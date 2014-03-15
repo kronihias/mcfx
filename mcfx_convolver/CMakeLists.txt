@@ -1,0 +1,5 @@
+ADD_SUBDIRECTORY ( mcfx_convolver )
+
+IF (BUILD_STANDALONE)
+	ADD_SUBDIRECTORY ( mcfx_convolver_standalone )
+ENDIF (BUILD_STANDALONE)

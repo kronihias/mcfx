@@ -1,0 +1,8 @@
+SET ( SPECIFIC_SOURE_DIR ${SRC_DIR}/mcfx_convolver )
+SET ( WITH_LIBSOXR TRUE )
+
+IF(WITH_ZITA_CONVOLVER)
+	SET ( WITH_FFTW3 TRUE )
+ENDIF(WITH_ZITA_CONVOLVER)
+
+INCLUDE(${SRC_DIR}/CMakeLists_subprojects_standalone.txt.inc)

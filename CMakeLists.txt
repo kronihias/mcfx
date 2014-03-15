@@ -14,6 +14,7 @@ ADD_DEFINITIONS(-DVERSION=${VERSION})
 SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
 SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 SET(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
+SET(WITH_ZITA_CONVOLVER FALSE CACHE BOOL "build with zita-convolver (not compatible with VST license!)")
 
 IF(BUILD_STANDALONE)
 
@@ -47,6 +48,10 @@ IF (JUCE_ASIO)
   INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
   
 ENDIF (JUCE_ASIO)
+
+IF (WITH_ZITA_CONVOLVER)
+	ADD_DEFINITIONS(-DUSE_ZITA_CONVOLVER=1)
+ENDIF(WITH_ZITA_CONVOLVER)
 
 # set release and optimization flags
 # SET(CMAKE_C_FLAGS_RELEASE "-Os") # use small size?
@@ -93,6 +98,18 @@ INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common )
 INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/Ressources )
 INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/SphericalHarmonic )
 INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/SphFilter )
+
+################################################
+# additional cmake find packages
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+find_package(libsoxr REQUIRED)
+
+IF (WITH_ZITA_CONVOLVER)
+	find_package(FFTW3 COMPONENTS single)
+ENDIF (WITH_ZITA_CONVOLVER)
+
+include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIRS} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS})
 
 
 ################################################
@@ -147,6 +164,13 @@ IF(UNIX AND NOT APPLE AND NOT ANDROID)
    INCLUDE_DIRECTORIES(${FREETYPE_INCLUDE_DIRS})
 
    SET ( JUCE_LIBRARIES ${OPENGL_LIBRARIES} ${X11_LIBRARY} ${XEXT_LIBRARY} ${XINERAMA_LIBRARY} ${ASOUND_LIBRARY} ${DL_LIBRARY} ${FREETYPE_LIBRARY} ${PTHREAD_LIBRARY} ${RT_LIBRARY})
+   
+   FIND_LIBRARY    ( LIBSOXR_LIBRARY soxr )
+   
+   IF(WITH_ZITA_CONVOLVER)
+	    FIND_LIBRARY    ( ZITA_CONVOLVER_LIBRARY zita-convolver )
+   		FIND_LIBRARY    ( FFTW3F_LIBRARY fftw3f )
+   ENDIF(WITH_ZITA_CONVOLVER)
    
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
@@ -232,6 +256,7 @@ ENDIF(APPLE)
 # add all subprojects (plugins)
 
 ADD_SUBDIRECTORY ( JUCE )
+# ADD_SUBDIRECTORY ( mcfx_convolver )
 ADD_SUBDIRECTORY ( mcfx_delay )
 ADD_SUBDIRECTORY ( mcfx_filter )
 ADD_SUBDIRECTORY ( mcfx_gain_delay )

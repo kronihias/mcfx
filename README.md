@@ -1,13 +1,13 @@
 mcfx - multichannel cross plattform audio plug-in suite
 ==============
 
-- mcfx is a suite of multichannel vst plug-ins or standalone applications (currently meter only)
+- mcfx is a suite of multichannel vst plug-ins or standalone applications (standalone currently meter and convolver only)
 
 - channel count is configurable with compile time flag
 
 - cross plattform VST for MacOSX, Windows and Linux
 
-- uses the JUCE framework (www.juce.com, GPLv3)
+- uses the JUCE framework (www.juce.com, GPLv3), libsoxr (LGPL, http://soxr.sourceforge.net)
 
 - ready to use binaries for MacOSX (> 10.5, 32/64 bit) and Windows (32/64 bit) can be found at http://www.matthiaskronlachner.com/?p=1910
 
@@ -24,6 +24,7 @@ prerequisites for building
 --------------
 
 - cmake, working build environment
+- libsoxr for the convolver (http://soxr.sourceforge.net)
 - Steinberg VST 2.4 SDK
 
 Install LINUX Libraries (Debian, Ubuntu):
@@ -61,6 +62,16 @@ then
 plug-ins explained:
 ==============
 
+mcfx_convolver
+--------------
+multichannel convolution matrix
+loads configuration files (compatible to jconvolver .conf files)
+searches for configuration file in following folders:
+		* Windows 7,8: C:\Users\username\AppData\Roaming\mcfx\convolver_presets\
+		* MacOS: ~/Library/mcfx/convolver_presets/
+		* Linux: ~/mcfx/convolver_presets/
+
+
 mcfx_delay
 --------------
 delay each channel about the same time (maximum delay time in seconds is a compile time flag (default 0.5s): MAX_DELAYTIME_S)
@@ -88,11 +99,12 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.3 (2014-03-15) - added mcfx_convolver
 
 - 0.2 (2014-02-25) - removed some license incompatible code, juce update
 
 - 0.1 (2014-01-10) - first release 
 
 ______________________________
-(C) 2013 Matthias Kronlachner
+(C) 2013-2014 Matthias Kronlachner
 m.kronlachner@gmail.com

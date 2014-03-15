@@ -1,33 +1,30 @@
 /*
- ==============================================================================
- 
- This file is part of the mcfx (Multichannel Effects) plug-in suite.
- Copyright (c) 2013/2014 - Matthias Kronlachner
- www.matthiaskronlachner.com
- 
- Permission is granted to use this software under the terms of:
- the GPL v2 (or any later version)
- 
- Details of these licenses can be found at: www.gnu.org/licenses
- 
- ambix is distributed in the hope that it will be useful, but WITHOUT ANY
- WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
- A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
- ==============================================================================
- */
 
-#ifndef __JUCE_APPCONFIG_CHUGWC__
-#define __JUCE_APPCONFIG_CHUGWC__
+    IMPORTANT! This file is auto-generated each time you save your
+    project - if you alter its contents, your changes may be overwritten!
+
+    There's a section below where you can add your own custom code safely, and the
+    Introjucer will preserve the contents of that block, but the best way to change
+    any of these definitions is by using the Introjucer's project settings.
+
+    Any commented-out settings will assume their default values.
+
+*/
+
+#ifndef __JUCE_APPCONFIG_AVC25S__
+#define __JUCE_APPCONFIG_AVC25S__
 
 //==============================================================================
 // [BEGIN_USER_CODE_SECTION]
 
+
+// #define USE_ZITA_CONVOLVER
+
 #ifndef NUM_CHANNELS
-    #define NUM_CHANNELS 36
+#define NUM_CHANNELS 36
 #endif
 
-#define Plugin_Name                   mcfx_meter
+#define Plugin_Name                   mcfx_convolver
 
 
 // GUI
@@ -45,19 +42,19 @@
 
 //==============================================================================
 #define JUCE_MODULE_AVAILABLE_juce_audio_basics             1
-#define JUCE_MODULE_AVAILABLE_juce_audio_devices            0
-#define JUCE_MODULE_AVAILABLE_juce_audio_formats            0
+#define JUCE_MODULE_AVAILABLE_juce_audio_devices            1
+#define JUCE_MODULE_AVAILABLE_juce_audio_formats            1
 #define JUCE_MODULE_AVAILABLE_juce_audio_plugin_client      1
 #define JUCE_MODULE_AVAILABLE_juce_audio_processors         1
 #define JUCE_MODULE_AVAILABLE_juce_core                     1
-#define JUCE_MODULE_AVAILABLE_juce_cryptography             0
+#define JUCE_MODULE_AVAILABLE_juce_cryptography             1
 #define JUCE_MODULE_AVAILABLE_juce_data_structures          1
 #define JUCE_MODULE_AVAILABLE_juce_events                   1
 #define JUCE_MODULE_AVAILABLE_juce_graphics                 1
 #define JUCE_MODULE_AVAILABLE_juce_gui_basics               1
 #define JUCE_MODULE_AVAILABLE_juce_gui_extra                1
-#define JUCE_MODULE_AVAILABLE_juce_opengl                   0
-#define JUCE_MODULE_AVAILABLE_juce_video                    0
+#define JUCE_MODULE_AVAILABLE_juce_opengl                   1
+#define JUCE_MODULE_AVAILABLE_juce_video                    1
 
 //==============================================================================
 // juce_audio_devices flags:
@@ -124,6 +121,10 @@
  //#define JUCE_PLUGINHOST_VST
 #endif
 
+#ifndef    JUCE_PLUGINHOST_VST3
+ //#define JUCE_PLUGINHOST_VST3
+#endif
+
 #ifndef    JUCE_PLUGINHOST_AU
  //#define JUCE_PLUGINHOST_AU
 #endif
@@ -145,6 +146,10 @@
 
 #ifndef    JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
  //#define JUCE_DONT_AUTOLINK_TO_WIN32_LIBRARIES
+#endif
+
+#ifndef    JUCE_INCLUDE_ZLIB_CODE
+ //#define JUCE_INCLUDE_ZLIB_CODE
 #endif
 
 //==============================================================================
@@ -184,6 +189,10 @@
  //#define JUCE_WEB_BROWSER
 #endif
 
+#ifndef    JUCE_ENABLE_LIVE_CONSTANT_EDITOR
+ //#define JUCE_ENABLE_LIVE_CONSTANT_EDITOR
+#endif
+
 //==============================================================================
 // juce_video flags:
 
@@ -210,6 +219,9 @@
 #ifndef  JucePlugin_Build_VST
  #define JucePlugin_Build_VST              1
 #endif
+#ifndef  JucePlugin_Build_VST3
+ #define JucePlugin_Build_VST3             0
+#endif
 #ifndef  JucePlugin_Build_AU
  #define JucePlugin_Build_AU               0
 #endif
@@ -220,19 +232,25 @@
  #define JucePlugin_Build_AAX              0
 #endif
 #ifndef  JucePlugin_Name
- #define JucePlugin_Name                   "mcfx_meter"
+ #define JucePlugin_Name                   "mcfx_convolver"
 #endif
 #ifndef  JucePlugin_Desc
- #define JucePlugin_Desc                   "mcfx_meter"
+ #define JucePlugin_Desc                   "mcfx_convolver"
 #endif
 #ifndef  JucePlugin_Manufacturer
  #define JucePlugin_Manufacturer           "kronlachner"
 #endif
+#ifndef  JucePlugin_ManufacturerWebsite
+ #define JucePlugin_ManufacturerWebsite    ""
+#endif
+#ifndef  JucePlugin_ManufacturerEmail
+ #define JucePlugin_ManufacturerEmail      "support@yourcompany.com"
+#endif
 #ifndef  JucePlugin_ManufacturerCode
- #define JucePlugin_ManufacturerCode       'KRON'
+ #define JucePlugin_ManufacturerCode       'Kron'
 #endif
 #ifndef  JucePlugin_PluginCode
- #define JucePlugin_PluginCode             'MCME'
+ #define JucePlugin_PluginCode             'mcco'
 #endif
 #ifndef  JucePlugin_MaxNumInputChannels
  #define JucePlugin_MaxNumInputChannels    NUM_CHANNELS
@@ -253,10 +271,10 @@
  #define JucePlugin_ProducesMidiOutput     0
 #endif
 #ifndef  JucePlugin_SilenceInProducesSilenceOut
- #define JucePlugin_SilenceInProducesSilenceOut  1
+ #define JucePlugin_SilenceInProducesSilenceOut  0
 #endif
 #ifndef  JucePlugin_EditorRequiresKeyboardFocus
- #define JucePlugin_EditorRequiresKeyboardFocus  1
+ #define JucePlugin_EditorRequiresKeyboardFocus  0
 #endif
 #ifndef  JucePlugin_Version
  #define JucePlugin_Version                1.0.0
@@ -280,16 +298,16 @@
  #define JucePlugin_AUSubType              JucePlugin_PluginCode
 #endif
 #ifndef  JucePlugin_AUExportPrefix
- #define JucePlugin_AUExportPrefix         mcfx_meterAU
+ #define JucePlugin_AUExportPrefix         mcfx_convolverAU
 #endif
 #ifndef  JucePlugin_AUExportPrefixQuoted
- #define JucePlugin_AUExportPrefixQuoted   "mcfx_meterAU"
+ #define JucePlugin_AUExportPrefixQuoted   "mcfx_convolverAU"
 #endif
 #ifndef  JucePlugin_AUManufacturerCode
  #define JucePlugin_AUManufacturerCode     JucePlugin_ManufacturerCode
 #endif
 #ifndef  JucePlugin_CFBundleIdentifier
- #define JucePlugin_CFBundleIdentifier     com.yourcompany.mcfx_meter
+ #define JucePlugin_CFBundleIdentifier     com.kronlachner.mcfx_convolver
 #endif
 #ifndef  JucePlugin_RTASCategory
  #define JucePlugin_RTASCategory           ePlugInCategory_None
@@ -307,7 +325,7 @@
  #define JucePlugin_RTASDisableMultiMono   0
 #endif
 #ifndef  JucePlugin_AAXIdentifier
- #define JucePlugin_AAXIdentifier          com.yourcompany.mcfx_meter
+ #define JucePlugin_AAXIdentifier          com.yourcompany.mcfx_convolver
 #endif
 #ifndef  JucePlugin_AAXManufacturerCode
  #define JucePlugin_AAXManufacturerCode    JucePlugin_ManufacturerCode
@@ -315,14 +333,14 @@
 #ifndef  JucePlugin_AAXProductId
  #define JucePlugin_AAXProductId           JucePlugin_PluginCode
 #endif
-#ifndef  JucePlugin_AAXPluginId
- #define JucePlugin_AAXPluginId            JucePlugin_PluginCode
-#endif
 #ifndef  JucePlugin_AAXCategory
  #define JucePlugin_AAXCategory            AAX_ePlugInCategory_Dynamics
 #endif
 #ifndef  JucePlugin_AAXDisableBypass
  #define JucePlugin_AAXDisableBypass       0
 #endif
+#ifndef  JucePlugin_AAXDisableMultiMono
+ #define JucePlugin_AAXDisableMultiMono    0
+#endif
 
-#endif  // __JUCE_APPCONFIG_CHUGWC__
+#endif  // __JUCE_APPCONFIG_AVC25S__
