@@ -271,7 +271,12 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         // get the line and remove spaces from start and end
         String line (myLines[currentLine].trim());
         
-        if (line.contains("/cd")) {
+        if (line.startsWith("#"))
+        {
+            
+            // ignore these lines
+            
+        } else if (line.contains("/cd")) {
             
             line = line.trimCharactersAtStart("/cd").trim();
             directory = line;
