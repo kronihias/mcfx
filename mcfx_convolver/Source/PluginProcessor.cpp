@@ -328,33 +328,47 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             
             // std::cout << IrFilename.getFullPathName() << std::endl;
             
-            if (_my_convolvers.getLast()->loadIr(IrFilename, channel-1, _SampleRate, _BufferSize, gain, delay, offset, length))
+            if ( ( in_ch < 1 ) || ( in_ch > getNumInputChannels() ) || ( out_ch < 1 ) || ( out_ch > getNumOutputChannels() ) )
             {
-                _conv_in.add(in_ch-1);
-                _conv_out.add(out_ch-1);
-                
-                
-                // these values are to make sure we afterwards have enough in/out channels
-                if (in_ch > _min_in_ch)
-                    _min_in_ch = in_ch;
-                
-                if (out_ch > _min_out_ch)
-                    _min_out_ch = out_ch;
+                _my_convolvers.removeLast();
                 
                 String debug;
-                debug << "conv # " << _my_convolvers.size() << " " << IrFilename.getFullPathName() << " loaded";
+                debug << "ERROR: channel assignment not feasible: In: " << in_ch << " Out: " << out_ch;
                 DebugPrint(debug << "\n");
                 
             } else {
                 
-                _my_convolvers.removeLast();
+                if (_my_convolvers.getLast()->loadIr(IrFilename, channel-1, _SampleRate, _BufferSize, gain, delay, offset, length))
+                {
+                    _conv_in.add(in_ch-1);
+                    _conv_out.add(out_ch-1);
+                    
+                    
+                    // these values are to make sure we afterwards have enough in/out channels
+                    if (in_ch > _min_in_ch)
+                    _min_in_ch = in_ch;
+                    
+                    if (out_ch > _min_out_ch)
+                    _min_out_ch = out_ch;
+                    
+                    String debug;
+                    debug << "conv # " << _my_convolvers.size() << " " << IrFilename.getFullPathName() << " loaded";
+                    DebugPrint(debug << "\n");
+                    
+                } else {
+                    
+                    _my_convolvers.removeLast();
+                    
+                    String debug;
+                    debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
+                    DebugPrint(debug << "\n");
+                    
+                } // end ir not loaded
                 
-                String debug;
-                debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
-                DebugPrint(debug << "\n");
-            }
+            } // end check channel assignment
             
-        }
+            
+        } // end /impulse/read line
         
         
     } // iterate over lines
