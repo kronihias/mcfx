@@ -20,6 +20,12 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#ifdef _WINDOWS
+#include <windows.h>
+#else
+#include <unistd.h>
+#define Sleep(x) usleep((x)*1000)
+#endif
 
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
@@ -233,7 +239,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     if (_configLoaded) {
         
         while (_isProcessing) {
-            usleep(1);
+            Sleep(1);
         }
         
         std::cout << "Unloading Config..." << std::endl;

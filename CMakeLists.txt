@@ -256,7 +256,7 @@ ENDIF(APPLE)
 # add all subprojects (plugins)
 
 ADD_SUBDIRECTORY ( JUCE )
-# ADD_SUBDIRECTORY ( mcfx_convolver )
+ADD_SUBDIRECTORY ( mcfx_convolver )
 ADD_SUBDIRECTORY ( mcfx_delay )
 ADD_SUBDIRECTORY ( mcfx_filter )
 ADD_SUBDIRECTORY ( mcfx_gain_delay )
