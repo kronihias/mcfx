@@ -36,17 +36,14 @@
 #define JucePlugin_Name                   QUH(Plugin_Name) QUH(NUM_CHANNELS)
 
 // get single quotes around our identifier - ugly, but is there another way?
-#define APOS           '
-#define CHAR2(a,b,c)   a##b##c
-#define CHAR1(a,b,c)   CHAR2(a,b,c)
-#define CHAR(x)        CHAR1(APOS,x,APOS)
+#define QS(A) (#A[0])
 
 #define PASTER(x,y) x ## y
 #define EVALUATOR(x,y)  PASTER(x,y)
 #define ADDORDER(fun) EVALUATOR(fun, NUM_CHANNELS)
 
 #define PluginCode                        ADDORDER(Plugin_Code)
-#define JucePlugin_PluginCode             CHAR(PluginCode)
+#define JucePlugin_PluginCode             QS(PluginCode)
 
 // [END_USER_CODE_SECTION]
 
