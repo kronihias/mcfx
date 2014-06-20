@@ -25,7 +25,7 @@
 #endif
 
 #define Plugin_Name                   mcfx_convolver
-
+#define Plugin_Code                   MC
 
 // GUI
 
@@ -37,6 +37,19 @@
 #define QU(x) #x
 #define QUH(x) QU(x)
 #define JucePlugin_Name                   QUH(Plugin_Name) QUH(NUM_CHANNELS)
+
+// get single quotes around our identifier - ugly, but is there another way?
+#define APOS           '
+#define CHAR2(a,b,c)   a##b##c
+#define CHAR1(a,b,c)   CHAR2(a,b,c)
+#define CHAR(x)        CHAR1(APOS,x,APOS)
+
+#define PASTER(x,y) x ## y
+#define EVALUATOR(x,y)  PASTER(x,y)
+#define ADDORDER(fun) EVALUATOR(fun, NUM_CHANNELS)
+
+#define PluginCode                        ADDORDER(Plugin_Code)
+#define JucePlugin_PluginCode             CHAR(PluginCode)
 
 // [END_USER_CODE_SECTION]
 
@@ -250,7 +263,7 @@
  #define JucePlugin_ManufacturerCode       'Kron'
 #endif
 #ifndef  JucePlugin_PluginCode
- #define JucePlugin_PluginCode             'mcco'
+ #define JucePlugin_PluginCode             'mc36'
 #endif
 #ifndef  JucePlugin_MaxNumInputChannels
  #define JucePlugin_MaxNumInputChannels    NUM_CHANNELS

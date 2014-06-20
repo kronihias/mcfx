@@ -99,6 +99,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.3.1 (2014-06-16) - fixed vst id for bidule compatibility
+
 - 0.3 (2014-03-15) - added mcfx_convolver
 
 - 0.2 (2014-02-25) - removed some license incompatible code, juce update
