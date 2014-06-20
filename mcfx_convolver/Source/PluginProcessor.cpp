@@ -168,7 +168,6 @@ void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samples
 {
     _SampleRate = sampleRate;
     _BufferSize = samplesPerBlock;
-    
 }
 
 void Mcfx_convolverAudioProcessor::releaseResources()
@@ -380,6 +379,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     } // iterate over lines
     
     _configLoaded = true;
+    
+    setLatencySamples(_BufferSize);
     
     sendChangeMessage(); // notify editor
 }
