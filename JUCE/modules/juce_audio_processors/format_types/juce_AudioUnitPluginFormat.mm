@@ -138,7 +138,7 @@ namespace AudioUnitFormatHelpers
                                                         fileOrIdentifier.lastIndexOfChar ('/')) + 1));
 
             StringArray tokens;
-            tokens.addTokens (s, ",", String());
+            tokens.addTokens (s, ",", StringRef());
             tokens.removeEmptyStrings();
 
             if (tokens.size() == 3)
@@ -523,14 +523,16 @@ public:
 
             for (int i = 0; i < numOutputBusses; ++i)
             {
-                AudioBufferList* const abl = getAudioBufferListForBus(i);
-                abl->mNumberBuffers = numOutputBusChannels;
-
-                for (int j = 0; j < numOutputBusChannels; ++j)
+                if (AudioBufferList* const abl = getAudioBufferListForBus(i))
                 {
-                    abl->mBuffers[j].mNumberChannels = 1;
-                    abl->mBuffers[j].mDataByteSize = sizeof (float) * numSamples;
-                    abl->mBuffers[j].mData = buffer.getSampleData (i * numOutputBusChannels + j, 0);
+                    abl->mNumberBuffers = numOutputBusChannels;
+
+                    for (int j = 0; j < numOutputBusChannels; ++j)
+                    {
+                        abl->mBuffers[j].mNumberChannels = 1;
+                        abl->mBuffers[j].mDataByteSize = sizeof (float) * numSamples;
+                        abl->mBuffers[j].mData = buffer.getWritePointer (i * numOutputBusChannels + j);
+                    }
                 }
             }
 
@@ -913,7 +915,7 @@ private:
         bool automatable;
     };
 
-    OwnedArray <ParamInfo> parameters;
+    OwnedArray<ParamInfo> parameters;
 
     MidiDataConcatenator midiConcatenator;
     CriticalSection midiInLock;
@@ -1050,7 +1052,7 @@ private:
                 if (bufferChannel < currentBuffer->getNumChannels())
                 {
                     memcpy (ioData->mBuffers[i].mData,
-                            currentBuffer->getSampleData (bufferChannel, 0),
+                            currentBuffer->getReadPointer (bufferChannel),
                             sizeof (float) * inNumberFrames);
                 }
                 else
@@ -1598,7 +1600,7 @@ AudioUnitPluginFormat::~AudioUnitPluginFormat()
 {
 }
 
-void AudioUnitPluginFormat::findAllTypesForFile (OwnedArray <PluginDescription>& results,
+void AudioUnitPluginFormat::findAllTypesForFile (OwnedArray<PluginDescription>& results,
                                                  const String& fileOrIdentifier)
 {
     if (! fileMightContainThisPluginType (fileOrIdentifier))

@@ -1062,17 +1062,17 @@ public:
 
             if ((effect->flags & effFlagsCanReplacing) != 0)
             {
-                effect->processReplacing (effect, buffer.getArrayOfChannels(), buffer.getArrayOfChannels(), numSamples);
+                effect->processReplacing (effect, buffer.getArrayOfWritePointers(), buffer.getArrayOfWritePointers(), numSamples);
             }
             else
             {
                 tempBuffer.setSize (effect->numOutputs, numSamples);
                 tempBuffer.clear();
 
-                effect->process (effect, buffer.getArrayOfChannels(), tempBuffer.getArrayOfChannels(), numSamples);
+                effect->process (effect, buffer.getArrayOfWritePointers(), tempBuffer.getArrayOfWritePointers(), numSamples);
 
                 for (int i = effect->numOutputs; --i >= 0;)
-                    buffer.copyFrom (i, 0, tempBuffer.getSampleData (i), numSamples);
+                    buffer.copyFrom (i, 0, tempBuffer.getReadPointer (i), numSamples);
             }
         }
         else
@@ -1285,7 +1285,8 @@ public:
                     handleUpdateNowIfNeeded();
 
                     for (int i = ComponentPeer::getNumPeers(); --i >= 0;)
-                        ComponentPeer::getPeer(i)->performAnyPendingRepaintsNow();
+                        if (ComponentPeer* p = ComponentPeer::getPeer(i))
+                            p->performAnyPendingRepaintsNow();
                 }
                 break;
 
@@ -2317,10 +2318,8 @@ private:
     {
         if (isOpen)
         {
-           #if ! (JUCE_MAC && JUCE_SUPPORT_CARBON)
             JUCE_VST_LOG ("Closing VST UI: " + plugin.getName());
             isOpen = false;
-
             dispatch (effEditClose, 0, 0, 0, 0);
             stopTimer();
 
@@ -2335,7 +2334,6 @@ private:
            #elif JUCE_LINUX
             pluginWindow = 0;
             pluginProc = 0;
-           #endif
            #endif
         }
     }

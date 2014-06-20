@@ -25,7 +25,6 @@
 		39993F8D18D446B9005064D2 /* MyConvolver.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 39993F8B18D446B9005064D2 /* MyConvolver.cpp */; };
 		39993F8F18D44FF3005064D2 /* libsoxr.0.1.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 39993F8E18D44FF3005064D2 /* libsoxr.0.1.0.dylib */; };
 		39993F9118D4504A005064D2 /* libsoxr.0.1.0.dylib in CopyFiles */ = {isa = PBXBuildFile; fileRef = 39993F8E18D44FF3005064D2 /* libsoxr.0.1.0.dylib */; };
-		39993F9318D47733005064D2 /* libfftw3f.3.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 39993F9218D47733005064D2 /* libfftw3f.3.dylib */; };
 		39993F9418D47746005064D2 /* libfftw3f.3.dylib in CopyFiles */ = {isa = PBXBuildFile; fileRef = 39993F9218D47733005064D2 /* libfftw3f.3.dylib */; };
 		39993F9718D477D7005064D2 /* zita-convolver.cc in Sources */ = {isa = PBXBuildFile; fileRef = 39993F9518D477D6005064D2 /* zita-convolver.cc */; };
 		3D033408A9F0090A0B51084C /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 76203D06123831B230777688 /* AudioToolbox.framework */; };
@@ -989,7 +988,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				5704072BEA01F302D5F2A21D /* Accelerate.framework in Frameworks */,
-				39993F9318D47733005064D2 /* libfftw3f.3.dylib in Frameworks */,
 				3D033408A9F0090A0B51084C /* AudioToolbox.framework in Frameworks */,
 				9128F1FE3FC8B243005986EC /* Carbon.framework in Frameworks */,
 				E66E0CEC2EE16EE482CABDAA /* Cocoa.framework in Frameworks */,

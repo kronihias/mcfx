@@ -375,7 +375,7 @@ public:
             const double delta = (button == incButton) ? interval : -interval;
 
             DragInProgress drag (*this);
-            setValue (owner.snapValue (getValue() + delta, false), sendNotificationSync);
+            setValue (owner.snapValue (getValue() + delta, notDragging), sendNotificationSync);
         }
     }
 
@@ -394,7 +394,7 @@ public:
 
     void labelTextChanged (Label* label) override
     {
-        const double newValue = owner.snapValue (owner.getValueFromText (label->getText()), false);
+        const double newValue = owner.snapValue (owner.getValueFromText (label->getText()), notDragging);
 
         if (newValue != (double) currentValue.getValue())
         {
@@ -745,12 +745,12 @@ public:
             || ((style == LinearHorizontal || style == LinearVertical || style == LinearBar || style == LinearBarVertical)
                 && ! snapsToMousePos))
         {
-            const int mouseDiff = (style == RotaryHorizontalDrag
-                                     || style == LinearHorizontal
-                                     || style == LinearBar
-                                     || (style == IncDecButtons && incDecDragDirectionIsHorizontal()))
-                                    ? e.x - mouseDragStartPos.x
-                                    : mouseDragStartPos.y - e.y;
+            const float mouseDiff = (style == RotaryHorizontalDrag
+                                        || style == LinearHorizontal
+                                        || style == LinearBar
+                                        || (style == IncDecButtons && incDecDragDirectionIsHorizontal()))
+                                      ? e.position.x - mouseDragStartPos.x
+                                      : mouseDragStartPos.y - e.position.y;
 
             newPos = owner.valueToProportionOfLength (valueOnMouseDown)
                        + mouseDiff * (1.0 / pixelsForFullDragExtent);
@@ -763,7 +763,8 @@ public:
         }
         else if (style == RotaryHorizontalVerticalDrag)
         {
-            const int mouseDiff = (e.x - mouseDragStartPos.x) + (mouseDragStartPos.y - e.y);
+            const float mouseDiff = (e.position.x - mouseDragStartPos.x)
+                                      + (mouseDragStartPos.y - e.position.y);
 
             newPos = owner.valueToProportionOfLength (valueOnMouseDown)
                        + mouseDiff * (1.0 / pixelsForFullDragExtent);
@@ -779,13 +780,13 @@ public:
 
     void handleVelocityDrag (const MouseEvent& e)
     {
-        const int mouseDiff = style == RotaryHorizontalVerticalDrag
-                                ? (e.x - mousePosWhenLastDragged.x) + (mousePosWhenLastDragged.y - e.y)
-                                : (isHorizontal()
-                                    || style == RotaryHorizontalDrag
-                                    || (style == IncDecButtons && incDecDragDirectionIsHorizontal()))
-                                      ? e.x - mousePosWhenLastDragged.x
-                                      : e.y - mousePosWhenLastDragged.y;
+        const float mouseDiff = style == RotaryHorizontalVerticalDrag
+                                   ? (e.x - mousePosWhenLastDragged.x) + (mousePosWhenLastDragged.y - e.y)
+                                   : (isHorizontal()
+                                       || style == RotaryHorizontalDrag
+                                       || (style == IncDecButtons && incDecDragDirectionIsHorizontal()))
+                                         ? e.position.x - mousePosWhenLastDragged.x
+                                         : e.position.y - mousePosWhenLastDragged.y;
 
         const double maxSpeed = jmax (200, sliderRegionSize);
         double speed = jlimit (0.0, maxSpeed, (double) abs (mouseDiff));
@@ -816,7 +817,7 @@ public:
     {
         incDecDragged = false;
         useDragEvents = false;
-        mouseDragStartPos = mousePosWhenLastDragged = e.getPosition();
+        mouseDragStartPos = mousePosWhenLastDragged = e.position;
         currentDrag = nullptr;
 
         if (owner.isEnabled())
@@ -873,6 +874,8 @@ public:
              && ! ((style == LinearBar || style == LinearBarVertical)
                     && e.mouseWasClicked() && valueBox != nullptr && valueBox->isEditable()))
         {
+            DragMode dragMode = notDragging;
+
             if (style == Rotary)
             {
                 handleRotaryDrag (e);
@@ -885,25 +888,31 @@ public:
                         return;
 
                     incDecDragged = true;
-                    mouseDragStartPos = e.getPosition();
+                    mouseDragStartPos = e.position;
                 }
 
                 if (isAbsoluteDragMode (e.mods) || (maximum - minimum) / sliderRegionSize < interval)
+                {
+                    dragMode = absoluteDrag;
                     handleAbsoluteDrag (e);
+                }
                 else
+                {
+                    dragMode = velocityDrag;
                     handleVelocityDrag (e);
+                }
             }
 
             valueWhenLastDragged = jlimit (minimum, maximum, valueWhenLastDragged);
 
             if (sliderBeingDragged == 0)
             {
-                setValue (owner.snapValue (valueWhenLastDragged, true),
+                setValue (owner.snapValue (valueWhenLastDragged, dragMode),
                           sendChangeOnlyOnRelease ? dontSendNotification : sendNotificationSync);
             }
             else if (sliderBeingDragged == 1)
             {
-                setMinValue (owner.snapValue (valueWhenLastDragged, true),
+                setMinValue (owner.snapValue (valueWhenLastDragged, dragMode),
                              sendChangeOnlyOnRelease ? dontSendNotification : sendNotificationAsync, true);
 
                 if (e.mods.isShiftDown())
@@ -913,7 +922,7 @@ public:
             }
             else if (sliderBeingDragged == 2)
             {
-                setMaxValue (owner.snapValue (valueWhenLastDragged, true),
+                setMaxValue (owner.snapValue (valueWhenLastDragged, dragMode),
                              sendChangeOnlyOnRelease ? dontSendNotification : sendNotificationAsync, true);
 
                 if (e.mods.isShiftDown())
@@ -922,7 +931,7 @@ public:
                     minMaxDiff = (double) valueMax.getValue() - (double) valueMin.getValue();
             }
 
-            mousePosWhenLastDragged = e.getPosition();
+            mousePosWhenLastDragged = e.position;
         }
     }
 
@@ -994,7 +1003,7 @@ public:
                     delta = -delta;
 
                 DragInProgress drag (*this);
-                setValue (owner.snapValue (value + delta, false), sendNotificationSync);
+                setValue (owner.snapValue (value + delta, notDragging), sendNotificationSync);
             }
 
             return true;
@@ -1028,29 +1037,29 @@ public:
                 const double pos = sliderBeingDragged == 2 ? getMaxValue()
                                                            : (sliderBeingDragged == 1 ? getMinValue()
                                                                                       : (double) currentValue.getValue());
-                Point<int> mousePos;
+                Point<float> mousePos;
 
                 if (isRotary())
                 {
                     mousePos = mi->getLastMouseDownPosition();
 
-                    const int delta = roundToInt (pixelsForFullDragExtent * (owner.valueToProportionOfLength (valueOnMouseDown)
-                                                                               - owner.valueToProportionOfLength (pos)));
+                    const float delta = (float) (pixelsForFullDragExtent * (owner.valueToProportionOfLength (valueOnMouseDown)
+                                                                                - owner.valueToProportionOfLength (pos)));
 
-                    if (style == RotaryHorizontalDrag)      mousePos += Point<int> (-delta, 0);
-                    else if (style == RotaryVerticalDrag)   mousePos += Point<int> (0, delta);
-                    else                                    mousePos += Point<int> (delta / -2, delta / 2);
+                    if (style == RotaryHorizontalDrag)      mousePos += Point<float> (-delta, 0.0f);
+                    else if (style == RotaryVerticalDrag)   mousePos += Point<float> (0.0f, delta);
+                    else                                    mousePos += Point<float> (delta / -2.0f, delta / 2.0f);
 
-                    mousePos = owner.getScreenBounds().reduced (4).getConstrainedPoint (mousePos);
+                    mousePos = owner.getScreenBounds().reduced (4).toFloat().getConstrainedPoint (mousePos);
                     mouseDragStartPos = mousePosWhenLastDragged = owner.getLocalPoint (nullptr, mousePos);
                     valueOnMouseDown = valueWhenLastDragged;
                 }
                 else
                 {
-                    const int pixelPos = (int) getLinearSliderPos (pos);
+                    const float pixelPos = (float) getLinearSliderPos (pos);
 
-                    mousePos = owner.localPointToGlobal (Point<int> (isHorizontal() ? pixelPos : (owner.getWidth() / 2),
-                                                                     isVertical()   ? pixelPos : (owner.getHeight() / 2)));
+                    mousePos = owner.localPointToGlobal (Point<float> (isHorizontal() ? pixelPos : (owner.getWidth() / 2.0f),
+                                                                       isVertical()   ? pixelPos : (owner.getHeight() / 2.0f)));
                 }
 
                 mi->setScreenPosition (mousePos);
@@ -1223,7 +1232,7 @@ public:
     double velocityModeSensitivity, velocityModeOffset, minMaxDiff;
     int velocityModeThreshold;
     float rotaryStart, rotaryEnd;
-    Point<int> mouseDragStartPos, mousePosWhenLastDragged;
+    Point<float> mouseDragStartPos, mousePosWhenLastDragged;
     int sliderRegionStart, sliderRegionSize;
     int sliderBeingDragged;
     int pixelsForFullDragExtent;
@@ -1534,7 +1543,7 @@ double Slider::valueToProportionOfLength (double value)
     return skew == 1.0 ? n : pow (n, skew);
 }
 
-double Slider::snapValue (double attemptedValue, const bool)
+double Slider::snapValue (double attemptedValue, DragMode)
 {
     return attemptedValue;
 }

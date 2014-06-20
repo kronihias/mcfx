@@ -178,30 +178,6 @@ struct AAXClasses
     }
 
     //==============================================================================
-    struct JUCELibraryRefCount
-    {
-        JUCELibraryRefCount()    { if (getCount()++ == 0) initialise(); }
-        ~JUCELibraryRefCount()   { if (--getCount() == 0) shutdown(); }
-
-    private:
-        static void initialise()
-        {
-            initialiseJuce_GUI();
-        }
-
-        static void shutdown()
-        {
-            shutdownJuce_GUI();
-        }
-
-        int& getCount() noexcept
-        {
-            static int count = 0;
-            return count;
-        }
-    };
-
-    //==============================================================================
     class JuceAAX_Processor;
 
     struct PluginInstanceInfo
@@ -389,7 +365,7 @@ struct AAXClasses
 
         ScopedPointer<ContentWrapperComponent> component;
 
-        JUCELibraryRefCount juceCount;
+        ScopedJuceInitialiser_GUI libraryInitialiser;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (JuceAAX_GUI)
     };
 
@@ -442,7 +418,7 @@ struct AAXClasses
             if (chunkID != juceChunkType)
                 return AAX_CEffectParameters::GetChunkSize (chunkID, oSize);
 
-            tempFilterData.setSize (0);
+            tempFilterData.reset();
             pluginInstance->getStateInformation (tempFilterData);
             *oSize = (uint32_t) tempFilterData.getSize();
             return AAX_SUCCESS;
@@ -458,7 +434,7 @@ struct AAXClasses
 
             oChunk->fSize = (int32_t) tempFilterData.getSize();
             tempFilterData.copyTo (oChunk->fData, 0, tempFilterData.getSize());
-            tempFilterData.setSize (0);
+            tempFilterData.reset();
 
             return AAX_SUCCESS;
         }
@@ -679,6 +655,7 @@ struct AAXClasses
 
         void audioProcessorChanged (AudioProcessor* processor) override
         {
+            ++mNumPlugInChanges;
             check (Controller()->SetSignalLatency (processor->getLatencySamples()));
         }
 
@@ -858,14 +835,24 @@ struct AAXClasses
                 AAX_IParameter* parameter
                     = new AAX_CParameter<float> (IndexAsParamID (parameterIndex),
                                                  audioProcessor.getParameterName (parameterIndex, 31).toRawUTF8(),
-                                                 audioProcessor.getParameter (parameterIndex),
+                                                 audioProcessor.getParameterDefaultValue (parameterIndex),
                                                  AAX_CLinearTaperDelegate<float, 0>(),
                                                  AAX_CNumberDisplayDelegate<float, 3>(),
                                                  audioProcessor.isParameterAutomatable (parameterIndex));
 
                 parameter->AddShortenedName (audioProcessor.getParameterName (parameterIndex, 4).toRawUTF8());
-                parameter->SetNumberOfSteps ((uint32_t) audioProcessor.getParameterNumSteps (parameterIndex));
-                parameter->SetType (AAX_eParameterType_Continuous);
+
+                const int parameterNumSteps = audioProcessor.getParameterNumSteps (parameterIndex);
+                parameter->SetNumberOfSteps ((uint32_t) parameterNumSteps);
+                parameter->SetType (parameterNumSteps > 1000 ? AAX_eParameterType_Continuous
+                                                             : AAX_eParameterType_Discrete);
+
+                parameter->SetOrientation (audioProcessor.isParameterOrientationInverted (parameterIndex)
+                                            ? (AAX_eParameterOrientation_RightMinLeftMax | AAX_eParameterOrientation_TopMinBottomMax
+                                                | AAX_eParameterOrientation_RotarySingleDotMode | AAX_eParameterOrientation_RotaryRightMinLeftMax)
+                                            : (AAX_eParameterOrientation_LeftMinRightMax | AAX_eParameterOrientation_BottomMinTopMax
+                                                | AAX_eParameterOrientation_RotarySingleDotMode | AAX_eParameterOrientation_RotaryLeftMinRightMax));
+
                 mParameterManager.AddParameter (parameter);
             }
         }
@@ -891,7 +878,7 @@ struct AAXClasses
             check (Controller()->SetSignalLatency (audioProcessor.getLatencySamples()));
         }
 
-        JUCELibraryRefCount juceCount;
+        ScopedJuceInitialiser_GUI libraryInitialiser;
 
         ScopedPointer<AudioProcessor> pluginInstance;
         MidiBuffer midiBuffer;
@@ -963,6 +950,12 @@ struct AAXClasses
         properties->AddProperty (AAX_eProperty_PlugInID_Native,     'jcaa' + channelConfigIndex);
         properties->AddProperty (AAX_eProperty_PlugInID_AudioSuite, 'jyaa' + channelConfigIndex);
 
+       #if JucePlugin_AAXDisableMultiMono
+        properties->AddProperty (AAX_eProperty_Constraint_MultiMonoSupport, false);
+       #else
+        properties->AddProperty (AAX_eProperty_Constraint_MultiMonoSupport, true);
+       #endif
+
         check (desc.AddProcessProc_Native (algorithmProcessCallback, properties));
     }
 
@@ -1009,7 +1002,7 @@ struct AAXClasses
 AAX_Result JUCE_CDECL GetEffectDescriptions (AAX_ICollection*);
 AAX_Result JUCE_CDECL GetEffectDescriptions (AAX_ICollection* collection)
 {
-    AAXClasses::JUCELibraryRefCount libraryRefCount;
+    ScopedJuceInitialiser_GUI libraryInitialiser;
 
     if (AAX_IEffectDescriptor* const descriptor = collection->NewDescriptor())
     {
