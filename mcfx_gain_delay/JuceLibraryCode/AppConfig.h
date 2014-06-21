@@ -32,22 +32,16 @@
 #endif
 
 #define Plugin_Name                   mcfx_gain_delay
-#define Plugin_Code                   MG
+#define Plugin_Code                   1296511024 // MG00
 
 // generate plugin name with channel count
 #define QU(x) #x
 #define QUH(x) QU(x)
 #define JucePlugin_Name                   QUH(Plugin_Name) QUH(NUM_CHANNELS)
 
-// get single quotes around our identifier - ugly, but is there another way?
-#define QS(A) (#A[0])
+#define ADD(x, y) ((x) + (y))
 
-#define PASTER(x,y) x ## y
-#define EVALUATOR(x,y)  PASTER(x,y)
-#define ADDORDER(fun) EVALUATOR(fun, NUM_CHANNELS)
-
-#define PluginCode                        ADDORDER(Plugin_Code)
-#define JucePlugin_PluginCode             QS(PluginCode)
+#define JucePlugin_PluginCode             ADD(Plugin_Code,NUM_CHANNELS)
 
 // [END_USER_CODE_SECTION]
 
@@ -231,7 +225,7 @@
  #define JucePlugin_MaxNumOutputChannels   NUM_CHANNELS
 #endif
 #ifndef  JucePlugin_PreferredChannelConfigurations
- #define JucePlugin_PreferredChannelConfigurations  {1, 1}, {2, 2}, {NUM_CHANNELS, NUM_CHANNELS}
+ #define JucePlugin_PreferredChannelConfigurations  {NUM_CHANNELS, NUM_CHANNELS}
 #endif
 #ifndef  JucePlugin_IsSynth
  #define JucePlugin_IsSynth                0
