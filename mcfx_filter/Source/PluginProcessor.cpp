@@ -591,49 +591,49 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
         // LOW CUT
         if (_lc_on_param > 0.5f) {
             
-            _LC_IIR_1.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+            _LC_IIR_1.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
             
             // second stage -> 4th order butterworth
             if (_lc_order_param > 0.5f)
-                _LC_IIR_2.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+                _LC_IIR_2.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
         }
         
         
         // HIGH CUT
         if (_hc_on_param > 0.5f) {
             
-            _HC_IIR_1.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+            _HC_IIR_1.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
             
             // second stage -> 4th order butterworth
             if (_hc_order_param > 0.5f)
-                _HC_IIR_2.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+                _HC_IIR_2.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
         }
         
         // PF1
         if (_pf1_gain_param != 0.5f) {
             
-            _PF_IIR_1.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+            _PF_IIR_1.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
             
         }
         
         // PF2
         if (_pf2_gain_param != 0.5f) {
             
-            _PF_IIR_2.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+            _PF_IIR_2.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
             
         }
         
         // LS
         if (_ls_gain_param != 0.5f) {
             
-            _LS_IIR.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+            _LS_IIR.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
             
         }
         
         // HS
         if (_hs_gain_param != 0.5f) {
             
-            _HS_IIR.getUnchecked(channel)->processSamples(buffer.getSampleData(channel), numSamples);
+            _HS_IIR.getUnchecked(channel)->processSamples(buffer.getWritePointer(channel), numSamples);
             
         }
         

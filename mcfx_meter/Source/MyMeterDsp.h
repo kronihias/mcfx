@@ -33,7 +33,7 @@ public:
     
     void setAudioParams(int _sampleRate, int _blocksize);
     
-    void calc(float* buffer, int NumSamples);
+    void calc(const float* buffer, int NumSamples);
     
     void reset();
     

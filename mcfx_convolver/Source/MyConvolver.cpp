@@ -143,8 +143,8 @@ bool MyConvolver::loadIr(const File& audioFile, int channel, double sampleRate, 
         soxr_error_t error;
         
         error = soxr_oneshot(irate, orate, 1, /* Rates and # of chans. */
-                                          IRBuffer.getSampleData(0), ir_length, NULL,         /* Input. */
-                                          ResampledBuffer.getSampleData(0), newsize, &odone,    /* Output. */
+                                          IRBuffer.getReadPointer(0), ir_length, NULL,         /* Input. */
+                                          ResampledBuffer.getWritePointer(0), newsize, &odone,    /* Output. */
                                           NULL, // soxr_io_spec_t
                                           &q_spec, // soxr_quality_spec_t
                                           NULL); // soxr_runtime_spec_t
@@ -181,7 +181,7 @@ bool MyConvolver::loadIr(const File& audioFile, int channel, double sampleRate, 
     
 
     // send hrir to zita-convolver
-    conv.impdata_create(0, 0, 1, IRBuffer.getSampleData(0),
+    conv.impdata_create(0, 0, 1, IRBuffer.getReadPointer(0),
                          delay, ir_length+delay);
     
     conv.start_process(CONVPROC_SCHEDULER_PRIORITY, CONVPROC_SCHEDULER_CLASS);
@@ -195,7 +195,7 @@ bool MyConvolver::loadIr(const File& audioFile, int channel, double sampleRate, 
 
 	int headBlockSize = block_length;
 	int tailBlockSize = std::max(4096, nextPowerOfTwo(ir_length+delay));
-	conv_win.init(headBlockSize, tailBlockSize, IRBufferDelay.getSampleData(0), ir_length+delay);
+	conv_win.init(headBlockSize, tailBlockSize, IRBufferDelay.getReadPointer(0), ir_length+delay);
     
 #endif
     // delete the audio file reader
@@ -233,7 +233,7 @@ void MyConvolver::process(AudioSampleBuffer& InputBuffer, AudioSampleBuffer& Out
         
         
         // processor samples
-        float* in_buffer = InputBuffer.getSampleData(InCh);
+        float* in_buffer = InputBuffer.getReadPointer(InCh);
         
         unsigned int bcp = bufconv_pos;
         
@@ -258,11 +258,11 @@ void MyConvolver::process(AudioSampleBuffer& InputBuffer, AudioSampleBuffer& Out
 		out_buffer.setSize(1,NumSamples,false,false,true);
 		out_buffer.clear();
 
-		conv_win.process(InputBuffer.getSampleData(InCh), out_buffer.getSampleData(0), NumSamples);
+		conv_win.process(InputBuffer.getReadPointer(InCh), out_buffer.getWritePointer(0), NumSamples);
 
 		
         // copy buffer to output
-        OutputBuffer.addFrom(OutCh, 0, out_buffer.getSampleData(0), NumSamples);
+        OutputBuffer.addFrom(OutCh, 0, out_buffer.getReadPointer(0), NumSamples);
 #endif
         
     }

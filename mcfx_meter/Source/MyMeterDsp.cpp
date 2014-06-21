@@ -65,11 +65,11 @@ void MyMeterDsp::setAudioParams(int _sampleRate, int _blockSize)
     blockSize = _blockSize;
 }
 
-void MyMeterDsp::calc(float *buffer, int NumSamples)
+void MyMeterDsp::calc(const float *buffer, int NumSamples)
 {
     
     float pow_sum = 0.f;
-    float* b_ptr = buffer;
+    float* b_ptr = (float*)buffer;
     
     _peak = 0.f; // reset
     

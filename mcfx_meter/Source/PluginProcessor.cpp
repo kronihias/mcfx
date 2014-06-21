@@ -168,7 +168,7 @@ void Ambix_meterAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
     
     for (int channel = 0; channel < getNumInputChannels(); channel++)
     {
-        _my_meter_dsp.getUnchecked(channel)->calc(buffer.getSampleData(channel), NumSamples);
+        _my_meter_dsp.getUnchecked(channel)->calc(buffer.getReadPointer(channel), NumSamples);
     }
 
 }
