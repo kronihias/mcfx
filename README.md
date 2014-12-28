@@ -100,7 +100,7 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
-- 0.3.2 (2014-12-27) - audiomulch compatibility, gui for mcfx_gain_delay with paste from clipboard functionality
+- 0.3.2 (2014-12-28) - audiomulch compatibility, gui for mcfx_gain_delay with paste from clipboard functionality, mcfx_meter added scale offset
 
 - 0.3.1 (2014-06-16) - fixed vst id for bidule compatibility
 
