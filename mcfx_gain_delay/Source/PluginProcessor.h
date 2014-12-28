@@ -26,7 +26,8 @@
 //==============================================================================
 /**
 */
-class Mcfx_gain_delayAudioProcessor  : public AudioProcessor
+class Mcfx_gain_delayAudioProcessor  : public AudioProcessor,
+                                       public ChangeBroadcaster
 {
 public:
     //==============================================================================

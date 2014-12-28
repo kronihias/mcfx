@@ -115,6 +115,7 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
     default:
       break;
   }
+    sendChangeMessage();
 
 }
 
@@ -365,13 +366,13 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
 //==============================================================================
 bool Mcfx_gain_delayAudioProcessor::hasEditor() const
 {
-    return false; // (change this to false if you choose to not supply an editor)
+    return true; // (change this to false if you choose to not supply an editor)
 }
 
 AudioProcessorEditor* Mcfx_gain_delayAudioProcessor::createEditor()
 {
-    //return new Mcfx_gain_delayAudioProcessorEditor (this);
-    return nullptr;
+    return new Mcfx_gain_delayAudioProcessorEditor (this);
+    //return nullptr;
 }
 
 //==============================================================================
@@ -380,12 +381,38 @@ void Mcfx_gain_delayAudioProcessor::getStateInformation (MemoryBlock& destData)
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
+    // Create an outer XML element..
+    
+    XmlElement xml ("MYPLUGINSETTINGS");
+    
+    // add some attributes to it..
+    for (int i=0; i < getNumParameters(); i++)
+    {
+        xml.setAttribute (String(i), getParameter(i));
+    }
+    
+    // then use this helper function to stuff it into the binary blob and return it..
+    copyXmlToBinary (xml, destData);
 }
 
 void Mcfx_gain_delayAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
+    
+    ScopedPointer<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    
+    if (xmlState != nullptr)
+    {
+        // make sure that it's actually our type of XML object..
+        if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
+        {
+            for (int i=0; i < getNumParameters(); i++) {
+                setParameter(i, xmlState->getDoubleAttribute(String(i)));
+            }
+        }
+        
+    }
 }
 
 //==============================================================================
