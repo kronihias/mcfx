@@ -1,20 +1,18 @@
 /*
   ==============================================================================
 
-  This is an automatically generated file created by the Jucer!
-
-  Creation date:  18 Apr 2013 12:51:24pm
+  This is an automatically generated GUI class created by the Introjucer!
 
   Be careful when adding custom code to these files, as only the code within
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Jucer version: 1.12
+  Created with Introjucer version: 3.1.1
 
   ------------------------------------------------------------------------------
 
-  The Jucer is part of the JUCE library - "Jules' Utility Class Extensions"
-  Copyright 2004-6 by Raw Material Software ltd.
+  The Introjucer is part of the JUCE library - "Jules' Utility Class Extensions"
+  Copyright 2004-13 by Raw Material Software Ltd.
 
   ==============================================================================
 */
@@ -30,26 +28,19 @@
 
 //==============================================================================
 Ambix_kmeterAudioProcessorEditor::Ambix_kmeterAudioProcessorEditor (Ambix_kmeterAudioProcessor* ownerFilter)
-    : AudioProcessorEditor (ownerFilter),
-      label (0),
-      sld_hold (0),
-      sld_fall (0),
-      label2 (0),
-      label3 (0),
-      tgl_pkhold (0),
-      cachedImage_meter_scale_png (0)
+    : AudioProcessorEditor (ownerFilter)
 {
     addAndMakeVisible (label = new Label ("new label",
-                                          "Ambix::kmeter"));
-    label->setFont (Font (15.0000f, Font::plain));
+                                          TRANS("Ambix::kmeter")));
+    label->setFont (Font (15.00f, Font::plain));
     label->setJustificationType (Justification::centredLeft);
     label->setEditable (false, false, false);
     label->setColour (Label::textColourId, Colours::yellow);
     label->setColour (TextEditor::textColourId, Colours::black);
-    label->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    label->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
     addAndMakeVisible (sld_hold = new Slider ("new slider"));
-    sld_hold->setTooltip ("hold time in ms");
+    sld_hold->setTooltip (TRANS("hold time in ms"));
     sld_hold->setRange (0, 5, 0.1);
     sld_hold->setSliderStyle (Slider::Rotary);
     sld_hold->setTextBoxStyle (Slider::TextBoxLeft, false, 40, 18);
@@ -57,7 +48,7 @@ Ambix_kmeterAudioProcessorEditor::Ambix_kmeterAudioProcessorEditor (Ambix_kmeter
     sld_hold->addListener (this);
 
     addAndMakeVisible (sld_fall = new Slider ("new slider"));
-    sld_fall->setTooltip ("fall dB/s");
+    sld_fall->setTooltip (TRANS("fall dB/s"));
     sld_fall->setRange (0, 99, 1);
     sld_fall->setSliderStyle (Slider::Rotary);
     sld_fall->setTextBoxStyle (Slider::TextBoxLeft, false, 40, 18);
@@ -65,28 +56,37 @@ Ambix_kmeterAudioProcessorEditor::Ambix_kmeterAudioProcessorEditor (Ambix_kmeter
     sld_fall->addListener (this);
 
     addAndMakeVisible (label2 = new Label ("new label",
-                                           "hold [s]\n"));
-    label2->setFont (Font (15.0000f, Font::plain));
+                                           TRANS("hold [s]\n")));
+    label2->setFont (Font (15.00f, Font::plain));
     label2->setJustificationType (Justification::centredLeft);
     label2->setEditable (false, false, false);
     label2->setColour (Label::textColourId, Colours::white);
     label2->setColour (TextEditor::textColourId, Colours::black);
-    label2->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    label2->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
     addAndMakeVisible (label3 = new Label ("new label",
-                                           "fall [dB/s]\n"));
-    label3->setFont (Font (15.0000f, Font::plain));
+                                           TRANS("fall [dB/s]\n")));
+    label3->setFont (Font (15.00f, Font::plain));
     label3->setJustificationType (Justification::centredLeft);
     label3->setEditable (false, false, false);
     label3->setColour (Label::textColourId, Colours::white);
     label3->setColour (TextEditor::textColourId, Colours::black);
-    label3->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    label3->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
     addAndMakeVisible (tgl_pkhold = new ToggleButton ("new toggle button"));
-    tgl_pkhold->setButtonText ("peak hold");
+    tgl_pkhold->setButtonText (TRANS("peak hold"));
     tgl_pkhold->addListener (this);
     tgl_pkhold->setColour (ToggleButton::textColourId, Colours::white);
 
+    addAndMakeVisible (sld_offset = new Slider ("new slider"));
+    sld_offset->setTooltip (TRANS("offset scale"));
+    sld_offset->setRange (-36, 18, 1);
+    sld_offset->setSliderStyle (Slider::LinearVertical);
+    sld_offset->setTextBoxStyle (Slider::NoTextBox, true, 40, 18);
+    sld_offset->setColour (Slider::rotarySliderFillColourId, Colours::white);
+    sld_offset->addListener (this);
+
+    cachedImage_meter_scale_png = ImageCache::getFromMemory (meter_scale_png, meter_scale_pngSize);
     cachedImage_meter_scale_png = ImageCache::getFromMemory (meter_scale_png, meter_scale_pngSize);
 
     //[UserPreSize]
@@ -104,12 +104,13 @@ Ambix_kmeterAudioProcessorEditor::~Ambix_kmeterAudioProcessorEditor()
     //[Destructor_pre]. You can add your own custom destruction code here..
     //[/Destructor_pre]
 
-    deleteAndZero (label);
-    deleteAndZero (sld_hold);
-    deleteAndZero (sld_fall);
-    deleteAndZero (label2);
-    deleteAndZero (label3);
-    deleteAndZero (tgl_pkhold);
+    label = nullptr;
+    sld_hold = nullptr;
+    sld_fall = nullptr;
+    label2 = nullptr;
+    label3 = nullptr;
+    tgl_pkhold = nullptr;
+    sld_offset = nullptr;
 
 
     //[Destructor]. You can add your own custom destruction code here..
@@ -140,12 +141,16 @@ void Ambix_kmeterAudioProcessorEditor::paint (Graphics& g)
 
 void Ambix_kmeterAudioProcessorEditor::resized()
 {
+    //[UserPreResize] Add your own custom resize code here..
+    //[/UserPreResize]
+
     label->setBounds (0, 0, 104, 16);
     sld_hold->setBounds (166, 0, 70, 24);
     sld_fall->setBounds (307, 0, 70, 24);
     label2->setBounds (111, 3, 64, 16);
     label3->setBounds (239, 3, 77, 16);
     tgl_pkhold->setBounds (382, 0, 91, 24);
+    sld_offset->setBounds (4, 23, 18, 167);
     //[UserResized] Add your own custom resize handling here..
     //[/UserResized]
 }
@@ -164,6 +169,11 @@ void Ambix_kmeterAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWas
     {
         //[UserSliderCode_sld_fall] -- add your slider handling code here..
         //[/UserSliderCode_sld_fall]
+    }
+    else if (sliderThatWasMoved == sld_offset)
+    {
+        //[UserSliderCode_sld_offset] -- add your slider handling code here..
+        //[/UserSliderCode_sld_offset]
     }
 
     //[UsersliderValueChanged_Post]
@@ -193,16 +203,17 @@ void Ambix_kmeterAudioProcessorEditor::buttonClicked (Button* buttonThatWasClick
 
 //==============================================================================
 #if 0
-/*  -- Jucer information section --
+/*  -- Introjucer information section --
 
-    This is where the Jucer puts all of its metadata, so don't change anything in here!
+    This is where the Introjucer stores the metadata that describe this GUI layout, so
+    make changes in here at your peril!
 
 BEGIN_JUCER_METADATA
 
 <JUCER_COMPONENT documentType="Component" className="Ambix_kmeterAudioProcessorEditor"
                  componentName="" parentClasses="public AudioProcessorEditor"
                  constructorParams="Ambix_kmeterAudioProcessor* ownerFilter" variableInitialisers="AudioProcessorEditor (ownerFilter)"
-                 snapPixels="8" snapActive="0" snapShown="1" overlayOpacity="0.330000013"
+                 snapPixels="8" snapActive="0" snapShown="1" overlayOpacity="0.330"
                  fixedSize="1" initialWidth="500" initialHeight="210">
   <BACKGROUND backgroundColour="ff1a1a1a">
     <IMAGE pos="39 26 17 167" resource="meter_scale_png" opacity="1" mode="0"/>
@@ -215,8 +226,8 @@ BEGIN_JUCER_METADATA
          fontsize="15" bold="0" italic="0" justification="33"/>
   <SLIDER name="new slider" id="d5c1a3078147bf28" memberName="sld_hold"
           virtualName="" explicitFocusOrder="0" pos="166 0 70 24" tooltip="hold time in ms"
-          rotarysliderfill="ffffffff" min="0" max="5" int="0.1" style="Rotary"
-          textBoxPos="TextBoxLeft" textBoxEditable="1" textBoxWidth="40"
+          rotarysliderfill="ffffffff" min="0" max="5" int="0.10000000000000000555"
+          style="Rotary" textBoxPos="TextBoxLeft" textBoxEditable="1" textBoxWidth="40"
           textBoxHeight="18" skewFactor="1"/>
   <SLIDER name="new slider" id="edc665213f83e06b" memberName="sld_fall"
           virtualName="" explicitFocusOrder="0" pos="307 0 70 24" tooltip="fall dB/s"
@@ -237,6 +248,11 @@ BEGIN_JUCER_METADATA
                 virtualName="" explicitFocusOrder="0" pos="382 0 91 24" txtcol="ffffffff"
                 buttonText="peak hold" connectedEdges="0" needsCallback="1" radioGroupId="0"
                 state="0"/>
+  <SLIDER name="new slider" id="42b67ea3b0dcd357" memberName="sld_offset"
+          virtualName="" explicitFocusOrder="0" pos="4 23 18 167" tooltip="offset scale"
+          rotarysliderfill="ffffffff" min="-36" max="18" int="1" style="LinearVertical"
+          textBoxPos="NoTextBox" textBoxEditable="0" textBoxWidth="40"
+          textBoxHeight="18" skewFactor="1"/>
 </JUCER_COMPONENT>
 
 END_JUCER_METADATA
@@ -374,7 +390,6 @@ static const unsigned char resource_Ambix_kmeterAudioProcessorEditor_meter_scale
 
 const char* Ambix_kmeterAudioProcessorEditor::meter_scale_png = (const char*) resource_Ambix_kmeterAudioProcessorEditor_meter_scale_png;
 const int Ambix_kmeterAudioProcessorEditor::meter_scale_pngSize = 6973;
-
 
 
 //[EndFile] You can add extra defines here...
