@@ -33,7 +33,7 @@ fall(15.f),
 holdSamples(0),
 fallPeak(0.f)
 {
-    
+    calcFall();
 }
 
 MyMeterDsp::~MyMeterDsp()

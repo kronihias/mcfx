@@ -1,23 +1,21 @@
 /*
-  ==============================================================================
-
-  This is an automatically generated file created by the Jucer!
-
-  Creation date:  16 Nov 2012 7:03:13pm
-
-  Be careful when adding custom code to these files, as only the code within
-  the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
-  and re-saved.
-
-  Jucer version: 1.12
-
-  ------------------------------------------------------------------------------
-
-  The Jucer is part of the JUCE library - "Jules' Utility Class Extensions"
-  Copyright 2004-6 by Raw Material Software ltd.
-
-  ==============================================================================
-*/
+ ==============================================================================
+ 
+ This file is part of the mcfx (Multichannel Effects) plug-in suite.
+ Copyright (c) 2013/2014 - Matthias Kronlachner
+ www.matthiaskronlachner.com
+ 
+ Permission is granted to use this software under the terms of:
+ the GPL v2 (or any later version)
+ 
+ Details of these licenses can be found at: www.gnu.org/licenses
+ 
+ ambix is distributed in the hope that it will be useful, but WITHOUT ANY
+ WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+ A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+ 
+ ==============================================================================
+ */
 
 //[Headers] You can add your own extra header files here...
 //[/Headers]
@@ -67,9 +65,10 @@ MeterComponent::MeterComponent ()
 : _peak_hold(false),
     cachedImage_meter_gradient_png (0),
     cachedImage_meter_gradient_off_png (0),
-    dpk_hold_db(0.f),
-    dpk_db(0.f),
-    rms_db(0.f)
+    dpk_hold_db(-199.f),
+    dpk_db(-199.f),
+    rms_db(-199.f),
+    _offset(0)
     
 {
     cachedImage_meter_gradient_png = ImageCache::getFromMemory (meter_gradient_png, meter_gradient_pngSize);
@@ -82,6 +81,7 @@ MeterComponent::MeterComponent ()
     dpk_db = 0.0f;
     rms_db = 0.0f;
 
+    reset();
     //[Constructor] You can add your own custom stuff here..
     //[/Constructor]
 }
@@ -115,26 +115,34 @@ void MeterComponent::paint (Graphics& g)
                          1.0000f);
     
     // 163 max height
-	int size_rms = (int)floorf(rms_db*163.f);
+	int size_rms = (int)floorf(iec_scale(rms_db - _offset)*163.f);
 
     int y_rms = 163-size_rms;
     
     g.fillRect (0, y_rms, 8, size_rms);
     
     // peak value
-	int y_dpk = (int)floorf(163 - dpk_db*163.f);
+	int y_dpk = (int)floorf(163 - iec_scale(dpk_db - _offset)*163.f);
     
-    g.setColour (Colours::white);
+    if (dpk_db > 0.f)
+        g.setColour (Colours::red);
+    else
+        g.setColour (Colours::white);
+    
     g.fillRect (0, y_dpk, 8, 2);
     
     if (_peak_hold)
     {
         // hold peak value
-		int y_dpk_hold = (int)floorf(163 - dpk_hold_db*163.f);
+		int y_dpk_hold = (int)floorf(163 - iec_scale(dpk_hold_db - _offset)*163.f);
         
         if (y_dpk_hold < 0)
         {
             y_dpk_hold = 0;
+        }
+        
+        if (dpk_hold_db > 0.f)
+        {
             g.setColour (Colours::red);
         } else {
             g.setColour (Colours::yellow);
@@ -162,18 +170,28 @@ void MeterComponent::mouseUp (const MouseEvent& e)
 
 void MeterComponent::reset ()
 {
-    rms_db=0.f;
-    dpk_db=0.f;
-    dpk_hold_db=0.f;
+    rms_db=-199.f;
+    dpk_db=-199.f;
+    dpk_hold_db=-199.f;
     repaint();
+}
+
+void MeterComponent::offset(int offset)
+{
+    _offset = offset;
 }
 
 void MeterComponent::setValue(float rms, float dpk, float dpk_hold)
 {
-    rms_db = iec_scale(rmstodb(rms));
-    dpk_db = iec_scale(rmstodb(dpk));
+    rms_db = rmstodb(rms);
+    dpk_db = rmstodb(dpk);
     
-    dpk_hold_db = iec_scale(rmstodb(dpk_hold));
+    dpk_hold_db = rmstodb(dpk_hold);
+    
+    // rms_db = iec_scale(rmstodb(rms) - _offset);
+    // dpk_db = iec_scale(rmstodb(dpk) - _offset);
+    
+    // dpk_hold_db = iec_scale(rmstodb(dpk_hold) - _offset);
     
     if (rms || dpk)
         repaint();

@@ -24,12 +24,15 @@
 //==============================================================================
 Ambix_meterAudioProcessor::Ambix_meterAudioProcessor() :
 _hold(0.5f),
-_fall(15.0f)
+_fall(15.0f),
+_pk_hold(false),
+_offset(0.f)
 {
     for (int i=0; i<NUM_CHANNELS; i++)
     {
         _my_meter_dsp.add(new MyMeterDsp());
-        
+        _my_meter_dsp.getUnchecked(i)->setAudioParams((int)getSampleRate(), getBlockSize());
+        _my_meter_dsp.getUnchecked(i)->setParams(_hold, _fall);
     }
 }
 
@@ -45,26 +48,129 @@ const String Ambix_meterAudioProcessor::getName() const
 
 int Ambix_meterAudioProcessor::getNumParameters()
 {
-    return 0;
+    return totalNumParams;
 }
 
 float Ambix_meterAudioProcessor::getParameter (int index)
 {
+    switch (index) {
+        case HoldParam:
+            return _hold/5.f;
+            break;
+        
+        case FallParam:
+            return _fall/99.f;
+            break;
+        
+        case PkHoldParam:
+            return (float)_pk_hold;
+            break;
+            
+        case OffsetParam:
+            return (_offset+36.f)/54.f;
+            break;
+            
+        default:
+            
+            break;
+    }
     return 0.0f;
 }
 
 void Ambix_meterAudioProcessor::setParameter (int index, float newValue)
 {
+    switch (index) {
+        case HoldParam:
+            _hold = newValue*5.f;
+            for (int i=0; i<NUM_CHANNELS; i++)
+            {
+                _my_meter_dsp.getUnchecked(i)->setParams(_hold, _fall);
+            }
+            break;
+            
+        case FallParam:
+            _fall = newValue*99.f;
+            for (int i=0; i<NUM_CHANNELS; i++)
+            {
+                _my_meter_dsp.getUnchecked(i)->setParams(_hold, _fall);
+            }
+            break;
+            
+        case PkHoldParam:
+            if (newValue < 0.5)
+                _pk_hold = false;
+            else
+                _pk_hold = true;
+            break;
+            
+        case OffsetParam:
+            _offset = newValue*54.f-36.f;
+            break;
+            
+        default:
+            
+            break;
+    }
+    sendChangeMessage();
 }
 
 const String Ambix_meterAudioProcessor::getParameterName (int index)
 {
+    switch (index) {
+        case HoldParam:
+            return "Hold [s]";
+            break;
+            
+        case FallParam:
+            return "Fall [dB/s]";
+            break;
+            
+        case PkHoldParam:
+            return "Show Peak Hold";
+            break;
+            
+        case OffsetParam:
+            return "Scale Offset";
+            break;
+            
+        default:
+            
+            break;
+    }
     return String::empty;
 }
 
 const String Ambix_meterAudioProcessor::getParameterText (int index)
 {
-    return String::empty;
+    String text = "";
+    
+    switch (index) {
+        case HoldParam:
+            text << String(_hold).substring(0, 3);
+            text << " s";
+            break;
+            
+        case FallParam:
+            text << String((int)_fall);
+            text << " dB/s";
+            break;
+            
+        case PkHoldParam:
+            if (_pk_hold)
+                text << "On";
+            else
+                text << "Off";
+            break;
+            
+        case OffsetParam:
+            text << String((int)_offset);
+            break;
+            
+        default:
+            
+            break;
+    }
+    return text;
 }
 
 const String Ambix_meterAudioProcessor::getInputChannelName (int channelIndex) const
@@ -136,30 +242,13 @@ void Ambix_meterAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     for (int i=0; i<NUM_CHANNELS; i++)
     {
         _my_meter_dsp.getUnchecked(i)->setAudioParams((int)sampleRate, samplesPerBlock);
+        _my_meter_dsp.getUnchecked(i)->setParams(_hold, _fall);
     }
 }
 
 void Ambix_meterAudioProcessor::releaseResources()
 {
     
-}
-
-void Ambix_meterAudioProcessor::setHoldParameter(float hold)
-{
-    _hold = hold;
-    for (int i=0; i<NUM_CHANNELS; i++)
-    {
-        _my_meter_dsp.getUnchecked(i)->setParams(_hold, _fall);
-    }
-}
-
-void Ambix_meterAudioProcessor::setFallParameter(float fall)
-{
-    _fall = fall;
-    for (int i=0; i<NUM_CHANNELS; i++)
-    {
-        _my_meter_dsp.getUnchecked(i)->setParams(_hold, _fall);
-    }
 }
 
 void Ambix_meterAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
@@ -190,12 +279,37 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     // You should use this method to store your parameters in the memory block.
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
+    
+    XmlElement xml ("MYPLUGINSETTINGS");
+    
+    // add some attributes to it..
+    for (int i=0; i < getNumParameters(); i++)
+    {
+        xml.setAttribute (String(i), getParameter(i));
+    }
+    
+    // then use this helper function to stuff it into the binary blob and return it..
+    copyXmlToBinary (xml, destData);
 }
 
 void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
+    
+    ScopedPointer<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    
+    if (xmlState != nullptr)
+    {
+        // make sure that it's actually our type of XML object..
+        if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
+        {
+            for (int i=0; i < getNumParameters(); i++) {
+                setParameter(i, xmlState->getDoubleAttribute(String(i)));
+            }
+        }
+        
+    }
 }
 
 //==============================================================================

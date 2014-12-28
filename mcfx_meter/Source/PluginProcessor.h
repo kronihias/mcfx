@@ -26,7 +26,8 @@
 //==============================================================================
 /**
 */
-class Ambix_meterAudioProcessor  : public AudioProcessor
+class Ambix_meterAudioProcessor  : public AudioProcessor,
+                                   public ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -50,9 +51,6 @@ public:
 
     float getParameter (int index);
     void setParameter (int index, float newValue);
-    
-    void setHoldParameter (float hold);
-    void setFallParameter (float fall);
     
     const String getParameterName (int index);
     const String getParameterText (int index);
@@ -83,8 +81,19 @@ public:
     float _hold; // peak hold time, seconds
     float _fall; // peak fallback rate, dB/s
     
-private:
+    bool _pk_hold;
+    float _offset;
     
+    enum Parameters
+	{
+		HoldParam,
+        FallParam,
+        PkHoldParam,
+        OffsetParam,
+		totalNumParams
+	};
+    
+private:
     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Ambix_meterAudioProcessor)

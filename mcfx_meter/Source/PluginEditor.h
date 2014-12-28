@@ -24,7 +24,7 @@
 #include "JuceHeader.h"
 #include "PluginProcessor.h"
 #include "meter.h"
-
+#include "MeterScale.h"
 
 
 
@@ -39,7 +39,8 @@
 class Ambix_meterAudioProcessorEditor  : public AudioProcessorEditor,
                                         public SliderListener,
                                         public ButtonListener,
-                                        public Timer
+                                        public Timer,
+                                        public ChangeListener
 {
 public:
     //==============================================================================
@@ -59,7 +60,9 @@ public:
     void mouseDown (const MouseEvent& e);
     
     void timerCallback();
-
+    
+    void changeListenerCallback (ChangeBroadcaster *source);
+    
     // Binary resources:
     static const char* meter_scale_png;
     static const int meter_scale_pngSize;
@@ -69,6 +72,9 @@ private:
     //[UserVariables]   -- You can add your own custom variables in this section.
     OwnedArray<MeterComponent> _meters;
     OwnedArray<Label> _labels;
+    
+    ScopedPointer<MeterScaleComponent> _scale_left;
+    ScopedPointer<MeterScaleComponent> _scale_right;
     
     int _width;
     
@@ -87,6 +93,7 @@ private:
     ScopedPointer<Label> label2;
     ScopedPointer<Label> label3;
     ScopedPointer<ToggleButton> tgl_pkhold;
+    ScopedPointer<Slider> sld_offset;
     Image cachedImage_meter_scale_png;
 
 
