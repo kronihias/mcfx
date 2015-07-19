@@ -27,16 +27,23 @@
 #define Sleep(x) usleep((x)*1000)
 #endif
 
+#define CONVPROC_SCHEDULER_PRIORITY 0
+#define CONVPROC_SCHEDULER_CLASS SCHED_FIFO
+#define THREAD_SYNC_MODE true
+
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
 _min_in_ch(0),
 _min_out_ch(0),
+_num_conv(0),
+_ConvBufferPos(0),
 _isProcessing(false),
 _configLoaded(false)
 
 {
     _SampleRate = getSampleRate();
     _BufferSize = getBlockSize();
+    _ConvBufferSize = getBlockSize();
     
     presetDir = presetDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
     std::cout << "Search dir:" << presetDir.getFullPathName() << std::endl;
@@ -55,6 +62,13 @@ _configLoaded(false)
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
 {
+#ifdef USE_ZITA_CONVOLVER
+    zita_conv.stop_process();
+    zita_conv.cleanup();
+#else
+    mtxconv_.StopProc();
+    mtxconv_.Cleanup();
+#endif
 }
 
 //==============================================================================
@@ -134,7 +148,8 @@ double Mcfx_convolverAudioProcessor::getTailLengthSeconds() const
 {
     if (_configLoaded)
     {
-        return _my_convolvers.getFirst()->irLength();
+        // TODO: return length...
+        return 0.0;
     } else {
         return 0.0;
     }
@@ -166,8 +181,20 @@ void Mcfx_convolverAudioProcessor::changeProgramName (int index, const String& n
 //==============================================================================
 void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    _SampleRate = sampleRate;
-    _BufferSize = samplesPerBlock;
+    
+    if (_SampleRate != sampleRate || _BufferSize != samplesPerBlock)
+    {
+        _SampleRate = sampleRate;
+        _BufferSize = samplesPerBlock;
+        
+        ReloadConfiguration();
+    }
+    
+    if (_configLoaded)
+    {
+        mtxconv_.Reset();
+    }
+    
 }
 
 void Mcfx_convolverAudioProcessor::releaseResources()
@@ -183,31 +210,36 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
     
     if (_configLoaded)
     {
+        
         _isProcessing = true;
         
-        // only process if we have enough intput/output channels
-        if (getNumInputChannels() >= _min_in_ch && getNumOutputChannels() >= _min_out_ch)
+#ifdef USE_ZITA_CONVOLVER
+        
+        for (int i=0; i < jmin(conv_data.getNumInputChannels(), getNumInputChannels()) ; i++)
         {
-            
-            // this buffer will hold the output
-            
-            AudioSampleBuffer outputBuffer(getNumOutputChannels(), buffer.getNumSamples());
-            
-            outputBuffer.clear();
-            
-            
-            // iterate through all convolvers
-            for (int i = 0; i < _my_convolvers.size(); i++)
-            {
-                
-                /* inputBuffer, outputBuffer, inputChannel, outputChannel */
-                
-                _my_convolvers.getUnchecked(i)->process(buffer, outputBuffer, _conv_in.getUnchecked(i), _conv_out.getUnchecked(i));
-                
-            }
-            
-            buffer = outputBuffer;
+            float* indata = zita_conv.inpdata(i)+_ConvBufferPos;
+            memcpy(indata, buffer.getReadPointer(i), getBlockSize()*sizeof(float));
         }
+        
+        _ConvBufferPos += getBlockSize();
+        
+        if (_ConvBufferPos >= _ConvBufferSize) {
+            zita_conv.process(THREAD_SYNC_MODE);
+            _ConvBufferPos = 0;
+        }
+        
+        
+        
+        for (int i=0; i < jmin(conv_data.getNumOutputChannels(), getNumOutputChannels()) ; i++)
+        {
+            float* outdata = zita_conv.outdata(i)+_ConvBufferPos;
+            memcpy(buffer.getWritePointer(i), outdata, getBlockSize()*sizeof(float));
+        }
+        
+#else
+        mtxconv_.processBlock(buffer, buffer);
+        
+#endif
         
         _isProcessing = false;
         
@@ -218,6 +250,12 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
     }
     
 
+}
+
+void Mcfx_convolverAudioProcessor::ReloadConfiguration()
+{
+    if (_configLoaded)
+        LoadConfiguration(_configFile);
 }
 
 void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
@@ -247,6 +285,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         std::cout << "Config Unloaded..." << std::endl;
     }
     
+    if (_ConvBufferSize < _BufferSize)
+        _ConvBufferSize = _BufferSize;
+    
+    _ConvBufferSize = nextPowerOfTwo(_ConvBufferSize);
+    
     String debug;
     debug << "\ntrying to load " << configFile.getFullPathName() << "\n\n";
     
@@ -255,8 +298,10 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     // debug print samplerate and buffer size
     debug = "Samplerate: ";
     debug << _SampleRate;
-    debug << " Buffer Size: ";
-    debug << _BufferSize;
+    debug << " Host Buffer Size: ";
+    debug << (int)_BufferSize;
+    debug << " Internal Buffer Size: ";
+    debug << (int)_ConvBufferSize;
     DebugPrint(debug);
     
     activePreset = configFile.getFileName(); // store filename only, on restart search preset folder for it!
@@ -269,6 +314,10 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     // global settings
     
     String directory("");
+    
+    AudioSampleBuffer TempAudioBuffer(1,256);
+    
+    conv_data.setSampleRate(_SampleRate);
     
     // iterate over all lines
     for (int currentLine = 0; currentLine < myLines.size(); currentLine++)
@@ -287,6 +336,16 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             directory = line;
             
             std::cout << "Dir: " << directory << std::endl;
+        
+        } else if (line.contains("/convolver/new")) {
+            int t_in_ch = 0;
+            int t_out_ch = 0;
+            
+            line = line.trimCharactersAtStart("/convolver/new").trim();
+            String::CharPointerType lineChar = line.getCharPointer();
+            
+            sscanf(lineChar, "%i%i", &t_in_ch, &t_out_ch);
+            
             
         } else if (line.contains("/impulse/read"))
         {
@@ -307,8 +366,6 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             sscanf(lineChar, "%i%i%f%i%i%i%i%s", &in_ch, &out_ch, &gain, &delay, &offset, &length, &channel, filename);
             
             // printf("load ir: %i %i %f %i %i %i %i %s \n", in_ch, out_ch, gain, delay, offset, length, channel, filename);
-            
-            _my_convolvers.add(new MyConvolver);
             
             File IrFilename;
             
@@ -331,11 +388,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 }
             }
             
-            // std::cout << IrFilename.getFullPathName() << std::endl;
-            
             if ( ( in_ch < 1 ) || ( in_ch > getNumInputChannels() ) || ( out_ch < 1 ) || ( out_ch > getNumOutputChannels() ) )
             {
-                _my_convolvers.removeLast();
                 
                 String debug;
                 debug << "ERROR: channel assignment not feasible: In: " << in_ch << " Out: " << out_ch;
@@ -343,65 +397,207 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 
             } else {
                 
-                if (_my_convolvers.getLast()->loadIr(IrFilename, channel-1, _SampleRate, _BufferSize, gain, delay, offset, length))
+                double src_samplerate;
+                if (loadIr(&TempAudioBuffer, IrFilename, channel-1, src_samplerate, gain, offset, length))
                 {
-                    _conv_in.add(in_ch-1);
-                    _conv_out.add(out_ch-1);
+                    // std::cout << "Length: " <<  TempAudioBuffer.getNumSamples() << " Channels: " << TempAudioBuffer.getNumChannels() << " MaxLevel: " << TempAudioBuffer.getRMSLevel(0, 0, 2048) << std::endl;
                     
-                    
-                    // these values are to make sure we afterwards have enough in/out channels
-                    if (in_ch > _min_in_ch)
-                    _min_in_ch = in_ch;
-                    
-                    if (out_ch > _min_out_ch)
-                    _min_out_ch = out_ch;
+                    // add IR to my convolution data - offset and length are already done while reading file
+                    conv_data.addIR(in_ch-1, out_ch-1, 0, delay, 0, &TempAudioBuffer, src_samplerate);
                     
                     String debug;
-                    debug << "conv # " << _my_convolvers.size() << " " << IrFilename.getFullPathName() << " loaded";
+                    debug << "conv # " << conv_data.getNumIRs() << " " << IrFilename.getFullPathName() << " loaded";
                     DebugPrint(debug << "\n");
                     
                 } else {
-                    
-                    _my_convolvers.removeLast();
-                    
                     String debug;
                     debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
                     DebugPrint(debug << "\n");
-                    
-                } // end ir not loaded
+                }
                 
+             
             } // end check channel assignment
             
             
-        } // end /impulse/read line
+        } // end "/impulse/read" line
+        else if (line.contains("/impulse/densewav"))
+        {
+            // TODO!
+        } // end "/impulse/densewav" line
         
         
     } // iterate over lines
     
+    // initiate convolution
+    
+#ifdef USE_ZITA_CONVOLVER
+    int err=0;
+    
+    unsigned int   options = 0;
+    
+    options |= Convproc::OPT_FFTW_MEASURE;
+    options |= Convproc::OPT_VECTOR_MODE;
+    
+    zita_conv.set_options (options);
+    zita_conv.set_density(0.5);
+    
+    printf("max length: %lli \n", conv_data.getMaxLength());
+    
+    err = zita_conv.configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), (unsigned int)conv_data.getMaxLength(), _ConvBufferSize, _ConvBufferSize, Convproc::MAXPART);
+    
+    for (int i=0; i < conv_data.getNumIRs(); i++)
+    {
+
+        err = zita_conv.impdata_create(conv_data.getInCh(i), conv_data.getOutCh(i), 1, (float *)conv_data.getIR(i)->getReadPointer(0), (unsigned int)conv_data.getDelay(i), (unsigned int)conv_data.getLength(i));
+        
+    }
+    
+    zita_conv.print();
+    zita_conv.start_process(CONVPROC_SCHEDULER_PRIORITY, CONVPROC_SCHEDULER_CLASS);
+    
+#else
+    mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _ConvBufferSize, conv_data.getMaxLength(), 8192);
+    
+    for (int i=0; i < conv_data.getNumIRs(); i++)
+    {
+        
+        mtxconv_.AddFilter(conv_data.getInCh(i), conv_data.getOutCh(i), *conv_data.getIR(i));
+        // no delay and length yet!
+        
+    }
+    
+    mtxconv_.StartProc();
+    
+#endif
+    
     _configLoaded = true;
     
-    setLatencySamples(_BufferSize);
+    setLatencySamples(_ConvBufferSize-_BufferSize);
+    
+    
+    _min_in_ch = conv_data.getNumInputChannels();
+    _min_out_ch = conv_data.getNumOutputChannels();
+    _num_conv = conv_data.getNumIRs();
+    
+    _configFile = configFile;
     
     sendChangeMessage(); // notify editor
 }
+
+bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain, int offset, int length)
+{
+    if (!audioFile.existsAsFile())
+    {
+        std::cout << "ERROR: file does not exist!!" << std::endl;
+        return false;
+    }
+    
+    AudioFormatManager formatManager;
+    
+    // this can read .wav and .aiff
+    formatManager.registerBasicFormats();
+    
+    AudioFormatReader* reader = formatManager.createReaderFor(audioFile);
+    
+    if (!reader) {
+        std::cout << "ERROR: could not read impulse response file!" << std::endl;
+        return false;
+    }
+    
+	//AudioFormatReader* reader = wavFormat.createMemoryMappedReader(audioFile);
+    
+    int64 ir_length = (int)reader->lengthInSamples-offset;
+    
+    if (ir_length <= 0) {
+        std::cout << "wav file has zero samples" << std::endl;
+        return false;
+    }
+    
+    if (reader->numChannels <= channel) {
+        std::cout << "wav file doesn't have enough channels: " << reader->numChannels << std::endl;
+        return false;
+    }
+    
+    
+    AudioSampleBuffer ReadBuffer(reader->numChannels, ir_length); // create buffer
+    
+    
+    reader->read(&ReadBuffer, 0, ir_length, offset, true, true);
+    
+    // set the samplerate -> maybe we have to resample later...
+    samplerate = reader->sampleRate;
+    
+    //std::cout << "ReadRMS: " << ReadBuffer.getRMSLevel(channel, 0, ir_length) << std::endl;
+    
+    // check if we want a shorter impulse response
+    
+    if (ir_length > length && length != 0)
+        ir_length = length;
+    
+    // copy the wanted channel into our IR Buffer
+    
+    IRBuffer->setSize(1, ir_length);
+    IRBuffer->copyFrom(0, 0, ReadBuffer, channel, 0, ir_length);
+    
+        
+    // scale ir with gain
+    IRBuffer->applyGain(gain);
+    
+    // std::cout << "ReadRMS: " << IRBuffer->getRMSLevel(0, 0, ir_length) << std::endl;
+    
+    delete reader;
+    
+    
+    return true;
+}
+
+unsigned int Mcfx_convolverAudioProcessor::getBufferSize()
+{
+    return _BufferSize;
+}
+
+unsigned int Mcfx_convolverAudioProcessor::getConvBufferSize()
+{
+    return _ConvBufferSize;
+}
+
+
+void Mcfx_convolverAudioProcessor::setConvBufferSize(unsigned int bufsize)
+{
+    if (nextPowerOfTwo(bufsize) != _ConvBufferSize)
+    {
+        _ConvBufferSize = nextPowerOfTwo(bufsize);
+        ReloadConfiguration();
+    }
+}
+
+
 
 void Mcfx_convolverAudioProcessor::UnloadConfiguration()
 {
     // delete configuration
     _configLoaded = false;
     
-    for (int i=0; i < _my_convolvers.size(); i++) {
-        
-        _my_convolvers.getUnchecked(i)->unloadIr();
-    }
-    
-    _my_convolvers.clear();
     _conv_in.clear();
     _conv_out.clear();
     
     _min_in_ch = 0;
     _min_out_ch = 0;
     
+#ifdef USE_ZITA_CONVOLVER
+    
+    zita_conv.stop_process();
+    zita_conv.cleanup();
+
+#else
+    
+    mtxconv_.StopProc();
+    mtxconv_.Cleanup();
+    
+#endif
+    
+    conv_data.clear();
+        
     std::cout << "Unloaded Convolution..." << std::endl;
     
 }
@@ -473,6 +669,7 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     // add some attributes to it..
     xml.setAttribute ("activePreset", activePreset);
     xml.setAttribute ("presetDir", presetDir.getFullPathName());
+    xml.setAttribute("ConvBufferSize", (int)_ConvBufferSize);
     
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -496,6 +693,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             activePreset  = xmlState->getStringAttribute("activePreset", "");
             
             newPresetDir = xmlState->getStringAttribute("presetDir", presetDir.getFullPathName());
+            
+            _ConvBufferSize = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
         }
         
         if (activePreset.isNotEmpty()) {

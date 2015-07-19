@@ -29,7 +29,8 @@
 */
 class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public ButtonListener,
-                                            public ChangeListener
+                                            public ChangeListener,
+                                            public ComboBoxListener
 {
 public:
     Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter);
@@ -43,6 +44,8 @@ public:
     void buttonClicked (Button* buttonThatWasClicked);
     
     void changeListenerCallback (ChangeBroadcaster *source);
+    
+    void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
     
     static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
     
@@ -71,6 +74,8 @@ private:
     ScopedPointer<Label> num_spk;
     ScopedPointer<Label> num_hrtf;
     ScopedPointer<TextButton> btn_preset_folder;
+    ScopedPointer<ComboBox> box_conv_buffer;
+    
     
 };
 

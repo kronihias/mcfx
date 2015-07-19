@@ -35,7 +35,8 @@ label4 (0),
 num_ch (0),
 num_spk (0),
 num_hrtf (0),
-btn_preset_folder (0)
+btn_preset_folder (0),
+box_conv_buffer (0)
 {
     
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
@@ -141,6 +142,12 @@ btn_preset_folder (0)
     btn_preset_folder->setColour (TextButton::buttonColourId, Colours::white);
     btn_preset_folder->setColour (TextButton::buttonOnColourId, Colours::blue);
     
+    addAndMakeVisible(box_conv_buffer = new ComboBox ("new combobox"));
+    box_conv_buffer->setTooltip("set higher buffer size to optimize CPU performance but increased latency");
+    box_conv_buffer->addListener(this);
+    box_conv_buffer->setEditableText (false);
+    box_conv_buffer->setJustificationType (Justification::centredLeft);
+    
     setSize (350, 300);
     
     UpdateText();
@@ -204,6 +211,11 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.drawText ("multichannel convolution matrix",
                 1, 28, 343, 30,
                 Justification::centred, true);
+    
+    g.setFont (Font (12.4000f, Font::plain));
+    g.drawText ("Buffer Size",
+                275, 132, 60, 30,
+                Justification::centred, true);
 }
 
 void Mcfx_convolverAudioProcessorEditor::resized()
@@ -221,6 +233,8 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     num_hrtf->setBounds (192, 152, 40, 24);
     btn_preset_folder->setBounds (248, 96, 94, 24);
     
+    box_conv_buffer->setBounds (270, 155, 65, 22);
+    
 }
 
 
@@ -233,7 +247,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     
     num_spk->setText(String(ourProcessor->_min_out_ch), dontSendNotification);
 
-    num_hrtf->setText(String(ourProcessor->_my_convolvers.size()), dontSendNotification);
+    num_hrtf->setText(String(ourProcessor->_num_conv), dontSendNotification);
 
     
     txt_debug->setText(ourProcessor->_DebugText, true);
@@ -242,6 +256,26 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     txt_preset->setCaretPosition(txt_preset->getTotalNumChars()-1);
     txt_preset->setTooltip(txt_preset->getText());
 
+    box_conv_buffer->clear(dontSendNotification);
+    
+    unsigned int buf = ourProcessor->getBufferSize();
+    unsigned int conv_buf = ourProcessor->getConvBufferSize();
+    
+    int sel = 0;
+    unsigned int val = 0;
+    
+    for (int i=0; val < 8192; i++) {
+        
+        val = buf*pow(2,i);
+        
+        box_conv_buffer->addItem(String(val), i+1);
+        
+        if (val == conv_buf)
+            sel = i;
+    }
+    
+    box_conv_buffer->setSelectedItemIndex(sel, dontSendNotification);
+    
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
@@ -354,4 +388,18 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
 {
     UpdateText();
     repaint();
+}
+
+void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
+{
+    Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
+    
+    if (comboBoxThatHasChanged == box_conv_buffer)
+    {
+        int val = box_conv_buffer->getText().getIntValue();
+        
+        // std::cout << "set size: " << val << std::endl;
+        ourProcessor->setConvBufferSize(val);
+    }
+    
 }

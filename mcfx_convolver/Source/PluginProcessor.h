@@ -22,7 +22,16 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
-#include "MyConvolver.h"
+#include "ConvolverData.h"
+
+#ifdef USE_ZITA_CONVOLVER
+    // in case you have problems with the other conv. engine
+    #include <zita-convolver.h>
+#else
+    #include "MtxConv.h"
+#endif
+
+
 //==============================================================================
 /**
 */
@@ -82,6 +91,7 @@ public:
     
     void UnloadConfiguration();
     
+    void ReloadConfiguration();
     
     void DebugPrint(String debugText);
     
@@ -95,6 +105,9 @@ public:
     
     void LoadPresetByName(String presetName);
     
+    unsigned int getBufferSize();
+    unsigned int getConvBufferSize();
+    void setConvBufferSize(unsigned int bufsize);
     
     File presetDir; // where to search for presets
     File lastDir; // for open file dialog...
@@ -105,27 +118,39 @@ public:
     
     String box_preset_str;
     
-    OwnedArray<MyConvolver> _my_convolvers;
-    
     int _min_in_ch;
     int _min_out_ch;
     
+    
+    int _num_conv;
+    
 private:
     
-
+    ConvolverData conv_data;
     
     Array<int> _conv_in; // list with input routing
     Array<int> _conv_out; // list with output routing
     
     
-
-    
     double _SampleRate;
-    int _BufferSize;
+    unsigned int _BufferSize; // size of the processing Block
+    unsigned int _ConvBufferSize; // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
+    
+    unsigned int _ConvBufferPos; // the position of the read/write head
     
     bool _isProcessing;
     
     bool _configLoaded; // is a configuration successfully loaded?
+    
+    File _configFile;
+    
+    bool loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain=1.f, int offset=0, int length=0);
+    
+#ifdef USE_ZITA_CONVOLVER
+	Convproc zita_conv; /* zita-convolver engine class instances */
+#else
+    MtxConvMaster mtxconv_;
+#endif
     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_convolverAudioProcessor)
