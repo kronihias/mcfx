@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2013 - Raw Material Software Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
    Permission is granted to use this software under the terms of either:
    a) the GPL v2 (or any later version)
@@ -369,7 +369,7 @@ public:
 
                     // (can't call the component's setBounds method because that'll reset our fullscreen flag)
                     if (r != component.getBounds() && ! r.isEmpty())
-                        setBounds (r, shouldBeFullScreen);
+                        setBounds (ScalingHelpers::scaledScreenPosToUnscaled (component, r), shouldBeFullScreen);
                 }
             }
         }
@@ -390,16 +390,37 @@ public:
         return ComponentPeer::isKioskMode();
     }
 
+    static bool isWindowAtPoint (NSWindow* w, NSPoint screenPoint)
+    {
+       #if defined (MAC_OS_X_VERSION_10_6) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
+        if ([NSWindow respondsToSelector: @selector (windowNumberAtPoint:belowWindowWithWindowNumber:)])
+            return [NSWindow windowNumberAtPoint: screenPoint belowWindowWithWindowNumber: 0] == [w windowNumber];
+       #endif
+
+        return true;
+    }
+
     bool contains (Point<int> localPos, bool trueIfInAChildWindow) const override
     {
-        NSRect frameRect = [view frame];
+        NSRect viewFrame = [view frame];
 
-        if (! (isPositiveAndBelow (localPos.getX(), (int) frameRect.size.width)
-             && isPositiveAndBelow (localPos.getY(), (int) frameRect.size.height)))
+        if (! (isPositiveAndBelow (localPos.getX(), (int) viewFrame.size.width)
+             && isPositiveAndBelow (localPos.getY(), (int) viewFrame.size.height)))
             return false;
 
-        NSView* v = [view hitTest: NSMakePoint (frameRect.origin.x + localPos.getX(),
-                                                frameRect.origin.y + frameRect.size.height - localPos.getY())];
+        if (NSWindow* const viewWindow = [view window])
+        {
+            const NSRect windowFrame = [viewWindow frame];
+            const NSPoint windowPoint = [view convertPoint: NSMakePoint (localPos.x, viewFrame.size.height - localPos.y) toView: nil];
+            const NSPoint screenPoint = NSMakePoint (windowFrame.origin.x + windowPoint.x,
+                                                     windowFrame.origin.y + windowPoint.y);
+
+            if (! isWindowAtPoint (viewWindow, screenPoint))
+                return false;
+        }
+
+        NSView* v = [view hitTest: NSMakePoint (viewFrame.origin.x + localPos.getX(),
+                                                viewFrame.origin.y + viewFrame.size.height - localPos.getY())];
 
         return trueIfInAChildWindow ? (v != nil)
                                     : (v == view);
@@ -476,10 +497,7 @@ public:
 
     void toBehind (ComponentPeer* other) override
     {
-        NSViewComponentPeer* const otherPeer = dynamic_cast<NSViewComponentPeer*> (other);
-        jassert (otherPeer != nullptr); // wrong type of window?
-
-        if (otherPeer != nullptr)
+        if (NSViewComponentPeer* const otherPeer = dynamic_cast<NSViewComponentPeer*> (other))
         {
             if (isSharedWindow)
             {
@@ -492,6 +510,10 @@ public:
                 [window orderWindow: NSWindowBelow
                          relativeTo: [otherPeer->window windowNumber]];
             }
+        }
+        else
+        {
+            jassertfalse; // wrong type of window?
         }
     }
 
@@ -553,19 +575,19 @@ public:
     {
         currentModifiers = currentModifiers.withoutMouseButtons();
 
-       #if defined (MAC_OS_X_VERSION_10_6) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
-        if ([NSWindow respondsToSelector: @selector (windowNumberAtPoint:belowWindowWithWindowNumber:)]
-             && [NSWindow windowNumberAtPoint: [[ev window] convertBaseToScreen: [ev locationInWindow]]
-                  belowWindowWithWindowNumber: 0] != [window windowNumber])
-        {
+        NSPoint windowPos = [ev locationInWindow];
+
+       #if defined (MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_7
+        NSPoint screenPos = [[ev window] convertRectToScreen: NSMakeRect (windowPos.x, windowPos.y, 1.0f, 1.0f)].origin;
+       #else
+        NSPoint screenPos = [[ev window] convertBaseToScreen: windowPos];
+       #endif
+
+        if (isWindowAtPoint ([ev window], screenPos))
+            sendMouseEvent (ev);
+        else
             // moved into another window which overlaps this one, so trigger an exit
             handleMouseEvent (0, Point<float> (-1.0f, -1.0f), currentModifiers, getMouseTime (ev));
-        }
-        else
-       #endif
-        {
-            sendMouseEvent (ev);
-        }
 
         showArrowCursorIfNeeded();
     }
@@ -599,6 +621,7 @@ public:
         wheel.deltaY = 0;
         wheel.isReversed = false;
         wheel.isSmooth = false;
+        wheel.isInertial = false;
 
        #if ! JUCE_PPC
         @try
@@ -606,6 +629,8 @@ public:
            #if defined (MAC_OS_X_VERSION_10_7) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_7
             if ([ev respondsToSelector: @selector (isDirectionInvertedFromDevice)])
                 wheel.isReversed = [ev isDirectionInvertedFromDevice];
+
+            wheel.isInertial = ([ev momentumPhase] != NSEventPhaseNone);
 
             if ([ev respondsToSelector: @selector (hasPreciseScrollingDeltas)])
             {
@@ -621,8 +646,8 @@ public:
            #endif
             if ([ev respondsToSelector: @selector (deviceDeltaX)])
             {
-                wheel.deltaX = checkDeviceDeltaReturnValue ((float) objc_msgSend_fpret (ev, @selector (deviceDeltaX)));
-                wheel.deltaY = checkDeviceDeltaReturnValue ((float) objc_msgSend_fpret (ev, @selector (deviceDeltaY)));
+                wheel.deltaX = checkDeviceDeltaReturnValue ((float) getMsgSendFPRetFn() (ev, @selector (deviceDeltaX)));
+                wheel.deltaY = checkDeviceDeltaReturnValue ((float) getMsgSendFPRetFn() (ev, @selector (deviceDeltaY)));
             }
         }
         @catch (...)
@@ -644,7 +669,7 @@ public:
        #if defined (MAC_OS_X_VERSION_10_6) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
         const float invScale = 1.0f - (float) [ev magnification];
 
-        if (invScale != 0.0f)
+        if (invScale > 0.0f)
             handleMagnifyGesture (0, getMousePos (ev, view), getMouseTime (ev), 1.0f / invScale);
        #endif
         (void) ev;
@@ -857,6 +882,13 @@ public:
         return (getStyleFlags() & juce::ComponentPeer::windowIgnoresKeyPresses) == 0;
     }
 
+    bool canBecomeMainWindow()
+    {
+        Component* owner = &juce::ComponentPeer::getComponent();
+
+        return dynamic_cast<ResizableWindow*> (owner) != nullptr;
+    }
+
     void becomeKeyWindow()
     {
         handleBroughtToFront();
@@ -1013,7 +1045,7 @@ public:
     static Point<float> getMousePos (NSEvent* e, NSView* view)
     {
         NSPoint p = [view convertPoint: [e locationInWindow] fromView: nil];
-        return Point<float> (p.x, [view frame].size.height - p.y);
+        return Point<float> ((float) p.x, (float) ([view frame].size.height - p.y));
     }
 
     static int getModifierForButtonNumber (const NSInteger num)
@@ -1221,6 +1253,8 @@ private:
 
         const Rectangle<int> clipBounds (clipW, clipH);
         const CGFloat viewH = [view frame].size.height;
+
+        clip.ensureStorageAllocated ((int) numRects);
 
         for (int i = 0; i < numRects; ++i)
             clip.addWithoutMerging (clipBounds.getIntersection (Rectangle<int> (roundToInt (rects[i].origin.x) + offset.x,
@@ -1468,7 +1502,7 @@ private:
             if ((! owner->textWasInserted) && (owner == nullptr || ! owner->redirectKeyDown (ev)))
             {
                 objc_super s = { self, [NSView class] };
-                objc_msgSendSuper (&s, @selector (keyDown:), ev);
+                getMsgSendSuperFn() (&s, @selector (keyDown:), ev);
             }
         }
     }
@@ -1480,7 +1514,7 @@ private:
         if (owner == nullptr || ! owner->redirectKeyUp (ev))
         {
             objc_super s = { self, [NSView class] };
-            objc_msgSendSuper (&s, @selector (keyUp:), ev);
+            getMsgSendSuperFn() (&s, @selector (keyUp:), ev);
         }
     }
 
@@ -1621,7 +1655,7 @@ private:
                 return true;
 
         objc_super s = { self, [NSView class] };
-        return objc_msgSendSuper (&s, @selector (performKeyEquivalent:), ev) != nil;
+        return getMsgSendSuperFn() (&s, @selector (performKeyEquivalent:), ev) != nil;
     }
     #endif
 
@@ -1695,6 +1729,7 @@ struct JuceNSWindowClass   : public ObjCClass<NSWindow>
         addIvar<NSViewComponentPeer*> ("owner");
 
         addMethod (@selector (canBecomeKeyWindow),            canBecomeKeyWindow,        "c@:");
+        addMethod (@selector (canBecomeMainWindow),           canBecomeMainWindow,        "c@:");
         addMethod (@selector (becomeKeyWindow),               becomeKeyWindow,           "v@:");
         addMethod (@selector (windowShouldClose:),            windowShouldClose,         "c@:@");
         addMethod (@selector (constrainFrameRect:toScreen:),  constrainFrameRect,        @encode (NSRect), "@:",  @encode (NSRect), "@");
@@ -1725,6 +1760,15 @@ private:
 
         return owner != nullptr
                 && owner->canBecomeKeyWindow()
+                && ! owner->sendModalInputAttemptIfBlocked();
+    }
+
+    static BOOL canBecomeMainWindow (id self, SEL)
+    {
+        NSViewComponentPeer* const owner = getOwner (self);
+
+        return owner != nullptr
+                && owner->canBecomeMainWindow()
                 && ! owner->sendModalInputAttemptIfBlocked();
     }
 
@@ -1771,7 +1815,9 @@ private:
 
     static void windowDidExitFullScreen (id, SEL, NSNotification*)
     {
+       #if defined (MAC_OS_X_VERSION_10_6) && MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_6
         [NSApp setPresentationOptions: NSApplicationPresentationDefault];
+       #endif
     }
 
     static void zoom (id self, SEL, id sender)
@@ -1780,7 +1826,7 @@ private:
         {
             owner->isZooming = true;
             objc_super s = { self, [NSWindow class] };
-            objc_msgSendSuper (&s, @selector (zoom:), sender);
+            getMsgSendSuperFn() (&s, @selector (zoom:), sender);
             owner->isZooming = false;
 
             owner->redirectMovedOrResized();

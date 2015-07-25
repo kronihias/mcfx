@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2013 - Raw Material Software Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
    Permission is granted to use this software under the terms of either:
    a) the GPL v2 (or any later version)
@@ -274,7 +274,7 @@ public:
                     sendMouseDrag (*current, newScreenPos + unboundedMouseOffset, time);
 
                     if (isUnboundedMouseModeOn)
-                        handleUnboundedDrag (current);
+                        handleUnboundedDrag (*current);
                 }
                 else
                 {
@@ -331,10 +331,17 @@ public:
                       Time time, const MouseWheelDetails& wheel)
     {
         Desktop::getInstance().incrementMouseWheelCounter();
-
         Point<float> screenPos;
-        if (Component* current = getTargetForGesture (peer, positionWithinPeer, time, screenPos))
-            sendMouseWheel (*current, screenPos, time, wheel);
+
+        // This will make sure that when the wheel spins in its inertial phase, any events
+        // continue to be sent to the last component that the mouse was over when it was being
+        // actively controlled by the user. This avoids confusion when scrolling through nested
+        // scrollable components.
+        if (lastNonInertialWheelTarget == nullptr || ! wheel.isInertial)
+            lastNonInertialWheelTarget = getTargetForGesture (peer, positionWithinPeer, time, screenPos);
+
+        if (Component* target = lastNonInertialWheelTarget)
+            sendMouseWheel (*target, screenPos, time, wheel);
     }
 
     void handleMagnifyGesture (ComponentPeer& peer, Point<float> positionWithinPeer,
@@ -351,13 +358,10 @@ public:
 
     int getNumberOfMultipleClicks() const noexcept
     {
-        int numClicks = 0;
+        int numClicks = 1;
 
-        if (mouseDowns[0].time != Time())
+        if (! hasMouseMovedSignificantlySincePressed())
         {
-            if (! mouseMovedSignificantlySincePressed)
-                ++numClicks;
-
             for (int i = 1; i < numElementsInArray (mouseDowns); ++i)
             {
                 if (mouseDowns[0].canBePartOfMultipleClickWith (mouseDowns[i], MouseEvent::getDoubleClickTimeout() * jmin (i, 2)))
@@ -399,7 +403,8 @@ public:
             {
                 // when released, return the mouse to within the component's bounds
                 if (Component* current = getComponentUnderMouse())
-                    setScreenPosition (current->getScreenBounds().toFloat().getConstrainedPoint (lastScreenPos));
+                    setScreenPosition (current->getScreenBounds().toFloat()
+                                          .getConstrainedPoint (ScalingHelpers::unscaledScreenPosToScaled (lastScreenPos)));
             }
 
             isUnboundedMouseModeOn = enable;
@@ -409,21 +414,22 @@ public:
         }
     }
 
-    void handleUnboundedDrag (Component* current)
+    void handleUnboundedDrag (Component& current)
     {
-        const Rectangle<float> screenArea (current->getParentMonitorArea().expanded (-2, -2).toFloat());
+        const Rectangle<float> componentScreenBounds
+                = ScalingHelpers::scaledScreenPosToUnscaled (current.getParentMonitorArea().reduced (2, 2).toFloat());
 
-        if (! screenArea.contains (lastScreenPos))
+        if (! componentScreenBounds.contains (lastScreenPos))
         {
-            const Point<float> componentCentre (current->getScreenBounds().toFloat().getCentre());
-            unboundedMouseOffset += (lastScreenPos - componentCentre);
+            const Point<float> componentCentre (current.getScreenBounds().toFloat().getCentre());
+            unboundedMouseOffset += (lastScreenPos - ScalingHelpers::scaledScreenPosToUnscaled (componentCentre));
             setScreenPosition (componentCentre);
         }
         else if (isCursorVisibleUntilOffscreen
                   && (! unboundedMouseOffset.isOrigin())
-                  && screenArea.contains (lastScreenPos + unboundedMouseOffset))
+                  && componentScreenBounds.contains (lastScreenPos + unboundedMouseOffset))
         {
-            setScreenPosition (lastScreenPos + unboundedMouseOffset);
+            MouseInputSource::setRawMousePosition (lastScreenPos + unboundedMouseOffset);
             unboundedMouseOffset = Point<float>();
         }
     }
@@ -462,14 +468,13 @@ public:
     //==============================================================================
     const int index;
     const bool isMouseDevice;
-    Point<float> lastScreenPos;
+    Point<float> lastScreenPos, unboundedMouseOffset; // NB: these are unscaled coords
     ModifierKeys buttonState;
 
-    Point<float> unboundedMouseOffset;
     bool isUnboundedMouseModeOn, isCursorVisibleUntilOffscreen;
 
 private:
-    WeakReference<Component> componentUnderMouse;
+    WeakReference<Component> componentUnderMouse, lastNonInertialWheelTarget;
     ComponentPeer* lastPeer;
 
     void* currentCursorHandle;
@@ -487,8 +492,8 @@ private:
         bool canBePartOfMultipleClickWith (const RecentMouseDown& other, const int maxTimeBetweenMs) const
         {
             return time - other.time < RelativeTime::milliseconds (maxTimeBetweenMs)
-                    && abs (position.x - other.position.x) < 8
-                    && abs (position.y - other.position.y) < 8
+                    && std::abs (position.x - other.position.x) < 8
+                    && std::abs (position.y - other.position.y) < 8
                     && buttons == other.buttons
                     && peerID == other.peerID;
         }
@@ -514,6 +519,7 @@ private:
             mouseDowns[0].peerID = 0;
 
         mouseMovedSignificantlySincePressed = false;
+        lastNonInertialWheelTarget = nullptr;
     }
 
     void registerMouseDrag (Point<float> screenPos) noexcept

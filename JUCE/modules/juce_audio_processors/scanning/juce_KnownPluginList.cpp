@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2013 - Raw Material Software Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
    Permission is granted to use this software under the terms of either:
    a) the GPL v2 (or any later version)
@@ -46,7 +46,7 @@ PluginDescription* KnownPluginList::getTypeForFile (const String& fileOrIdentifi
 PluginDescription* KnownPluginList::getTypeForIdentifierString (const String& identifierString) const
 {
     for (int i = 0; i < types.size(); ++i)
-        if (types.getUnchecked(i)->createIdentifierString() == identifierString)
+        if (types.getUnchecked(i)->matchesIdentifierString (identifierString))
             return types.getUnchecked(i);
 
     return nullptr;

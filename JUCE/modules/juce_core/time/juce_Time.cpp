@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the juce_core module of the JUCE library.
-   Copyright (c) 2013 - Raw Material Software Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
    Permission to use, copy, modify, and/or distribute this software for any purpose with
    or without fee is hereby granted, provided that the above copyright notice and this
@@ -64,19 +64,14 @@ namespace TimeHelpers
         {
             time_t now = static_cast <time_t> (seconds);
 
-          #if JUCE_WINDOWS
-           #ifdef _INC_TIME_INL
+           #if JUCE_WINDOWS
             if (now >= 0 && now <= 0x793406fff)
                 localtime_s (&result, &now);
             else
                 zerostruct (result);
            #else
-            result = *localtime (&now);
-           #endif
-          #else
-
             localtime_r (&now, &result); // more thread-safe
-          #endif
+           #endif
         }
 
         return result;
@@ -195,19 +190,15 @@ Time& Time::operator= (const Time& other) noexcept
 //==============================================================================
 int64 Time::currentTimeMillis() noexcept
 {
-  #if JUCE_WINDOWS
+   #if JUCE_WINDOWS
     struct _timeb t;
-   #ifdef _INC_TIME_INL
     _ftime_s (&t);
-   #else
-    _ftime (&t);
-   #endif
     return ((int64) t.time) * 1000 + t.millitm;
-  #else
+   #else
     struct timeval tv;
     gettimeofday (&tv, nullptr);
     return ((int64) tv.tv_sec) * 1000 + tv.tv_usec / 1000;
-  #endif
+   #endif
 }
 
 Time JUCE_CALLTYPE Time::getCurrentTime() noexcept
@@ -361,10 +352,9 @@ String Time::getTimeZone() const noexcept
 {
     String zone[2];
 
-  #if JUCE_WINDOWS
+  #if JUCE_MSVC
     _tzset();
 
-   #ifdef _INC_TIME_INL
     for (int i = 0; i < 2; ++i)
     {
         char name[128] = { 0 };
@@ -372,13 +362,12 @@ String Time::getTimeZone() const noexcept
         _get_tzname (&length, name, 127, i);
         zone[i] = name;
     }
-   #else
-    const char** const zonePtr = (const char**) _tzname;
-    zone[0] = zonePtr[0];
-    zone[1] = zonePtr[1];
-   #endif
   #else
+   #if JUCE_MINGW
+    #warning "Can't find a replacement for tzset on mingw - ideas welcome!"
+   #else
     tzset();
+   #endif
     const char** const zonePtr = (const char**) tzname;
     zone[0] = zonePtr[0];
     zone[1] = zonePtr[1];
@@ -407,11 +396,11 @@ String Time::getWeekdayName (const bool threeLetterVersion) const
     return getWeekdayName (getDayOfWeek(), threeLetterVersion);
 }
 
+static const char* const shortMonthNames[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+static const char* const longMonthNames[]  = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
+
 String Time::getMonthName (int monthNumber, const bool threeLetterVersion)
 {
-    static const char* const shortMonthNames[] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
-    static const char* const longMonthNames[]  = { "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December" };
-
     monthNumber %= 12;
 
     return TRANS (threeLetterVersion ? shortMonthNames [monthNumber]
@@ -430,17 +419,40 @@ String Time::getWeekdayName (int day, const bool threeLetterVersion)
 }
 
 //==============================================================================
-Time& Time::operator+= (RelativeTime delta)           { millisSinceEpoch += delta.inMilliseconds(); return *this; }
-Time& Time::operator-= (RelativeTime delta)           { millisSinceEpoch -= delta.inMilliseconds(); return *this; }
+Time& Time::operator+= (RelativeTime delta) noexcept           { millisSinceEpoch += delta.inMilliseconds(); return *this; }
+Time& Time::operator-= (RelativeTime delta) noexcept           { millisSinceEpoch -= delta.inMilliseconds(); return *this; }
 
-Time operator+ (Time time, RelativeTime delta)        { Time t (time); return t += delta; }
-Time operator- (Time time, RelativeTime delta)        { Time t (time); return t -= delta; }
-Time operator+ (RelativeTime delta, Time time)        { Time t (time); return t += delta; }
-const RelativeTime operator- (Time time1, Time time2) { return RelativeTime::milliseconds (time1.toMilliseconds() - time2.toMilliseconds()); }
+Time operator+ (Time time, RelativeTime delta) noexcept        { Time t (time); return t += delta; }
+Time operator- (Time time, RelativeTime delta) noexcept        { Time t (time); return t -= delta; }
+Time operator+ (RelativeTime delta, Time time) noexcept        { Time t (time); return t += delta; }
+const RelativeTime operator- (Time time1, Time time2) noexcept { return RelativeTime::milliseconds (time1.toMilliseconds() - time2.toMilliseconds()); }
 
-bool operator== (Time time1, Time time2)      { return time1.toMilliseconds() == time2.toMilliseconds(); }
-bool operator!= (Time time1, Time time2)      { return time1.toMilliseconds() != time2.toMilliseconds(); }
-bool operator<  (Time time1, Time time2)      { return time1.toMilliseconds() <  time2.toMilliseconds(); }
-bool operator>  (Time time1, Time time2)      { return time1.toMilliseconds() >  time2.toMilliseconds(); }
-bool operator<= (Time time1, Time time2)      { return time1.toMilliseconds() <= time2.toMilliseconds(); }
-bool operator>= (Time time1, Time time2)      { return time1.toMilliseconds() >= time2.toMilliseconds(); }
+bool operator== (Time time1, Time time2) noexcept      { return time1.toMilliseconds() == time2.toMilliseconds(); }
+bool operator!= (Time time1, Time time2) noexcept      { return time1.toMilliseconds() != time2.toMilliseconds(); }
+bool operator<  (Time time1, Time time2) noexcept      { return time1.toMilliseconds() <  time2.toMilliseconds(); }
+bool operator>  (Time time1, Time time2) noexcept      { return time1.toMilliseconds() >  time2.toMilliseconds(); }
+bool operator<= (Time time1, Time time2) noexcept      { return time1.toMilliseconds() <= time2.toMilliseconds(); }
+bool operator>= (Time time1, Time time2) noexcept      { return time1.toMilliseconds() >= time2.toMilliseconds(); }
+
+static int getMonthNumberForCompileDate (const String& m) noexcept
+{
+    for (int i = 0; i < 12; ++i)
+        if (m.equalsIgnoreCase (shortMonthNames[i]))
+            return i;
+
+    // If you hit this because your compiler has a non-standard __DATE__ format,
+    // let me know so we can add support for it!
+    jassertfalse;
+    return 0;
+}
+
+Time Time::getCompilationDate()
+{
+    StringArray dateTokens;
+    dateTokens.addTokens (__DATE__, true);
+    dateTokens.removeEmptyStrings (true);
+
+    return Time (dateTokens[2].getIntValue(),
+                 getMonthNumberForCompileDate (dateTokens[0]),
+                 dateTokens[1].getIntValue(), 12, 0);
+}

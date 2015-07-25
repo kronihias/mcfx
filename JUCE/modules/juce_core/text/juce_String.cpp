@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the juce_core module of the JUCE library.
-   Copyright (c) 2013 - Raw Material Software Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
    Permission to use, copy, modify, and/or distribute this software for any purpose with
    or without fee is hereby granted, provided that the above copyright notice and this
@@ -558,7 +558,7 @@ struct HashGenerator
         Type result = Type();
 
         while (! t.isEmpty())
-            result = multiplier * result + t.getAndAdvance();
+            result = ((Type) multiplier) * result + (Type) t.getAndAdvance();
 
         return result;
     }
@@ -566,9 +566,9 @@ struct HashGenerator
     enum { multiplier = sizeof (Type) > 4 ? 101 : 31 };
 };
 
-int String::hashCode() const noexcept       { return HashGenerator<int>        ::calculate (text); }
-int64 String::hashCode64() const noexcept   { return HashGenerator<int64>      ::calculate (text); }
-std::size_t String::hash() const noexcept   { return HashGenerator<std::size_t>::calculate (text); }
+int String::hashCode() const noexcept       { return HashGenerator<int>    ::calculate (text); }
+int64 String::hashCode64() const noexcept   { return HashGenerator<int64>  ::calculate (text); }
+size_t String::hash() const noexcept        { return HashGenerator<size_t> ::calculate (text); }
 
 //==============================================================================
 JUCE_API bool JUCE_CALLTYPE operator== (const String& s1, const String& s2) noexcept            { return s1.compare (s2) == 0; }
@@ -683,11 +683,16 @@ static int naturalStringCompare (String::CharPointerType s1, String::CharPointer
                 return result;
         }
 
-        const juce_wchar c1 = s1.getAndAdvance();
-        const juce_wchar c2 = s2.getAndAdvance();
+        juce_wchar c1 = s1.getAndAdvance();
+        juce_wchar c2 = s2.getAndAdvance();
 
-        if (c1 == c2 || CharacterFunctions::toUpperCase (c1)
-                          == CharacterFunctions::toUpperCase (c2))
+        if (c1 != c2)
+        {
+            c1 = CharacterFunctions::toUpperCase (c1);
+            c2 = CharacterFunctions::toUpperCase (c2);
+        }
+
+        if (c1 == c2)
         {
             if (c1 == 0)
                 return 0;
@@ -715,7 +720,8 @@ int String::compareNatural (StringRef other) const noexcept
 //==============================================================================
 void String::append (const String& textToAppend, size_t maxCharsToTake)
 {
-    appendCharPointer (textToAppend.text, maxCharsToTake);
+    appendCharPointer (this == &textToAppend ? String (textToAppend).text
+                                             : textToAppend.text, maxCharsToTake);
 }
 
 void String::appendCharPointer (const CharPointerType textToAppend)
@@ -759,6 +765,9 @@ String& String::operator+= (const String& other)
 {
     if (isEmpty())
         return operator= (other);
+
+    if (this == &other)
+        return operator+= (String (*this));
 
     appendCharPointer (other.text);
     return *this;
@@ -1608,10 +1617,10 @@ String String::upToLastOccurrenceOf (StringRef sub,
 
 bool String::isQuotedString() const
 {
-    const String trimmed (trimStart());
+    const juce_wchar trimmedStart = trimStart()[0];
 
-    return trimmed[0] == '"'
-        || trimmed[0] == '\'';
+    return trimmedStart == '"'
+        || trimmedStart == '\'';
 }
 
 String String::unquoted() const
@@ -2268,6 +2277,12 @@ public:
             expect (s.compare (String ("012345678")) == 0);
             expect (s.compare (String ("012345679")) < 0);
             expect (s.compare (String ("012345676")) > 0);
+            expect (String("a").compareNatural ("A") == 0);
+            expect (String("A").compareNatural ("B") < 0);
+            expect (String("a").compareNatural ("B") < 0);
+            expect (String("10").compareNatural ("2") > 0);
+            expect (String("Abc 10").compareNatural ("aBC 2") > 0);
+            expect (String("Abc 1").compareNatural ("aBC 2") < 0);
             expect (s.substring (2, 3) == String::charToString (s[2]));
             expect (s.substring (0, 1) == String::charToString (s[0]));
             expect (s.getLastCharacter() == s [s.length() - 1]);
@@ -2507,14 +2522,13 @@ public:
             beginTest ("var");
 
             var v1 = 0;
-            var v2 = 0.1;
-            var v3 = "0.1";
+            var v2 = 0.16;
+            var v3 = "0.16";
             var v4 = (int64) 0;
             var v5 = 0.0;
             expect (! v2.equals (v1));
             expect (! v1.equals (v2));
             expect (v2.equals (v3));
-            expect (v3.equals (v2));
             expect (! v3.equals (v1));
             expect (! v1.equals (v3));
             expect (v1.equals (v4));

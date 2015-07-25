@@ -2,7 +2,7 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2013 - Raw Material Software Ltd.
+   Copyright (c) 2015 - ROLI Ltd.
 
    Permission is granted to use this software under the terms of either:
    a) the GPL v2 (or any later version)
@@ -75,11 +75,15 @@ public:
     /** The device manager that this component is controlling */
     AudioDeviceManager& deviceManager;
 
+    /** Sets the standard height used for items in the panel. */
+    void setItemHeight (int itemHeight);
+
+    /** Returns the standard height used for items in the panel. */
+    int getItemHeight() const noexcept      { return itemHeight; }
+
     //==============================================================================
     /** @internal */
     void resized() override;
-    /** @internal */
-    void childBoundsChanged (Component*) override;
 
 private:
     //==============================================================================
@@ -87,6 +91,7 @@ private:
     ScopedPointer<Label> deviceTypeDropDownLabel;
     ScopedPointer<Component> audioDeviceSettingsComp;
     String audioDeviceSettingsCompType;
+    int itemHeight;
     const int minOutputChannels, maxOutputChannels, minInputChannels, maxInputChannels;
     const bool showChannelsAsStereoPairs;
     const bool hideAdvancedOptionsWithButton;
