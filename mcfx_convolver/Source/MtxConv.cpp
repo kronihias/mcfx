@@ -18,6 +18,7 @@
 
 #include "MtxConv.h"
 
+// #define DEBUG_COUT 1
 
 MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
                                  outbuf_(1, 256),
@@ -858,7 +859,6 @@ void MtxConvSlave::Process()
     pingpong_ = pingpong;
     
     outnodeoffset_ = 0;
-    
 }
 
 
@@ -889,8 +889,9 @@ void MtxConvSlave::ReadOutput(int numsamples)
     std::cout << "ReadOutput, outnodeoffset_: " << outnodeoffset_ << " outoffset_: " << outoffset_ << std::endl;
 #endif
     
-    if (outnodeoffset_ < partitionsize_) // this happens if process is not done yet!
+    if (outnodeoffset_ < partitionsize_) // new data is available
     {
+            
         //int smplstowrite_end = partitionsize_; // write to the end
         int smplstowrite_end = numsamples; // write to the end
         int smplstowrite_start = 0; // write to the start
@@ -934,6 +935,11 @@ void MtxConvSlave::ReadOutput(int numsamples)
             outoffset_ -= bufsize_;
         
         outnodeoffset_ += numsamples;
+    }
+    else // no new data -> add nothing but continue counting..
+    {
+        outnodeoffset_ += numsamples;
+        outoffset_ += numsamples;
     }
     
     // reset is done in the processing methode
