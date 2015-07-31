@@ -86,6 +86,8 @@ private:
   Array<float> _gain_factor;
   Array<float> _gain_factor_; // for ramp
   
+  Array<float> _phase;
+    
   int _buf_write_pos;
   int _buf_size;
   Array<int> _buf_read_pos;

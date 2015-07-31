@@ -48,6 +48,7 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
   _gain_param.resize(NUM_CHANNELS);
   _gain_factor.resize(NUM_CHANNELS);
   _gain_factor_.resize(NUM_CHANNELS);
+  _phase.resize(NUM_CHANNELS);
   
   for (int i = 0; i < NUM_CHANNELS; i++) {
     _delay_ms.set(i, 0.f);
@@ -58,6 +59,8 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
     _gain_param.set(i, 0.5f);
     _gain_factor.set(i, 1.f);
     _gain_factor_.set(i, 1.f);
+      
+    _phase.set(i, 1.f);
   }
   
 }
@@ -74,13 +77,13 @@ const String Mcfx_gain_delayAudioProcessor::getName() const
 
 int Mcfx_gain_delayAudioProcessor::getNumParameters()
 {
-    return NUM_CHANNELS*2; // gain and delay for each channel
+    return NUM_CHANNELS*3; // gain, delay and phase for each channel
 }
 
 float Mcfx_gain_delayAudioProcessor::getParameter (int index)
 {
-  int ch = index/2;
-  int param = index%2;
+  int ch = index/3;
+  int param = index%3;
   
   switch (param) {
     case 0: // gain
@@ -90,7 +93,14 @@ float Mcfx_gain_delayAudioProcessor::getParameter (int index)
     case 1: // delay
       return _delay_ms.getUnchecked(ch);
       break;
-      
+          
+    case 2: // phase
+      if (_phase.getUnchecked(ch) < 0)
+        return 1.f; // invert phase!
+      else
+        return 0.f;
+      break;
+        
     default:
       return 0.f;
   }
@@ -98,18 +108,27 @@ float Mcfx_gain_delayAudioProcessor::getParameter (int index)
 
 void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
 {
-  int ch = index/2;
-  int param = index%2;
+  int ch = index/3;
+  int param = index%3;
   
   switch (param) {
     case 0: // gain
       _gain_param.set(ch, newValue);
-      _gain_factor.set(ch, param2gain(newValue));
+      _gain_factor.set( ch, param2gain(newValue)*_phase.getUnchecked(ch) );
       break;
       
     case 1: // delay
       _delay_ms.set(ch, newValue);
       _delay_smpls.set(ch, (int)(newValue*MAX_DELAYTIME_S*getSampleRate()));
+      break;
+      
+    case 2: // phase
+      if (newValue > 0.5f)
+        _phase.set(ch, -1.f);
+      else
+        _phase.set(ch, 1.f);
+      
+      _gain_factor.set(ch, param2gain(_gain_param.getUnchecked(ch))*_phase.getUnchecked(ch) );
       break;
       
     default:
@@ -123,8 +142,8 @@ const String Mcfx_gain_delayAudioProcessor::getParameterName (int index)
 {
   String name = "";
   
-  int ch = index/2;
-  int param = index%2;
+  int ch = index/3;
+  int param = index%3;
   
   name << "Ch " << ch+1 << " "; // start with channel 1
   
@@ -137,6 +156,10 @@ const String Mcfx_gain_delayAudioProcessor::getParameterName (int index)
       name << "delaytime";
       break;
       
+    case 2: // phase
+      name << "phase";
+      break;
+      
     default:
       break;
   }
@@ -147,8 +170,8 @@ const String Mcfx_gain_delayAudioProcessor::getParameterText (int index)
 {
   String text = "";
   
-  int ch = index/2;
-  int param = index%2;
+  int ch = index/3;
+  int param = index%3;
   
   switch (param) {
     case 0: // gain
@@ -159,6 +182,13 @@ const String Mcfx_gain_delayAudioProcessor::getParameterText (int index)
     case 1: // delay
       text << String(_delay_ms.getUnchecked(ch)*MAX_DELAYTIME_S*1000).substring(0, 5);
       text << " ms";
+      break;
+      
+    case 2: // phase
+      if (_phase.getUnchecked(ch) > 0.f)
+        text << "";
+      else
+        text << "invert";
       break;
       
     default:
@@ -407,8 +437,20 @@ void Mcfx_gain_delayAudioProcessor::setStateInformation (const void* data, int s
         // make sure that it's actually our type of XML object..
         if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
         {
-            for (int i=0; i < getNumParameters(); i++) {
-                setParameter(i, xmlState->getDoubleAttribute(String(i)));
+            int numattr = xmlState->getNumAttributes();
+            // old version compatibility with only 2 parameters per channel (gain, delay)
+            if (numattr < 3*NUM_CHANNELS)
+            {
+                
+                for (int i=0; i < numattr; i++) {
+                    int par_id = i+i*0.5;
+                    setParameter(par_id, xmlState->getDoubleAttribute(String(i)));
+                }
+                
+            } else { // saved already with new version
+                for (int i=0; i < jmin(getNumParameters(),numattr); i++) {
+                    setParameter(i, xmlState->getDoubleAttribute(String(i)));
+                }
             }
         }
         

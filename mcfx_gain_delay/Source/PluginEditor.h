@@ -61,6 +61,12 @@ public:
     static const int clipboard35_pngSize;
     static const char* clipboard35_grey_png;
     static const int clipboard35_grey_pngSize;
+    static const char* phase_symbol_png;
+    static const int phase_symbol_pngSize;
+    static const char* phase_symbol_inv_png;
+    static const int phase_symbol_inv_pngSize;
+    static const char* phase_symbol_over_png;
+    static const int phase_symbol_over_pngSize;
 
 
 private:
@@ -78,6 +84,7 @@ private:
     OwnedArray<Slider> sld_del;
     OwnedArray<Slider> sld_gain;
     OwnedArray<Label> lbl_ch;
+    OwnedArray<DrawableButton> btn_phase;
 
     Mcfx_gain_delayAudioProcessor* getProcessor() const
     {
