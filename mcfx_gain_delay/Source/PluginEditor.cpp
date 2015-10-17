@@ -103,7 +103,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
     solo_act.setImage(ImageCache::getFromMemory (solo_symbol_act_png, solo_symbol_act_pngSize));
     
     
-    addAndMakeVisible (btn_mute_reset = new DrawableButton ("new drawablebutton", DrawableButton::ButtonStyle::ImageFitted));
+    addAndMakeVisible (btn_mute_reset = new DrawableButton ("new drawablebutton", DrawableButton::ImageFitted));
     btn_mute_reset->setVisible(true);
     btn_mute_reset->setTooltip (TRANS("Unmute all channels"));
     btn_mute_reset->addListener (this);
@@ -117,11 +117,11 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                          &mute_act,
                                          &mute_act);
     
-    btn_mute_reset->setColour(DrawableButton::ColourIds::backgroundColourId, Colours::transparentBlack);
-    btn_mute_reset->setColour(DrawableButton::ColourIds::backgroundOnColourId, Colours::transparentBlack);
+    btn_mute_reset->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+    btn_mute_reset->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
     btn_mute_reset->setClickingTogglesState(true);
     
-    addAndMakeVisible (btn_solo_reset = new DrawableButton ("new drawablebutton", DrawableButton::ButtonStyle::ImageFitted));
+    addAndMakeVisible (btn_solo_reset = new DrawableButton ("new drawablebutton", DrawableButton::ImageFitted));
     btn_solo_reset->setVisible(true);
     btn_solo_reset->setTooltip (TRANS("Unsolo all channels"));
     btn_solo_reset->addListener (this);
@@ -135,8 +135,8 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                &solo_act,
                                &solo_act);
     
-    btn_solo_reset->setColour(DrawableButton::ColourIds::backgroundColourId, Colours::transparentBlack);
-    btn_solo_reset->setColour(DrawableButton::ColourIds::backgroundOnColourId, Colours::transparentBlack);
+    btn_solo_reset->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+    btn_solo_reset->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
     btn_solo_reset->setClickingTogglesState(true);
     
     
@@ -195,7 +195,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
             sld_gain.getUnchecked(i)->setDoubleClickReturnValue(true, 0.f);
         }
         
-        if (DrawableButton* const PHASE = new DrawableButton (String(i), DrawableButton::ButtonStyle::ImageFitted))
+        if (DrawableButton* const PHASE = new DrawableButton (String(i), DrawableButton::ImageFitted))
         {
             btn_phase.add(PHASE);
             addChildComponent(btn_phase.getUnchecked(i));
@@ -212,14 +212,14 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                                   &phase_inv,
                                                   &phase_inv);
             
-            btn_phase.getUnchecked(i)->setColour(DrawableButton::ColourIds::backgroundColourId, Colours::transparentBlack);
-            btn_phase.getUnchecked(i)->setColour(DrawableButton::ColourIds::backgroundOnColourId, Colours::transparentBlack);
+            btn_phase.getUnchecked(i)->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+            btn_phase.getUnchecked(i)->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
             
             btn_phase.getUnchecked(i)->setClickingTogglesState(true);
             
         }
         
-        if (DrawableButton* const MUTE = new DrawableButton (String(NUM_CHANNELS+i), DrawableButton::ButtonStyle::ImageFitted))
+        if (DrawableButton* const MUTE = new DrawableButton (String(NUM_CHANNELS+i), DrawableButton::ImageFitted))
         {
             btn_mute.add(MUTE);
             addChildComponent(btn_mute.getUnchecked(i));
@@ -236,14 +236,14 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                                   &mute_act,
                                                   &mute_act);
             
-            btn_mute.getUnchecked(i)->setColour(DrawableButton::ColourIds::backgroundColourId, Colours::transparentBlack);
-            btn_mute.getUnchecked(i)->setColour(DrawableButton::ColourIds::backgroundOnColourId, Colours::transparentBlack);
+            btn_mute.getUnchecked(i)->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+            btn_mute.getUnchecked(i)->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
             
             btn_mute.getUnchecked(i)->setClickingTogglesState(true);
             
         }
         
-        if (DrawableButton* const SOLO = new DrawableButton (String(2*NUM_CHANNELS+i), DrawableButton::ButtonStyle::ImageFitted))
+        if (DrawableButton* const SOLO = new DrawableButton (String(2*NUM_CHANNELS+i), DrawableButton::ImageFitted))
         {
             btn_solo.add(SOLO);
             addChildComponent(btn_solo.getUnchecked(i));
@@ -260,8 +260,8 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                                  &solo_act,
                                                  &solo_act);
             
-            btn_solo.getUnchecked(i)->setColour(DrawableButton::ColourIds::backgroundColourId, Colours::transparentBlack);
-            btn_solo.getUnchecked(i)->setColour(DrawableButton::ColourIds::backgroundOnColourId, Colours::transparentBlack);
+            btn_solo.getUnchecked(i)->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+            btn_solo.getUnchecked(i)->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
             
             btn_solo.getUnchecked(i)->setClickingTogglesState(true);
             
