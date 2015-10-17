@@ -64,6 +64,18 @@ public:
     static const int phase_symbol_inv_pngSize;
     static const char* phase_symbol_over_png;
     static const int phase_symbol_over_pngSize;
+    static const char* solo_symbol_png;
+    static const int solo_symbol_pngSize;
+    static const char* solo_symbol_over_png;
+    static const int solo_symbol_over_pngSize;
+    static const char* solo_symbol_act_png;
+    static const int solo_symbol_act_pngSize;
+    static const char* mute_symbol_png;
+    static const int mute_symbol_pngSize;
+    static const char* mute_symbol_over_png;
+    static const int mute_symbol_over_pngSize;
+    static const char* mute_symbol_act_png;
+    static const int mute_symbol_act_pngSize;
 
 
 private:
@@ -80,6 +92,10 @@ private:
     ScopedPointer<ImageButton> btn_paste_gain;
     ScopedPointer<ImageButton> btn_paste_gain2;
     ScopedPointer<ImageButton> btn_phase;
+    ScopedPointer<ImageButton> btn_solo;
+    ScopedPointer<ImageButton> btn_mute;
+    ScopedPointer<ImageButton> btn_mute2;
+    ScopedPointer<ImageButton> btn_solo2;
 
 
     //==============================================================================

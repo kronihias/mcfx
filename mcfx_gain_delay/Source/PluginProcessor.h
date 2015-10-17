@@ -78,6 +78,8 @@ public:
 
 private:
   
+  void calcGainFact(int ch);
+  
   Array<float> _delay_ms;
   Array<int> _delay_smpls;
   AudioSampleBuffer _delay_buffer;
@@ -87,7 +89,11 @@ private:
   Array<float> _gain_factor_; // for ramp
   
   Array<float> _phase;
-    
+  Array<bool> _mute;
+  Array<bool> _solo;
+
+  int _solocount;
+  
   int _buf_write_pos;
   int _buf_size;
   Array<int> _buf_read_pos;

@@ -67,7 +67,18 @@ public:
     static const int phase_symbol_inv_pngSize;
     static const char* phase_symbol_over_png;
     static const int phase_symbol_over_pngSize;
-
+    static const char* solo_symbol_png;
+    static const int solo_symbol_pngSize;
+    static const char* solo_symbol_over_png;
+    static const int solo_symbol_over_pngSize;
+    static const char* solo_symbol_act_png;
+    static const int solo_symbol_act_pngSize;
+    static const char* mute_symbol_png;
+    static const int mute_symbol_pngSize;
+    static const char* mute_symbol_over_png;
+    static const int mute_symbol_over_pngSize;
+    static const char* mute_symbol_act_png;
+    static const int mute_symbol_act_pngSize;
 
 private:
     //[UserVariables]   -- You can add your own custom variables in this section.
@@ -79,13 +90,17 @@ private:
     ScopedPointer<Label> label3;
     ScopedPointer<ImageButton> btn_paste_gain;
     ScopedPointer<ImageButton> btn_paste_gain2;
-
+    
+    ScopedPointer<DrawableButton> btn_mute_reset;
+    ScopedPointer<DrawableButton> btn_solo_reset;
     
     OwnedArray<Slider> sld_del;
     OwnedArray<Slider> sld_gain;
     OwnedArray<Label> lbl_ch;
     OwnedArray<DrawableButton> btn_phase;
-
+    OwnedArray<DrawableButton> btn_mute;
+    OwnedArray<DrawableButton> btn_solo;
+    
     Mcfx_gain_delayAudioProcessor* getProcessor() const
     {
         return static_cast <Mcfx_gain_delayAudioProcessor*> (getAudioProcessor());
