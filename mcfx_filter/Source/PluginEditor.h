@@ -17,26 +17,117 @@
  ==============================================================================
  */
 
-#ifndef PLUGINEDITOR_H_INCLUDED
-#define PLUGINEDITOR_H_INCLUDED
+#ifndef __JUCE_HEADER_F47B898C4BCD30D0__
+#define __JUCE_HEADER_F47B898C4BCD30D0__
 
-#include "../JuceLibraryCode/JuceHeader.h"
+//[Headers]     -- You can add your own extra header files here --
+#include "JuceHeader.h"
 #include "PluginProcessor.h"
+#include "FilterGraph.h"
+//[/Headers]
+
 
 
 //==============================================================================
 /**
+                                                                    //[Comments]
+    An auto-generated component, created by the Jucer.
+
+    Describe your class and how it works here!
+                                                                    //[/Comments]
 */
-class LowhighpassAudioProcessorEditor  : public AudioProcessorEditor
+class LowhighpassAudioProcessorEditor  : public AudioProcessorEditor,
+                                         public ButtonListener,
+                                         public SliderListener,
+                                         public ChangeListener,
+                                         public Timer
 {
 public:
+    //==============================================================================
     LowhighpassAudioProcessorEditor (LowhighpassAudioProcessor* ownerFilter);
     ~LowhighpassAudioProcessorEditor();
 
     //==============================================================================
-    // This is just a standard Juce paint method...
+    //[UserMethods]     -- You can add your own custom methods in this section.
+    //[/UserMethods]
+
     void paint (Graphics& g);
+    void resized();
+    void buttonClicked (Button* buttonThatWasClicked);
+    void sliderValueChanged (Slider* sliderThatWasMoved);
+    
+    void changeListenerCallback (ChangeBroadcaster *source);
+    
+    void timerCallback();
+    
+    // Binary resources:
+    static const char* lc_off_png;
+    static const int lc_off_pngSize;
+    static const char* _2nd_png;
+    static const int _2nd_pngSize;
+    static const char* hc_off_png;
+    static const int hc_off_pngSize;
+    static const char* _4th_png;
+    static const int _4th_pngSize;
+    static const char* hc_over_png;
+    static const int hc_over_pngSize;
+    static const char* hc_on_png;
+    static const int hc_on_pngSize;
+    static const char* lc_over_png;
+    static const int lc_over_pngSize;
+    static const char* lc_on_png;
+    static const int lc_on_pngSize;
+    static const char* analyzer_off_png;
+    static const int analyzer_off_pngSize;
+    static const char* analyzer_over_png;
+    static const int analyzer_over_pngSize;
+    static const char* analyzer_on_png;
+    static const int analyzer_on_pngSize;
+
+
+private:
+    //[UserVariables]   -- You can add your own custom variables in this section.
+    //[/UserVariables]
+    
+    void updateSliders();
+    
+    //==============================================================================
+    ScopedPointer<Label> lbl_gd;
+    ScopedPointer<ImageButton> btn_lc_on;
+    ScopedPointer<Slider> sld_lc_f;
+    ScopedPointer<ImageButton> btn_lc_order;
+    ScopedPointer<ImageButton> btn_hc_on;
+    ScopedPointer<Slider> sld_hc_f;
+    ScopedPointer<ImageButton> btn_hc_order;
+    ScopedPointer<Slider> sld_hs_f;
+    ScopedPointer<Slider> sld_hs_g;
+    ScopedPointer<Slider> sld_hs_q;
+    ScopedPointer<Slider> sld_p1_f;
+    ScopedPointer<Slider> sld_p1_g;
+    ScopedPointer<Slider> sld_p1_q;
+    ScopedPointer<Slider> sld_p2_f;
+    ScopedPointer<Slider> sld_p2_g;
+    ScopedPointer<Slider> sld_p2_q;
+    ScopedPointer<Slider> sld_ls_f;
+    ScopedPointer<Slider> sld_ls_g;
+    ScopedPointer<Slider> sld_ls_q;
+    ScopedPointer<FilterGraph> filtergraph;
+    ScopedPointer<ImageButton> btn_analyzer;
+    
+    bool changed_;
+    
+    LowhighpassAudioProcessor* getProcessor() const
+    {
+        return static_cast <LowhighpassAudioProcessor*> (getAudioProcessor());
+    }
+    
+    TooltipWindow tooltipWindow;
+    
+    //==============================================================================
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LowhighpassAudioProcessorEditor)
 };
 
+//[EndFile] You can add extra defines here...
+//[/EndFile]
 
-#endif  // PLUGINEDITOR_H_INCLUDED
+#endif   // __JUCE_HEADER_F47B898C4BCD30D0__

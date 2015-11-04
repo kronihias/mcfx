@@ -22,11 +22,94 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
+#include "FilterInfo.h"
+
+#include <complex>
+
+#if JUCE_MAC
+    #include <Accelerate/Accelerate.h>
+
+    #define SPLIT_COMPLEX 1
+#else
+    #include <fftw3.h>
+    const int fftwopt = FFTW_MEASURE; // FFTW_ESTIMATE || FFTW_MEASURE
+
+    #define SPLIT_COMPLEX 0
+#endif
+
+// Aligned Memory Allocation and Deallocation
+
+inline void* aligned_malloc(size_t size, size_t align) {
+    void *result;
+#ifdef _MSC_VER
+    result = _aligned_malloc(size, align);
+#else
+    if(posix_memalign(&result, align, size)) result = 0;
+#endif
+    return result;
+}
+
+inline void aligned_free(void *ptr) {
+#ifdef _MSC_VER
+    _aligned_free(ptr);
+#else
+    free(ptr);
+#endif
+    
+}
 
 //==============================================================================
 /**
 */
-class LowhighpassAudioProcessor  : public AudioProcessor
+
+// convert param 0...1 to freq 24Hz ... 21618Hz
+float param2freq(float param)
+{
+    return powf(2.f, param*9.8f + 4.6f);
+}
+
+float freq2param(float freq)
+{
+    return (log2f(freq)-4.6f)/9.8f;
+}
+
+// convert parameter 0...1 to Q 0.2 .... 20
+float param2q(float param)
+{
+    return powf(2.f, param*6.6439f)*0.2f;
+}
+
+float q2param(float q)
+{
+    return log2f(q/0.2f)/6.6439f;
+}
+
+float param2db(float param)
+{
+    return param*36.f-18.f;
+}
+
+float db2param(float db)
+{
+    return (db+18.f)/36.f;
+}
+
+#define LOGTEN 2.302585092994
+float dbtorms(float db)
+{
+    return expf(((float)LOGTEN * 0.05f) * db);
+}
+
+float param2gain (float param)
+{
+    return dbtorms(param2db(param));
+}
+
+#define FFT_LENGTH 4096
+
+class LowhighpassAudioProcessor  : public AudioProcessor,
+                                   public FilterInfo,
+                                   public ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -39,7 +122,14 @@ public:
 
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages);
 
-    void checkFilters();
+    void checkFilters(bool force_update);
+    
+    freqResponse getResponse(double f);
+    
+    float inMagnitude(double f);
+    float outMagnitude(double f);
+    
+    void freqanalysis(bool activate);
     
     //==============================================================================
     AudioProcessorEditor* createEditor();
@@ -105,9 +195,14 @@ public:
     
 		totalNumParams
 	};
-  
+    
+    bool _freqanalysis; // compute the spectrum of the summed input/output signals
+    bool _editorOpen; // editor is open
+    
 private:
   
+    double _sampleRate;
+    
     float _lc_on_param, // 1 = on
     _lc_freq_param, // 0...20kHz log
     _lc_order_param,
@@ -153,7 +248,28 @@ private:
   
     IIRCoefficients _IIR_HS_Coeff;
     OwnedArray<IIRFilter> _HS_IIR;
+    
+    AudioSampleBuffer _analysis_inbuf, _analysis_outbuf;
+    float *_in_mag, *_out_mag; // magnitude frequency
+    float *_w; // window function
+    
+    int _bufpos;
+    
+    float               *fft_t_;             // time data for fft/ifft -> 2*N
   
+#if SPLIT_COMPLEX
+    FFTSetup            vdsp_fft_setup_;     // Apple vDSP FFT plan
+    DSPSplitComplex     splitcomplex_;
+    
+    float               *fft_re_;            // N+1
+    float               *fft_im_;            // N+1
+    int                 vdsp_log2_;      // vDSP needs the exponent of two
+#else
+    fftwf_plan          fftwf_plan_r2c_;     // FFTWF forward plan
+    float               *fftwf_t_data_;      // FFTWF buffer for time domain signal (2*N)
+    fftwf_complex       *fft_c_;             // FFTWF buffer for complex signal (N+1)
+#endif
+    
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LowhighpassAudioProcessor)
 };

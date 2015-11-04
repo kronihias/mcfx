@@ -20,9 +20,14 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 
+#define _USE_MATH_DEFINES
+#include <math.h>
 
 //==============================================================================
 LowhighpassAudioProcessor::LowhighpassAudioProcessor() :
+_freqanalysis(false),
+_editorOpen(false),
+_sampleRate(44100.f),
 _lc_on_param(0.f),
 _lc_freq_param(0.1f),
 _lc_order_param(1.f),
@@ -40,13 +45,83 @@ _ls_freq_param(0.2f),
 _ls_q_param(0.27f), // Q=0.7
 _hs_gain_param(0.5f),
 _hs_freq_param(0.7f),
-_hs_q_param(0.27f) // Q=0.7
+_hs_q_param(0.27f), // Q=0.7
+_analysis_inbuf(1, FFT_LENGTH),
+_analysis_outbuf(1, FFT_LENGTH),
+_bufpos(0)
 {
+    
+    // initiate and allocate fft
+    fft_t_ = reinterpret_cast<float*>( aligned_malloc( FFT_LENGTH*sizeof(float), 16 ) );
+    FloatVectorOperations::clear(&fft_t_[0], FFT_LENGTH);
+    
+#if SPLIT_COMPLEX
+    
+    fft_re_ = reinterpret_cast<float*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(float), 16 ) );
+    fft_im_ = reinterpret_cast<float*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(float), 16 ) );
+    
+    splitcomplex_.realp = fft_re_;
+    splitcomplex_.imagp = fft_im_;
+    
+    vdsp_log2_ = 0;
+    while ((1 << vdsp_log2_) < FFT_LENGTH)
+    {
+        ++vdsp_log2_; // N=2^vdsp_log2_
+    }
+    
+    vdsp_fft_setup_ = vDSP_create_fftsetup(vdsp_log2_, FFT_RADIX2);
+    
+#else
+    
+    fft_c_ = reinterpret_cast<fftwf_complex*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(fftwf_complex), 16 ) );
+    
+    FloatVectorOperations::clear(&fft_c_[0][0], 2*(FFT_LENGTH/2+1));
+    
+    fftwf_plan_r2c_ = fftwf_plan_dft_r2c_1d (FFT_LENGTH, fft_t_, fft_c_, fftwopt);
+    
+#endif
+    
+    _w = reinterpret_cast<float*>( aligned_malloc( FFT_LENGTH*sizeof(float), 16 ) );
+    
+//    // init hann window
+//    for (int i=0; i<FFT_LENGTH; i++) {
+//        _w[i] = 0.5f*(1.f-cosf(2.f*M_PI*i/FFT_LENGTH));
+//    }
+    
+    // init blackman-harris window
+    for (int i=0; i<FFT_LENGTH; i++) {
+        _w[i] = 0.35875f - 0.48829*cosf(2.f*M_PI*i/(FFT_LENGTH-1)) + 0.14128*cosf(4.f*M_PI*i/(FFT_LENGTH-1)) - 0.01168*cosf(6.f*M_PI*i/(FFT_LENGTH-1));
+    }
+    
+    _in_mag = reinterpret_cast<float*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(float), 16 ) );
+    _out_mag = reinterpret_cast<float*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(float), 16 ) );
+    
+    FloatVectorOperations::clear(_in_mag, FFT_LENGTH/2+1);
+    FloatVectorOperations::clear(_out_mag, FFT_LENGTH/2+1);
     
 }
 
 LowhighpassAudioProcessor::~LowhighpassAudioProcessor()
 {
+#if SPLIT_COMPLEX
+    if (vdsp_fft_setup_)
+        vDSP_destroy_fftsetup(vdsp_fft_setup_);
+    
+    aligned_free(fft_re_);
+    aligned_free(fft_im_);
+    
+#else
+    if (fftwf_plan_r2c_)
+        fftwf_destroy_plan(fftwf_plan_r2c_);
+    
+    aligned_free(fft_c_);
+#endif
+    
+    aligned_free(fft_t_);
+    
+    aligned_free(_in_mag);
+    aligned_free(_out_mag);
+    aligned_free(_w);
     
 }
 
@@ -110,6 +185,7 @@ void LowhighpassAudioProcessor::setParameter (int index, float newValue)
 		case HCOnParam:
             _hc_on_param = newValue;
             break;
+        
 		case HCfreqParam:
             _hc_freq_param = newValue;
             break;
@@ -161,6 +237,24 @@ void LowhighpassAudioProcessor::setParameter (int index, float newValue)
 		default:
             break;
 	}
+    
+    checkFilters(false);
+    
+    sendChangeMessage();
+    
+    /*
+    //// TEST OUTPUT FREQ MAG/PHASE
+    double f=1.f;
+    for (int i=0; i < 14; i++)
+    {
+        freqResponse H = getResponse(f);
+        
+        std::cout << "f: " << f <<  " Hz Mag: " << 20*log10(H.magnitude) << " Phase: " << H.phase*180.f/M_PI << std::endl;
+        
+        f *= 2.f;
+    }
+    ////
+     */
 }
 
 const String LowhighpassAudioProcessor::getParameterName (int index)
@@ -175,53 +269,26 @@ const String LowhighpassAudioProcessor::getParameterName (int index)
 		case HCfreqParam:    return "HighCut Freq";
 		case HCorderParam:    return "HighCut Order";
             
-    case PF1GainParam:    return "Peak 1 Gain";
-    case PF1freqParam:    return "Peak 1 Freq";
-    case PF1QParam:    return "Peak 1 Q";
+        case PF1GainParam:    return "Peak 1 Gain";
+        case PF1freqParam:    return "Peak 1 Freq";
+        case PF1QParam:    return "Peak 1 Q";
             
-    case PF2GainParam:    return "Peak 2 Gain";
-    case PF2freqParam:    return "Peak 2 Freq";
-    case PF2QParam:    return "Peak 2 Q";
-      
-    case LSGainParam:    return "LowShelf Gain";
-    case LSfreqParam:    return "LowShelf Freq";
-    case LSQParam:    return "LowShelf Q";
-      
-    case HSGainParam:    return "HighShelf Gain";
-    case HSfreqParam:    return "HighShelf Freq";
-    case HSQParam:    return "HighShelf Q";
-      
+        case PF2GainParam:    return "Peak 2 Gain";
+        case PF2freqParam:    return "Peak 2 Freq";
+        case PF2QParam:    return "Peak 2 Q";
+            
+        case LSGainParam:    return "LowShelf Gain";
+        case LSfreqParam:    return "LowShelf Freq";
+        case LSQParam:    return "LowShelf Q";
+            
+        case HSGainParam:    return "HighShelf Gain";
+        case HSfreqParam:    return "HighShelf Freq";
+        case HSQParam:    return "HighShelf Q";
+            
 		default:            return "";
 	}
 }
 
-// convert param 0...1 to freq 24Hz ... 21618Hz
-float param2freq(float param)
-{
-    return powf(2.f, param*9.8f + 4.6f);
-}
-
-// convert parameter 0...1 to Q 0.2 .... 20
-float param2q(float param)
-{
-    return powf(2.f, param*6.6439f)*0.2f;
-}
-
-float param2db(float param)
-{
-    return param*18*2-18;
-}
-
-#define LOGTEN 2.302585092994
-float dbtorms(float db)
-{
-    return expf(((float)LOGTEN * 0.05f) * db);
-}
-
-float param2gain (float param)
-{
-    return dbtorms(param2db(param));
-}
 
 const String LowhighpassAudioProcessor::getParameterText (int index)
 {
@@ -410,8 +477,13 @@ void LowhighpassAudioProcessor::changeProgramName (int index, const String& newN
 //==============================================================================
 void LowhighpassAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    // std::cout << "Processing channels: " << getNumInputChannels() << std::endl;
-    checkFilters();
+    bool force_update = (_sampleRate != sampleRate);
+    _sampleRate = sampleRate;
+    
+    checkFilters(force_update);
+    _analysis_inbuf.clear();
+    _analysis_outbuf.clear();
+    
 }
 
 void LowhighpassAudioProcessor::releaseResources()
@@ -420,14 +492,14 @@ void LowhighpassAudioProcessor::releaseResources()
     // spare memory, etc.
 }
 
-void LowhighpassAudioProcessor::checkFilters()
+void LowhighpassAudioProcessor::checkFilters(bool force_update)
 {
     
     ///////////////////////
     // low cut parameters and filters
-    if (_lc_freq_param != _lc_freq_param_)
+    if ((_lc_freq_param != _lc_freq_param_) || force_update)
     {
-        _IIR_LC_Coeff = _IIR_LC_Coeff.makeHighPass(getSampleRate(), param2freq(_lc_freq_param));
+        _IIR_LC_Coeff = _IIR_LC_Coeff.makeHighPass(_sampleRate, param2freq(_lc_freq_param));
         
         for (int i = 0; i < _LC_IIR_1.size(); i++) {
             _LC_IIR_1.getUnchecked(i)->setCoefficients(_IIR_LC_Coeff);
@@ -447,9 +519,9 @@ void LowhighpassAudioProcessor::checkFilters()
     
     ///////////////////////
     // high cut parameters and filters
-    if (_hc_freq_param != _hc_freq_param_)
+    if ((_hc_freq_param != _hc_freq_param_) || force_update)
     {
-        _IIR_HC_Coeff = _IIR_HC_Coeff.makeLowPass(getSampleRate(), param2freq(_hc_freq_param));
+        _IIR_HC_Coeff = _IIR_HC_Coeff.makeLowPass(_sampleRate, param2freq(_hc_freq_param));
         
         for (int i = 0; i < _HC_IIR_1.size(); i++) {
             _HC_IIR_1.getUnchecked(i)->setCoefficients(_IIR_HC_Coeff);
@@ -469,10 +541,10 @@ void LowhighpassAudioProcessor::checkFilters()
     
     ///////////////////
     // Peak Filter 1
-    if (_pf1_freq_param != _pf1_freq_param_ || _pf1_gain_param != _pf1_gain_param_ || _pf1_q_param != _pf1_q_param_)
+    if (_pf1_freq_param != _pf1_freq_param_ || _pf1_gain_param != _pf1_gain_param_ || _pf1_q_param != _pf1_q_param_ || force_update)
     {
         // get new coefficients
-        _IIR_PF_Coeff_1 = _IIR_PF_Coeff_1.makePeakFilter(getSampleRate(), param2freq(_pf1_freq_param), param2q(_pf1_q_param), param2gain(_pf1_gain_param));
+        _IIR_PF_Coeff_1 = _IIR_PF_Coeff_1.makePeakFilter(_sampleRate, param2freq(_pf1_freq_param), param2q(_pf1_q_param), param2gain(_pf1_gain_param));
        // update coefficients for filters
         for (int i = 0; i < _PF_IIR_1.size(); i++) {
             _PF_IIR_1.getUnchecked(i)->setCoefficients(_IIR_PF_Coeff_1);
@@ -496,10 +568,10 @@ void LowhighpassAudioProcessor::checkFilters()
     
     ///////////////////
     // Peak Filter 2
-    if (_pf2_freq_param != _pf2_freq_param_ || _pf2_gain_param != _pf2_gain_param_ || _pf2_q_param != _pf2_q_param_)
+    if (_pf2_freq_param != _pf2_freq_param_ || _pf2_gain_param != _pf2_gain_param_ || _pf2_q_param != _pf2_q_param_ || force_update)
     {
         // get new coefficients
-        _IIR_PF_Coeff_2 = _IIR_PF_Coeff_2.makePeakFilter(getSampleRate(), param2freq(_pf2_freq_param), param2q(_pf2_q_param), param2gain(_pf2_gain_param));
+        _IIR_PF_Coeff_2 = _IIR_PF_Coeff_2.makePeakFilter(_sampleRate, param2freq(_pf2_freq_param), param2q(_pf2_q_param), param2gain(_pf2_gain_param));
         // update coefficients for filters
         for (int i = 0; i < _PF_IIR_2.size(); i++) {
             _PF_IIR_2.getUnchecked(i)->setCoefficients(_IIR_PF_Coeff_2);
@@ -523,10 +595,10 @@ void LowhighpassAudioProcessor::checkFilters()
   
     ///////////////////
     // Low Shelf Filter
-    if (_ls_freq_param != _ls_freq_param_ || _ls_gain_param != _ls_gain_param_ || _ls_q_param != _ls_q_param_)
+    if (_ls_freq_param != _ls_freq_param_ || _ls_gain_param != _ls_gain_param_ || _ls_q_param != _ls_q_param_ || force_update)
     {
         // get new coefficients
-        _IIR_LS_Coeff = _IIR_LS_Coeff.makeLowShelf(getSampleRate(), param2freq(_ls_freq_param), param2q(_ls_q_param), param2gain(_ls_gain_param));
+        _IIR_LS_Coeff = _IIR_LS_Coeff.makeLowShelf(_sampleRate, param2freq(_ls_freq_param), param2q(_ls_q_param), param2gain(_ls_gain_param));
         // update coefficients for filters
         for (int i = 0; i < _LS_IIR.size(); i++) {
             _LS_IIR.getUnchecked(i)->setCoefficients(_IIR_LS_Coeff);
@@ -550,10 +622,10 @@ void LowhighpassAudioProcessor::checkFilters()
     
     ///////////////////
     // High Shelf Filter
-    if (_hs_freq_param != _hs_freq_param_ || _hs_gain_param != _hs_gain_param_ || _hs_q_param != _hs_q_param_)
+    if (_hs_freq_param != _hs_freq_param_ || _hs_gain_param != _hs_gain_param_ || _hs_q_param != _hs_q_param_ || force_update)
     {
         // get new coefficients
-        _IIR_HS_Coeff = _IIR_HS_Coeff.makeHighShelf(getSampleRate(), param2freq(_hs_freq_param), param2q(_hs_q_param), param2gain(_hs_gain_param));
+        _IIR_HS_Coeff = _IIR_HS_Coeff.makeHighShelf(_sampleRate, param2freq(_hs_freq_param), param2q(_hs_q_param), param2gain(_hs_gain_param));
         // update coefficients for filters
         for (int i = 0; i < _HS_IIR.size(); i++) {
             _HS_IIR.getUnchecked(i)->setCoefficients(_IIR_HS_Coeff);
@@ -577,16 +649,211 @@ void LowhighpassAudioProcessor::checkFilters()
     
 }
 
+freqResponse LowhighpassAudioProcessor::getResponse(double f)
+{
+    std::complex<double> wn (0, 2.f*M_PI*f / _sampleRate);
+    
+    std::complex<double> z = pow(M_E, wn);
+    
+    std::complex <double> Y (0, 0);
+    std::complex <double> X (0, 0);
+    
+    std::complex <double> H (1,0);
+    ///////////////////
+    // get the freq response of the low cut
+    if (_lc_on_param > 0.5f) {
+        
+        Y.real() = 0.0;
+        Y.imag() = 0.0;
+        
+        X.real() = 0.0;
+        X.imag() = 0.0;
+        
+        Y += (double)_IIR_LC_Coeff.coefficients[0]; // b0
+        Y += (double)_IIR_LC_Coeff.coefficients[1] / pow(z, 1); // b1
+        Y += (double)_IIR_LC_Coeff.coefficients[2] / pow(z, 2); // b2
+        
+        X += 1.0; // a0 = 1, coeffs are normalized
+        X += (double)_IIR_LC_Coeff.coefficients[3] / pow(z, 1); // a1
+        X += (double)_IIR_LC_Coeff.coefficients[4] / pow(z, 2); // a2
+        
+        std::complex <double> H_temp = Y / X;
+        H *= H_temp;
+        
+        if (_lc_order_param > 0.5f)
+        {
+            H *= H_temp;
+        }
+    }
+    ///////////////////
+    // get the freq response of the high cut
+    if (_hc_on_param > 0.5f) {
+        
+        Y.real() = 0.0;
+        Y.imag() = 0.0;
+        
+        X.real() = 0.0;
+        X.imag() = 0.0;
+        
+        Y += (double)_IIR_HC_Coeff.coefficients[0];
+        Y += (double)_IIR_HC_Coeff.coefficients[1] / pow(z, 1);
+        Y += (double)_IIR_HC_Coeff.coefficients[2] / pow(z, 2);
+        
+        X += 1.0;
+        X += (double)_IIR_HC_Coeff.coefficients[3] / pow(z, 1);
+        X += (double)_IIR_HC_Coeff.coefficients[4] / pow(z, 2);
+        
+        std::complex <double> H_temp = Y / X;
+        H *= H_temp;
+        
+        if (_hc_order_param > 0.5f)
+        {
+            H *= H_temp;
+        }
+    }
+    
+    ///////////////////
+    // get freq response of peak 1
+    
+    Y.real() = 0.0;
+    Y.imag() = 0.0;
+    
+    X.real() = 0.0;
+    X.imag() = 0.0;
+    
+    Y += (double)_IIR_PF_Coeff_1.coefficients[0];
+    Y += (double)_IIR_PF_Coeff_1.coefficients[1] / pow(z, 1);
+    Y += (double)_IIR_PF_Coeff_1.coefficients[2] / pow(z, 2);
+    
+    X += 1.0;
+    X += (double)_IIR_PF_Coeff_1.coefficients[3] / pow(z, 1);
+    X += (double)_IIR_PF_Coeff_1.coefficients[4] / pow(z, 2);
+    
+    H *= Y / X;
+    
+    ///////////////////
+    // get freq response of peak 2
+    
+    Y.real() = 0.0;
+    Y.imag() = 0.0;
+    
+    X.real() = 0.0;
+    X.imag() = 0.0;
+    
+    Y += (double)_IIR_PF_Coeff_2.coefficients[0];
+    Y += (double)_IIR_PF_Coeff_2.coefficients[1] / pow(z, 1);
+    Y += (double)_IIR_PF_Coeff_2.coefficients[2] / pow(z, 2);
+    
+    X += 1.0;
+    X += (double)_IIR_PF_Coeff_2.coefficients[3] / pow(z, 1);
+    X += (double)_IIR_PF_Coeff_2.coefficients[4] / pow(z, 2);
+    
+    H *= Y / X;
+    
+    ///////////////////
+    // get freq response of low shelf
+    
+    Y.real() = 0.0;
+    Y.imag() = 0.0;
+    
+    X.real() = 0.0;
+    X.imag() = 0.0;
+    
+    Y += (double)_IIR_LS_Coeff.coefficients[0];
+    Y += (double)_IIR_LS_Coeff.coefficients[1] / pow(z, 1);
+    Y += (double)_IIR_LS_Coeff.coefficients[2] / pow(z, 2);
+    
+    X += 1.0;
+    X += (double)_IIR_LS_Coeff.coefficients[3] / pow(z, 1);
+    X += (double)_IIR_LS_Coeff.coefficients[4] / pow(z, 2);
+    
+    H *= Y / X;
+
+    
+    ///////////////////
+    // get freq response of high shelf
+    
+    Y.real() = 0.0;
+    Y.imag() = 0.0;
+    
+    X.real() = 0.0;
+    X.imag() = 0.0;
+    
+    Y += (double)_IIR_HS_Coeff.coefficients[0];
+    Y += (double)_IIR_HS_Coeff.coefficients[1] / pow(z, 1);
+    Y += (double)_IIR_HS_Coeff.coefficients[2] / pow(z, 2);
+    
+    X += 1.0;
+    X += (double)_IIR_HS_Coeff.coefficients[3] / pow(z, 1);
+    X += (double)_IIR_HS_Coeff.coefficients[4] / pow(z, 2);
+    
+    H *= Y / X;
+    
+    freqResponse response;
+    
+    response.magnitude = abs(H);
+    
+    response.phase = arg(H);
+    
+    return response;
+}
+
+float LowhighpassAudioProcessor::inMagnitude(double f)
+{
+    return _in_mag[(int)floor( (f / getSampleRate()*(double)FFT_LENGTH) + 0.5f)];
+    //return 0.f;
+}
+
+float LowhighpassAudioProcessor::outMagnitude(double f)
+{
+    return _out_mag[(int)floor( (f / getSampleRate()*(double)FFT_LENGTH)  + 0.5f)];
+    //return 0.f;
+}
+
+void LowhighpassAudioProcessor::freqanalysis(bool activate)
+{
+    _freqanalysis = activate;
+}
+
 void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
-    checkFilters();
+    int numSamples = buffer.getNumSamples();
     
+    int numChannels = buffer.getNumChannels();
+    
+    // this is for the fft analysis
+    int x1 = numSamples;
+    int x2 = 0;
+    
+    // if we want to analyse the signal sum all channels
+    if (_freqanalysis && _editorOpen)
+    {
+        AudioSampleBuffer tempBuffer(1,numSamples);
+        tempBuffer.clear();
+        for (int i=0; i<numChannels; i++) {
+            tempBuffer.addFrom(0, 0, buffer, i, 0, numSamples);
+        }
+        
+        if (_bufpos+x1 > FFT_LENGTH)
+        {
+            x1 = FFT_LENGTH - _bufpos;
+            x2 = numSamples - x1;
+        }
+        
+        _analysis_inbuf.copyFrom(0, _bufpos, tempBuffer, 0, 0, x1);
+        
+        if (x2 > 0)
+        {
+            _analysis_inbuf.copyFrom(0, 0, tempBuffer, 0, x1, x2);
+        }
+        
+    }
     // std::cout << "Processing channels: " << getNumInputChannels() << std::endl;
     // std::cout << "Buffer channels: " << buffer.getNumChannels() << std::endl;
     
-    int numSamples = buffer.getNumSamples();
     
-    for (int channel = 0; channel < getNumInputChannels(); channel++)
+    
+    for (int channel = 0; channel < numChannels; channel++)
     {
         // LOW CUT
         if (_lc_on_param > 0.5f) {
@@ -638,26 +905,139 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
         }
         
     }
-    // In case we have more outputs than inputs, we'll clear any output
-    // channels that didn't contain input data, (because these aren't
-    // guaranteed to be empty - they may contain garbage).
-    for (int i = getNumInputChannels(); i < getNumOutputChannels(); ++i)
+    
+    // if we want to analyse the signal sum all channels
+    if (_freqanalysis && _editorOpen)
     {
-        buffer.clear (i, 0, buffer.getNumSamples());
+        AudioSampleBuffer tempBuffer(1,numSamples);
+        tempBuffer.clear();
+        for (int i=0; i<numChannels; i++) {
+            tempBuffer.addFrom(0, 0, buffer, i, 0, numSamples);
+        }
+        
+        if (_bufpos+x1 > FFT_LENGTH)
+        {
+            x1 = FFT_LENGTH - _bufpos;
+            x2 = numSamples - x1;
+        }
+        
+        _analysis_outbuf.copyFrom(0, _bufpos, tempBuffer, 0, 0, x1);
+        
+        if (x2 > 0)
+        {
+            _analysis_outbuf.copyFrom(0, 0, tempBuffer, 0, x1, x2);
+        }
+        
+        // std::cout << "BufPos " << _bufpos << std::endl;
+        
+        _bufpos += numSamples;
+        
+        if (_bufpos >= FFT_LENGTH)
+        {
+            // do fft if buffer is full
+            
+            // first the input signal
+            FloatVectorOperations::copy(fft_t_, _analysis_inbuf.getReadPointer(0), FFT_LENGTH);
+            
+            // windowing
+            FloatVectorOperations::multiply(fft_t_, _w, FFT_LENGTH);
+            
+            // do "correct" scaling
+            // FloatVectorOperations::multiply(fft_t_, 1.f/FFT_LENGTH, FFT_LENGTH);
+            
+#if SPLIT_COMPLEX
+            
+            vDSP_ctoz(reinterpret_cast<const COMPLEX*>(fft_t_), 2, &splitcomplex_, 1, FFT_LENGTH/2);
+            vDSP_fft_zrip(vdsp_fft_setup_, &splitcomplex_, 1, vdsp_log2_, FFT_FORWARD);
+            
+            fft_re_[FFT_LENGTH/2] = fft_im_[0];
+            fft_im_[0] = 0.f;
+            fft_im_[FFT_LENGTH/2] = 0.f;
+            
+            // get magnitude
+            for (int i=0; i<FFT_LENGTH/2+1; i++) {
+                _in_mag[i] = 0.8f * _in_mag[i] + 0.2f * (sqrtf(fft_re_[i]*fft_re_[i]+fft_im_[i]*fft_im_[i]));
+            }
+            
+#else
+            fftwf_execute_dft_r2c (fftwf_plan_r2c_, fft_t_, fft_c_);
+            
+            // get magnitude
+            for (int i=0; i<FFT_LENGTH/2+1; i++) {
+                _in_mag[i] = 0.8f * _in_mag[i] + 0.2f * (sqrtf(fft_c_[i][0]*fft_c_[i][0]+fft_c_[i][1]*fft_c_[i][1]));
+            }
+#endif
+            
+            
+            
+            
+            
+            // scale for the maximum to be 0 dB
+            
+            float max = FloatVectorOperations::findMaximum(_in_mag, FFT_LENGTH/2+1);
+            float scale = (max == 0.f) ? 1.f : 1.f / max;
+            
+            // std::cout << "scale factor: " << scale << " maximum: " << FloatVectorOperations::findMaximum(_in_mag, FFT_LENGTH/2+1) << std::endl;
+            
+            FloatVectorOperations::multiply(_in_mag, scale, FFT_LENGTH/2+1);
+            
+            
+            // do the output
+            
+            FloatVectorOperations::copy(fft_t_, _analysis_outbuf.getReadPointer(0), FFT_LENGTH);
+            
+            // windowing
+            FloatVectorOperations::multiply(fft_t_, _w, FFT_LENGTH);
+            
+            // do scaling
+            // FloatVectorOperations::multiply(fft_t_, 1.f/FFT_LENGTH, FFT_LENGTH);
+            
+            // FloatVectorOperations::clear(&fft_c_[0][0], 2*(FFT_LENGTH/2+1));
+            
+#if SPLIT_COMPLEX
+            
+            vDSP_ctoz(reinterpret_cast<const COMPLEX*>(fft_t_), 2, &splitcomplex_, 1, FFT_LENGTH/2);
+            vDSP_fft_zrip(vdsp_fft_setup_, &splitcomplex_, 1, vdsp_log2_, FFT_FORWARD);
+            
+            fft_re_[FFT_LENGTH/2] = fft_im_[0];
+            fft_im_[0] = 0.f;
+            fft_im_[FFT_LENGTH/2] = 0.f;
+            
+            // get magnitude
+            for (int i=0; i<FFT_LENGTH/2+1; i++) {
+                _out_mag[i] = 0.8f * _out_mag[i] + 0.2f * (sqrtf(fft_re_[i]*fft_re_[i]+fft_im_[i]*fft_im_[i]));
+            }
+            
+#else
+            fftwf_execute_dft_r2c (fftwf_plan_r2c_, fft_t_, fft_c_);
+            
+            // get magnitude
+            for (int i=0; i<FFT_LENGTH/2+1; i++) {
+                _out_mag[i] = 0.8f * _out_mag[i] + 0.2f * (sqrtf(fft_c_[i][0]*fft_c_[i][0]+fft_c_[i][1]*fft_c_[i][1]));
+            }
+#endif
+            
+            FloatVectorOperations::multiply(_out_mag, scale, FFT_LENGTH/2+1);
+            
+            
+            _bufpos -= FFT_LENGTH;
+        }
+        
     }
+    
 }
 
 //==============================================================================
 bool LowhighpassAudioProcessor::hasEditor() const
 {
-    return false; // (change this to false if you choose to not supply an editor)
+    return true; // (change this to false if you choose to not supply an editor)
 }
 
 
 AudioProcessorEditor* LowhighpassAudioProcessor::createEditor()
 {
-    //return new LowhighpassAudioProcessorEditor (this);
-    return nullptr;
+    return new LowhighpassAudioProcessorEditor (this);
+    //return nullptr;
 }
 
 //==============================================================================
@@ -676,6 +1056,8 @@ void LowhighpassAudioProcessor::getStateInformation (MemoryBlock& destData)
         xml.setAttribute (String(i), getParameter(i));
     }
     
+    xml.setAttribute("freqanalysis", _freqanalysis);
+    
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
 }
@@ -692,9 +1074,10 @@ void LowhighpassAudioProcessor::setStateInformation (const void* data, int sizeI
         // make sure that it's actually our type of XML object..
         if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
         {
-            for (int i=0; i < getNumParameters(); i++) {
+            for (int i=0; i < getNumParameters()-1; i++) {
                 setParameter(i, xmlState->getDoubleAttribute(String(i)));
             }
+            _freqanalysis = xmlState->getBoolAttribute("freqanalysis");
         }
         
     }
