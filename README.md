@@ -100,6 +100,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.4.0 (2015-11-04) - gui for mcfx_delay, gui for mcfx_filter (with fft analyzer), added phase, solo and mute buttons to mcfx_gain_delay
+
 - 0.3.3 (2015-07-19) - performance improvements for mcfx_convolver
 _
 - 0.3.2 (2014-12-28) - audiomulch compatibility, gui for mcfx_gain_delay with paste from clipboard functionality, mcfx_meter added scale offset
