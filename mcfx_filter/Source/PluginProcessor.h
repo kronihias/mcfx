@@ -63,44 +63,44 @@ inline void aligned_free(void *ptr) {
 */
 
 // convert param 0...1 to freq 24Hz ... 21618Hz
-float param2freq(float param)
+inline float param2freq(float param)
 {
     return powf(2.f, param*9.8f + 4.6f);
 }
 
-float freq2param(float freq)
+inline float freq2param(float freq)
 {
     return (log2f(freq)-4.6f)/9.8f;
 }
 
 // convert parameter 0...1 to Q 0.2 .... 20
-float param2q(float param)
+inline float param2q(float param)
 {
     return powf(2.f, param*6.6439f)*0.2f;
 }
 
-float q2param(float q)
+inline float q2param(float q)
 {
     return log2f(q/0.2f)/6.6439f;
 }
 
-float param2db(float param)
+inline float param2db(float param)
 {
     return param*36.f-18.f;
 }
 
-float db2param(float db)
+inline float db2param(float db)
 {
     return (db+18.f)/36.f;
 }
 
 #define LOGTEN 2.302585092994
-float dbtorms(float db)
+inline float dbtorms(float db)
 {
     return expf(((float)LOGTEN * 0.05f) * db);
 }
 
-float param2gain (float param)
+inline float param2gain (float param)
 {
     return dbtorms(param2db(param));
 }
