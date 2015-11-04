@@ -1,1 +1,5 @@
-INCLUDE(${SRC_DIR}/CMakeLists_subprojects.txt.inc)
+ADD_SUBDIRECTORY ( mcfx_gain_delay )
+
+IF (BUILD_STANDALONE)
+	ADD_SUBDIRECTORY ( mcfx_gain_delay_standalone )
+ENDIF (BUILD_STANDALONE)
