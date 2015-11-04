@@ -58,6 +58,12 @@ inline void aligned_free(void *ptr) {
     
 }
 
+inline float LOG2F_( float n )  
+{  
+    // log(n)/log(2) is log2.  
+    return logf( n ) / logf( 2 );  
+}
+
 //==============================================================================
 /**
 */
@@ -70,7 +76,7 @@ inline float param2freq(float param)
 
 inline float freq2param(float freq)
 {
-    return (log2f(freq)-4.6f)/9.8f;
+    return (LOG2F_(freq)-4.6f)/9.8f;
 }
 
 // convert parameter 0...1 to Q 0.2 .... 20
@@ -81,7 +87,7 @@ inline float param2q(float param)
 
 inline float q2param(float q)
 {
-    return log2f(q/0.2f)/6.6439f;
+    return LOG2F_(q/0.2f)/6.6439f;
 }
 
 inline float param2db(float param)

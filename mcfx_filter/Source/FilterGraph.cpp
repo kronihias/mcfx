@@ -25,6 +25,8 @@ FilterGraph::FilterGraph(FilterInfo* filterinfo, AudioProcessor* processor) :   
                                 mindb_(-18.f),
                                 maxdb_(18.f),
                                 grid_div(6.f),
+								xmargin(35.f),
+								ymargin(12.f),
                                 changed_(true)
 {
     

@@ -157,8 +157,8 @@ private:
     float maxdb_;       // max displayed dB
     float grid_div;     // how many dB per divisions (between grid lines)
     
-    float xmargin = 35.f; // space for y labels
-    float ymargin = 12.f;
+    float xmargin; // space for y labels
+    float ymargin;
     
     Path path_grid, path_w_grid;
     
