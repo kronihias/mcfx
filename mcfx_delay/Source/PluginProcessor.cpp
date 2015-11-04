@@ -28,6 +28,12 @@ Mcfx_delayAudioProcessor::Mcfx_delayAudioProcessor() : _delay_ms(0.f),
     _buf_read_pos(0),
     _buf_size(256)
 {
+    _samplerate = getSampleRate();
+    
+    if (_samplerate == 0.f) {
+        _samplerate = 44100.f;
+    }
+    
 }
 
 Mcfx_delayAudioProcessor::~Mcfx_delayAudioProcessor()
@@ -52,8 +58,11 @@ float Mcfx_delayAudioProcessor::getParameter (int index)
 
 void Mcfx_delayAudioProcessor::setParameter (int index, float newValue)
 {
-    _delay_ms = newValue;
-    _delay_smpls = (int)(_delay_ms*MAX_DELAYTIME_S*getSampleRate());
+    _delay_smpls = (int)floor(newValue*MAX_DELAYTIME_S*_samplerate+0.5f);
+    
+    _delay_ms = _delay_smpls/_samplerate/MAX_DELAYTIME_S;
+    
+    sendChangeMessage();
 }
 
 const String Mcfx_delayAudioProcessor::getParameterName (int index)
@@ -64,7 +73,8 @@ const String Mcfx_delayAudioProcessor::getParameterName (int index)
 const String Mcfx_delayAudioProcessor::getParameterText (int index)
 {
     String text;
-    text = String(_delay_ms*MAX_DELAYTIME_S*1000);
+    // round toward 0.01 ms
+    text = String(floor(_delay_ms*MAX_DELAYTIME_S*100000.f+0.5f)/100.f);
     text << " ms";
     return text;
 }
@@ -143,9 +153,21 @@ void Mcfx_delayAudioProcessor::changeProgramName (int index, const String& newNa
 //==============================================================================
 void Mcfx_delayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    _samplerate = sampleRate;
+    
     _buf_size = (int)(MAX_DELAYTIME_S * sampleRate + samplesPerBlock + 1); // MAX_DELAYTIME_S maximum
     _delay_buffer.clear();
     _delay_smpls = (int)(_delay_ms*MAX_DELAYTIME_S*sampleRate);
+}
+
+int Mcfx_delayAudioProcessor::getDelayInSmpls()
+{
+    return _delay_smpls;
+}
+
+float Mcfx_delayAudioProcessor::getDelayInMs()
+{
+    return _delay_ms*MAX_DELAYTIME_S*1000;
 }
 
 void Mcfx_delayAudioProcessor::releaseResources()
@@ -244,13 +266,13 @@ void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuff
 //==============================================================================
 bool Mcfx_delayAudioProcessor::hasEditor() const
 {
-    return false; // (change this to false if you choose to not supply an editor)
+    return true;
 }
 
 AudioProcessorEditor* Mcfx_delayAudioProcessor::createEditor()
 {
-    //return new Mcfx_delayAudioProcessorEditor (this);
-    return nullptr;
+    return new Mcfx_delayAudioProcessorEditor (this);
+    //return nullptr;
 }
 
 //==============================================================================

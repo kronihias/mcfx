@@ -26,7 +26,8 @@
 //==============================================================================
 /**
 */
-class Mcfx_delayAudioProcessor  : public AudioProcessor
+class Mcfx_delayAudioProcessor  : public AudioProcessor,
+                                  public ChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -74,7 +75,10 @@ public:
     //==============================================================================
     void getStateInformation (MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
-
+    
+    int getDelayInSmpls();
+    float getDelayInMs();
+    
     enum Parameters
 	{
         delayMSParam, // 0....2000ms
@@ -82,6 +86,7 @@ public:
 		totalNumParams
 	};
     
+    double _samplerate;
 private:
     
     float _delay_ms;
