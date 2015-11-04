@@ -655,19 +655,18 @@ freqResponse LowhighpassAudioProcessor::getResponse(double f)
     
     std::complex<double> z = pow(M_E, wn);
     
-    std::complex <double> Y (0, 0);
-    std::complex <double> X (0, 0);
+    std::complex <double> Y (0.f, 0.f);
+    std::complex <double> X (0.f, 0.f);
+    
+    std::complex<double> compl_zero (0.f, 0.f); // use this for OS independent reset
     
     std::complex <double> H (1,0);
     ///////////////////
     // get the freq response of the low cut
     if (_lc_on_param > 0.5f) {
-
-        Y.real(0.0f);
-        Y.imag(0.0f);
         
-        X.real(0.0f);
-        X.imag(0.0f);
+        Y=compl_zero;
+        X=compl_zero;
         
         Y += (double)_IIR_LC_Coeff.coefficients[0]; // b0
         Y += (double)_IIR_LC_Coeff.coefficients[1] / pow(z, 1); // b1
@@ -689,11 +688,8 @@ freqResponse LowhighpassAudioProcessor::getResponse(double f)
     // get the freq response of the high cut
     if (_hc_on_param > 0.5f) {
         
-        Y.real(0.0f);
-        Y.imag(0.0f);
-        
-        X.real(0.0f);
-        X.imag(0.0f);
+        Y=compl_zero;
+        X=compl_zero;
         
         Y += (double)_IIR_HC_Coeff.coefficients[0];
         Y += (double)_IIR_HC_Coeff.coefficients[1] / pow(z, 1);
@@ -715,11 +711,8 @@ freqResponse LowhighpassAudioProcessor::getResponse(double f)
     ///////////////////
     // get freq response of peak 1
     
-    Y.real(0.0f);
-    Y.imag(0.0f);
-    
-    X.real(0.0f);
-    X.imag(0.0f);
+    Y=compl_zero;
+    X=compl_zero;
     
     Y += (double)_IIR_PF_Coeff_1.coefficients[0];
     Y += (double)_IIR_PF_Coeff_1.coefficients[1] / pow(z, 1);
@@ -734,11 +727,8 @@ freqResponse LowhighpassAudioProcessor::getResponse(double f)
     ///////////////////
     // get freq response of peak 2
     
-    Y.real(0.0f);
-    Y.imag(0.0f);
-    
-    X.real(0.0f);
-    X.imag(0.0f);
+    Y=compl_zero;
+    X=compl_zero;
     
     Y += (double)_IIR_PF_Coeff_2.coefficients[0];
     Y += (double)_IIR_PF_Coeff_2.coefficients[1] / pow(z, 1);
@@ -753,11 +743,8 @@ freqResponse LowhighpassAudioProcessor::getResponse(double f)
     ///////////////////
     // get freq response of low shelf
     
-    Y.real(0.0f);
-    Y.imag(0.0f);
-    
-    X.real(0.0f);
-    X.imag(0.0f);
+    Y=compl_zero;
+    X=compl_zero;
     
     Y += (double)_IIR_LS_Coeff.coefficients[0];
     Y += (double)_IIR_LS_Coeff.coefficients[1] / pow(z, 1);
@@ -773,11 +760,8 @@ freqResponse LowhighpassAudioProcessor::getResponse(double f)
     ///////////////////
     // get freq response of high shelf
     
-    Y.real(0.0f);
-    Y.imag(0.0f);
-    
-    X.real(0.0f);
-    X.imag(0.0f);
+    Y=compl_zero;
+    X=compl_zero;
     
     Y += (double)_IIR_HS_Coeff.coefficients[0];
     Y += (double)_IIR_HS_Coeff.coefficients[1] / pow(z, 1);
