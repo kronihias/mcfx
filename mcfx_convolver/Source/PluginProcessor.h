@@ -124,6 +124,8 @@ public:
     
     int _num_conv;
     
+    File _configFile;
+    
 private:
     
     ConvolverData conv_data;
@@ -141,8 +143,6 @@ private:
     bool _isProcessing;
     
     bool _configLoaded; // is a configuration successfully loaded?
-    
-    File _configFile;
     
     bool loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain=1.f, int offset=0, int length=0);
     
