@@ -405,30 +405,13 @@ void MtxConvSlave::SetBufsize(int bufsize)
     std::cout << "Slave::SETBUFSIZE: " << bufsize_ << "offset_: " << offset_ << std::endl;
 #endif
     
-    //inoffset_ = bufsize_ - partitionsize_ - offset_ + 1; // this works!!
+    inoffset_ = bufsize_ - partitionsize_ + 1; // offset due to overlap/save
+    //inoffset_ = bufsize_ - partitionsize_ - offset_ + 1;
     
-    inoffset_ = bufsize_ - partitionsize_ + 1;
+    // outoffset_ = 0; //old
     
-    outoffset_ = 0;
+    outoffset_ = offset_-offset_/4;
     
-    // outoffset_ = partitionsize_ - 512;
-    
-    
-    // outoffset_ = bufsize_ - 512;
-    
-    // outoffset_ = 0;
-    // outoffset_ = partitionsize_ - 512;
-    // outoffset_ = partitionsize_;
-    // outoffset_ = bufsize_ - partitionsize_;
-    
-    // inoffset_ = bufsize_ - 512; // this does not work!
-    
-    // should the offset be included here?! -> yes!
-    
-    // inoffset_ = bufsize_ - partitionsize_; // overlap save -> should it be +1? YES!
-    
-    // if (inoffset_ > bufsize_)
-    //    inoffset_ -= bufsize_;
 }
 
 
