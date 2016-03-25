@@ -375,7 +375,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 IrFilename = configFile.getParentDirectory().getChildFile(String(filename));
                 
             } else { // /cd is defined
-                if (directory.startsWith("/"))
+                if (File::isAbsolutePath(directory))
                 {
                     // absolute path is defined
                     File path(directory);
@@ -395,6 +395,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 debug << "ERROR: channel assignment not feasible: In: " << in_ch << " Out: " << out_ch;
                 DebugPrint(debug << "\n");
                 
+                
             } else {
                 
                 double src_samplerate;
@@ -402,8 +403,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 {
                     // std::cout << "Length: " <<  TempAudioBuffer.getNumSamples() << " Channels: " << TempAudioBuffer.getNumChannels() << " MaxLevel: " << TempAudioBuffer.getRMSLevel(0, 0, 2048) << std::endl;
                     
-                    // add IR to my convolution data - offset and length are already done while reading file
-                    conv_data.addIR(in_ch-1, out_ch-1, 0, delay, 0, &TempAudioBuffer, src_samplerate);
+                    // add IR to my convolution data - offset and length are already done while reading file, samplerate conversion is done during addIR
+                    conv_data.addIR(in_ch-1, out_ch-1, 0, delay, 0, &TempAudioBuffer, 0, src_samplerate);
                     
                     String debug;
                     debug << "conv # " << conv_data.getNumIRs() << " " << IrFilename.getFullPathName() << " loaded";
@@ -413,6 +414,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     String debug;
                     debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
                     DebugPrint(debug << "\n");
+                    
                 }
                 
              
@@ -420,10 +422,130 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             
             
         } // end "/impulse/read" line
-        else if (line.contains("/impulse/densewav"))
+        
+        
+        /*
+        packed matrix in one .wav file as used in X-Volver by Angelo Farina
+         
+        one channel in the .wav file represents one output channel of the convolver matrix
+        in one channel there are sequentially aligned input IRs
+        
+        the length of one impulse response is (length .wav) / #in_channels
+         
+        ir_#in_#out
+         
+        wav ch #1:  ir_1_1  ir_2_1  ir_3_1  ... ir_m_1
+        wav ch #2:  ir_1_2  ir_2_2  ir_3_2  ... ir_m_2
+        ...
+        wav ch #3:  ir_1_n  ir_2_n  ir_3_n  ... ir_m_n
+        
+         
+        by defining the number of input channels the plugin can recognize the length of each impulse response
+        */
+        else if (line.contains("/impulse/packedmatrix"))
         {
-            // TODO!
-        } // end "/impulse/densewav" line
+            int inchannels = 0;
+            float gain = 1.f;
+            int delay = 0;
+            int offset = 0;
+            int length = 0;
+            char filename[100];
+            
+            line = line.trimCharactersAtStart("/impulse/packedmatrix").trim();
+            
+            String::CharPointerType lineChar = line.getCharPointer();
+            
+            
+            sscanf(lineChar, "%i%f%i%i%i%s", &inchannels, &gain, &delay, &offset, &length, filename);
+            
+            File IrFilename;
+            
+            
+            // check if /cd is defined in config
+            if (directory.isEmpty()) {
+                IrFilename = configFile.getParentDirectory().getChildFile(String(filename));
+                
+            } else { // /cd is defined
+                if (File::isAbsolutePath(directory))
+                {
+                    // absolute path is defined
+                    File path(directory);
+                    
+                    IrFilename = path.getChildFile(String(filename));
+                } else {
+                    
+                    // relative path to the config file is defined
+                    IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(String(filename));
+                }
+            }
+            if (inchannels < 1)
+            {
+                String debug;
+                debug << "ERROR: Number of input channels not feasible: " << inchannels;
+                DebugPrint(debug << "\n");
+                
+                return;
+            }
+            
+            
+            double src_samplerate;
+            if (loadIr(&TempAudioBuffer, IrFilename, -1, src_samplerate, gain, 0, 0)) // offset/length has to be done while processing individual irs
+            {
+                
+                
+                int numOutChannels = TempAudioBuffer.getNumChannels();
+                int irLength = TempAudioBuffer.getNumSamples()/inchannels;
+                
+                if (irLength*inchannels != TempAudioBuffer.getNumSamples())
+                {
+                    String debug;
+                    debug << "ERROR: length of wav file is not multiple of irLength*numinchannels!" << IrFilename.getFullPathName();
+                    DebugPrint(debug << "\n");
+                    
+                    return;
+                }
+                
+                if ((inchannels > getNumInputChannels()) || numOutChannels > getNumOutputChannels())
+                {
+                    String debug;
+                    debug << "Input/Output channel assignement not feasible. Not enough input/output channels of the plugin. Need Input: " << inchannels << " Output: " << numOutChannels;
+                    DebugPrint(debug << "\n");
+                    
+                    return;
+                }
+                
+                if (length <= 0)
+                    length = irLength-offset;
+                
+                // std::cout << "TotalLength: " <<  TempAudioBuffer.getNumSamples() << " IRLength: " <<  irLength << " Used Length: " << length << " Channels: " << TempAudioBuffer.getNumChannels() << std::endl;
+                
+                
+                for (int i=0; i < numOutChannels; i++) {
+                    for (int j=0; j < inchannels; j++) {
+                        // add IR to my convolution data - offset and length are already done while reading file
+                        int individualOffset = j*irLength;
+                        
+                        // std::cout << "AddIR: IN: " << j << " OUT: " << i << " individualOffset: " << individualOffset << std::endl;
+                        
+                        // CHECK IF LENGTH/OFFSET E.G. IS OK!!
+                        conv_data.addIR(j, i, individualOffset + offset, delay, individualOffset+length, &TempAudioBuffer, i, src_samplerate);
+                        
+                    }
+                }
+                
+                String debug;
+                debug << "loaded " << conv_data.getNumIRs() << " filters with\nlength " << length << "\ninput channels: " << inchannels << "\noutput channels: " << numOutChannels << "\nfilename: " << IrFilename.getFileName();
+                DebugPrint(debug << "\n\n");
+                
+            } else {
+                String debug;
+                debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
+                DebugPrint(debug << "\n");
+                
+                return;
+            }
+            
+        } // end "/impulse/packedmatrix" line
         
         
     } // iterate over lines
@@ -488,7 +610,9 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
 {
     if (!audioFile.existsAsFile())
     {
-        std::cout << "ERROR: file does not exist!!" << std::endl;
+        String debug;
+        debug << "ERROR: file does not exist!";
+        DebugPrint(debug << "\n");
         return false;
     }
     
@@ -500,48 +624,71 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     AudioFormatReader* reader = formatManager.createReaderFor(audioFile);
     
     if (!reader) {
-        std::cout << "ERROR: could not read impulse response file!" << std::endl;
+        String debug;
+        debug << "ERROR: could not read impulse response file!";
+        DebugPrint(debug << "\n");
         return false;
     }
     
-	//AudioFormatReader* reader = wavFormat.createMemoryMappedReader(audioFile);
+	if (offset < 0)
+        offset = 0;
     
-    int64 ir_length = (int)reader->lengthInSamples-offset;
+    int64 wav_length = (int)reader->lengthInSamples;
     
-    if (ir_length <= 0) {
-        std::cout << "wav file has zero samples" << std::endl;
+    if (length <= 0)
+        length = wav_length - offset;
+    
+    if (wav_length <= 0) {
+        String debug;
+        debug << "ERROR: zero samples in impulse response file!";
+        DebugPrint(debug << "\n");
         return false;
     }
     
-    if (reader->numChannels <= channel) {
-        std::cout << "wav file doesn't have enough channels: " << reader->numChannels << std::endl;
+    if (wav_length-offset < length) {
+        length = wav_length-offset;
+        
+        String debug;
+        debug << "Warning: not enough samples in impulse response file, reading maximum number of samples: " << String(length);
+        DebugPrint(debug << "\n");
+    }
+    
+    if ((int)reader->numChannels <= channel) {
+        String debug;
+        debug << "ERROR: wav file doesn't have enough channels: " << String(reader->numChannels);
+        DebugPrint(debug << "\n");
         return false;
     }
     
     
-    AudioSampleBuffer ReadBuffer(reader->numChannels, ir_length); // create buffer
+    AudioSampleBuffer ReadBuffer(reader->numChannels, length); // create buffer
     
     
-    reader->read(&ReadBuffer, 0, ir_length, offset, true, true);
+    reader->read(&ReadBuffer, 0, length, offset, true, true);
     
     // set the samplerate -> maybe we have to resample later...
     samplerate = reader->sampleRate;
     
-    //std::cout << "ReadRMS: " << ReadBuffer.getRMSLevel(channel, 0, ir_length) << std::endl;
-    
-    // check if we want a shorter impulse response
-    
-    if (ir_length > length && length != 0)
-        ir_length = length;
-    
     // copy the wanted channel into our IR Buffer
     
-    IRBuffer->setSize(1, ir_length);
-    IRBuffer->copyFrom(0, 0, ReadBuffer, channel, 0, ir_length);
-    
+    if (channel >= 0) // only one channel wanted...
+    {
+        IRBuffer->setSize(1, length);
+        IRBuffer->copyFrom(0, 0, ReadBuffer, channel, 0, length);
+    }
+    else // copy all channels from the wav file if channel == -1 -> used for packedmatrix
+    {
+        IRBuffer->setSize(reader->numChannels, length);
         
+        for (int i=0; i<reader->numChannels; i++) {
+            IRBuffer->copyFrom(i, 0, ReadBuffer, i, 0, length);
+        }
+    }
+   
+    
     // scale ir with gain
-    IRBuffer->applyGain(gain);
+    if (gain != 1.f)
+        IRBuffer->applyGain(gain);
     
     // std::cout << "ReadRMS: " << IRBuffer->getRMSLevel(0, 0, ir_length) << std::endl;
     
