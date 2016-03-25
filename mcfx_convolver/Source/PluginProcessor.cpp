@@ -844,15 +844,17 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             _ConvBufferSize = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
         }
         
-        if (activePreset.isNotEmpty()) {
-            LoadPresetByName(activePreset);
-        }
-        
         File tempDir(newPresetDir);
         if (tempDir.exists()) {
             presetDir = tempDir;
             SearchPresets(presetDir);
         }
+        
+        if (activePreset.isNotEmpty()) {
+            LoadPresetByName(activePreset);
+        }
+        
+        
     }
 }
 
