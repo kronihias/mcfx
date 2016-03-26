@@ -433,6 +433,16 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
                 538, 219, 70, 23,
                 Justification::centred, true);
 
+    
+    /* Version text */
+    g.setColour (Colours::white);
+    g.setFont (Font (10.00f, Font::plain));
+    String version_string;
+    version_string << "v" << QUOTE(VERSION);
+    g.drawText (version_string,
+                getWidth()-51, getHeight()-11, 50, 10,
+                Justification::bottomRight, true);
+    
     //[UserPaint] Add your own custom painting code here..
     //[/UserPaint]
 }

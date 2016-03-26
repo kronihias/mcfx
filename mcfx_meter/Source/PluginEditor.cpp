@@ -191,6 +191,15 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
                                        true));
     g.fillRect (0, 0, _width, 220);
     
+    /* Version text */
+    g.setColour (Colours::white);
+    g.setFont (Font (10.00f, Font::plain));
+    String version_string;
+    version_string << "v" << QUOTE(VERSION);
+    g.drawText (version_string,
+                getWidth()-51, getHeight()-11, 50, 10,
+                Justification::bottomRight, true);
+    
     // draw left scale
     /*
     g.drawImage (cachedImage_meter_scale_png,

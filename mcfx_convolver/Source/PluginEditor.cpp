@@ -216,6 +216,16 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.drawText ("Buffer Size",
                 275, 132, 60, 30,
                 Justification::centred, true);
+    
+    
+    /* Version text */
+    g.setColour (Colours::white);
+    g.setFont (Font (10.00f, Font::plain));
+    String version_string;
+    version_string << "v" << QUOTE(VERSION);
+    g.drawText (version_string,
+                getWidth()-51, getHeight()-11, 50, 10,
+                Justification::bottomRight, true);
 }
 
 void Mcfx_convolverAudioProcessorEditor::resized()
