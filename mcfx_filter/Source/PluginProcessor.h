@@ -23,6 +23,7 @@
 #include "../JuceLibraryCode/JuceHeader.h"
 
 #include "FilterInfo.h"
+#include "SmoothIIRFilter.h"
 
 #include <complex>
 
@@ -228,10 +229,10 @@ private:
     float _ls_gain_param_, _ls_freq_param_, _ls_q_param_;
     float _hs_gain_param_, _hs_freq_param_, _hs_q_param_;
   
-    OwnedArray<IIRFilter> _LC_IIR_1;
-    OwnedArray<IIRFilter> _LC_IIR_2;
-    OwnedArray<IIRFilter> _HC_IIR_1;
-    OwnedArray<IIRFilter> _HC_IIR_2;
+    OwnedArray<SmoothIIRFilter> _LC_IIR_1;
+    OwnedArray<SmoothIIRFilter> _LC_IIR_2;
+    OwnedArray<SmoothIIRFilter> _HC_IIR_1;
+    OwnedArray<SmoothIIRFilter> _HC_IIR_2;
     
     
     IIRCoefficients _IIR_LC_Coeff;
@@ -239,21 +240,21 @@ private:
     
     // Peak/Notch Filters
     IIRCoefficients _IIR_PF_Coeff_1;
-    OwnedArray<IIRFilter> _PF_IIR_1;
+    OwnedArray<SmoothIIRFilter> _PF_IIR_1;
     
     
     IIRCoefficients _IIR_PF_Coeff_2;
-    OwnedArray<IIRFilter> _PF_IIR_2;
+    OwnedArray<SmoothIIRFilter> _PF_IIR_2;
   
   
     // High/Low Shelf
   
     IIRCoefficients _IIR_LS_Coeff;
-    OwnedArray<IIRFilter> _LS_IIR;
+    OwnedArray<SmoothIIRFilter> _LS_IIR;
   
   
     IIRCoefficients _IIR_HS_Coeff;
-    OwnedArray<IIRFilter> _HS_IIR;
+    OwnedArray<SmoothIIRFilter> _HS_IIR;
     
     AudioSampleBuffer _analysis_inbuf, _analysis_outbuf;
     float *_in_mag, *_out_mag; // magnitude frequency

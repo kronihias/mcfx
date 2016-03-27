@@ -510,9 +510,9 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
     // add filters if necessary
     if (_LC_IIR_1.size() < getNumInputChannels()) {
         while (getNumInputChannels() - _LC_IIR_1.size() > 0) {
-            _LC_IIR_1.add(new IIRFilter());
+            _LC_IIR_1.add(new SmoothIIRFilter());
             _LC_IIR_1.getLast()->setCoefficients(_IIR_LC_Coeff);
-            _LC_IIR_2.add(new IIRFilter());
+            _LC_IIR_2.add(new SmoothIIRFilter());
             _LC_IIR_2.getLast()->setCoefficients(_IIR_LC_Coeff);
         }
     }
@@ -532,9 +532,9 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
     // add filters if necessary
     if (_HC_IIR_1.size() < getNumInputChannels()) {
         while (getNumInputChannels() - _HC_IIR_1.size() > 0) {
-            _HC_IIR_1.add(new IIRFilter());
+            _HC_IIR_1.add(new SmoothIIRFilter());
             _HC_IIR_1.getLast()->setCoefficients(_IIR_HC_Coeff);
-            _HC_IIR_2.add(new IIRFilter());
+            _HC_IIR_2.add(new SmoothIIRFilter());
             _HC_IIR_2.getLast()->setCoefficients(_IIR_HC_Coeff);
         }
     }
@@ -559,9 +559,9 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
     // add filters if necessary
     if (_PF_IIR_1.size() < getNumInputChannels()) {
         while (getNumInputChannels() - _PF_IIR_1.size() > 0) {
-            _PF_IIR_1.add(new IIRFilter());
+            _PF_IIR_1.add(new SmoothIIRFilter());
             _PF_IIR_1.getLast()->setCoefficients(_IIR_PF_Coeff_1);
-            _PF_IIR_1.add(new IIRFilter());
+            _PF_IIR_1.add(new SmoothIIRFilter());
             _PF_IIR_1.getLast()->setCoefficients(_IIR_PF_Coeff_1);
         }
     }
@@ -586,9 +586,9 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
     // add filters if necessary
     if (_PF_IIR_2.size() < getNumInputChannels()) {
         while (getNumInputChannels() - _PF_IIR_2.size() > 0) {
-            _PF_IIR_2.add(new IIRFilter());
+            _PF_IIR_2.add(new SmoothIIRFilter());
             _PF_IIR_2.getLast()->setCoefficients(_IIR_PF_Coeff_2);
-            _PF_IIR_2.add(new IIRFilter());
+            _PF_IIR_2.add(new SmoothIIRFilter());
             _PF_IIR_2.getLast()->setCoefficients(_IIR_PF_Coeff_2);
         }
     }
@@ -613,9 +613,9 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
     // add filters if necessary
     if (_LS_IIR.size() < getNumInputChannels()) {
         while (getNumInputChannels() - _LS_IIR.size() > 0) {
-            _LS_IIR.add(new IIRFilter());
+            _LS_IIR.add(new SmoothIIRFilter());
             _LS_IIR.getLast()->setCoefficients(_IIR_LS_Coeff);
-            _LS_IIR.add(new IIRFilter());
+            _LS_IIR.add(new SmoothIIRFilter());
             _LS_IIR.getLast()->setCoefficients(_IIR_LS_Coeff);
         }
     }
@@ -640,9 +640,9 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
     // add filters if necessary
     if (_HS_IIR.size() < getNumInputChannels()) {
         while (getNumInputChannels() - _HS_IIR.size() > 0) {
-            _HS_IIR.add(new IIRFilter());
+            _HS_IIR.add(new SmoothIIRFilter());
             _HS_IIR.getLast()->setCoefficients(_IIR_HS_Coeff);
-            _HS_IIR.add(new IIRFilter());
+            _HS_IIR.add(new SmoothIIRFilter());
             _HS_IIR.getLast()->setCoefficients(_IIR_HS_Coeff);
         }
     }
