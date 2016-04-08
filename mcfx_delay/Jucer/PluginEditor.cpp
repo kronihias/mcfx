@@ -7,7 +7,7 @@
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Created with Introjucer version: 3.2.0
+  Created with Introjucer version: 4.1.0
 
   ------------------------------------------------------------------------------
 
@@ -121,6 +121,12 @@ void Mcfx_delayAudioProcessorEditor::paint (Graphics& g)
 
     g.fillAll (Colour (0xff1a1a1a));
 
+    g.setColour (Colours::white);
+    g.setFont (Font (10.00f, Font::plain));
+    g.drawText (TRANS("v0.4.2"),
+                137, 108, 50, 10,
+                Justification::bottomRight, true);
+
     //[UserPaint] Add your own custom painting code here..
     //[/UserPaint]
 }
@@ -180,7 +186,10 @@ BEGIN_JUCER_METADATA
                  constructorParams="Mcfx_delayAudioProcessor* ownerFilter" variableInitialisers="AudioProcessorEditor (ownerFilter)"
                  snapPixels="8" snapActive="0" snapShown="1" overlayOpacity="0.330"
                  fixedSize="1" initialWidth="190" initialHeight="120">
-  <BACKGROUND backgroundColour="ff1a1a1a"/>
+  <BACKGROUND backgroundColour="ff1a1a1a">
+    <TEXT pos="137 108 50 10" fill="solid: ffffffff" hasStroke="0" text="v0.4.2"
+          fontname="Default font" fontsize="10" bold="0" italic="0" justification="18"/>
+  </BACKGROUND>
   <LABEL name="new label" id="b45e45d811b90270" memberName="lbl_g" virtualName=""
          explicitFocusOrder="0" pos="0 0 115 16" textCol="ffffff00" edTextCol="ff000000"
          edBkgCol="0" labelText="mcfx_delay" editableSingleClick="0" editableDoubleClick="0"

@@ -7,7 +7,7 @@
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Created with Introjucer version: 3.2.0
+  Created with Introjucer version: 4.1.0
 
   ------------------------------------------------------------------------------
 
@@ -128,27 +128,143 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                          ImageCache::getFromMemory (mute_symbol_png, mute_symbol_pngSize), 1.000f, Colour (0x00000000),
                          ImageCache::getFromMemory (mute_symbol_over_png, mute_symbol_over_pngSize), 1.000f, Colour (0x00000000),
                          ImageCache::getFromMemory (mute_symbol_act_png, mute_symbol_act_pngSize), 1.000f, Colour (0x00000000));
-    addAndMakeVisible (btn_mute2 = new ImageButton ("new button"));
-    btn_mute2->setTooltip (TRANS("Not muted"));
-    btn_mute2->addListener (this);
+    addAndMakeVisible (btn_mute_reset = new ImageButton ("new button"));
+    btn_mute_reset->setTooltip (TRANS("Not muted"));
+    btn_mute_reset->addListener (this);
 
-    btn_mute2->setImages (false, true, true,
-                          ImageCache::getFromMemory (mute_symbol_png, mute_symbol_pngSize), 1.000f, Colour (0x00000000),
-                          ImageCache::getFromMemory (mute_symbol_over_png, mute_symbol_over_pngSize), 1.000f, Colour (0x00000000),
-                          ImageCache::getFromMemory (mute_symbol_act_png, mute_symbol_act_pngSize), 1.000f, Colour (0x00000000));
-    addAndMakeVisible (btn_solo2 = new ImageButton ("new button"));
-    btn_solo2->setTooltip (TRANS("Not soloed"));
-    btn_solo2->addListener (this);
+    btn_mute_reset->setImages (false, true, true,
+                               ImageCache::getFromMemory (mute_symbol_png, mute_symbol_pngSize), 1.000f, Colour (0x00000000),
+                               ImageCache::getFromMemory (mute_symbol_over_png, mute_symbol_over_pngSize), 1.000f, Colour (0x00000000),
+                               ImageCache::getFromMemory (mute_symbol_act_png, mute_symbol_act_pngSize), 1.000f, Colour (0x00000000));
+    addAndMakeVisible (btn_solo_reset = new ImageButton ("new button"));
+    btn_solo_reset->setTooltip (TRANS("Not soloed"));
+    btn_solo_reset->addListener (this);
 
-    btn_solo2->setImages (false, true, true,
-                          ImageCache::getFromMemory (solo_symbol_png, solo_symbol_pngSize), 1.000f, Colour (0x00000000),
-                          ImageCache::getFromMemory (solo_symbol_over_png, solo_symbol_over_pngSize), 1.000f, Colour (0x00000000),
-                          ImageCache::getFromMemory (solo_symbol_act_png, solo_symbol_act_pngSize), 1.000f, Colour (0x00000000));
+    btn_solo_reset->setImages (false, true, true,
+                               ImageCache::getFromMemory (solo_symbol_png, solo_symbol_pngSize), 1.000f, Colour (0x00000000),
+                               ImageCache::getFromMemory (solo_symbol_over_png, solo_symbol_over_pngSize), 1.000f, Colour (0x00000000),
+                               ImageCache::getFromMemory (solo_symbol_act_png, solo_symbol_act_pngSize), 1.000f, Colour (0x00000000));
+    addAndMakeVisible (btn_sig = new ImageButton ("new button"));
+    btn_sig->setTooltip (TRANS("Signal generator off"));
+    btn_sig->addListener (this);
+
+    btn_sig->setImages (false, true, true,
+                        ImageCache::getFromMemory (sig_symbol_png, sig_symbol_pngSize), 1.000f, Colour (0x00000000),
+                        ImageCache::getFromMemory (sig_symbol_over_png, sig_symbol_over_pngSize), 1.000f, Colour (0x00000000),
+                        ImageCache::getFromMemory (sig_symbol_act_png, sig_symbol_act_pngSize), 1.000f, Colour (0x00000000));
+    addAndMakeVisible (btn_phase_reset = new ImageButton ("new button"));
+    btn_phase_reset->setTooltip (TRANS("Reset phase for all channels"));
+    btn_phase_reset->addListener (this);
+
+    btn_phase_reset->setImages (false, true, true,
+                                ImageCache::getFromMemory (phase_symbol_png, phase_symbol_pngSize), 0.986f, Colour (0x00000000),
+                                ImageCache::getFromMemory (phase_symbol_over_png, phase_symbol_over_pngSize), 1.000f, Colour (0x00000000),
+                                ImageCache::getFromMemory (phase_symbol_inv_png, phase_symbol_inv_pngSize), 1.000f, Colour (0x00000000));
+    
+    addAndMakeVisible (sld_siggain = new Slider ("new slider"));
+    sld_siggain->setTooltip (TRANS("Signalgenerator Gain"));
+    sld_siggain->setRange (-99, 6, 0.1);
+    sld_siggain->setSliderStyle (Slider::Rotary);
+    sld_siggain->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+    sld_siggain->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_siggain->setColour (Slider::trackColourId, Colour (0xff797900));
+    sld_siggain->setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
+    sld_siggain->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_siggain->addListener (this);
+
+    addAndMakeVisible (box_signal = new ComboBox ("new combo box"));
+    box_signal->setTooltip (TRANS("Signal Type"));
+    box_signal->setEditableText (false);
+    box_signal->setJustificationType (Justification::centredLeft);
+    box_signal->setTextWhenNothingSelected (TRANS("white"));
+    box_signal->setTextWhenNoChoicesAvailable (TRANS("(no choices)"));
+    box_signal->addItem (TRANS("white"), 1);
+    box_signal->addItem (TRANS("pink"), 2);
+    box_signal->addItem (TRANS("sine"), 3);
+    box_signal->addItem (TRANS("triangle"), 4);
+    box_signal->addItem (TRANS("square"), 5);
+    box_signal->addListener (this);
+
+    addAndMakeVisible (box_sigtime = new ComboBox ("new combo box"));
+    box_sigtime->setTooltip (TRANS("Signal generator time sequence"));
+    box_sigtime->setEditableText (false);
+    box_sigtime->setJustificationType (Justification::centredLeft);
+    box_sigtime->setTextWhenNothingSelected (TRANS("steady"));
+    box_sigtime->setTextWhenNoChoicesAvailable (TRANS("(no choices)"));
+    box_sigtime->addItem (TRANS("steady"), 1);
+    box_sigtime->addItem (TRANS("pulsed"), 2);
+    box_sigtime->addListener (this);
+
+    addAndMakeVisible (sld_sigfreq = new Slider ("new slider"));
+    sld_sigfreq->setTooltip (TRANS("Signalgenerator Frequency"));
+    sld_sigfreq->setExplicitFocusOrder (20000);
+    sld_sigfreq->setRange (20, 6, 1);
+    sld_sigfreq->setSliderStyle (Slider::Rotary);
+    sld_sigfreq->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+    sld_sigfreq->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_sigfreq->setColour (Slider::trackColourId, Colours::yellow);
+    sld_sigfreq->setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
+    sld_sigfreq->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_sigfreq->addListener (this);
+
+    addAndMakeVisible (sld_sigstepinterval = new Slider ("new slider"));
+    sld_sigstepinterval->setTooltip (TRANS("Step Interval"));
+    sld_sigstepinterval->setExplicitFocusOrder (5000);
+    sld_sigstepinterval->setRange (50, 6, 1);
+    sld_sigstepinterval->setSliderStyle (Slider::Rotary);
+    sld_sigstepinterval->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+    sld_sigstepinterval->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_sigstepinterval->setColour (Slider::trackColourId, Colours::yellow);
+    sld_sigstepinterval->setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
+    sld_sigstepinterval->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_sigstepinterval->addListener (this);
+
+    addAndMakeVisible (tgl_sigstep = new ToggleButton ("new toggle button"));
+    tgl_sigstep->setTooltip (TRANS("Signalgenerator step through channels"));
+    tgl_sigstep->setButtonText (TRANS("step through channels"));
+    tgl_sigstep->addListener (this);
+    tgl_sigstep->setColour (ToggleButton::textColourId, Colours::white);
+
+    addAndMakeVisible (btn_sig_reset = new ImageButton ("new button"));
+    btn_sig_reset->setTooltip (TRANS("Reset signal generator"));
+    btn_sig_reset->addListener (this);
+
+    btn_sig_reset->setImages (false, true, true,
+                              ImageCache::getFromMemory (sig_symbol_png, sig_symbol_pngSize), 1.000f, Colour (0x00000000),
+                              ImageCache::getFromMemory (sig_symbol_over_png, sig_symbol_over_pngSize), 1.000f, Colour (0x00000000),
+                              ImageCache::getFromMemory (sig_symbol_act_png, sig_symbol_act_pngSize), 1.000f, Colour (0x00000000));
+    addAndMakeVisible (label4 = new Label ("new label",
+                                           TRANS("gain [dB]\n")));
+    label4->setFont (Font (13.00f, Font::plain));
+    label4->setJustificationType (Justification::centredLeft);
+    label4->setEditable (false, false, false);
+    label4->setColour (Label::textColourId, Colours::white);
+    label4->setColour (TextEditor::textColourId, Colours::black);
+    label4->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+
+    addAndMakeVisible (label6 = new Label ("new label",
+                                           TRANS("[Hz]")));
+    label6->setFont (Font (13.00f, Font::plain));
+    label6->setJustificationType (Justification::centredLeft);
+    label6->setEditable (false, false, false);
+    label6->setColour (Label::textColourId, Colours::white);
+    label6->setColour (TextEditor::textColourId, Colours::black);
+    label6->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+
+    addAndMakeVisible (label7 = new Label ("new label",
+                                           TRANS("[ms]")));
+    label7->setFont (Font (13.00f, Font::plain));
+    label7->setJustificationType (Justification::centredLeft);
+    label7->setEditable (false, false, false);
+    label7->setColour (Label::textColourId, Colours::white);
+    label7->setColour (TextEditor::textColourId, Colours::black);
+    label7->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+
 
     //[UserPreSize]
     //[/UserPreSize]
 
-    setSize (260, 210);
+    setSize (300, 210);
 
 
     //[Constructor] You can add your own custom stuff here..
@@ -171,8 +287,20 @@ Mcfx_gain_delayAudioProcessorEditor::~Mcfx_gain_delayAudioProcessorEditor()
     btn_phase = nullptr;
     btn_solo = nullptr;
     btn_mute = nullptr;
-    btn_mute2 = nullptr;
-    btn_solo2 = nullptr;
+    btn_mute_reset = nullptr;
+    btn_solo_reset = nullptr;
+    btn_sig = nullptr;
+    btn_phase_reset = nullptr;
+    sld_siggain = nullptr;
+    box_signal = nullptr;
+    box_sigtime = nullptr;
+    sld_sigfreq = nullptr;
+    sld_sigstepinterval = nullptr;
+    tgl_sigstep = nullptr;
+    btn_sig_reset = nullptr;
+    label4 = nullptr;
+    label6 = nullptr;
+    label7 = nullptr;
 
 
     //[Destructor]. You can add your own custom destruction code here..
@@ -187,6 +315,15 @@ void Mcfx_gain_delayAudioProcessorEditor::paint (Graphics& g)
 
     g.fillAll (Colour (0xff1a1a1a));
 
+    g.setColour (Colour (0xff111111));
+    g.fillRoundedRectangle (9.0f, 125.0f, 279.0f, 77.0f, 10.000f);
+
+    g.setColour (Colour (0xffdd2929));
+    g.setFont (Font (15.00f, Font::plain));
+    g.drawText (TRANS("Signalgenerator"),
+                16, 126, 107, 24,
+                Justification::centredLeft, true);
+
     //[UserPaint] Add your own custom painting code here..
     //[/UserPaint]
 }
@@ -197,18 +334,30 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
     //[/UserPreResize]
 
     lbl_gd->setBounds (0, 0, 115, 16);
-    sld_del->setBounds (109, 45, 80, 24);
-    sld_gain->setBounds (28, 45, 80, 24);
-    label2->setBounds (37, 26, 66, 16);
-    label3->setBounds (115, 26, 75, 16);
-    lbl_ch->setBounds (-2, 48, 29, 16);
-    btn_paste_gain->setBounds (29, 26, 16, 16);
-    btn_paste_gain2->setBounds (109, 26, 16, 16);
-    btn_phase->setBounds (189, 48, 19, 19);
-    btn_solo->setBounds (235, 48, 19, 19);
-    btn_mute->setBounds (212, 48, 19, 19);
-    btn_mute2->setBounds (212, 22, 19, 19);
-    btn_solo2->setBounds (237, 22, 19, 19);
+    sld_del->setBounds (107, 58, 80, 24);
+    sld_gain->setBounds (26, 58, 80, 24);
+    label2->setBounds (35, 39, 66, 16);
+    label3->setBounds (113, 39, 75, 16);
+    lbl_ch->setBounds (-4, 61, 29, 16);
+    btn_paste_gain->setBounds (27, 39, 16, 16);
+    btn_paste_gain2->setBounds (107, 39, 16, 16);
+    btn_phase->setBounds (187, 61, 19, 19);
+    btn_solo->setBounds (233, 61, 19, 19);
+    btn_mute->setBounds (210, 61, 19, 19);
+    btn_mute_reset->setBounds (210, 35, 19, 19);
+    btn_solo_reset->setBounds (235, 35, 19, 19);
+    btn_sig->setBounds (257, 62, 19, 19);
+    btn_phase_reset->setBounds (187, 34, 19, 19);
+    sld_siggain->setBounds (132, 127, 80, 24);
+    box_signal->setBounds (17, 155, 80, 18);
+    box_sigtime->setBounds (106, 155, 67, 18);
+    sld_sigfreq->setBounds (184, 150, 79, 26);
+    sld_sigstepinterval->setBounds (185, 177, 72, 26);
+    tgl_sigstep->setBounds (14, 178, 164, 24);
+    btn_sig_reset->setBounds (257, 36, 19, 19);
+    label4->setBounds (208, 129, 62, 16);
+    label6->setBounds (258, 155, 32, 16);
+    label7->setBounds (256, 181, 35, 16);
     //[UserResized] Add your own custom resize handling here..
     //[/UserResized]
 }
@@ -227,6 +376,21 @@ void Mcfx_gain_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThat
     {
         //[UserSliderCode_sld_gain] -- add your slider handling code here..
         //[/UserSliderCode_sld_gain]
+    }
+    else if (sliderThatWasMoved == sld_siggain)
+    {
+        //[UserSliderCode_sld_siggain] -- add your slider handling code here..
+        //[/UserSliderCode_sld_siggain]
+    }
+    else if (sliderThatWasMoved == sld_sigfreq)
+    {
+        //[UserSliderCode_sld_sigfreq] -- add your slider handling code here..
+        //[/UserSliderCode_sld_sigfreq]
+    }
+    else if (sliderThatWasMoved == sld_sigstepinterval)
+    {
+        //[UserSliderCode_sld_sigstepinterval] -- add your slider handling code here..
+        //[/UserSliderCode_sld_sigstepinterval]
     }
 
     //[UsersliderValueChanged_Post]
@@ -263,19 +427,59 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         //[UserButtonCode_btn_mute] -- add your button handler code here..
         //[/UserButtonCode_btn_mute]
     }
-    else if (buttonThatWasClicked == btn_mute2)
+    else if (buttonThatWasClicked == btn_mute_reset)
     {
-        //[UserButtonCode_btn_mute2] -- add your button handler code here..
-        //[/UserButtonCode_btn_mute2]
+        //[UserButtonCode_btn_mute_reset] -- add your button handler code here..
+        //[/UserButtonCode_btn_mute_reset]
     }
-    else if (buttonThatWasClicked == btn_solo2)
+    else if (buttonThatWasClicked == btn_solo_reset)
     {
-        //[UserButtonCode_btn_solo2] -- add your button handler code here..
-        //[/UserButtonCode_btn_solo2]
+        //[UserButtonCode_btn_solo_reset] -- add your button handler code here..
+        //[/UserButtonCode_btn_solo_reset]
+    }
+    else if (buttonThatWasClicked == btn_sig)
+    {
+        //[UserButtonCode_btn_sig] -- add your button handler code here..
+        //[/UserButtonCode_btn_sig]
+    }
+    else if (buttonThatWasClicked == btn_phase_reset)
+    {
+        //[UserButtonCode_btn_phase_reset] -- add your button handler code here..
+        //[/UserButtonCode_btn_phase_reset]
+    }
+    else if (buttonThatWasClicked == tgl_sigstep)
+    {
+        //[UserButtonCode_tgl_sigstep] -- add your button handler code here..
+        //[/UserButtonCode_tgl_sigstep]
+    }
+    else if (buttonThatWasClicked == btn_sig_reset)
+    {
+        //[UserButtonCode_btn_sig_reset] -- add your button handler code here..
+        //[/UserButtonCode_btn_sig_reset]
     }
 
     //[UserbuttonClicked_Post]
     //[/UserbuttonClicked_Post]
+}
+
+void Mcfx_gain_delayAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
+{
+    //[UsercomboBoxChanged_Pre]
+    //[/UsercomboBoxChanged_Pre]
+
+    if (comboBoxThatHasChanged == box_signal)
+    {
+        //[UserComboBoxCode_box_signal] -- add your combo box handling code here..
+        //[/UserComboBoxCode_box_signal]
+    }
+    else if (comboBoxThatHasChanged == box_sigtime)
+    {
+        //[UserComboBoxCode_box_sigtime] -- add your combo box handling code here..
+        //[/UserComboBoxCode_box_sigtime]
+    }
+
+    //[UsercomboBoxChanged_Post]
+    //[/UsercomboBoxChanged_Post]
 }
 
 
@@ -298,88 +502,158 @@ BEGIN_JUCER_METADATA
                  constructorParams="Mcfx_gain_delayAudioProcessor* ownerFilter"
                  variableInitialisers="AudioProcessorEditor (ownerFilter)" snapPixels="8"
                  snapActive="0" snapShown="1" overlayOpacity="0.330" fixedSize="1"
-                 initialWidth="260" initialHeight="210">
-  <BACKGROUND backgroundColour="ff1a1a1a"/>
+                 initialWidth="300" initialHeight="210">
+  <BACKGROUND backgroundColour="ff1a1a1a">
+    <ROUNDRECT pos="9 125 279 77" cornerSize="10" fill="solid: ff111111" hasStroke="0"/>
+    <TEXT pos="16 126 107 24" fill="solid: ffdd2929" hasStroke="0" text="Signalgenerator"
+          fontname="Default font" fontsize="15" bold="0" italic="0" justification="33"/>
+  </BACKGROUND>
   <LABEL name="new label" id="b45e45d811b90270" memberName="lbl_gd" virtualName=""
          explicitFocusOrder="0" pos="0 0 115 16" textCol="ffffff00" edTextCol="ff000000"
          edBkgCol="0" labelText="mcfx_gain_delay" editableSingleClick="0"
          editableDoubleClick="0" focusDiscardsChanges="0" fontname="Default font"
          fontsize="15" bold="0" italic="0" justification="33"/>
   <SLIDER name="new slider" id="d5c1a3078147bf28" memberName="sld_del"
-          virtualName="" explicitFocusOrder="0" pos="109 45 80 24" tooltip="delay ch 1"
+          virtualName="" explicitFocusOrder="0" pos="107 58 80 24" tooltip="delay ch 1"
           rotarysliderfill="ffff0000" min="0" max="500" int="0.10000000000000000555"
           style="Rotary" textBoxPos="TextBoxLeft" textBoxEditable="1" textBoxWidth="50"
           textBoxHeight="18" skewFactor="1"/>
   <SLIDER name="new slider" id="edc665213f83e06b" memberName="sld_gain"
-          virtualName="" explicitFocusOrder="0" pos="28 45 80 24" tooltip="gain ch 1"
+          virtualName="" explicitFocusOrder="0" pos="26 58 80 24" tooltip="gain ch 1"
           thumbcol="ff5a5a90" trackcol="ffffff00" rotarysliderfill="ffffff00"
           rotaryslideroutline="ffffff00" min="-18" max="18" int="0.010000000000000000208"
           style="Rotary" textBoxPos="TextBoxLeft" textBoxEditable="1" textBoxWidth="50"
           textBoxHeight="18" skewFactor="1"/>
   <LABEL name="new label" id="e30a8f204d299927" memberName="label2" virtualName=""
-         explicitFocusOrder="0" pos="37 26 66 16" textCol="ffffffff" edTextCol="ff000000"
+         explicitFocusOrder="0" pos="35 39 66 16" textCol="ffffffff" edTextCol="ff000000"
          edBkgCol="0" labelText="gain [dB]&#10;" editableSingleClick="0"
          editableDoubleClick="0" focusDiscardsChanges="0" fontname="Default font"
          fontsize="13" bold="0" italic="0" justification="34"/>
   <LABEL name="new label" id="a7997dcae0239c4c" memberName="label3" virtualName=""
-         explicitFocusOrder="0" pos="115 26 75 16" textCol="ffffffff"
+         explicitFocusOrder="0" pos="113 39 75 16" textCol="ffffffff"
          edTextCol="ff000000" edBkgCol="0" labelText="delay [ms]&#10;"
          editableSingleClick="0" editableDoubleClick="0" focusDiscardsChanges="0"
          fontname="Default font" fontsize="13" bold="0" italic="0" justification="34"/>
   <LABEL name="new label" id="5189e110ab7987d1" memberName="lbl_ch" virtualName=""
-         explicitFocusOrder="0" pos="-2 48 29 16" textCol="ffffffff" edTextCol="ff000000"
+         explicitFocusOrder="0" pos="-4 61 29 16" textCol="ffffffff" edTextCol="ff000000"
          edBkgCol="0" labelText="1" editableSingleClick="0" editableDoubleClick="0"
          focusDiscardsChanges="0" fontname="Default font" fontsize="15"
          bold="0" italic="0" justification="34"/>
   <IMAGEBUTTON name="new button" id="fb278a9f97bfef46" memberName="btn_paste_gain"
-               virtualName="" explicitFocusOrder="0" pos="29 26 16 16" tooltip="paste gain values from clipboard"
+               virtualName="" explicitFocusOrder="0" pos="27 39 16 16" tooltip="paste gain values from clipboard"
                buttonText="new button" connectedEdges="0" needsCallback="1"
                radioGroupId="0" keepProportions="1" resourceNormal="clipboard35_grey_png"
                opacityNormal="1" colourNormal="0" resourceOver="clipboard35_png"
                opacityOver="1" colourOver="0" resourceDown="" opacityDown="1"
                colourDown="0"/>
   <IMAGEBUTTON name="new button" id="548c7fabb48b0c32" memberName="btn_paste_gain2"
-               virtualName="" explicitFocusOrder="0" pos="109 26 16 16" tooltip="paste delay values from clipboard"
+               virtualName="" explicitFocusOrder="0" pos="107 39 16 16" tooltip="paste delay values from clipboard"
                buttonText="new button" connectedEdges="0" needsCallback="1"
                radioGroupId="0" keepProportions="1" resourceNormal="clipboard35_grey_png"
                opacityNormal="1" colourNormal="0" resourceOver="clipboard35_png"
                opacityOver="1" colourOver="0" resourceDown="" opacityDown="1"
                colourDown="0"/>
   <IMAGEBUTTON name="new button" id="35f65f745d301744" memberName="btn_phase"
-               virtualName="" explicitFocusOrder="0" pos="189 48 19 19" tooltip="phase normal"
+               virtualName="" explicitFocusOrder="0" pos="187 61 19 19" tooltip="phase normal"
                buttonText="new button" connectedEdges="0" needsCallback="1"
                radioGroupId="0" keepProportions="1" resourceNormal="phase_symbol_png"
                opacityNormal="0.98593747615814208984" colourNormal="0" resourceOver="phase_symbol_over_png"
                opacityOver="1" colourOver="0" resourceDown="phase_symbol_inv_png"
                opacityDown="1" colourDown="0"/>
   <IMAGEBUTTON name="new button" id="9c6bc8d4ac97807c" memberName="btn_solo"
-               virtualName="" explicitFocusOrder="0" pos="235 48 19 19" tooltip="Not soloed"
+               virtualName="" explicitFocusOrder="0" pos="233 61 19 19" tooltip="Not soloed"
                buttonText="new button" connectedEdges="0" needsCallback="1"
                radioGroupId="0" keepProportions="1" resourceNormal="solo_symbol_png"
                opacityNormal="1" colourNormal="0" resourceOver="solo_symbol_over_png"
                opacityOver="1" colourOver="0" resourceDown="solo_symbol_act_png"
                opacityDown="1" colourDown="0"/>
   <IMAGEBUTTON name="new button" id="a9a7f5e5ad1d236c" memberName="btn_mute"
-               virtualName="" explicitFocusOrder="0" pos="212 48 19 19" tooltip="Not muted"
+               virtualName="" explicitFocusOrder="0" pos="210 61 19 19" tooltip="Not muted"
                buttonText="new button" connectedEdges="0" needsCallback="1"
                radioGroupId="0" keepProportions="1" resourceNormal="mute_symbol_png"
                opacityNormal="1" colourNormal="0" resourceOver="mute_symbol_over_png"
                opacityOver="1" colourOver="0" resourceDown="mute_symbol_act_png"
                opacityDown="1" colourDown="0"/>
-  <IMAGEBUTTON name="new button" id="10915824ad71c0ad" memberName="btn_mute2"
-               virtualName="" explicitFocusOrder="0" pos="212 22 19 19" tooltip="Not muted"
+  <IMAGEBUTTON name="new button" id="10915824ad71c0ad" memberName="btn_mute_reset"
+               virtualName="" explicitFocusOrder="0" pos="210 35 19 19" tooltip="Not muted"
                buttonText="new button" connectedEdges="0" needsCallback="1"
                radioGroupId="0" keepProportions="1" resourceNormal="mute_symbol_png"
                opacityNormal="1" colourNormal="0" resourceOver="mute_symbol_over_png"
                opacityOver="1" colourOver="0" resourceDown="mute_symbol_act_png"
                opacityDown="1" colourDown="0"/>
-  <IMAGEBUTTON name="new button" id="45dceba6c8fb603e" memberName="btn_solo2"
-               virtualName="" explicitFocusOrder="0" pos="237 22 19 19" tooltip="Not soloed"
+  <IMAGEBUTTON name="new button" id="45dceba6c8fb603e" memberName="btn_solo_reset"
+               virtualName="" explicitFocusOrder="0" pos="235 35 19 19" tooltip="Not soloed"
                buttonText="new button" connectedEdges="0" needsCallback="1"
                radioGroupId="0" keepProportions="1" resourceNormal="solo_symbol_png"
                opacityNormal="1" colourNormal="0" resourceOver="solo_symbol_over_png"
                opacityOver="1" colourOver="0" resourceDown="solo_symbol_act_png"
                opacityDown="1" colourDown="0"/>
+  <IMAGEBUTTON name="new button" id="69e93199bbe1157c" memberName="btn_sig"
+               virtualName="" explicitFocusOrder="0" pos="257 62 19 19" tooltip="Signal generator off"
+               buttonText="new button" connectedEdges="0" needsCallback="1"
+               radioGroupId="0" keepProportions="1" resourceNormal="sig_symbol_png"
+               opacityNormal="1" colourNormal="0" resourceOver="sig_symbol_over_png"
+               opacityOver="1" colourOver="0" resourceDown="sig_symbol_act_png"
+               opacityDown="1" colourDown="0"/>
+  <IMAGEBUTTON name="new button" id="14ef880fd3e30033" memberName="btn_phase_reset"
+               virtualName="" explicitFocusOrder="0" pos="187 34 19 19" tooltip="Reset phase for all channels"
+               buttonText="new button" connectedEdges="0" needsCallback="1"
+               radioGroupId="0" keepProportions="1" resourceNormal="phase_symbol_png"
+               opacityNormal="0.98593747615814208984" colourNormal="0" resourceOver="phase_symbol_over_png"
+               opacityOver="1" colourOver="0" resourceDown="phase_symbol_inv_png"
+               opacityDown="1" colourDown="0"/>
+  <SLIDER name="new slider" id="41498c4d8e549c8" memberName="sld_siggain"
+          virtualName="" explicitFocusOrder="0" pos="132 127 80 24" tooltip="Signalgenerator Gain"
+          thumbcol="ff5a5a90" trackcol="ff797900" rotarysliderfill="fff0f8ff"
+          rotaryslideroutline="ffffff00" min="-99" max="6" int="0.10000000000000000555"
+          style="Rotary" textBoxPos="TextBoxLeft" textBoxEditable="1" textBoxWidth="50"
+          textBoxHeight="18" skewFactor="1"/>
+  <COMBOBOX name="new combo box" id="95597410936a8eb4" memberName="box_signal"
+            virtualName="" explicitFocusOrder="0" pos="17 155 80 18" tooltip="Signal Type"
+            editable="0" layout="33" items="white&#10;pink&#10;sine&#10;triangle&#10;square"
+            textWhenNonSelected="white" textWhenNoItems="(no choices)"/>
+  <COMBOBOX name="new combo box" id="b6cf3ce6a4eaf04e" memberName="box_sigtime"
+            virtualName="" explicitFocusOrder="0" pos="106 155 67 18" tooltip="Signal generator time sequence"
+            editable="0" layout="33" items="steady&#10;pulsed" textWhenNonSelected="steady"
+            textWhenNoItems="(no choices)"/>
+  <SLIDER name="new slider" id="642761a228e1eb0" memberName="sld_sigfreq"
+          virtualName="" explicitFocusOrder="20000" pos="184 150 79 26"
+          tooltip="Signalgenerator Frequency" thumbcol="ff5a5a90" trackcol="ffffff00"
+          rotarysliderfill="fff0f8ff" rotaryslideroutline="ffffff00" min="20"
+          max="6" int="1" style="Rotary" textBoxPos="TextBoxLeft" textBoxEditable="1"
+          textBoxWidth="50" textBoxHeight="18" skewFactor="1"/>
+  <SLIDER name="new slider" id="9c8e1f16686d032" memberName="sld_sigstepinterval"
+          virtualName="" explicitFocusOrder="5000" pos="185 177 72 26"
+          tooltip="Step Interval" thumbcol="ff5a5a90" trackcol="ffffff00"
+          rotarysliderfill="fff0f8ff" rotaryslideroutline="ffffff00" min="50"
+          max="6" int="1" style="Rotary" textBoxPos="TextBoxLeft" textBoxEditable="1"
+          textBoxWidth="50" textBoxHeight="18" skewFactor="1"/>
+  <TOGGLEBUTTON name="new toggle button" id="d6ff088990c25ae2" memberName="tgl_sigstep"
+                virtualName="" explicitFocusOrder="0" pos="14 178 164 24" tooltip="Signalgenerator step through channels"
+                txtcol="ffffffff" buttonText="step through channels" connectedEdges="0"
+                needsCallback="1" radioGroupId="0" state="0"/>
+  <IMAGEBUTTON name="new button" id="23e7365fb3c2826f" memberName="btn_sig_reset"
+               virtualName="" explicitFocusOrder="0" pos="257 36 19 19" tooltip="Reset signal generator"
+               buttonText="new button" connectedEdges="0" needsCallback="1"
+               radioGroupId="0" keepProportions="1" resourceNormal="sig_symbol_png"
+               opacityNormal="1" colourNormal="0" resourceOver="sig_symbol_over_png"
+               opacityOver="1" colourOver="0" resourceDown="sig_symbol_act_png"
+               opacityDown="1" colourDown="0"/>
+  <LABEL name="new label" id="725f1fb9d5f049a4" memberName="label4" virtualName=""
+         explicitFocusOrder="0" pos="208 129 62 16" textCol="ffffffff"
+         edTextCol="ff000000" edBkgCol="0" labelText="gain [dB]&#10;"
+         editableSingleClick="0" editableDoubleClick="0" focusDiscardsChanges="0"
+         fontname="Default font" fontsize="13" bold="0" italic="0" justification="33"/>
+  <LABEL name="new label" id="5ee7047eb46397f2" memberName="label6" virtualName=""
+         explicitFocusOrder="0" pos="258 155 32 16" textCol="ffffffff"
+         edTextCol="ff000000" edBkgCol="0" labelText="[Hz]" editableSingleClick="0"
+         editableDoubleClick="0" focusDiscardsChanges="0" fontname="Default font"
+         fontsize="13" bold="0" italic="0" justification="33"/>
+  <LABEL name="new label" id="d408f000b18d3d66" memberName="label7" virtualName=""
+         explicitFocusOrder="0" pos="256 181 35 16" textCol="ffffffff"
+         edTextCol="ff000000" edBkgCol="0" labelText="[ms]" editableSingleClick="0"
+         editableDoubleClick="0" focusDiscardsChanges="0" fontname="Default font"
+         fontsize="13" bold="0" italic="0" justification="33"/>
 </JUCER_COMPONENT>
 
 END_JUCER_METADATA
@@ -965,6 +1239,166 @@ static const unsigned char resource_Mcfx_gain_delayAudioProcessorEditor_mute_sym
 
 const char* Mcfx_gain_delayAudioProcessorEditor::mute_symbol_act_png = (const char*) resource_Mcfx_gain_delayAudioProcessorEditor_mute_symbol_act_png;
 const int Mcfx_gain_delayAudioProcessorEditor::mute_symbol_act_pngSize = 2890;
+
+// JUCER_RESOURCE: sig_symbol_png, 2592, "sig_symbol.png"
+static const unsigned char resource_Mcfx_gain_delayAudioProcessorEditor_sig_symbol_png[] = { 137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,49,0,0,0,47,8,6,0,0,1,61,71,18,97,0,0,0,9,112,72,89,115,
+0,0,17,139,0,0,17,137,1,168,30,143,128,0,0,9,210,73,68,65,84,120,218,213,89,9,84,83,87,26,190,129,7,72,88,130,16,84,112,1,21,112,1,164,40,155,128,11,56,130,40,90,4,92,170,136,226,54,101,10,246,136,98,
+143,227,1,102,84,56,162,30,43,46,135,17,21,91,21,21,165,14,58,14,200,28,198,65,11,20,21,117,80,169,82,220,101,0,101,53,202,110,200,124,247,105,210,176,4,18,146,182,244,63,231,65,94,222,189,247,191,255,
+255,254,229,251,110,24,145,72,68,196,226,231,231,119,51,61,61,221,81,124,207,208,63,235,214,173,99,71,140,24,49,130,253,124,246,236,217,134,202,202,74,93,134,116,35,11,23,46,212,97,103,250,250,250,222,
+30,53,106,20,41,76,219,79,126,168,32,36,60,60,92,50,136,185,116,233,210,68,186,148,67,96,56,113,232,180,2,187,236,197,139,23,69,243,230,205,227,136,191,124,255,254,125,34,251,80,188,219,109,219,182,37,
+175,89,179,102,203,144,33,67,42,186,236,52,46,46,46,132,254,223,183,111,31,135,17,127,41,45,65,65,65,109,146,237,255,244,160,136,100,101,95,99,119,104,104,104,200,72,30,88,141,179,99,47,42,21,21,21,255,
+97,232,122,157,151,59,119,238,156,39,35,237,195,41,83,166,136,236,237,237,187,120,6,110,171,131,219,12,59,216,57,121,242,100,145,163,163,35,233,110,194,71,119,14,164,26,125,124,124,102,227,202,100,226,
+227,227,19,233,4,121,36,51,51,51,3,147,56,12,254,36,29,57,114,228,115,162,128,48,19,38,76,184,147,156,156,220,186,114,229,74,205,222,6,83,199,72,108,122,247,238,157,214,71,219,10,176,85,103,233,129,250,
+250,250,223,199,196,196,204,208,208,208,104,147,104,146,246,30,149,134,134,6,126,112,112,112,166,133,133,69,49,236,93,65,186,139,16,42,174,174,174,175,28,28,28,6,209,207,67,135,14,37,77,77,77,14,240,214,
+242,250,250,122,114,252,248,113,78,135,9,60,30,79,180,124,249,242,110,247,111,96,96,192,6,143,196,14,196,155,166,172,193,210,18,26,26,42,74,76,76,228,48,216,107,11,2,182,215,9,48,156,8,133,66,117,70,158,
+193,98,177,177,177,185,223,37,219,46,100,229,147,183,63,221,34,117,31,239,165,19,236,217,179,103,230,93,38,124,234,237,74,8,189,186,145,233,211,167,231,48,135,15,31,110,71,78,169,201,25,91,62,12,252,173,
+222,93,122,117,150,87,175,94,101,74,39,169,37,252,92,42,107,48,159,207,255,17,207,103,75,38,192,181,143,232,139,241,242,242,170,26,59,118,44,95,122,240,201,147,39,235,106,107,107,173,101,198,146,88,218,
+218,218,184,86,86,86,85,12,195,112,167,78,157,74,116,116,116,58,60,167,243,110,220,184,65,74,74,74,26,75,75,75,205,141,141,141,171,100,166,70,231,47,16,213,162,21,43,62,196,233,220,185,115,101,250,129,
+195,225,16,103,103,103,122,113,81,192,94,127,44,11,141,40,11,58,50,149,224,213,252,15,185,104,42,86,208,23,65,25,225,210,23,117,226,196,9,65,93,93,29,175,131,146,49,99,198,8,188,189,189,245,136,138,100,
+217,178,101,250,70,70,70,245,53,53,53,6,172,146,214,214,86,61,23,23,23,149,41,16,203,210,165,75,121,81,81,81,240,228,182,40,6,55,217,38,38,38,50,7,183,189,45,39,127,251,230,59,246,179,154,161,25,241,243,
+246,32,67,249,31,246,244,188,248,22,49,179,158,36,115,110,108,108,236,22,86,201,224,193,131,203,112,239,36,51,187,245,76,59,228,33,149,166,134,6,210,78,212,122,84,240,49,136,4,172,187,14,28,56,16,224,
+225,225,33,178,181,181,149,219,21,218,58,58,189,142,81,83,83,107,201,200,200,248,57,177,182,111,223,62,53,37,37,229,26,195,48,42,123,39,55,111,222,188,181,119,239,222,124,137,18,55,55,183,239,17,239,26,
+8,128,102,212,107,117,101,22,31,52,104,208,237,209,163,71,239,70,53,56,221,37,79,96,197,251,194,194,66,230,229,203,151,195,167,77,155,118,15,0,132,167,200,226,90,90,90,223,161,15,220,217,178,101,75,108,
+175,25,63,124,248,240,151,79,158,60,49,16,223,239,222,189,123,35,80,199,159,177,67,1,58,145,64,83,83,179,237,205,155,55,234,119,239,222,181,8,12,12,76,59,118,236,88,8,178,191,199,74,41,179,118,117,170,
+187,171,82,83,83,131,94,191,126,141,28,51,170,70,185,57,141,236,62,44,87,75,151,245,96,215,174,93,199,162,163,163,87,224,93,145,241,227,199,211,80,100,47,42,185,185,185,30,168,81,73,57,57,57,34,127,127,
+255,212,164,164,164,207,228,86,0,212,52,158,118,241,144,144,16,130,206,34,115,103,166,166,166,100,201,146,37,180,247,46,6,204,92,136,178,238,129,42,125,173,71,5,232,240,59,14,30,60,248,213,170,85,171,
+20,138,34,128,92,53,180,186,171,232,219,105,167,79,159,94,208,173,130,236,236,236,207,1,84,190,234,169,156,247,36,3,7,14,36,205,205,205,129,97,97,97,7,145,208,95,116,81,0,116,145,24,16,16,160,84,178,13,
+24,48,128,148,149,149,253,9,237,126,151,185,185,249,51,137,2,220,52,42,187,184,88,134,13,27,70,0,178,254,91,93,93,109,32,81,128,74,171,173,202,82,190,104,209,34,94,94,94,30,2,208,45,143,65,180,228,201,
+139,113,229,21,117,117,117,2,200,245,15,52,37,67,6,241,236,170,104,212,200,35,64,39,181,172,139,128,53,201,47,33,200,37,54,43,25,164,126,207,101,248,202,223,73,65,113,25,251,217,206,113,58,113,119,177,
+37,31,112,93,27,121,46,64,51,210,239,190,16,235,233,233,25,179,10,40,78,149,45,45,236,226,158,127,240,38,111,171,158,160,230,231,144,34,92,98,113,246,91,43,83,1,154,16,197,247,58,76,99,99,99,79,197,248,
+231,54,58,206,138,184,76,157,197,238,188,161,169,149,104,107,235,16,181,158,203,120,57,192,93,3,83,94,94,174,160,119,53,136,142,182,70,175,163,64,46,158,178,46,194,203,120,142,255,102,170,126,201,89,89,
+89,236,154,204,149,43,87,62,137,140,140,172,211,214,86,105,174,145,25,51,102,100,179,10,208,238,234,207,156,57,35,68,194,169,171,106,241,150,150,150,203,180,219,73,74,5,16,129,205,142,29,59,30,136,27,
+138,146,210,14,176,220,218,161,154,34,235,30,66,201,35,152,101,161,236,234,240,70,13,90,235,167,93,202,117,113,113,177,37,109,224,157,209,157,34,146,150,150,86,137,197,77,100,118,52,0,0,142,157,157,221,
+125,123,123,123,107,69,220,5,180,241,14,252,94,136,208,52,233,181,39,23,21,21,217,220,191,127,223,6,253,53,15,208,68,159,54,17,153,13,157,97,26,129,169,238,1,142,102,97,241,24,185,81,5,101,172,224,101,
+60,148,91,163,197,139,23,159,185,115,231,206,36,107,107,235,50,88,213,134,204,231,60,126,252,152,15,197,141,232,223,95,236,217,179,231,223,74,227,34,89,146,159,159,191,40,33,33,97,19,172,176,66,69,208,
+69,121,96,185,31,173,208,20,247,194,117,244,112,137,242,67,26,186,4,160,141,96,131,34,90,66,0,192,31,173,93,187,246,107,120,41,5,253,67,168,76,96,201,141,176,105,12,32,127,118,129,216,132,209,147,20,196,
+3,139,201,64,61,200,156,57,115,20,209,73,225,148,46,174,79,208,89,191,77,79,79,255,22,89,66,185,120,11,168,228,137,248,248,248,47,185,92,110,163,74,141,0,58,13,67,49,249,26,94,101,102,206,156,73,84,133,
+65,196,2,86,78,102,207,158,253,161,67,16,178,122,254,252,249,171,241,134,91,66,67,67,15,238,220,185,115,131,82,70,96,243,155,177,120,156,187,187,59,37,204,228,215,18,240,111,122,105,33,193,34,80,98,34,
+0,83,46,93,184,112,97,174,66,70,84,85,85,89,32,94,31,128,152,48,202,212,40,101,133,86,19,170,191,169,169,201,151,207,231,11,64,140,214,33,220,190,233,213,8,32,241,173,171,87,175,142,2,18,36,186,186,186,
+164,63,8,109,188,160,37,122,96,10,123,177,191,207,208,153,189,101,26,129,65,251,54,109,218,20,78,207,105,40,218,236,111,2,18,206,123,248,240,33,254,57,223,184,126,253,186,83,23,35,192,85,103,173,95,191,
+62,60,56,56,184,95,26,32,133,178,121,104,96,38,216,39,40,224,241,224,14,70,44,88,176,224,140,171,171,43,233,169,171,245,23,65,147,28,118,254,252,121,47,49,241,97,141,0,241,12,2,196,225,121,123,123,147,
+223,139,96,243,13,91,183,110,141,22,231,7,131,100,9,161,156,94,105,176,247,190,133,52,161,43,183,19,117,80,18,45,162,173,201,252,98,70,24,26,26,154,92,190,124,89,114,188,204,224,45,240,209,33,251,138,
+131,73,97,74,18,249,161,182,151,51,57,67,83,98,59,218,138,12,49,230,18,97,195,107,242,248,94,33,121,138,57,110,1,107,200,68,83,197,67,24,180,77,27,112,70,4,8,195,165,221,157,1,161,123,251,226,197,139,
+62,123,133,107,54,145,204,155,227,68,204,12,58,51,163,54,82,83,81,70,158,148,150,144,146,162,82,82,84,91,78,138,36,207,140,136,157,155,11,25,51,164,111,57,8,142,216,216,220,220,60,64,12,79,24,79,79,207,
+140,171,87,175,186,245,205,4,45,50,222,221,77,38,229,51,50,25,201,94,142,44,199,84,157,8,133,194,167,232,234,18,170,202,0,73,198,109,216,176,33,6,109,94,147,254,222,244,123,144,146,146,146,183,168,168,
+255,234,80,98,55,110,220,120,224,232,209,163,17,126,126,126,253,222,0,192,248,219,224,30,22,168,76,174,29,140,136,137,137,217,128,47,189,208,9,109,232,79,50,253,85,0,133,42,147,146,146,204,80,153,102,
+73,31,32,51,82,4,199,214,193,193,225,65,65,65,193,88,23,23,151,126,103,0,136,214,243,67,135,14,113,83,83,83,23,97,159,133,50,1,32,24,218,56,32,199,67,96,201,43,252,253,253,53,233,73,81,127,16,80,214,127,
+2,219,185,32,140,236,233,177,127,175,80,124,255,254,253,127,220,188,121,243,95,193,226,239,141,28,57,114,160,147,147,19,231,55,220,252,163,216,216,88,139,200,200,200,31,171,171,171,125,21,34,69,232,224,
+229,160,139,70,152,200,7,121,127,104,110,110,174,13,99,184,244,103,204,95,67,192,31,114,147,147,147,135,251,248,248,100,131,22,91,42,69,79,177,88,53,140,225,211,31,223,35,34,34,246,128,99,175,154,52,105,
+146,16,220,90,95,197,104,183,29,52,53,15,192,142,39,16,8,116,79,157,58,181,49,58,58,250,186,74,15,10,232,105,68,66,66,194,151,244,162,247,185,185,185,238,127,129,160,8,76,182,180,180,172,50,51,51,163,
+135,123,131,241,250,123,93,15,93,182,6,221,246,25,156,35,192,58,150,237,237,237,106,224,240,199,144,139,187,163,162,162,234,251,226,129,255,3,203,152,248,12,255,209,210,13,0,0,0,0,73,69,78,68,174,66,96,
+130,0,0};
+
+const char* Mcfx_gain_delayAudioProcessorEditor::sig_symbol_png = (const char*) resource_Mcfx_gain_delayAudioProcessorEditor_sig_symbol_png;
+const int Mcfx_gain_delayAudioProcessorEditor::sig_symbol_pngSize = 2592;
+
+// JUCER_RESOURCE: sig_symbol_over_png, 2601, "sig_symbol_over.png"
+static const unsigned char resource_Mcfx_gain_delayAudioProcessorEditor_sig_symbol_over_png[] = { 137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,49,0,0,0,47,8,6,0,0,1,61,71,18,97,0,0,0,9,112,72,89,
+115,0,0,17,139,0,0,17,137,1,168,30,143,128,0,0,9,219,73,68,65,84,120,218,213,89,9,80,84,87,22,125,109,127,81,217,154,85,101,17,49,54,162,35,227,2,142,56,96,201,162,70,177,64,45,5,29,173,68,193,160,40,
+68,65,22,21,145,160,160,184,162,32,65,4,167,198,72,50,226,2,90,53,195,192,176,184,96,68,101,130,48,202,166,136,2,26,113,65,129,2,105,145,197,158,243,190,116,167,89,26,26,186,147,33,183,234,209,252,255,
+239,187,247,221,247,238,114,238,255,140,80,40,36,34,242,246,246,254,41,42,42,234,79,162,107,166,227,151,229,192,3,246,127,83,83,211,166,135,15,31,170,50,164,7,194,3,21,118,166,151,151,87,126,76,76,12,
+9,51,231,144,111,10,48,77,66,13,131,7,230,84,84,112,190,144,4,119,145,192,138,157,59,119,174,240,202,149,43,28,209,77,79,79,207,216,19,39,78,16,70,36,38,49,49,241,111,246,246,246,65,163,70,141,122,209,
+105,165,171,86,173,162,191,110,29,215,28,70,180,124,73,186,119,239,94,171,120,249,9,127,141,32,107,215,251,179,43,156,58,117,42,35,126,176,198,221,143,29,29,11,184,70,31,112,186,138,195,170,236,25,73,
+227,14,29,58,36,220,182,109,91,183,157,49,50,50,170,123,250,244,169,86,39,59,67,66,66,132,123,246,236,33,61,77,160,132,9,154,84,99,90,90,218,34,7,7,135,52,38,57,57,57,150,78,144,133,48,33,149,221,130,
+201,147,39,199,227,159,141,164,31,196,76,156,56,177,64,83,83,179,165,174,174,78,73,6,126,142,216,38,76,24,70,127,173,172,172,238,220,186,117,203,82,146,235,230,205,155,63,90,90,90,206,29,58,116,104,171,
+88,147,228,238,81,106,111,111,215,217,177,99,71,154,161,161,97,49,60,210,149,244,228,33,148,214,175,95,255,234,212,169,83,35,185,92,46,57,124,248,48,189,53,3,99,237,163,71,143,136,137,137,9,167,211,4,
+61,61,61,225,139,23,47,122,92,60,152,69,110,46,182,67,73,26,179,36,9,4,2,161,178,178,50,135,129,47,126,184,122,245,106,159,19,192,76,237,227,50,178,48,139,200,204,204,172,168,91,180,217,46,247,37,79,47,
+29,35,21,34,207,151,216,197,170,170,42,227,110,19,174,39,31,197,223,163,61,106,176,177,177,185,206,168,169,169,125,108,108,108,28,34,203,146,224,144,14,12,152,185,61,133,87,87,218,176,97,67,90,124,124,
+252,167,115,40,47,47,55,225,243,249,143,164,49,191,121,243,166,4,204,139,196,7,7,230,114,122,48,97,97,97,53,193,193,193,58,146,204,90,90,90,117,181,181,181,147,165,250,146,228,214,207,158,61,187,70,91,
+91,91,57,54,54,150,232,235,235,119,122,72,231,237,218,181,139,192,157,4,197,197,197,198,186,186,186,53,82,67,163,235,141,209,163,71,11,95,190,124,41,242,112,233,49,194,225,144,125,251,246,209,161,140,
+203,215,244,30,178,169,64,148,52,123,84,178,121,243,230,231,209,209,209,250,34,5,3,33,40,160,10,133,58,58,58,13,216,95,94,39,37,243,231,207,111,200,204,204,84,35,10,34,40,80,71,90,174,127,245,234,149,
+134,72,137,218,201,147,39,21,166,64,68,80,192,131,67,192,47,194,130,153,237,219,183,103,29,60,120,80,42,115,83,213,117,162,106,108,199,254,63,108,156,45,73,77,250,142,216,155,143,101,175,83,98,246,17,
+71,175,32,169,115,195,195,195,131,88,37,26,26,26,63,227,122,166,52,70,149,177,182,164,171,7,190,174,174,38,109,100,104,175,10,40,33,250,26,216,237,10,12,12,92,126,252,248,113,225,150,45,91,100,222,138,
+145,93,220,89,10,125,72,77,77,253,37,176,102,206,156,57,167,185,185,249,198,240,225,195,21,118,38,214,214,214,119,115,114,114,110,137,149,204,154,53,235,199,182,182,182,161,62,62,62,205,145,145,145,92,
+121,132,87,87,87,231,103,103,103,31,129,130,196,110,113,194,48,76,27,20,48,207,158,61,27,227,236,236,92,152,155,155,203,235,143,112,120,104,242,219,183,111,11,130,130,130,246,117,128,8,233,17,63,102,204,
+152,103,80,160,33,186,62,114,228,136,63,188,100,39,138,124,3,178,117,131,146,146,82,43,146,48,23,60,124,44,38,233,244,233,211,110,136,126,225,198,141,210,139,112,111,185,75,76,69,69,69,95,93,186,116,233,
+11,20,39,109,36,191,55,118,118,118,137,243,230,205,59,37,83,73,151,246,32,61,61,253,180,139,139,139,107,68,68,4,173,169,180,222,72,62,182,187,113,227,70,188,187,187,187,208,201,201,233,60,120,86,201,172,
+160,165,165,229,15,72,5,197,53,53,53,164,161,161,65,234,202,230,204,153,67,202,202,202,104,237,253,11,178,244,10,108,165,29,238,221,232,85,1,64,220,129,243,231,207,111,7,222,232,151,23,33,67,15,41,45,
+45,205,94,179,102,77,82,66,66,130,75,143,10,112,120,27,3,2,2,182,103,100,100,12,200,85,39,77,154,68,224,141,206,8,226,24,4,179,87,55,5,43,86,172,136,133,119,200,21,108,112,0,178,100,201,18,207,202,202,
+202,195,198,198,198,149,98,5,128,94,2,121,133,139,8,80,156,98,167,255,194,227,52,36,107,198,8,69,166,114,108,55,15,81,141,236,97,157,195,32,152,114,100,197,184,178,18,2,146,110,213,63,81,156,180,24,212,
+95,43,127,127,127,69,215,35,2,16,88,203,110,209,248,241,227,201,175,65,0,82,234,172,2,244,41,189,50,6,175,181,38,123,19,216,44,76,60,2,34,73,244,33,111,148,32,182,14,146,148,10,46,113,28,215,115,202,183,
+181,181,213,101,21,168,170,170,246,34,190,150,21,30,19,159,64,42,243,46,3,122,251,144,56,12,17,237,202,168,149,170,0,89,154,52,53,53,169,48,189,163,107,173,95,202,232,250,47,201,161,184,79,43,175,174,
+169,39,186,186,6,29,150,72,5,5,213,72,57,77,12,146,86,63,119,87,133,232,235,170,244,201,117,225,194,133,10,96,50,194,76,153,50,165,10,215,99,21,125,200,200,176,99,89,5,208,52,13,254,90,7,212,166,80,5,
+168,25,89,236,89,0,206,212,67,120,59,148,112,21,37,252,192,129,3,255,166,213,78,156,42,144,110,205,144,160,74,145,160,20,33,255,227,237,219,183,91,58,101,83,52,170,15,204,205,205,203,243,243,243,249,242,
+74,135,231,188,133,7,45,233,150,174,33,220,132,22,112,89,106,180,52,50,48,48,120,9,225,122,82,43,26,132,115,96,73,17,10,252,228,126,110,215,59,156,101,123,125,125,189,94,159,53,25,150,152,1,69,152,161,
+195,201,121,240,224,129,58,58,162,94,59,92,160,139,66,164,229,116,8,15,145,25,85,208,142,21,69,159,7,64,165,141,90,113,14,181,218,2,133,253,103,20,146,86,220,231,228,229,229,233,32,37,11,98,98,98,188,
+178,178,178,174,244,10,91,228,217,115,64,198,149,232,233,182,65,201,4,44,66,85,93,93,157,24,26,26,18,154,161,105,47,206,227,241,200,251,247,239,201,187,119,239,8,22,75,30,63,126,76,231,8,81,90,155,128,
+143,203,87,175,94,125,204,209,209,241,239,92,46,183,93,30,199,98,250,193,75,119,231,48,82,253,215,104,249,134,249,250,250,18,15,15,15,250,166,136,29,253,145,131,65,179,248,52,140,51,5,5,5,103,208,44,17,
+84,217,15,192,120,223,239,222,189,219,27,27,32,80,168,17,79,158,60,249,122,241,226,197,199,224,83,76,98,98,34,245,53,133,102,174,233,211,167,147,148,148,20,182,135,195,112,7,124,115,247,246,246,254,176,
+105,211,166,24,96,70,63,185,140,64,22,12,68,80,132,35,131,81,152,77,126,43,2,14,165,99,24,220,207,23,41,198,119,217,178,101,41,201,201,201,78,253,50,162,181,181,149,111,97,97,81,234,224,224,32,87,188,
+200,75,52,155,80,253,216,76,71,125,125,253,6,156,202,22,87,87,215,239,250,52,226,254,253,251,161,128,252,193,133,133,133,180,187,34,131,129,104,225,69,50,80,131,123,69,162,211,88,149,150,150,182,64,170,
+17,168,115,199,113,116,155,95,191,126,205,162,205,193,70,177,177,177,60,32,107,75,52,228,255,185,115,231,206,204,110,70,192,255,22,194,125,54,3,139,15,74,3,68,4,228,206,195,26,245,16,51,136,255,132,53,
+157,140,88,185,114,229,57,26,192,180,53,26,236,20,29,29,109,56,110,220,184,207,69,141,15,107,68,73,73,201,23,197,197,197,60,20,44,242,123,33,156,72,83,104,104,232,55,233,233,233,108,124,48,151,47,95,118,
+179,177,177,145,91,112,171,160,142,212,212,215,147,22,164,123,149,17,154,68,87,115,196,175,102,4,60,71,111,231,206,157,98,168,77,59,20,29,224,149,1,138,171,37,161,159,105,147,144,138,222,185,134,125,102,
+65,92,151,127,73,172,45,70,147,230,23,63,145,228,111,35,72,250,99,66,246,94,175,37,65,54,154,3,201,88,35,218,218,218,132,2,129,64,153,86,119,70,69,69,165,17,185,120,224,128,216,105,11,249,135,103,24,113,
+50,85,239,250,66,149,20,221,76,39,23,190,255,129,252,16,127,25,253,223,93,18,39,126,198,39,27,247,30,32,235,172,52,7,164,19,6,8,154,155,155,135,139,224,9,99,105,105,153,138,158,221,122,128,111,73,136,
+199,167,47,151,61,182,124,102,179,151,177,35,52,78,177,238,116,237,218,181,10,83,83,83,241,199,20,6,181,33,28,192,43,164,172,172,76,105,194,132,9,191,139,192,142,139,139,107,116,113,113,201,232,148,98,
+129,34,191,133,33,190,217,217,217,131,222,0,0,80,250,198,152,127,241,226,69,171,78,70,248,248,248,248,101,100,100,124,30,20,20,100,70,63,201,12,86,66,28,188,92,176,96,193,88,64,143,133,180,255,236,6,59,
+82,83,83,255,136,84,91,26,24,24,56,113,255,254,253,131,206,128,198,198,198,42,62,159,175,124,238,220,185,149,51,102,204,200,147,10,0,113,76,147,252,252,252,226,166,77,155,230,122,247,238,93,37,250,81,
+119,48,16,250,141,127,1,193,206,66,3,53,157,190,246,239,19,138,71,68,68,120,0,53,238,49,50,50,42,92,183,110,157,102,88,88,24,231,255,181,120,244,218,229,35,71,142,228,7,4,4,148,80,72,222,175,166,8,248,
+189,250,249,243,231,218,152,168,99,96,96,240,192,217,217,121,68,100,100,164,50,253,140,249,91,16,250,245,155,75,151,46,29,179,112,225,194,44,244,20,38,114,181,167,168,140,111,96,140,14,253,248,142,224,
+63,122,230,204,153,175,182,110,221,218,142,184,81,87,48,218,253,136,238,49,7,46,195,171,171,171,83,61,123,246,172,127,69,69,133,204,239,226,101,122,81,64,223,70,68,69,69,121,211,209,209,123,204,70,67,
+191,59,55,55,247,207,192,247,53,142,142,142,204,162,69,139,70,153,152,152,244,41,15,213,246,109,102,102,102,37,70,67,82,82,146,9,54,104,136,155,155,219,105,128,186,35,121,121,121,245,3,217,129,255,1,34,
+105,76,125,35,147,137,239,0,0,0,0,73,69,78,68,174,66,96,130,0,0};
+
+const char* Mcfx_gain_delayAudioProcessorEditor::sig_symbol_over_png = (const char*) resource_Mcfx_gain_delayAudioProcessorEditor_sig_symbol_over_png;
+const int Mcfx_gain_delayAudioProcessorEditor::sig_symbol_over_pngSize = 2601;
+
+// JUCER_RESOURCE: sig_symbol_act_png, 2831, "sig_symbol_act.png"
+static const unsigned char resource_Mcfx_gain_delayAudioProcessorEditor_sig_symbol_act_png[] = { 137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,49,0,0,0,47,8,6,0,0,1,61,71,18,97,0,0,0,9,112,72,89,
+115,0,0,17,139,0,0,17,137,1,168,30,143,128,0,0,10,193,73,68,65,84,120,218,213,89,9,88,19,87,30,255,79,50,9,36,129,132,35,28,225,18,105,64,228,16,80,43,151,34,10,69,180,168,109,133,122,124,173,5,181,43,
+43,245,40,138,174,165,130,210,74,105,81,168,182,84,43,91,168,107,85,180,106,181,82,46,209,42,130,74,81,145,5,81,209,21,16,185,67,64,142,92,100,152,157,137,18,65,8,119,119,233,239,251,222,28,153,247,222,
+255,120,255,235,189,160,56,142,67,55,214,47,112,47,248,38,45,239,245,238,119,148,188,136,23,179,20,61,190,162,61,127,118,184,142,118,148,53,60,211,64,161,31,20,185,202,89,138,145,193,62,46,183,227,25,
+0,177,87,68,16,249,12,64,180,136,169,236,132,30,204,186,49,149,156,42,108,54,19,194,94,153,65,49,237,130,2,28,79,123,29,65,186,127,220,108,252,193,129,239,200,143,221,220,254,244,105,112,210,27,33,145,
+225,6,60,94,109,47,78,151,144,15,193,71,130,196,196,141,113,174,3,65,187,217,239,137,63,188,57,157,74,246,143,61,237,132,53,183,59,21,28,218,179,228,168,242,195,10,19,154,162,145,248,24,113,255,29,37,
+231,123,117,186,131,103,179,230,162,61,117,184,123,10,11,15,157,216,87,51,147,174,171,55,63,105,104,210,233,37,103,184,13,11,255,212,18,160,191,1,36,30,184,74,180,73,138,151,131,79,45,152,63,127,126,58,
+122,50,106,211,1,114,192,80,224,121,208,63,13,230,19,42,152,178,56,240,16,220,74,12,134,97,0,181,118,112,44,212,206,198,100,53,222,84,250,96,157,73,197,40,101,106,238,144,168,145,119,87,23,151,27,151,
+12,138,157,123,118,188,97,230,121,117,102,220,89,47,26,141,214,169,164,212,83,123,36,176,86,33,55,108,197,162,116,83,171,201,119,63,142,75,12,132,254,44,132,196,42,39,211,250,4,51,161,190,66,237,84,226,
+242,159,194,233,226,197,199,62,120,212,1,96,159,221,129,244,26,96,168,65,199,203,189,104,253,242,207,103,61,55,158,151,114,116,202,232,170,58,247,68,211,155,76,92,247,55,17,130,206,54,213,146,102,56,35,
+131,14,96,162,8,96,24,70,69,135,210,185,27,118,118,118,37,125,188,205,231,14,21,170,159,180,65,249,139,247,158,14,86,89,81,97,222,103,64,150,35,6,224,200,236,151,194,108,79,207,203,168,94,166,172,171,
+113,30,157,50,20,150,210,211,211,231,163,237,146,78,106,127,238,245,42,54,208,230,166,39,118,175,67,245,222,34,75,227,205,14,15,85,117,22,154,56,150,38,38,156,95,160,92,56,62,159,255,8,136,133,137,116,
+53,109,252,135,190,144,219,179,179,241,85,181,102,161,48,207,86,165,45,41,33,19,51,221,44,12,27,117,65,198,220,103,139,0,79,189,183,250,113,188,11,118,61,68,32,169,6,17,149,62,170,48,215,211,211,107,84,
+233,26,175,254,96,192,66,241,10,111,133,209,195,197,105,228,181,127,29,34,8,5,118,90,1,217,152,176,198,188,129,140,81,14,121,84,81,153,160,149,165,146,200,58,103,139,234,189,134,245,70,221,4,70,130,34,
+119,140,73,46,148,73,14,173,181,169,185,133,211,139,136,151,185,78,107,170,131,84,19,198,8,79,61,58,217,6,58,218,45,245,194,102,173,231,107,34,110,215,252,198,82,66,16,64,96,44,81,49,75,198,217,177,99,
+199,103,4,118,160,91,151,46,200,142,98,170,38,32,18,139,128,123,225,249,51,133,195,130,84,39,42,120,178,229,138,247,140,74,49,248,78,96,168,28,27,189,123,119,184,130,136,22,207,248,41,212,221,154,161,
+210,187,25,76,194,15,149,54,69,52,57,8,164,0,100,172,27,136,0,9,77,54,187,85,161,174,240,239,143,47,217,235,192,194,215,153,15,93,21,220,161,216,6,85,77,154,150,150,250,210,177,220,18,50,60,164,49,190,
+57,106,212,177,91,19,239,250,201,183,242,220,220,174,41,137,184,206,156,117,85,126,246,25,109,147,173,150,36,214,26,31,21,169,186,137,206,183,111,56,127,184,39,111,249,242,227,125,252,4,69,81,249,183,
+15,218,209,170,170,42,211,119,220,156,138,115,166,138,57,195,153,60,217,236,237,211,205,134,147,11,195,195,195,119,79,28,204,227,77,77,77,171,10,170,4,90,221,239,123,246,236,217,18,29,29,253,137,25,151,
+211,106,195,211,105,165,19,249,173,170,77,70,205,191,91,198,247,247,247,63,149,156,156,28,132,32,8,190,110,160,140,171,50,118,245,244,228,179,71,86,159,73,57,250,94,109,131,64,87,87,143,43,152,243,214,
+187,199,125,150,175,74,28,82,74,87,245,33,109,87,72,242,178,232,3,129,95,216,49,96,149,9,192,63,20,246,72,52,9,209,82,174,206,185,240,221,250,67,235,138,229,248,194,37,1,39,226,126,248,105,249,144,9,72,
+170,202,108,120,68,22,127,66,196,174,122,95,213,246,63,147,168,138,254,61,155,72,141,130,95,150,185,25,178,222,141,57,153,62,199,195,195,35,103,64,2,183,191,143,138,73,249,58,102,91,141,143,250,176,172,
+232,162,51,80,30,68,249,94,121,159,235,119,234,72,202,201,128,126,9,60,78,253,49,120,235,206,152,109,231,103,140,44,102,77,98,33,240,101,107,170,255,134,144,144,132,253,9,9,33,125,8,44,13,10,62,144,227,
+54,58,207,211,166,33,224,91,244,227,186,138,138,176,88,115,115,243,138,151,78,103,196,22,141,118,242,110,204,209,5,176,152,230,116,167,182,233,69,56,39,47,115,181,48,198,88,134,242,251,110,82,78,94,94,
+158,59,129,60,244,203,101,94,121,67,173,113,135,10,58,5,129,197,139,22,158,23,52,9,117,208,152,95,47,187,109,120,67,29,198,26,158,175,25,10,21,42,154,200,164,195,159,129,85,250,98,182,130,128,61,123,224,
+142,159,23,137,32,186,242,197,32,107,54,196,91,201,225,121,53,139,65,170,148,9,126,106,210,126,199,205,66,234,245,20,4,52,208,129,236,94,162,152,60,126,42,11,170,90,164,16,119,191,21,146,238,191,252,186,
+121,150,38,65,64,69,136,32,214,161,163,163,131,133,214,73,200,96,167,138,136,250,139,52,74,244,49,161,195,231,118,116,5,231,181,50,42,112,137,71,26,136,84,178,214,200,54,171,49,99,177,58,208,92,33,166,
+178,16,83,145,31,129,55,132,101,59,211,101,92,190,137,148,100,138,197,4,66,9,53,19,198,122,145,227,175,150,77,80,16,248,57,167,192,177,105,185,81,179,46,125,108,235,166,185,94,94,217,138,181,208,210,210,
+106,225,231,96,88,149,55,58,102,37,64,188,182,119,6,153,237,148,161,34,247,86,145,93,229,250,105,247,38,48,199,96,118,4,233,202,111,6,89,175,104,106,109,109,125,223,169,218,248,209,53,203,106,254,104,
+231,55,191,198,108,170,111,56,183,184,79,184,46,44,45,179,36,19,120,207,93,214,112,193,47,224,212,213,55,212,240,84,102,52,162,0,64,166,58,216,151,28,211,127,108,59,44,117,169,105,182,243,178,36,88,75,
+75,239,201,251,205,201,183,139,138,237,74,74,74,236,204,102,186,231,221,113,235,100,235,208,6,176,46,58,83,180,176,150,95,236,238,229,147,217,114,114,87,228,144,171,10,114,199,218,216,242,140,211,212,
+212,164,187,104,217,178,148,162,194,91,211,220,173,204,159,26,106,170,117,10,36,24,114,171,178,158,75,87,103,136,18,136,212,152,237,229,117,17,70,91,23,169,66,213,229,179,75,19,227,98,183,94,44,188,103,
+85,220,208,162,161,73,71,193,88,157,2,22,44,10,48,8,163,231,16,236,139,49,34,38,97,56,8,59,113,120,220,209,5,181,18,57,174,77,132,144,215,109,39,61,122,47,120,67,188,223,187,43,142,82,169,84,108,52,134,
+133,14,185,39,97,3,249,9,145,177,107,163,246,126,84,47,234,84,219,104,65,131,213,102,56,108,167,34,176,125,170,226,176,101,32,255,120,209,200,176,71,70,112,76,3,160,212,17,82,130,15,23,28,90,123,56,234,
+33,14,215,155,65,186,38,240,253,35,187,98,191,222,200,100,50,69,99,42,196,195,95,254,249,209,91,31,110,140,215,65,113,244,176,3,192,117,87,146,25,90,15,230,70,7,7,54,2,167,167,41,230,81,131,167,71,215,
+28,243,56,186,102,203,189,46,233,223,137,42,43,250,171,61,155,71,37,68,221,169,253,219,121,1,27,163,63,179,99,194,77,247,177,97,120,40,88,97,76,54,138,154,176,228,187,80,4,217,27,250,206,34,191,212,211,
+231,206,47,28,150,16,178,218,114,254,84,123,187,123,243,184,56,58,154,24,53,90,144,209,132,164,223,36,187,232,199,211,225,180,126,17,183,111,67,96,96,224,143,131,10,81,248,67,76,148,103,200,39,59,110,
+206,86,7,19,117,4,198,3,200,196,251,120,150,92,115,67,220,182,175,79,28,63,190,60,61,51,115,158,74,33,174,196,109,221,239,191,35,110,253,19,162,176,36,171,205,241,134,253,19,219,57,251,234,139,156,93,
+156,103,252,113,35,255,143,25,125,132,104,44,248,221,247,205,237,177,235,203,188,24,227,82,128,110,108,52,104,227,60,169,23,242,86,174,92,249,47,2,43,123,9,177,116,105,64,202,231,54,76,98,107,4,227,30,
+123,13,106,77,108,46,102,249,116,111,124,20,66,148,164,159,120,175,180,161,133,243,155,189,26,252,85,176,201,81,191,35,42,42,42,34,243,133,127,160,103,126,58,28,52,75,119,244,123,160,78,12,3,129,28,33,
+10,62,42,176,136,4,200,69,187,254,52,33,150,80,171,121,17,185,149,202,227,101,180,182,190,145,107,168,54,82,63,144,64,236,133,46,136,20,15,220,139,194,97,66,32,15,5,55,182,28,164,18,49,252,90,142,67,102,
+27,64,248,108,93,8,231,136,135,31,177,16,9,67,46,7,92,36,18,49,201,236,142,106,104,106,182,53,200,187,134,185,19,234,113,176,104,68,131,147,22,26,224,199,120,117,195,136,65,105,179,12,206,84,83,224,248,
+99,17,36,61,3,72,82,126,99,192,106,194,124,87,177,101,35,162,137,161,12,145,68,210,172,222,93,158,160,206,222,190,105,187,175,94,115,31,217,74,168,67,144,226,255,1,105,191,91,62,27,109,6,209,0,62,181,
+235,111,172,108,196,230,116,133,105,89,62,105,210,51,165,214,81,255,144,173,209,107,183,69,68,62,108,7,186,165,198,95,195,177,147,106,40,109,1,1,1,89,189,66,108,120,232,250,111,67,14,37,132,102,57,35,
+227,94,128,34,195,25,183,115,206,148,240,79,101,231,186,245,18,34,52,42,118,115,86,230,5,159,157,101,101,118,59,173,198,175,32,82,29,147,186,133,167,139,39,164,103,100,248,146,251,207,62,101,71,70,254,
+29,123,15,39,219,123,17,15,42,172,163,38,141,63,1,58,244,45,43,109,207,213,48,83,78,156,88,58,125,250,244,155,42,11,192,156,194,187,147,67,67,130,191,119,249,249,72,224,53,151,46,162,2,161,140,11,1,50,
+45,222,252,109,205,145,75,46,133,133,133,78,228,177,255,160,165,120,92,194,193,181,53,225,17,187,172,28,167,20,175,212,19,107,71,240,225,255,102,95,77,6,54,143,76,19,111,242,195,194,204,75,5,2,129,223,
+176,54,69,70,70,70,53,213,13,2,93,98,32,247,53,155,201,247,223,214,199,24,177,22,98,38,242,63,90,153,187,22,158,185,1,191,220,53,245,157,63,61,27,199,11,6,61,17,30,112,123,202,229,114,5,53,13,141,92,242,
+207,247,208,208,208,184,195,201,73,171,63,178,100,97,97,70,173,236,49,173,118,17,164,235,158,133,103,222,223,46,85,113,154,219,218,53,142,125,18,177,165,60,222,57,127,76,15,10,200,211,136,125,251,246,
+109,36,155,226,140,45,55,119,230,78,2,249,55,174,187,58,79,228,53,250,234,83,208,121,104,157,1,95,29,27,116,62,76,211,160,233,18,221,172,226,82,171,122,235,153,252,187,150,88,87,23,37,40,40,40,121,203,
+150,45,123,110,198,105,181,140,68,7,255,5,112,174,19,66,237,196,131,173,0,0,0,0,73,69,78,68,174,66,96,130,0,0};
+
+const char* Mcfx_gain_delayAudioProcessorEditor::sig_symbol_act_png = (const char*) resource_Mcfx_gain_delayAudioProcessorEditor_sig_symbol_act_png;
+const int Mcfx_gain_delayAudioProcessorEditor::sig_symbol_act_pngSize = 2831;
 
 
 //[EndFile] You can add extra defines here...

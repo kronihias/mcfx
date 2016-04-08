@@ -7,7 +7,7 @@
   the "//[xyz]" and "//[/xyz]" sections will be retained when the file is loaded
   and re-saved.
 
-  Created with Introjucer version: 3.2.0
+  Created with Introjucer version: 4.1.0
 
   ------------------------------------------------------------------------------
 
@@ -37,7 +37,8 @@
 */
 class Mcfx_gain_delayAudioProcessorEditor  : public AudioProcessorEditor,
                                              public SliderListener,
-                                             public ButtonListener
+                                             public ButtonListener,
+                                             public ComboBoxListener
 {
 public:
     //==============================================================================
@@ -48,10 +49,11 @@ public:
     //[UserMethods]     -- You can add your own custom methods in this section.
     //[/UserMethods]
 
-    void paint (Graphics& g);
-    void resized();
-    void sliderValueChanged (Slider* sliderThatWasMoved);
-    void buttonClicked (Button* buttonThatWasClicked);
+    void paint (Graphics& g) override;
+    void resized() override;
+    void sliderValueChanged (Slider* sliderThatWasMoved) override;
+    void buttonClicked (Button* buttonThatWasClicked) override;
+    void comboBoxChanged (ComboBox* comboBoxThatHasChanged) override;
 
     // Binary resources:
     static const char* clipboard35_png;
@@ -76,6 +78,12 @@ public:
     static const int mute_symbol_over_pngSize;
     static const char* mute_symbol_act_png;
     static const int mute_symbol_act_pngSize;
+    static const char* sig_symbol_png;
+    static const int sig_symbol_pngSize;
+    static const char* sig_symbol_over_png;
+    static const int sig_symbol_over_pngSize;
+    static const char* sig_symbol_act_png;
+    static const int sig_symbol_act_pngSize;
 
 
 private:
@@ -94,8 +102,20 @@ private:
     ScopedPointer<ImageButton> btn_phase;
     ScopedPointer<ImageButton> btn_solo;
     ScopedPointer<ImageButton> btn_mute;
-    ScopedPointer<ImageButton> btn_mute2;
-    ScopedPointer<ImageButton> btn_solo2;
+    ScopedPointer<ImageButton> btn_mute_reset;
+    ScopedPointer<ImageButton> btn_solo_reset;
+    ScopedPointer<ImageButton> btn_sig;
+    ScopedPointer<ImageButton> btn_phase_reset;
+    ScopedPointer<Slider> sld_siggain;
+    ScopedPointer<ComboBox> box_signal;
+    ScopedPointer<ComboBox> box_sigtime;
+    ScopedPointer<Slider> sld_sigfreq;
+    ScopedPointer<Slider> sld_sigstepinterval;
+    ScopedPointer<ToggleButton> tgl_sigstep;
+    ScopedPointer<ImageButton> btn_sig_reset;
+    ScopedPointer<Label> label4;
+    ScopedPointer<Label> label6;
+    ScopedPointer<Label> label7;
 
 
     //==============================================================================
