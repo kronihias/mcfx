@@ -40,7 +40,9 @@ float param2gain (float param)
 Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
   _delay_buffer(2,256),
   _buf_write_pos(0),
-  _buf_size(256)
+  _buf_size(256),
+  _stepspeed(0.5f),
+  _stepper_on(false)
 {
   _delay_ms.resize(NUM_CHANNELS);
   _delay_smpls.resize(NUM_CHANNELS);
@@ -52,7 +54,11 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
   _mute.resize(NUM_CHANNELS);
   _solo.resize(NUM_CHANNELS);
   
+  _siggen_flag.resize(NUM_CHANNELS);
+  
   _solocount = 0;
+  
+  _channelstepper = new ChannelStepper(this);
   
   for (int i = 0; i < NUM_CHANNELS; i++) {
     _delay_ms.set(i, 0.f);
@@ -67,6 +73,7 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
     _phase.set(i, 1.f); // 1... not inverted
     _mute.set(i, false); // false.. not muted
     _solo.set(i, false);
+    _siggen_flag.set(i, false);
   }
   
 }
@@ -83,125 +90,235 @@ const String Mcfx_gain_delayAudioProcessor::getName() const
 
 int Mcfx_gain_delayAudioProcessor::getNumParameters()
 {
-    return NUM_CHANNELS*5; // gain, delay, phase, mute, solo for each channel
+  // 6 for each channel: gain, delay, phase, mute, solo, siggen_flag
+  // 6 general: signal generator: gain (dB -inf...+6dB); signal type (white, pink, brown, sine, triangle); time sequence (steady, pulsed); sine/triangle freq; stepchannels on/off; step speed
+  //
+    return NUM_CHANNELS*PARAMS_PER_CH+6;
+  
 }
 
 float Mcfx_gain_delayAudioProcessor::getParameter (int index)
 {
-  int ch = index/5;
-  int param = index%5;
-  
-  switch (param) {
-    case 0: // gain
-      return _gain_param.getUnchecked(ch);
-      break;
-      
-    case 1: // delay
-      return _delay_ms.getUnchecked(ch);
-      break;
-          
-    case 2: // phase
-      if (_phase.getUnchecked(ch) < 0.f)
-        return 1.f; // invert phase!
-      else
+  if (index < NUM_CHANNELS*PARAMS_PER_CH)
+  {
+    // per channel parameters
+    int ch = index/PARAMS_PER_CH;
+    int param = index%PARAMS_PER_CH;
+    
+    switch (param) {
+      case 0: // gain
+        return _gain_param.getUnchecked(ch);
+        break;
+        
+      case 1: // delay
+        return _delay_ms.getUnchecked(ch);
+        break;
+        
+      case 2: // phase
+        if (_phase.getUnchecked(ch) < 0.f)
+          return 1.f; // invert phase!
+        else
+          return 0.f;
+        break;
+        
+      case 3: // mute
+        if (_mute.getUnchecked(ch))
+          return 1.0f;
+        else
+          return 0.0f;
+        break;
+        
+      case 4: // solo
+        if (_solo.getUnchecked(ch))
+          return 1.0f;
+        else
+          return 0.0f;
+        break;
+        
+      case 5: // siggen
+        if (_siggen_flag.getUnchecked(ch))
+          return 1.f;
+        else
+          return 0.f;
+        break;
+        
+      default:
         return 0.f;
-      break;
-      
-    case 3: // mute
-      if (_mute.getUnchecked(ch))
-        return 1.0f;
-      else
-        return 0.0f;
-      break;
-      
-    case 4: // solo
-      if (_solo.getUnchecked(ch))
-        return 1.0f;
-      else
-        return 0.0f;
-      break;
-      
-    default:
-      return 0.f;
+    }
   }
+  else
+  {
+    // global parameters
+    int temp_index = index-NUM_CHANNELS*PARAMS_PER_CH;
+    
+    switch (temp_index) {
+      case 0: // signal generator gain
+        return _siggen.getGainParam();
+        break;
+        
+      case 1: // signal type
+        return _siggen.getSignalTypeParam();
+        break;
+        
+      case 2: // time sequence
+        return _siggen.getSignalTimeParam();
+        break;
+        
+      case 3: // sine freq
+        return _siggen.getFreqParam();
+        break;
+        
+      case 4: // stepchannels on/off
+        return (float)_stepper_on;
+        break;
+        
+      case 5: // step speed
+        return _stepspeed;
+        break;
+        
+      default:
+        return 0.f;
+        break;
+    }
+  }
+  
 }
 
 void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
 {
-  int ch = index/5;
-  int param = index%5;
-  
-  bool alt_all_ch = false;
-  
-  switch (param) {
-    case 0: // gain
-      _gain_param.set(ch, newValue);
-      break;
-      
-    case 1: // delay
-      _delay_ms.set(ch, newValue);
-      _delay_smpls.set(ch, (int)(newValue*MAX_DELAYTIME_S*getSampleRate()));
-      break;
-      
-    case 2: // phase
-      if (newValue > 0.5f)
-        _phase.set(ch, -1.f);
-      else
-        _phase.set(ch, 1.f);
-      break;
-      
-    case 3: // mute
-      if (newValue > 0.5f)
-        _mute.set(ch, true);
-      else
-        _mute.set(ch, false);
-      break;
-      
-    case 4: // solo
-      if (newValue > 0.5f)
-      {
-        if (!_solo.getUnchecked(ch))
-        {
-          if (++_solocount == 1) {
-            alt_all_ch = true;
-          }
-        }
-        
-        _solo.set(ch, true);
-      }
-      else
-      {
-        if (_solo.getUnchecked(ch))
-        {
-          if (--_solocount == 0) {
-            alt_all_ch = true;
-          }
-        }
-        
-        _solo.set(ch, false);
-      }
-      break;
-      
-    default:
-      break;
-  }
-  
-  //////////////
-  // compute new gain value for the channel(s)
-  
-  if (alt_all_ch)
+  if (index < NUM_CHANNELS*PARAMS_PER_CH)
   {
-    for (int i=0; i < NUM_CHANNELS; i++) {
-      calcGainFact(i);
+    // per channel parameters
+    
+    int ch = index/PARAMS_PER_CH;
+    int param = index%PARAMS_PER_CH;
+    
+    bool alt_all_ch = false;
+    
+    switch (param) {
+      case 0: // gain
+        _gain_param.set(ch, newValue);
+        break;
+        
+      case 1: // delay
+        _delay_ms.set(ch, newValue);
+        _delay_smpls.set(ch, (int)(newValue*MAX_DELAYTIME_S*getSampleRate()));
+        break;
+        
+      case 2: // phase
+        if (newValue > 0.5f)
+          _phase.set(ch, -1.f);
+        else
+          _phase.set(ch, 1.f);
+        break;
+        
+      case 3: // mute
+        if (newValue > 0.5f)
+          _mute.set(ch, true);
+        else
+          _mute.set(ch, false);
+        break;
+        
+      case 4: // solo
+        if (newValue > 0.5f)
+        {
+          if (!_solo.getUnchecked(ch))
+          {
+            if (++_solocount == 1) {
+              alt_all_ch = true;
+            }
+          }
+          
+          _solo.set(ch, true);
+        }
+        else
+        {
+          if (_solo.getUnchecked(ch))
+          {
+            if (--_solocount == 0) {
+              alt_all_ch = true;
+            }
+          }
+          
+          _solo.set(ch, false);
+        }
+        break;
+        
+      case 5: // siggen
+        if (newValue > 0.5f)
+          _siggen_flag.set(ch, true);
+        else
+          _siggen_flag.set(ch, false);
+        break;
+        
+      default:
+        break;
     }
+    
+    //////////////
+    // compute new gain value for the channel(s)
+    
+    if (alt_all_ch)
+    {
+      for (int i=0; i < NUM_CHANNELS; i++) {
+        calcGainFact(i);
+      }
+    }
+    else
+    { // change only the actual channel...
+      
+      calcGainFact(ch);
+    }
+    
+    sendChangeMessage();
   }
   else
-  { // change only the actual channel...
+  {
+    // global parameters
+    int temp_index = index-NUM_CHANNELS*PARAMS_PER_CH;
     
-    calcGainFact(ch);
+    switch (temp_index) {
+      case 0: // signal generator gain
+        _siggen.setGainParam(newValue);
+        break;
+        
+      case 1: // signal type
+        _siggen.setSignalTypeParam(newValue);
+        break;
+        
+      case 2: // time sequence
+        _siggen.setSignalTimeParam(newValue);
+        break;
+        
+      case 3: // sine freq
+        _siggen.setFreqParam(newValue);
+        break;
+        
+      case 4: // stepchannels on/off
+        if (newValue > 0.5f)
+        {
+          if (!_stepper_on)
+            _channelstepper->start(jmap(_stepspeed, 50.f, 5000.f));
+          
+          _stepper_on = true;
+        }
+        else if (newValue <= 0.5f)
+        {
+          _stepper_on = false;
+          _channelstepper->stop();
+        }
+        break;
+        
+      case 5: // step speed
+        _stepspeed = newValue;
+        if (_stepper_on)
+          _channelstepper->setInterval(jmap(_stepspeed, 50.f, 5000.f));
+        break;
+        
+      default:
+        break;
+    }
   }
-
-  sendChangeMessage();
 
 }
 
@@ -239,84 +356,188 @@ void Mcfx_gain_delayAudioProcessor::calcGainFact(int ch)
 
 const String Mcfx_gain_delayAudioProcessor::getParameterName (int index)
 {
-  String name = "";
   
-  int ch = index/5;
-  int param = index%5;
-  
-  name << "Ch " << ch+1 << " "; // start with channel 1
-  
-  switch (param) {
-    case 0: // gain
-      name << "gain";
-      break;
-      
-    case 1: // delay
-      name << "delaytime";
-      break;
-      
-    case 2: // phase
-      name << "phase";
-      break;
-      
-    case 3: // mute
-      name << "mute";
-      break;
-      
-    case 4: // solo
-      name << "solo";
-      break;
-      
-    default:
-      break;
+  if (index < NUM_CHANNELS*PARAMS_PER_CH)
+  {
+    // per channel parameter
+    String name = "";
+    
+    int ch = index/PARAMS_PER_CH;
+    int param = index%PARAMS_PER_CH;
+    
+    name << "Ch " << ch+1 << " "; // start with channel 1
+    
+    switch (param) {
+      case 0: // gain
+        name << "gain";
+        break;
+        
+      case 1: // delay
+        name << "delaytime";
+        break;
+        
+      case 2: // phase
+        name << "phase";
+        break;
+        
+      case 3: // mute
+        name << "mute";
+        break;
+        
+      case 4: // solo
+        name << "solo";
+        break;
+        
+      case 5: // siggen
+        name << "signalgenerator";
+        break;
+        
+      default:
+        break;
+    }
+    
+    return name;
   }
-  return name;
+  else
+  {
+    // global parameters
+    int temp_index = index-NUM_CHANNELS*PARAMS_PER_CH;
+    
+    switch (temp_index) {
+      case 0: // signal generator gain
+        return "SigGenGain";
+        break;
+        
+      case 1: // signal type
+        return "SigGenSignaltype";
+        break;
+        
+      case 2: // time sequence
+        return "SigGen Timesignal";
+        break;
+        
+      case 3: // sine freq
+        return "SigGen Freq";
+        break;
+        
+      case 4: // stepchannels on/off
+        return "SigGen StepChannels";
+        break;
+        
+      case 5: // step speed
+        return "SigGen StepSpeed";
+        break;
+        
+      default:
+        return "";
+        break;
+    }
+  }
+  
 }
 
 const String Mcfx_gain_delayAudioProcessor::getParameterText (int index)
 {
   String text = "";
   
-  int ch = index/5;
-  int param = index%5;
-  
-  switch (param) {
-    case 0: // gain
-      text << String(param2db(_gain_param.getUnchecked(ch)));
-      text << " dB";
-      break;
-      
-    case 1: // delay
-      text << String(_delay_ms.getUnchecked(ch)*MAX_DELAYTIME_S*1000).substring(0, 5);
-      text << " ms";
-      break;
-      
-    case 2: // phase
-      if (_phase.getUnchecked(ch) > 0.f)
-        text << "";
-      else
-        text << "invert";
-      break;
-      
-    case 3: // mute
-      if (_mute.getUnchecked(ch))
-        text << "Muted";
-      else
-        text << "Not muted";
-      break;
-      
-    case 4: // solo
-      if (_solo.getUnchecked(ch))
-        text << "Soloed";
-      else
-        text << "Not soloed";
-      break;
-      
-    default:
-      break;
+  if (index < NUM_CHANNELS*PARAMS_PER_CH)
+  {
+    // per channel parameter
+    int ch = index/PARAMS_PER_CH;
+    int param = index%PARAMS_PER_CH;
+    
+    switch (param) {
+      case 0: // gain
+        text << String(param2db(_gain_param.getUnchecked(ch)));
+        text << " dB";
+        break;
+        
+      case 1: // delay
+        text << String(_delay_ms.getUnchecked(ch)*MAX_DELAYTIME_S*1000).substring(0, 5);
+        text << " ms";
+        break;
+        
+      case 2: // phase
+        if (_phase.getUnchecked(ch) > 0.f)
+          text << "";
+        else
+          text << "invert";
+        break;
+        
+      case 3: // mute
+        if (_mute.getUnchecked(ch))
+          text << "Muted";
+        else
+          text << "Not muted";
+        break;
+        
+      case 4: // solo
+        if (_solo.getUnchecked(ch))
+          text << "Soloed";
+        else
+          text << "Not soloed";
+        break;
+        
+      case 5: // siggen
+        if (_siggen_flag.getUnchecked(ch))
+          text << "On";
+        else
+          text << "Off";
+        break;
+        
+      default:
+        break;
+    }
+    
+  }
+  else
+  {
+    // global parameters
+    int temp_index = index-NUM_CHANNELS*PARAMS_PER_CH;
+    
+    switch (temp_index) {
+      case 0: // signal generator gain
+        text << _siggen.getGainText();
+        break;
+        
+      case 1: // signal type
+        text << _siggen.getSignalTypeText();
+        break;
+        
+      case 2: // time sequence
+        text << _siggen.getSignalTimeText();
+        break;
+        
+      case 3: // sine freq
+        text << _siggen.getFreqText();
+        break;
+        
+      case 4: // stepchannels on/off
+        if (_stepper_on)
+          return "On";
+        else
+          return "Off";
+        break;
+        
+      case 5: // step speed
+        text << String(jmap(_stepspeed, 50.f, 5000.f)).upToFirstOccurrenceOf(".", false, false) << " ms";
+        break;
+        
+      default:
+        
+        break;
+    }
   }
   
   return text;
+}
+
+void Mcfx_gain_delayAudioProcessor::setSiggenForAllChannels(bool active)
+{
+  for (int i=0; i<NUM_CHANNELS; i++) {
+    setParameter(i*PARAMS_PER_CH+5, (float)active);
+    // should i use +notifyhost??
+  }
 }
 
 const String Mcfx_gain_delayAudioProcessor::getInputChannelName (int channelIndex) const
@@ -400,6 +621,8 @@ void Mcfx_gain_delayAudioProcessor::prepareToPlay (double sampleRate, int sample
     _delay_smpls.set(i, (int)(_delay_ms.getUnchecked(i)*MAX_DELAYTIME_S*sampleRate));
   }
   
+  _siggen.setSamplerate((float)sampleRate);
+  _siggen.setGaindB(-22.f);
 }
 
 void Mcfx_gain_delayAudioProcessor::releaseResources()
@@ -415,6 +638,17 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
   
   int numChannels = buffer.getNumChannels();
   
+  AudioSampleBuffer tempSigBuf(1,numSamples);
+  
+  _siggen.fillBufferWithSignal(tempSigBuf);
+  
+  // add signal in case we want to
+  for (int i=0; i < numChannels; i++) {
+    if (_siggen_flag.getUnchecked(i)) {
+      buffer.addFrom(i, 0, tempSigBuf, 0, 0, numSamples);
+    }
+  }
+  
   // compute read position
   for (int i=0; i < NUM_CHANNELS; i++) {
     _buf_read_pos.set(i, _buf_write_pos - _delay_smpls.getUnchecked(i));
@@ -425,16 +659,16 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
   
   // std::cout << "size : " << _buf_size << " read pos: " << _buf_read_pos << std::endl;
   // resize buffer if necessary
-  if (_delay_buffer.getNumChannels() < buffer.getNumChannels() || _delay_buffer.getNumSamples() < _buf_size) {
+  if (_delay_buffer.getNumChannels() < numChannels || _delay_buffer.getNumSamples() < _buf_size) {
     // resize buffer
-    _delay_buffer.setSize(buffer.getNumChannels(), _buf_size, true, true, false);
+    _delay_buffer.setSize(numChannels, _buf_size, true, true, false);
   }
   
   // write to the buffer
   
   if (_buf_write_pos + numSamples < _buf_size)
   {
-    for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+    for (int ch = 0; ch < numChannels; ch++)
     {
       // copy straight into buffer
       _delay_buffer.copyFrom(ch, _buf_write_pos, buffer, ch, 0, numSamples);
@@ -449,7 +683,7 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
     
     // std::cout << "spl_write1: " << samples_to_write1 << " spl_write2: " << samples_to_write2 << std::endl;
     
-    for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+    for (int ch = 0; ch < numChannels; ch++)
     {
       
       // copy until end
@@ -576,6 +810,13 @@ void Mcfx_gain_delayAudioProcessor::setStateInformation (const void* data, int s
                     int par = i%3;
                     setParameter(5*ch+par, xmlState->getDoubleAttribute(String(i)));
                 }
+              
+            } else if (numattr < 6*NUM_CHANNELS) { // saved with 4 param version (gain, delay, phase, solo)
+              for (int i=0; i < numattr; i++) {
+                int ch = i/4;
+                int par = i%4;
+                setParameter(6*ch+par, xmlState->getDoubleAttribute(String(i)));
+              }
               
             } else { // saved with 5 param version (gain, delay, phase, mute, solo)
                 for (int i=0; i < jmin(getNumParameters(),numattr); i++) {

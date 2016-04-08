@@ -22,6 +22,11 @@
 
 #include "../JuceLibraryCode/JuceHeader.h"
 
+#include "MySignalGenerator.h"
+#include "ChannelStepper.h"
+
+// number of parameters per channel
+#define PARAMS_PER_CH 6
 
 //==============================================================================
 /**
@@ -52,6 +57,8 @@ public:
     float getParameter (int index);
     void setParameter (int index, float newValue);
 
+    void setSiggenForAllChannels(bool active); // activate/deactivate the signal generator for all channels
+  
     const String getParameterName (int index);
     const String getParameterText (int index);
 
@@ -91,6 +98,7 @@ private:
   Array<float> _phase;
   Array<bool> _mute;
   Array<bool> _solo;
+  Array<bool> _siggen_flag;
 
   int _solocount;
   
@@ -98,6 +106,11 @@ private:
   int _buf_size;
   Array<int> _buf_read_pos;
   
+  MySignalGenerator _siggen;
+  
+  float _stepspeed; // hold time for each channel while iterating
+  bool _stepper_on; // step through channels with testsignal on/off
+  ScopedPointer<ChannelStepper> _channelstepper; // helper object to iterate testsignal over channels
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_gain_delayAudioProcessor)
 };

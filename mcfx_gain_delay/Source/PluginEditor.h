@@ -38,7 +38,8 @@
 class Mcfx_gain_delayAudioProcessorEditor  : public AudioProcessorEditor,
                                              public SliderListener,
                                              public ButtonListener,
-                                             public ChangeListener
+                                             public ChangeListener,
+                                             public ComboBoxListener
 {
 public:
     //==============================================================================
@@ -53,7 +54,8 @@ public:
     void resized();
     void sliderValueChanged (Slider* sliderThatWasMoved);
     void buttonClicked (Button* buttonThatWasClicked);
-
+    void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
+    
     void changeListenerCallback (ChangeBroadcaster *source);
     
     // Binary resources:
@@ -79,6 +81,12 @@ public:
     static const int mute_symbol_over_pngSize;
     static const char* mute_symbol_act_png;
     static const int mute_symbol_act_pngSize;
+    static const char* sig_symbol_png;
+    static const int sig_symbol_pngSize;
+    static const char* sig_symbol_over_png;
+    static const int sig_symbol_over_pngSize;
+    static const char* sig_symbol_act_png;
+    static const int sig_symbol_act_pngSize;
 
 private:
     //[UserVariables]   -- You can add your own custom variables in this section.
@@ -90,9 +98,12 @@ private:
     ScopedPointer<Label> label3;
     ScopedPointer<ImageButton> btn_paste_gain;
     ScopedPointer<ImageButton> btn_paste_gain2;
-    
+  
+  
+    ScopedPointer<DrawableButton> btn_phase_reset;
     ScopedPointer<DrawableButton> btn_mute_reset;
     ScopedPointer<DrawableButton> btn_solo_reset;
+    ScopedPointer<DrawableButton> btn_sig_reset;
     
     OwnedArray<Slider> sld_del;
     OwnedArray<Slider> sld_gain;
@@ -100,6 +111,17 @@ private:
     OwnedArray<DrawableButton> btn_phase;
     OwnedArray<DrawableButton> btn_mute;
     OwnedArray<DrawableButton> btn_solo;
+    OwnedArray<DrawableButton> btn_sig;
+    
+    ScopedPointer<Slider> sld_siggain;
+    ScopedPointer<ComboBox> box_signal;
+    ScopedPointer<ComboBox> box_sigtime;
+    ScopedPointer<Slider> sld_sigfreq;
+    ScopedPointer<Slider> sld_sigstepinterval;
+    ScopedPointer<ToggleButton> tgl_sigstep;
+    ScopedPointer<Label> label4;
+    ScopedPointer<Label> label6;
+    ScopedPointer<Label> label7;
     
     Mcfx_gain_delayAudioProcessor* getProcessor() const
     {
