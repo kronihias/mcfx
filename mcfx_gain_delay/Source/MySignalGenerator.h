@@ -295,7 +295,6 @@ public:
     f_ = 440.f;
     samplerate_ = 44100.f;
     
-    // updateTable();
   }
   
   virtual ~MyToneGenerator() {};
@@ -307,6 +306,7 @@ public:
     
     samplerate_ = samplerate;
     
+    setFreq(f_);
   }
   
   void setFreq(float f)

@@ -41,7 +41,7 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
   _delay_buffer(2,256),
   _buf_write_pos(0),
   _buf_size(256),
-  _stepspeed(0.5f),
+  _stepspeed(0.1f),
   _stepper_on(false)
 {
   _delay_ms.resize(NUM_CHANNELS);
@@ -75,6 +75,8 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
     _solo.set(i, false);
     _siggen_flag.set(i, false);
   }
+  
+  _siggen.setGaindB(-40.f); // use low gain as default to avoid damage
   
 }
 
@@ -622,7 +624,6 @@ void Mcfx_gain_delayAudioProcessor::prepareToPlay (double sampleRate, int sample
   }
   
   _siggen.setSamplerate((float)sampleRate);
-  _siggen.setGaindB(-22.f);
 }
 
 void Mcfx_gain_delayAudioProcessor::releaseResources()

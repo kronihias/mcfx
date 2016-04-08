@@ -112,7 +112,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
     sld_siggain->setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
     sld_siggain->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
     sld_siggain->addListener (this);
-    sld_siggain->setDoubleClickReturnValue(true, -20.f);
+    sld_siggain->setDoubleClickReturnValue(true, -40.f);
     
     addAndMakeVisible (box_signal = new ComboBox ("new combo box"));
     box_signal->setTooltip (TRANS("Signal Type"));
