@@ -50,7 +50,7 @@ Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAud
     label->setFont (Font (15.0000f, Font::plain));
     label->setJustificationType (Justification::centredLeft);
     label->setEditable (false, false, false);
-    label->setColour (Label::textColourId, Colours::yellow);
+    label->setColour (Label::textColourId, Colours::aquamarine);
     label->setColour (TextEditor::textColourId, Colours::black);
     label->setColour (TextEditor::backgroundColourId, Colour (0x0));
     
@@ -98,7 +98,8 @@ Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAud
     tgl_pkhold->setTooltip("additional stable peak hold indicator");
     tgl_pkhold->addListener (this);
     tgl_pkhold->setColour (ToggleButton::textColourId, Colours::white);
-    
+    tgl_pkhold->setColour (TextButton::buttonColourId, Colours::grey);
+  
     cachedImage_meter_scale_png = ImageCache::getFromMemory (meter_scale_png, meter_scale_pngSize);
     
     addAndMakeVisible (sld_offset = new Slider ("new slider"));
@@ -107,6 +108,7 @@ Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAud
     sld_offset->setSliderStyle (Slider::LinearVertical);
     sld_offset->setTextBoxStyle (Slider::NoTextBox, true, 40, 18);
     sld_offset->setColour (Slider::rotarySliderFillColourId, Colours::white);
+    sld_offset->setColour (Slider::thumbColourId, Colours::grey);
     sld_offset->addListener (this);
     sld_offset->setDoubleClickReturnValue(true, 0.f);
     

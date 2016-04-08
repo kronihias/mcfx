@@ -40,7 +40,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
     lbl_g->setFont (Font (15.00f, Font::plain));
     lbl_g->setJustificationType (Justification::centredLeft);
     lbl_g->setEditable (false, false, false);
-    lbl_g->setColour (Label::textColourId, Colours::yellow);
+    lbl_g->setColour (Label::textColourId, Colours::aquamarine);
     lbl_g->setColour (TextEditor::textColourId, Colours::black);
     lbl_g->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
