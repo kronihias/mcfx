@@ -1,6 +1,11 @@
 mcfx_convolver configuration files HOWTO
 
 
+searches for configuration files (.conf) in following folders by default:
+		* Windows 7,8: C:\Users\username\AppData\Roaming\mcfx\convolver_presets\
+		* MacOS: ~/Library/mcfx/convolver_presets/
+		* Linux: ~/mcfx/convolver_presets/
+
 
 /cd <path>
 

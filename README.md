@@ -66,6 +66,7 @@ mcfx_convolver
 --------------
 multichannel convolution matrix
 loads configuration files (compatible to jconvolver .conf files)
+have a look at 'CONVOLVER_CONFIG_HOWTO.txt' for details about the configuration files
 searches for configuration file in following folders:
 		* Windows 7,8: C:\Users\username\AppData\Roaming\mcfx\convolver_presets\
 		* MacOS: ~/Library/mcfx/convolver_presets/
@@ -79,7 +80,7 @@ delay each channel about the same time (maximum delay time in seconds is a compi
 
 mcfx_filter
 --------------
-filter each channel with the same low/high cut, peak filter and high/low shelf filter settings
+filter each channel with the same low/high cut, peak filter and high/low shelf filter settings, frequency analyzer that displays a sum of all channels
 
 low and high pass: 2nd order butterworth filter or 2x 2nd order butterworth cascaded (resulting in linkwitz riley characteristic) for use as x-over network
 plus 2x parametric filter +- 18dB
@@ -88,7 +89,7 @@ plus low and high shelf filters +- 18dB
 
 mcfx_gain_delay
 --------------
-set different delay time and gain setting for each channel (good for multispeaker calibration)
+set different delay time and gain setting for each channel (good for multispeaker calibration), includes a signal generator for testing individual channels
 the GUI allows to paste a list of float gain and delay values from the clipboard with semicolon, comma, newline, tab or space separated.
 maximum delay time in seconds is a compile time flag (MAX_DELAYTIME_S)
 
@@ -100,6 +101,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.5.0 (2016-04-08) - add signal generator to mcfx_gain_delay; convolver: support for packed wav file to load a dense FIR matrix from only one .wav file -> have a look at CONVOLVER_CONFIG_HOWTO.txt; filter: smooth iir filter to avoid clicks when parameters change
+
 - 0.4.2 (2016-02-19) - fixed one more convolver bug
 
 - 0.4.1 (2016-02-17) - fixed convolver bug which resulted in mixed up partitions
@@ -119,5 +122,5 @@ _
 - 0.1 (2014-01-10) - first release 
 
 ______________________________
-(C) 2013-2015 Matthias Kronlachner
+(C) 2013-2016 Matthias Kronlachner
 m.kronlachner@gmail.com
