@@ -22,6 +22,9 @@
 
 #include <JuceHeader.h>
 
+#define _USE_MATH_DEFINES
+#include <math.h>
+
 #define SIGTABLEN 512
 
 /////////////////////////////////
