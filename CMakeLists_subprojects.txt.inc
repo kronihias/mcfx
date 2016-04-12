@@ -146,10 +146,6 @@ IF(WIN32)
   ENDIF (WITH_LIBLO OR WITH_FFTW3)
 ENDIF(WIN32)
 
-#########
-# dependency on JUCE_STATIC_LIB
-ADD_DEPENDENCIES (${SUBPROJECT_NAME} ${JUCE_STATIC_LIB})
-
 
 ################################################
 # change to static linking for ms visual c++
