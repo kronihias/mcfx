@@ -528,7 +528,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                         // std::cout << "AddIR: IN: " << j << " OUT: " << i << " individualOffset: " << individualOffset << std::endl;
                         
                         // CHECK IF LENGTH/OFFSET E.G. IS OK!!
-                        conv_data.addIR(j, i, individualOffset + offset, delay, individualOffset+length, &TempAudioBuffer, i, src_samplerate);
+                        conv_data.addIR(j, i, individualOffset + offset, delay, length, &TempAudioBuffer, i, src_samplerate);
                         
                     }
                 }
