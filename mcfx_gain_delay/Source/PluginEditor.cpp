@@ -563,7 +563,7 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
     label7->setBounds (256, getHeight()+181-210, 35, 16);
     /*                */
   
-    int num_groups_first_col = (jmax(NUM_CHANNELS,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f + 0.5f;
+    int num_groups_first_col = jmax(1, (int)floorf((jmax(NUM_CHANNELS,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f));
   
     for (int i=0; i < NUM_CHANNELS; i++)
     {
