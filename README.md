@@ -101,6 +101,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.5.1 (2016-04-25) - mcfx_convolver: fixed bug in loading packed (dense) matrix; mcfx_gain_delay gui fix
+
 - 0.5.0 (2016-04-08) - add signal generator to mcfx_gain_delay; convolver: support for packed wav file to load a dense FIR matrix from only one .wav file -> have a look at CONVOLVER_CONFIG_HOWTO.txt; filter: smooth iir filter to avoid clicks when parameters change
 
 - 0.4.2 (2016-02-19) - fixed one more convolver bug
