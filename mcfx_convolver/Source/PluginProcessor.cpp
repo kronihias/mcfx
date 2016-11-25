@@ -31,11 +31,13 @@
 #define CONVPROC_SCHEDULER_CLASS SCHED_FIFO
 #define THREAD_SYNC_MODE true
 
+#define MAX_PART_SIZE 8192
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
 _min_in_ch(0),
 _min_out_ch(0),
 _num_conv(0),
+_MaxPartSize(MAX_PART_SIZE),
 _ConvBufferPos(0),
 _isProcessing(false),
 _configLoaded(false)
@@ -206,7 +208,7 @@ void Mcfx_convolverAudioProcessor::releaseResources()
 void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
     
-    // std::cout << "in: " << getNumInputChannels() << " out: " << getNumOutputChannels() << std::endl;
+    // std::cout << "in: " << getTotalNumInputChannels() << " out: " << getTotalNumOutputChannels() << std::endl;
     
     if (_configLoaded)
     {
@@ -215,7 +217,7 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
         
 #ifdef USE_ZITA_CONVOLVER
         
-        for (int i=0; i < jmin(conv_data.getNumInputChannels(), getNumInputChannels()) ; i++)
+        for (int i=0; i < jmin(conv_data.getNumInputChannels(), getTotalNumInputChannels()) ; i++)
         {
             float* indata = zita_conv.inpdata(i)+_ConvBufferPos;
             memcpy(indata, buffer.getReadPointer(i), getBlockSize()*sizeof(float));
@@ -388,7 +390,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 }
             }
             
-            if ( ( in_ch < 1 ) || ( in_ch > getNumInputChannels() ) || ( out_ch < 1 ) || ( out_ch > getNumOutputChannels() ) )
+            if ( ( in_ch < 1 ) || ( in_ch > getTotalNumInputChannels() ) || ( out_ch < 1 ) || ( out_ch > getTotalNumOutputChannels() ) )
             {
                 
                 String debug;
@@ -505,7 +507,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     return;
                 }
                 
-                if ((inchannels > getNumInputChannels()) || numOutChannels > getNumOutputChannels())
+                if ((inchannels > getTotalNumInputChannels()) || numOutChannels > getTotalNumOutputChannels())
                 {
                     String debug;
                     debug << "Input/Output channel assignement not feasible. Not enough input/output channels of the plugin. Need Input: " << inchannels << " Output: " << numOutChannels;
@@ -578,7 +580,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     zita_conv.start_process(CONVPROC_SCHEDULER_PRIORITY, CONVPROC_SCHEDULER_CLASS);
     
 #else
-    mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _ConvBufferSize, conv_data.getMaxLength(), 8192);
+    _MaxPartSize = jmin(MAX_PART_SIZE, nextPowerOfTwo(_MaxPartSize));
+  
+    mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _ConvBufferSize, conv_data.getMaxLength(), _MaxPartSize);
     
     for (int i=0; i < conv_data.getNumIRs(); i++)
     {
@@ -708,6 +712,10 @@ unsigned int Mcfx_convolverAudioProcessor::getConvBufferSize()
     return _ConvBufferSize;
 }
 
+unsigned int Mcfx_convolverAudioProcessor::getMaxPartitionSize()
+{
+  return _MaxPartSize;
+}
 
 void Mcfx_convolverAudioProcessor::setConvBufferSize(unsigned int bufsize)
 {
@@ -718,7 +726,17 @@ void Mcfx_convolverAudioProcessor::setConvBufferSize(unsigned int bufsize)
     }
 }
 
-
+void Mcfx_convolverAudioProcessor::setMaxPartitionSize(unsigned int maxsize)
+{
+    if (maxsize > MAX_PART_SIZE)
+      return;
+  
+    if (nextPowerOfTwo(maxsize) != _MaxPartSize)
+    {
+      _MaxPartSize = nextPowerOfTwo(maxsize);
+      ReloadConfiguration();
+    }
+}
 
 void Mcfx_convolverAudioProcessor::UnloadConfiguration()
 {
@@ -817,7 +835,7 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("activePreset", activePreset);
     xml.setAttribute ("presetDir", presetDir.getFullPathName());
     xml.setAttribute("ConvBufferSize", (int)_ConvBufferSize);
-    
+    xml.setAttribute("MaxPartSize", (int)_MaxPartSize);
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
 }
@@ -842,6 +860,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             newPresetDir = xmlState->getStringAttribute("presetDir", presetDir.getFullPathName());
             
             _ConvBufferSize = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
+            _MaxPartSize = xmlState->getIntAttribute("MaxPartSize", _MaxPartSize);
         }
         
         File tempDir(newPresetDir);

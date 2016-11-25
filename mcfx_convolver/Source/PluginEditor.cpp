@@ -24,19 +24,20 @@
 //==============================================================================
 Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter)
     : AudioProcessorEditor (ownerFilter),
-label (0),
-txt_preset(0),
-label5 (0),
-txt_debug (0),
-btn_open (0),
-label2 (0),
-label3 (0),
-label4 (0),
-num_ch (0),
-num_spk (0),
-num_hrtf (0),
-btn_preset_folder (0),
-box_conv_buffer (0)
+label (nullptr),
+txt_preset(nullptr),
+label5 (nullptr),
+txt_debug (nullptr),
+btn_open (nullptr),
+label2 (nullptr),
+label3 (nullptr),
+label4 (nullptr),
+num_ch (nullptr),
+num_spk (nullptr),
+num_hrtf (nullptr),
+btn_preset_folder (nullptr),
+box_conv_buffer (nullptr),
+box_maxpart(nullptr)
 {
     
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
@@ -147,7 +148,13 @@ box_conv_buffer (0)
     box_conv_buffer->addListener(this);
     box_conv_buffer->setEditableText (false);
     box_conv_buffer->setJustificationType (Justification::centredLeft);
-    
+  
+    addAndMakeVisible(box_maxpart = new ComboBox ("new combobox"));
+    box_maxpart->setTooltip("set maximum partition size for CPU load optimizations, leave it at 8192 if you don't know what you are doing!");
+    box_maxpart->addListener(this);
+    box_maxpart->setEditableText (false);
+    box_maxpart->setJustificationType (Justification::centredLeft);
+    box_maxpart->setColour(ComboBox::backgroundColourId, Colour (0xffa8a8a8));
     setSize (350, 300);
     
     UpdateText();
@@ -179,6 +186,8 @@ Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
     num_spk = nullptr;
     num_hrtf = nullptr;
     btn_preset_folder = nullptr;
+    box_conv_buffer = nullptr;
+    box_maxpart = nullptr;
 }
 
 
@@ -198,26 +207,29 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.drawRect (0, 0, 350, 300, 1);
     
     g.setColour (Colour (0x410000ff));
-    g.fillRoundedRectangle (18.0f, 100.0f, 222.0f, 76.0f, 10.0000f);
+    g.fillRoundedRectangle (18.0f, 100.0f, 190.0f, 76.0f, 10.0000f);
     
     g.setColour (Colours::white);
     g.setFont (Font (17.2000f, Font::bold));
 
     g.drawText ("MCFX-CONVOLVER",
-                1, 4, 343, 30,
+                1, 3, 343, 25,
                 Justification::centred, true);
     
     g.setFont (Font (12.4000f, Font::plain));
-    g.drawText ("multichannel convolution matrix",
-                1, 28, 343, 30,
+    g.drawText ("multichannel non-equal partioned convolution matrix",
+                1, 23, 343, 25,
                 Justification::centred, true);
     
     g.setFont (Font (12.4000f, Font::plain));
-    g.drawText ("Buffer Size",
-                275, 132, 60, 30,
-                Justification::centred, true);
-    
-    
+    g.drawText ("First Partition Size",
+                200, 98, 135, 30,
+                Justification::centredRight, true);
+    g.drawText ("Maximum Partition Size",
+              200, 136, 135, 30,
+              Justification::centredRight, true);
+  
+  
     /* Version text */
     g.setColour (Colours::white);
     g.setFont (Font (10.00f, Font::plain));
@@ -230,21 +242,21 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
 void Mcfx_convolverAudioProcessorEditor::resized()
 {
-    label->setBounds (16, 104, 184, 24);
-    txt_preset->setBounds (72, 64, 200, 24);
-    label5->setBounds (8, 64, 56, 24);
+    label->setBounds (16, 104, 140, 24);
+    txt_preset->setBounds (72, 50, 200, 24);
+    label5->setBounds (8, 50, 56, 24);
     txt_debug->setBounds (16, 184, 320, 96);
-    btn_open->setBounds (280, 64, 56, 24);
-    label2->setBounds (72, 128, 127, 24);
-    label3->setBounds (48, 152, 152, 24);
+    btn_open->setBounds (280, 50, 56, 24);
+    label2->setBounds (16, 128, 140, 24);
+    label3->setBounds (16, 152, 140, 24);
     label4->setBounds (24, 280, 64, 16);
-    num_ch->setBounds (192, 104, 40, 24);
-    num_spk->setBounds (192, 128, 40, 24);
-    num_hrtf->setBounds (192, 152, 40, 24);
-    btn_preset_folder->setBounds (248, 96, 94, 24);
+    num_ch->setBounds (150, 104, 40, 24);
+    num_spk->setBounds (150, 128, 40, 24);
+    num_hrtf->setBounds (150, 152, 40, 24);
+    btn_preset_folder->setBounds (245, 80, 94, 24);
     
-    box_conv_buffer->setBounds (270, 155, 65, 22);
-    
+    box_conv_buffer->setBounds (270, 119, 67, 20);
+    box_maxpart->setBounds (270, 157, 65, 20);
 }
 
 
@@ -269,8 +281,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     box_conv_buffer->clear(dontSendNotification);
     
     unsigned int buf = jmax(ourProcessor->getBufferSize(), (unsigned int) 1);
-    unsigned int conv_buf = ourProcessor->getConvBufferSize();
-    
+    unsigned int conv_buf = jmax(ourProcessor->getConvBufferSize(), ourProcessor->getBufferSize());
+  
     int sel = 0;
     unsigned int val = 0;
     
@@ -283,8 +295,22 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         if (val == conv_buf)
             sel = i;
     }
-    
     box_conv_buffer->setSelectedItemIndex(sel, dontSendNotification);
+  
+    box_maxpart->clear(dontSendNotification);
+    sel = 0;
+    val = 0;
+    unsigned int max_part_size = ourProcessor->getMaxPartitionSize();
+    for (int i=0; val < 8192; i++) {
+      
+      val = conv_buf*pow(2,i);
+      
+      box_maxpart->addItem(String(val), i+1);
+      
+      if (val == max_part_size)
+        sel = i;
+    }
+    box_maxpart->setSelectedItemIndex(sel, dontSendNotification);
     
 }
 
@@ -423,6 +449,11 @@ void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThat
         
         // std::cout << "set size: " << val << std::endl;
         ourProcessor->setConvBufferSize(val);
+    }
+    else if (comboBoxThatHasChanged == box_maxpart)
+    {
+        int val = box_maxpart->getText().getIntValue();
+        ourProcessor->setMaxPartitionSize(val);
     }
     
 }

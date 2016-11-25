@@ -75,7 +75,8 @@ private:
     ScopedPointer<Label> num_hrtf;
     ScopedPointer<TextButton> btn_preset_folder;
     ScopedPointer<ComboBox> box_conv_buffer;
-    
+    ScopedPointer<ComboBox> box_maxpart;
+  
     
 };
 

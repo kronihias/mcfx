@@ -22,6 +22,7 @@
 #include "JuceHeader.h"
 
 #if JUCE_MAC
+    #define VIMAGE_H // avoid namespace clashes
     #include <Accelerate/Accelerate.h>
     #include <vector>
 

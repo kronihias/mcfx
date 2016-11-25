@@ -107,8 +107,10 @@ public:
     
     unsigned int getBufferSize();
     unsigned int getConvBufferSize();
+    unsigned int getMaxPartitionSize();
     void setConvBufferSize(unsigned int bufsize);
-    
+    void setMaxPartitionSize(unsigned int maxsize);
+  
     File presetDir; // where to search for presets
     File lastDir; // for open file dialog...
     
@@ -137,7 +139,8 @@ private:
     double _SampleRate;
     unsigned int _BufferSize; // size of the processing Block
     unsigned int _ConvBufferSize; // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
-    
+    unsigned int _MaxPartSize; // maximum size of the partition
+  
     unsigned int _ConvBufferPos; // the position of the read/write head
     
     bool _isProcessing;
