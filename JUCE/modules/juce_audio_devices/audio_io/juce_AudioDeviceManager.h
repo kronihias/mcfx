@@ -404,26 +404,28 @@ public:
     */
     void playTestSound();
 
-    /** Turns on level-measuring.
-
-        When enabled, the device manager will measure the peak input level
-        across all channels, and you can get this level by calling getCurrentInputLevel().
-
-        This is mainly intended for audio setup UI panels to use to create a mic
-        level display, so that the user can check that they've selected the right
-        device.
-
-        A simple filter is used to make the level decay smoothly, but this is
-        only intended for giving rough feedback, and not for any kind of accurate
-        measurement.
+    //==============================================================================
+    /** Turns on level-measuring for input channels.
+        @see getCurrentInputLevel()
     */
-    void enableInputLevelMeasurement (bool enableMeasurement);
+    void enableInputLevelMeasurement (bool enableMeasurement) noexcept;
+
+    /** Turns on level-measuring for output channels.
+        @see getCurrentOutputLevel()
+    */
+    void enableOutputLevelMeasurement (bool enableMeasurement) noexcept;
 
     /** Returns the current input level.
         To use this, you must first enable it by calling enableInputLevelMeasurement().
-        See enableInputLevelMeasurement() for more info.
+        @see enableInputLevelMeasurement()
     */
-    double getCurrentInputLevel() const;
+    double getCurrentInputLevel() const noexcept;
+
+    /** Returns the current output level.
+        To use this, you must first enable it by calling enableOutputLevelMeasurement().
+        @see enableOutputLevelMeasurement()
+    */
+    double getCurrentOutputLevel() const noexcept;
 
     /** Returns the a lock that can be used to synchronise access to the audio callback.
         Obviously while this is locked, you're blocking the audio thread from running, so
@@ -450,10 +452,6 @@ private:
     BigInteger inputChannels, outputChannels;
     ScopedPointer<XmlElement> lastExplicitSettings;
     mutable bool listNeedsScanning;
-    Atomic<int> inputLevelMeasurementEnabledCount;
-    double inputLevel;
-    ScopedPointer<AudioSampleBuffer> testSound;
-    int testSoundPosition;
     AudioSampleBuffer tempBuffer;
 
     struct MidiCallbackInfo
@@ -470,7 +468,23 @@ private:
     ScopedPointer<MidiOutput> defaultMidiOutput;
     CriticalSection audioCallbackLock, midiCallbackLock;
 
+    ScopedPointer<AudioSampleBuffer> testSound;
+    int testSoundPosition;
+
     double cpuUsageMs, timeToCpuScale;
+
+    struct LevelMeter
+    {
+        LevelMeter() noexcept;
+        void updateLevel (const float* const*, int numChannels, int numSamples) noexcept;
+        void setEnabled (bool) noexcept;
+        double getCurrentLevel() const noexcept;
+
+        Atomic<int> enabled;
+        double level;
+    };
+
+    LevelMeter inputLevelMeter, outputLevelMeter;
 
     //==============================================================================
     class CallbackHandler;

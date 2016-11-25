@@ -37,7 +37,7 @@ StringArray::StringArray (const StringArray& other)
 
 #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
 StringArray::StringArray (StringArray&& other) noexcept
-    : strings (static_cast <Array <String>&&> (other.strings))
+    : strings (static_cast<Array <String>&&> (other.strings))
 {
 }
 #endif
@@ -81,7 +81,7 @@ StringArray& StringArray::operator= (const StringArray& other)
 #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
 StringArray& StringArray::operator= (StringArray&& other) noexcept
 {
-    strings = static_cast <Array<String>&&> (other.strings);
+    strings = static_cast<Array<String>&&> (other.strings);
     return *this;
 }
 #endif
@@ -127,7 +127,12 @@ const String& StringArray::operator[] (const int index) const noexcept
     if (isPositiveAndBelow (index, strings.size()))
         return strings.getReference (index);
 
+   #if JUCE_ALLOW_STATIC_NULL_VARIABLES
     return String::empty;
+   #else
+    static String empty;
+    return empty;
+   #endif
 }
 
 String& StringArray::getReference (const int index) noexcept
@@ -152,10 +157,13 @@ void StringArray::insert (const int index, const String& newString)
     strings.insert (index, newString);
 }
 
-void StringArray::addIfNotAlreadyThere (const String& newString, const bool ignoreCase)
+bool StringArray::addIfNotAlreadyThere (const String& newString, const bool ignoreCase)
 {
-    if (! contains (newString, ignoreCase))
-        add (newString);
+    if (contains (newString, ignoreCase))
+        return false;
+
+    add (newString);
+    return true;
 }
 
 void StringArray::addArray (const StringArray& otherArray, int startIndex, int numElementsToAdd)
@@ -171,6 +179,12 @@ void StringArray::addArray (const StringArray& otherArray, int startIndex, int n
 
     while (--numElementsToAdd >= 0)
         strings.add (otherArray.strings.getReference (startIndex++));
+}
+
+void StringArray::mergeArray (const StringArray& otherArray, const bool ignoreCase)
+{
+    for (int i = 0; i < otherArray.size(); ++i)
+        addIfNotAlreadyThere (otherArray[i], ignoreCase);
 }
 
 void StringArray::set (const int index, const String& newString)

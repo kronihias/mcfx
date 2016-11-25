@@ -26,7 +26,7 @@
   ==============================================================================
 */
 
-#if defined (JUCE_CORE_H_INCLUDED) && ! JUCE_AMALGAMATED_INCLUDE
+#ifdef JUCE_CORE_H_INCLUDED
  /* When you add this cpp file to your project, you mustn't include it in a file where you've
     already included any other headers - just put it inside a file on its own, possibly with your config
     flags preceding it, but don't include anything else. That also includes avoiding any automatic prefix
@@ -35,16 +35,15 @@
  #error "Incorrect use of JUCE cpp file"
 #endif
 
-// Your project must contain an AppConfig.h file with your project-specific settings in it,
-// and your header search path must make it accessible to the module's files.
-#include "AppConfig.h"
+#define JUCE_CORE_INCLUDE_OBJC_HELPERS 1
+#define JUCE_CORE_INCLUDE_COM_SMART_PTR 1
+#define JUCE_CORE_INCLUDE_NATIVE_HEADERS 1
 
-//==============================================================================
-#include "native/juce_BasicNativeHeaders.h"
 #include "juce_core.h"
 
 #include <locale>
 #include <cctype>
+#include <cstdarg>
 
 #if ! JUCE_ANDROID
  #include <sys/timeb.h>
@@ -83,8 +82,10 @@
  #endif
 
  #if JUCE_LINUX
+  #include <stdio.h>
   #include <langinfo.h>
   #include <ifaddrs.h>
+  #include <sys/resource.h>
 
   #if JUCE_USE_CURL
    #include <curl/curl.h>
@@ -114,9 +115,11 @@
  #include <android/log.h>
 #endif
 
+#undef check
+
 //==============================================================================
 #ifndef    JUCE_STANDALONE_APPLICATION
- JUCE_COMPILER_WARNING ("Please re-save your Introjucer project with the latest Introjucer version to avoid this warning")
+ JUCE_COMPILER_WARNING ("Please re-save your project with the latest Projucer version to avoid this warning")
  #define   JUCE_STANDALONE_APPLICATION 0
 #endif
 
@@ -126,6 +129,7 @@ namespace juce
 
 #include "containers/juce_AbstractFifo.cpp"
 #include "containers/juce_NamedValueSet.cpp"
+#include "containers/juce_ListenerList.cpp"
 #include "containers/juce_PropertySet.cpp"
 #include "containers/juce_Variant.cpp"
 #include "files/juce_DirectoryIterator.cpp"
@@ -143,6 +147,7 @@ namespace juce
 #include "maths/juce_Expression.cpp"
 #include "maths/juce_Random.cpp"
 #include "memory/juce_MemoryBlock.cpp"
+#include "misc/juce_RuntimePermissions.cpp"
 #include "misc/juce_Result.cpp"
 #include "misc/juce_Uuid.cpp"
 #include "network/juce_MACAddress.cpp"
@@ -165,6 +170,7 @@ namespace juce
 #include "text/juce_StringPairArray.cpp"
 #include "text/juce_StringPool.cpp"
 #include "text/juce_TextDiff.cpp"
+#include "text/juce_Base64.cpp"
 #include "threads/juce_ReadWriteLock.cpp"
 #include "threads/juce_Thread.cpp"
 #include "threads/juce_ThreadPool.cpp"
@@ -182,10 +188,6 @@ namespace juce
 #include "files/juce_WildcardFileFilter.cpp"
 
 //==============================================================================
-#if JUCE_MAC || JUCE_IOS
-#include "native/juce_osx_ObjCHelpers.h"
-#endif
-
 #if JUCE_ANDROID
 #include "native/juce_android_JNIHelpers.h"
 #endif
@@ -205,7 +207,6 @@ namespace juce
 
 //==============================================================================
 #elif JUCE_WINDOWS
-#include "native/juce_win32_ComSmartPtr.h"
 #include "native/juce_win32_Files.cpp"
 #include "native/juce_win32_Network.cpp"
 #include "native/juce_win32_Registry.cpp"
@@ -231,11 +232,30 @@ namespace juce
 #include "native/juce_android_Network.cpp"
 #include "native/juce_android_SystemStats.cpp"
 #include "native/juce_android_Threads.cpp"
+#include "native/juce_android_RuntimePermissions.cpp"
 
 #endif
 
 #include "threads/juce_ChildProcess.cpp"
 #include "threads/juce_HighResolutionTimer.cpp"
 #include "network/juce_URL.cpp"
+#include "network/juce_WebInputStream.cpp"
+
+//==============================================================================
+/*
+    As the very long class names here try to explain, the purpose of this code is to cause
+    a linker error if not all of your compile units are consistent in the options that they
+    enable before including JUCE headers. The reason this is important is that if you have
+    two cpp files, and one includes the juce headers with debug enabled, and the other doesn't,
+    then each will be generating code with different memory layouts for the classes, and
+    you'll get subtle and hard-to-track-down memory corruption bugs!
+*/
+#if JUCE_DEBUG
+ this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode
+    ::this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_debug_mode() noexcept {}
+#else
+ this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode
+    ::this_will_fail_to_link_if_some_of_your_compile_units_are_built_in_release_mode() noexcept {}
+#endif
 
 }

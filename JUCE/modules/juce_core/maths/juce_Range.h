@@ -172,6 +172,15 @@ public:
         return Range (start, start + newLength);
     }
 
+    /** Returns a range which has its start moved down and its end moved up by the
+        given amount.
+        @returns The returned range will be (start - amount, end + amount)
+    */
+    Range expanded (ValueType amount) const noexcept
+    {
+        return Range (start - amount, end + amount);
+    }
+
     //==============================================================================
     /** Adds an amount to the start and end of the range. */
     inline Range operator+= (const ValueType amountToAdd) noexcept
@@ -208,7 +217,10 @@ public:
     bool operator!= (Range other) const noexcept     { return start != other.start || end != other.end; }
 
     //==============================================================================
-    /** Returns true if the given position lies inside this range. */
+    /** Returns true if the given position lies inside this range.
+        When making this comparison, the start value is considered to be inclusive,
+        and the end of the range exclusive.
+    */
     bool contains (const ValueType position) const noexcept
     {
         return start <= position && position < end;
@@ -220,10 +232,7 @@ public:
         return jlimit (start, end, value);
     }
 
-    /** Returns true if the given range lies entirely inside this range.
-        When making this comparison, the start value is considered to be inclusive,
-        and the end of the range exclusive.
-     */
+    /** Returns true if the given range lies entirely inside this range. */
     bool contains (Range other) const noexcept
     {
         return start <= other.start && end >= other.end;

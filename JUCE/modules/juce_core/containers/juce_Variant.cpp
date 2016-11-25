@@ -49,7 +49,7 @@ public:
     virtual int toInt (const ValueUnion&) const noexcept                        { return 0; }
     virtual int64 toInt64 (const ValueUnion&) const noexcept                    { return 0; }
     virtual double toDouble (const ValueUnion&) const noexcept                  { return 0; }
-    virtual String toString (const ValueUnion&) const                           { return String::empty; }
+    virtual String toString (const ValueUnion&) const                           { return String(); }
     virtual bool toBool (const ValueUnion&) const noexcept                      { return false; }
     virtual ReferenceCountedObject* toObject (const ValueUnion&) const noexcept { return nullptr; }
     virtual Array<var>* toArray (const ValueUnion&) const noexcept              { return nullptr; }
@@ -274,7 +274,7 @@ public:
     }
 
     String toString (const ValueUnion& data) const override                            { return "Object 0x" + String::toHexString ((int) (pointer_sized_int) data.objectValue); }
-    bool toBool (const ValueUnion& data) const noexcept override                       { return data.objectValue != 0; }
+    bool toBool (const ValueUnion& data) const noexcept override                       { return data.objectValue != nullptr; }
     ReferenceCountedObject* toObject (const ValueUnion& data) const noexcept override  { return data.objectValue; }
     bool isObject() const noexcept override                                            { return true; }
 
@@ -434,7 +434,9 @@ var::var() noexcept : type (&VariantType_Void::instance) {}
 var::var (const VariantType& t) noexcept  : type (&t) {}
 var::~var() noexcept  { type->cleanUp (value); }
 
+#if JUCE_ALLOW_STATIC_NULL_VARIABLES
 const var var::null;
+#endif
 
 //==============================================================================
 var::var (const var& valueToCopy)  : type (valueToCopy.type)
@@ -453,6 +455,17 @@ var::var (const char* const v)        : type (&VariantType_String::instance) { n
 var::var (const wchar_t* const v)     : type (&VariantType_String::instance) { new (value.stringValue) String (v); }
 var::var (const void* v, size_t sz)   : type (&VariantType_Binary::instance) { value.binaryValue = new MemoryBlock (v, sz); }
 var::var (const MemoryBlock& v)       : type (&VariantType_Binary::instance) { value.binaryValue = new MemoryBlock (v); }
+
+var::var (const StringArray& v)       : type (&VariantType_Array::instance)
+{
+    Array<var> strings;
+
+    const int n = v.size();
+    for (int i = 0; i < n; ++i)
+        strings.add (var (v[i]));
+
+    value.objectValue = new VariantType_Array::RefCountedArray(strings);
+}
 
 var::var (ReferenceCountedObject* const object)  : type (&VariantType_Object::instance)
 {
@@ -504,6 +517,7 @@ var& var::operator= (const double v)             { type->cleanUp (value); type =
 var& var::operator= (const char* const v)        { type->cleanUp (value); type = &VariantType_String::instance; new (value.stringValue) String (v); return *this; }
 var& var::operator= (const wchar_t* const v)     { type->cleanUp (value); type = &VariantType_String::instance; new (value.stringValue) String (v); return *this; }
 var& var::operator= (const String& v)            { type->cleanUp (value); type = &VariantType_String::instance; new (value.stringValue) String (v); return *this; }
+var& var::operator= (const MemoryBlock& v)       { type->cleanUp (value); type = &VariantType_Binary::instance; value.binaryValue = new MemoryBlock (v); return *this; }
 var& var::operator= (const Array<var>& v)        { var v2 (v); swapWith (v2); return *this; }
 var& var::operator= (ReferenceCountedObject* v)  { var v2 (v); swapWith (v2); return *this; }
 var& var::operator= (NativeFunction v)           { var v2 (v); swapWith (v2); return *this; }
@@ -581,7 +595,7 @@ const var& var::operator[] (const Identifier& propertyName) const
     if (DynamicObject* const o = getDynamicObject())
         return o->getProperty (propertyName);
 
-    return var::null;
+    return getNullVarRef();
 }
 
 const var& var::operator[] (const char* const propertyName) const

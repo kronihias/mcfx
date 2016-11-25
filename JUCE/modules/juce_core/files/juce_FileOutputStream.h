@@ -43,13 +43,17 @@ public:
     /** Creates a FileOutputStream.
 
         If the file doesn't exist, it will first be created. If the file can't be
-        created or opened, the failedToOpen() method will return
-        true.
+        created or opened (for example, because the parent directory of the file
+        does not exist), the failedToOpen() method will return true.
 
         If the file already exists when opened, the stream's write-postion will
         be set to the end of the file. To overwrite an existing file,
         use File::deleteFile() before opening the stream, or use setPosition(0)
         after it's opened (although this won't truncate the file).
+
+        Destroying a FileOutputStream object does not force the operating system
+        to write the buffered data to disk immediately. If this is required you
+        should call flush() before triggering the destructor.
 
         @see TemporaryFile
     */
@@ -101,7 +105,7 @@ private:
     Result status;
     int64 currentPosition;
     size_t bufferSize, bytesInBuffer;
-    HeapBlock <char> buffer;
+    HeapBlock<char> buffer;
 
     void openHandle();
     void closeHandle();

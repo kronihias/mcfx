@@ -158,7 +158,7 @@ File File::getSpecialLocation (const SpecialLocationType type)
         case hostApplicationPath:
         {
             const File f ("/proc/self/exe");
-            return f.isLink() ? f.getLinkedTarget() : juce_getExecutableFile();
+            return f.isSymbolicLink() ? f.getLinkedTarget() : juce_getExecutableFile();
         }
 
         default:
@@ -202,9 +202,9 @@ bool Process::openDocument (const String& fileName, const String& parameters)
     String cmdString (fileName.replace (" ", "\\ ",false));
     cmdString << " " << parameters;
 
-    if (URL::isProbablyAWebsiteURL (fileName)
-         || cmdString.startsWithIgnoreCase ("file:")
-         || URL::isProbablyAnEmailAddress (fileName)
+    if (/*URL::isProbablyAWebsiteURL (fileName)
+          ||*/ cmdString.startsWithIgnoreCase ("file:")
+         /*|| URL::isProbablyAnEmailAddress (fileName)*/
          || File::createFileWithoutCheckingPath (fileName).isDirectory()
          || ! isFileExecutable (fileName))
     {

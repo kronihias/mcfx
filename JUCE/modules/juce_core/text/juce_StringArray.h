@@ -118,7 +118,10 @@ public:
 
     //==============================================================================
     /** Returns the number of strings in the array */
-    inline int size() const noexcept                                    { return strings.size(); };
+    inline int size() const noexcept                                    { return strings.size(); }
+
+    /** Returns true if the array is empty, false otherwise. */
+    inline bool isEmpty() const noexcept                                { return size() == 0; }
 
     /** Returns one of the strings from the array.
 
@@ -188,8 +191,10 @@ public:
 
     /** Adds a string to the array as long as it's not already in there.
         The search can optionally be case-insensitive.
+
+        @return true if the string has been added, false otherwise.
     */
-    void addIfNotAlreadyThere (const String& stringToAdd, bool ignoreCase = false);
+    bool addIfNotAlreadyThere (const String& stringToAdd, bool ignoreCase = false);
 
     /** Replaces one of the strings in the array with another one.
 
@@ -208,6 +213,15 @@ public:
     void addArray (const StringArray& other,
                    int startIndex = 0,
                    int numElementsToAdd = -1);
+
+    /** Merges the strings from another array into this one.
+        This will not add a string that already exists.
+
+        @param other                the array to add
+        @param ignoreCase           ignore case when merging
+    */
+    void mergeArray (const StringArray& other,
+                     bool ignoreCase = false);
 
     /** Breaks up a string into tokens and adds them to this array.
 
@@ -247,7 +261,7 @@ public:
     /** Returns an array containing the tokens in a given string.
 
         This will tokenise the given string using whitespace characters as the
-        token delimiters, and return these tokens as an array.
+        token delimiters, and return the parsed tokens as an array.
         @see addTokens
     */
     static StringArray fromTokens (StringRef stringToTokenise,
@@ -255,8 +269,8 @@ public:
 
     /** Returns an array containing the tokens in a given string.
 
-        This will tokenise the given string using whitespace characters as the
-        token delimiters, and return these tokens as an array.
+        This will tokenise the given string using the breakCharacters string to define
+        the token delimiters, and will return the parsed tokens as an array.
 
         @param stringToTokenise     the string to tokenise
         @param breakCharacters      a string of characters, any of which will be considered
@@ -293,8 +307,8 @@ public:
     void remove (int index);
 
     /** Finds a string in the array and removes it.
-        This will remove the first occurrence of the given string from the array. The
-        comparison may be case-insensitive depending on the ignoreCase parameter.
+        This will remove all occurrences of the given string from the array.
+        The comparison may be case-insensitive depending on the ignoreCase parameter.
     */
     void removeString (StringRef stringToRemove,
                        bool ignoreCase = false);
@@ -355,10 +369,10 @@ public:
         @param appendNumberToFirstInstance  whether the first of a group of similar strings
                                             also has a number appended to it.
         @param preNumberString              when adding a number, this string is added before the number.
-                                            If you pass 0, a default string will be used, which adds
+                                            If you pass nullptr, a default string will be used, which adds
                                             brackets around the number.
         @param postNumberString             this string is appended after any numbers that are added.
-                                            If you pass 0, a default string will be used, which adds
+                                            If you pass nullptr, a default string will be used, which adds
                                             brackets around the number.
     */
     void appendNumbersToDuplicates (bool ignoreCaseWhenComparing,

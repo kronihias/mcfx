@@ -41,7 +41,7 @@ public:
     typedef char CharType;
 
     inline explicit CharPointer_UTF8 (const CharType* const rawPointer) noexcept
-        : data (const_cast <CharType*> (rawPointer))
+        : data (const_cast<CharType*> (rawPointer))
     {
     }
 
@@ -58,7 +58,7 @@ public:
 
     inline CharPointer_UTF8 operator= (const CharType* text) noexcept
     {
-        data = const_cast <CharType*> (text);
+        data = const_cast<CharType*> (text);
         return *this;
     }
 
@@ -90,9 +90,9 @@ public:
         uint32 n = (uint32) (uint8) byte;
         uint32 mask = 0x7f;
         uint32 bit = 0x40;
-        size_t numExtraValues = 0;
+        int numExtraValues = 0;
 
-        while ((n & bit) != 0 && bit > 0x10)
+        while ((n & bit) != 0 && bit > 0x8)
         {
             mask >>= 1;
             ++numExtraValues;
@@ -101,9 +101,9 @@ public:
 
         n &= mask;
 
-        for (size_t i = 1; i <= numExtraValues; ++i)
+        for (int i = 1; i <= numExtraValues; ++i)
         {
-            const uint8 nextByte = (uint8) data [i];
+            const uint32 nextByte = (uint32) (uint8) data[i];
 
             if ((nextByte & 0xc0) != 0x80)
                 break;
@@ -312,9 +312,8 @@ public:
     static size_t getBytesRequiredFor (CharPointer text) noexcept
     {
         size_t count = 0;
-        juce_wchar n;
 
-        while ((n = text.getAndAdvance()) != 0)
+        while (juce_wchar n = text.getAndAdvance())
             count += getBytesRequiredFor (n);
 
         return count;
@@ -421,13 +420,7 @@ public:
     /** Compares this string with another one. */
     int compareIgnoreCase (const CharPointer_UTF8 other) const noexcept
     {
-       #if JUCE_MSVC
-        return stricmp (data, other.data);
-       #elif JUCE_MINGW
         return CharacterFunctions::compareIgnoreCase (*this, other);
-       #else
-        return strcasecmp (data, other.data);
-       #endif
     }
 
     /** Compares this string with another one, up to a specified number of characters. */
@@ -527,6 +520,9 @@ public:
                         return false;
                 }
 
+                if (numExtraValues == 0)
+                    return false;
+
                 maxBytesToRead -= numExtraValues;
                 if (maxBytesToRead < 0)
                     return false;
@@ -543,7 +539,7 @@ public:
     /** Atomically swaps this pointer for a new value, returning the previous value. */
     CharPointer_UTF8 atomicSwap (const CharPointer_UTF8 newValue)
     {
-        return CharPointer_UTF8 (reinterpret_cast <Atomic<CharType*>&> (data).exchange (newValue.data));
+        return CharPointer_UTF8 (reinterpret_cast<Atomic<CharType*>&> (data).exchange (newValue.data));
     }
 
     /** These values are the byte-order mark (BOM) values for a UTF-8 stream. */

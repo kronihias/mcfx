@@ -164,7 +164,7 @@ StringArray JUCE_CALLTYPE JUCEApplicationBase::getCommandLineParameterArray()
 #else
 
 #if JUCE_IOS
- extern int juce_iOSMain (int argc, const char* argv[]);
+ extern int juce_iOSMain (int argc, const char* argv[], void* classPtr);
 #endif
 
 #if JUCE_MAC
@@ -201,7 +201,7 @@ StringArray JUCEApplicationBase::getCommandLineParameterArray()
     return StringArray (juce_argv + 1, juce_argc - 1);
 }
 
-int JUCEApplicationBase::main (int argc, const char* argv[])
+int JUCEApplicationBase::main (int argc, const char* argv[], void* customDelegate)
 {
     JUCE_AUTORELEASEPOOL
     {
@@ -213,8 +213,10 @@ int JUCEApplicationBase::main (int argc, const char* argv[])
        #endif
 
        #if JUCE_IOS
-        return juce_iOSMain (argc, argv);
+        return juce_iOSMain (argc, argv, customDelegate);
        #else
+        ignoreUnused (customDelegate);
+
         return JUCEApplicationBase::main();
        #endif
     }
@@ -254,6 +256,20 @@ bool JUCEApplicationBase::initialiseApp()
     {
         DBG ("Another instance is running - quitting...");
         return false;
+    }
+   #endif
+
+   #if JUCE_WINDOWS && JUCE_STANDALONE_APPLICATION && (! defined (_CONSOLE)) && (! JUCE_MINGW)
+    if (AttachConsole (ATTACH_PARENT_PROCESS) != 0)
+    {
+        // if we've launched a GUI app from cmd.exe or PowerShell, we need this to enable printf etc.
+        // However, only reassign stdout, stderr, stdin if they have not been already opened by
+        // a redirect or similar.
+        FILE* ignore;
+
+        if (_fileno(stdout) < 0) freopen_s (&ignore, "CONOUT$", "w", stdout);
+        if (_fileno(stderr) < 0) freopen_s (&ignore, "CONOUT$", "w", stderr);
+        if (_fileno(stdin)  < 0) freopen_s (&ignore, "CONIN$",  "r", stdin);
     }
    #endif
 
