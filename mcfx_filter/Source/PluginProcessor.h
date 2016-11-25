@@ -28,6 +28,7 @@
 #include <complex>
 
 #if JUCE_MAC
+    #define VIMAGE_H // avoid namespace clashes
     #include <Accelerate/Accelerate.h>
 
     #define SPLIT_COMPLEX 1

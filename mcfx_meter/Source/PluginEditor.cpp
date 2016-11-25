@@ -32,13 +32,13 @@ extern float iec_scale(float dB);
 //==============================================================================
 Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAudioProcessor* ownerFilter)
     : AudioProcessorEditor (ownerFilter),
-    label (0),
-    sld_hold (0),
-    sld_fall (0),
-    label2 (0),
-    label3 (0),
-    tgl_pkhold (0),
-    cachedImage_meter_scale_png (0)
+    label (nullptr),
+    sld_hold (nullptr),
+    sld_fall (nullptr),
+    label2 (nullptr),
+    label3 (nullptr),
+    tgl_pkhold (nullptr),
+    cachedImage_meter_scale_png (nullptr)
 {
     tooltipWindow.setMillisecondsBeforeTipAppears (500); // tooltip delay
     

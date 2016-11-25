@@ -508,8 +508,8 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
         _lc_freq_param_ = _lc_freq_param; // set old value
     }
     // add filters if necessary
-    if (_LC_IIR_1.size() < getNumInputChannels()) {
-        while (getNumInputChannels() - _LC_IIR_1.size() > 0) {
+    if (_LC_IIR_1.size() < getTotalNumInputChannels()) {
+        while (getTotalNumInputChannels() - _LC_IIR_1.size() > 0) {
             _LC_IIR_1.add(new SmoothIIRFilter());
             _LC_IIR_1.getLast()->setCoefficients(_IIR_LC_Coeff);
             _LC_IIR_2.add(new SmoothIIRFilter());
@@ -530,8 +530,8 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
         _hc_freq_param_ = _hc_freq_param; // set old value
     }
     // add filters if necessary
-    if (_HC_IIR_1.size() < getNumInputChannels()) {
-        while (getNumInputChannels() - _HC_IIR_1.size() > 0) {
+    if (_HC_IIR_1.size() < getTotalNumInputChannels()) {
+        while (getTotalNumInputChannels() - _HC_IIR_1.size() > 0) {
             _HC_IIR_1.add(new SmoothIIRFilter());
             _HC_IIR_1.getLast()->setCoefficients(_IIR_HC_Coeff);
             _HC_IIR_2.add(new SmoothIIRFilter());
@@ -557,8 +557,8 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
         
     }
     // add filters if necessary
-    if (_PF_IIR_1.size() < getNumInputChannels()) {
-        while (getNumInputChannels() - _PF_IIR_1.size() > 0) {
+    if (_PF_IIR_1.size() < getTotalNumInputChannels()) {
+        while (getTotalNumInputChannels() - _PF_IIR_1.size() > 0) {
             _PF_IIR_1.add(new SmoothIIRFilter());
             _PF_IIR_1.getLast()->setCoefficients(_IIR_PF_Coeff_1);
             _PF_IIR_1.add(new SmoothIIRFilter());
@@ -584,8 +584,8 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
         
     }
     // add filters if necessary
-    if (_PF_IIR_2.size() < getNumInputChannels()) {
-        while (getNumInputChannels() - _PF_IIR_2.size() > 0) {
+    if (_PF_IIR_2.size() < getTotalNumInputChannels()) {
+        while (getTotalNumInputChannels() - _PF_IIR_2.size() > 0) {
             _PF_IIR_2.add(new SmoothIIRFilter());
             _PF_IIR_2.getLast()->setCoefficients(_IIR_PF_Coeff_2);
             _PF_IIR_2.add(new SmoothIIRFilter());
@@ -611,8 +611,8 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
         
     }
     // add filters if necessary
-    if (_LS_IIR.size() < getNumInputChannels()) {
-        while (getNumInputChannels() - _LS_IIR.size() > 0) {
+    if (_LS_IIR.size() < getTotalNumInputChannels()) {
+        while (getTotalNumInputChannels() - _LS_IIR.size() > 0) {
             _LS_IIR.add(new SmoothIIRFilter());
             _LS_IIR.getLast()->setCoefficients(_IIR_LS_Coeff);
             _LS_IIR.add(new SmoothIIRFilter());
@@ -638,8 +638,8 @@ void LowhighpassAudioProcessor::checkFilters(bool force_update)
         
     }
     // add filters if necessary
-    if (_HS_IIR.size() < getNumInputChannels()) {
-        while (getNumInputChannels() - _HS_IIR.size() > 0) {
+    if (_HS_IIR.size() < getTotalNumInputChannels()) {
+        while (getTotalNumInputChannels() - _HS_IIR.size() > 0) {
             _HS_IIR.add(new SmoothIIRFilter());
             _HS_IIR.getLast()->setCoefficients(_IIR_HS_Coeff);
             _HS_IIR.add(new SmoothIIRFilter());
@@ -832,7 +832,7 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
         }
         
     }
-    // std::cout << "Processing channels: " << getNumInputChannels() << std::endl;
+    // std::cout << "Processing channels: " << getTotalNumInputChannels() << std::endl;
     // std::cout << "Buffer channels: " << buffer.getNumChannels() << std::endl;
     
     
