@@ -684,7 +684,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     {
         IRBuffer->setSize(reader->numChannels, length);
         
-        for (int i=0; i<reader->numChannels; i++) {
+        for (unsigned int i=0; i<reader->numChannels; i++) {
             IRBuffer->copyFrom(i, 0, ReadBuffer, i, 0, length);
         }
     }

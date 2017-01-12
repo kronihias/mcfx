@@ -288,7 +288,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     
     for (int i=0; val < 8192; i++) {
         
-        val = buf*pow(2,i);
+        val = (unsigned int)floor(buf*pow(2,i));
         
         box_conv_buffer->addItem(String(val), i+1);
         
@@ -303,7 +303,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     unsigned int max_part_size = ourProcessor->getMaxPartitionSize();
     for (int i=0; val < 8192; i++) {
       
-      val = conv_buf*pow(2,i);
+      val = (unsigned int)floor(conv_buf*pow(2,i));
       
       box_maxpart->addItem(String(val), i+1);
       
