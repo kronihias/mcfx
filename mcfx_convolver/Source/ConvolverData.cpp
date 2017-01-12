@@ -86,7 +86,7 @@ void ConvolverData::addIR(int in_ch, int out_ch, int offset, int delay, int leng
         // do resampling
         double sr_conv_fact = SampleRate / src_samplerate;
         
-        int newsize = ceil(size*sr_conv_fact);
+        int newsize = (int)ceil(size*sr_conv_fact);
         
         AudioSampleBuffer ResampledBuffer(1, newsize);
         ResampledBuffer.clear();
