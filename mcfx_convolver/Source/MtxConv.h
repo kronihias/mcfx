@@ -246,6 +246,9 @@ private:
     // transform the accumulated output
     void TransformOutput();
 
+    // Write the time data to the master output buffer
+    void WriteToOutbuf();
+
     // this is called to get the time domain output signal
     void ReadOutput(int numsamples);
     

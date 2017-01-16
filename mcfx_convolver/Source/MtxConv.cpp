@@ -832,39 +832,11 @@ void MtxConvSlave::Process(int filt_part_idx)
 	finished_part_.operator++();
 }
 
-// this is called from the master
-void MtxConvSlave::ReadOutput(int numsamples)
+void MtxConvSlave::WriteToOutbuf()
 {
-    
-    numnewinsamples_+=numsamples;
-    
-    // do processing if enough samples arrived
-    if (numnewinsamples_ >= partitionsize_)
-    {
-		TransformInput();
-
-		// always perform the head partition in callback!
-		Process(0);
-
-		// signal thread to do the other partitions
-		waitnewdata_.signal();
-        
-		// should we make sure the other partitions are finished before this??
-		TransformOutput();
-
-        numnewinsamples_ -= partitionsize_;
-    }
-    
-#ifdef DEBUG_COUT
-    std::cout << "ReadOutput, outnodeoffset_: " << outnodeoffset_ << " outoffset_: " << outoffset_ << std::endl;
-#endif
-    
-    
     if (outnodeoffset_ < partitionsize_) // new data is available
     {
         
-        
-        //int smplstowrite_end = partitionsize_; // write to the end
         int smplstowrite_end = numsamples; // write to the end
         int smplstowrite_start = 0; // write to the start
         
@@ -914,11 +886,50 @@ void MtxConvSlave::ReadOutput(int numsamples)
         outnodeoffset_ += numsamples;
         outoffset_ += numsamples;
     }
+}
+
+// this is called from the master
+void MtxConvSlave::ReadOutput(int numsamples)
+{
     
-    // reset is done in the processing methode
-    // if (outnodeoffset_ >= partitionsize_)
-    //    outnodeoffset_ = 0;
+    numnewinsamples_+=numsamples;
     
+    // do processing if enough samples arrived
+    if (numnewinsamples_ >= partitionsize_)
+    {
+		if (priority_ >= 0) // highest priority has to deliver immediateley
+		{
+			TransformInput();
+
+			// compute first partition directly
+			Process(0);
+
+			// signal thread to do the other partitions
+			waitnewdata_.signal();
+			
+			TransformOutput();
+
+			WriteToOutbuf();
+		}
+		TransformInput();
+
+		// always perform the head partition in callback!
+		Process(0);
+
+		// signal thread to do the other partitions
+		waitnewdata_.signal();
+        
+		// should we make sure the other partitions are finished before this??
+		TransformOutput();
+
+        numnewinsamples_ -= partitionsize_;
+    }
+    
+#ifdef DEBUG_COUT
+    std::cout << "ReadOutput, outnodeoffset_: " << outnodeoffset_ << " outoffset_: " << outoffset_ << std::endl;
+#endif
+    
+	// what to do with smaller buffers?
 }
 
 
