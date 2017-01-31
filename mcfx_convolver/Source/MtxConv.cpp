@@ -22,7 +22,8 @@
 
 MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
                                  outbuf_(1, 256),
-                                 bufsize_(512),
+                                 inbufsize_(512),
+							     outbufsize_(512),
                                  inoffset_(0),
                                  outoffset_(0),
                                  blocksize_(256),
@@ -71,9 +72,9 @@ void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSamp
         int smplstowrite_end = smplstowrite; // write to the end
         int smplstowrite_start = 0; // write to the start
         
-        if (inoffset_ + smplstowrite >= bufsize_)
+        if (inoffset_ + smplstowrite >= inbufsize_)
         {
-            smplstowrite_end = bufsize_ - inoffset_;
+            smplstowrite_end = inbufsize_ - inoffset_;
             smplstowrite_start = smplstowrite - smplstowrite_end;
         }
         
@@ -95,8 +96,8 @@ void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSamp
             inoffset_ = smplstowrite_start;
         }
         
-        if (inoffset_ >= bufsize_)
-            inoffset_ -= bufsize_;
+        if (inoffset_ >= inbufsize_)
+            inoffset_ -= inbufsize_;
         
         
         /////////////////////////
@@ -138,9 +139,9 @@ void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSamp
         int smplstoread_end = smplstoread;
         int smplstoread_start = 0;
         
-        if (outoffset_ + smplstoread >= bufsize_)
+        if (outoffset_ + smplstoread >= outbufsize_)
         {
-            smplstowrite_end = bufsize_ - outoffset_;
+            smplstowrite_end = outbufsize_ - outoffset_;
             smplstoread_start = smplstoread - smplstoread_end;
         }
         
@@ -166,8 +167,8 @@ void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSamp
             outoffset_ = smplstoread_start;
         }
         
-        if (outoffset_ >= bufsize_)
-            outoffset_ -= bufsize_;
+        if (outoffset_ >= outbufsize_)
+            outoffset_ -= outbufsize_;
         
     } // configured true
     else
@@ -259,10 +260,12 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
 #endif
     
     // resize the in/out buffers
-    bufsize_ = jmax(2*maxsize_, blocksize_);
+	inbufsize_ = 2 * maxpart_;
+
+    outbufsize_ = jmax(2*maxsize_, blocksize_);
     
-    inbuf_.setSize(numins_, bufsize_);
-    outbuf_.setSize(numouts_, bufsize_);
+    inbuf_.setSize(numins_, inbufsize_);
+    outbuf_.setSize(numouts_, outbufsize_);
     
     inbuf_.clear();
     outbuf_.clear();
@@ -271,12 +274,12 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
 	outoffset_ = blocksize_ - minpart_;
     
 	if (outoffset_ < 0)
-		outoffset_ += bufsize_;
+		outoffset_ += outbufsize_;
     
     // set the actual buffersize and compute correct offsets!
     for (int i=0; i < numpartitions_; i++) {
         MtxConvSlave *partition = partitions_.getUnchecked(i);
-        partition->SetBufsize(bufsize_, blocksize_);
+        partition->SetBufsize(inbufsize_, outbufsize_, blocksize_);
     }
     
     
@@ -349,7 +352,7 @@ void MtxConvMaster::DebugInfo()
 {
 	String dbg_text;
 
-	dbg_text << "Blocksize: " << blocksize_ << " MinPart: " << minpart_ << " MaxPart: " << maxpart_ << " Partitions: " << numpartitions_<< " Maxsize: " << maxsize_  << " Bufsize: " << bufsize_  << " InOffset: " << inoffset_ << " Outoffset: " << outoffset_ << "\n";
+	dbg_text << "Blocksize: " << blocksize_ << " MinPart: " << minpart_ << " MaxPart: " << maxpart_ << " Partitions: " << numpartitions_<< " Maxsize: " << maxsize_  << " InputBufsize: " << inbufsize_ << " OutputBufsize: " << outbufsize_ << " InOffset: " << inoffset_ << " Outoffset: " << outoffset_ << "\n";
     std::cout << dbg_text << std::endl;
 	WriteLog(dbg_text);
 	
@@ -444,17 +447,17 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
     return true;
 }
 
-void MtxConvSlave::SetBufsize(int bufsize, int blocksize)
+void MtxConvSlave::SetBufsize(int inbufsize, int outbufsize, int blocksize)
 {
-    bufsize_ = bufsize;
+    inbufsize_ = inbufsize;
+	outbufsize_ = outbufsize;
 
 #ifdef DEBUG_COUT
     std::cout << "Slave::SETBUFSIZE: " << bufsize_ << "offset_: " << offset_ << std::endl;
 #endif
     
-    inoffset_ = bufsize_ - partitionsize_ + 1; // offset due to overlap/save
+    inoffset_ = inbufsize_ - partitionsize_ + 1; // offset due to overlap/save
     
-    //outoffset_ = offset_ - partitionsize_ + blocksize; // is this correct?
 	outoffset_ = offset_;
 
 }
@@ -705,9 +708,9 @@ void MtxConvSlave::TransformInput()
     int smplstoread_end = 2*partitionsize_; // read from the end
     int smplstoread_start = 0; // read from the start
     
-    if (inoffset_+smplstoread_end >= bufsize_)
+    if (inoffset_+smplstoread_end >= inbufsize_)
     {
-        smplstoread_end = bufsize_ - inoffset_;
+        smplstoread_end = inbufsize_ - inoffset_;
         smplstoread_start = 2*partitionsize_ - smplstoread_end;
     }
     
@@ -750,8 +753,8 @@ void MtxConvSlave::TransformInput()
     
     inoffset_ += partitionsize_;
 
-    if (inoffset_ >= bufsize_)
-        inoffset_ = inoffset_ - bufsize_;
+    if (inoffset_ >= inbufsize_)
+        inoffset_ = inoffset_ - inbufsize_;
 }
 
 // this should be done in callback thread as well
@@ -801,9 +804,9 @@ void MtxConvSlave::WriteToOutbuf(int numsamples)
 	int smplstowrite_end = numsamples; // write to the end
 	int smplstowrite_start = 0; // write to the start
 
-	if (smplstowrite_end + outoffset_ >= bufsize_)
+	if (smplstowrite_end + outoffset_ >= outbufsize_)
 	{
-		smplstowrite_end = bufsize_ - outoffset_;
+		smplstowrite_end = outbufsize_ - outoffset_;
 		// smplstowrite_start = partitionsize_ - smplstowrite_end;
 		smplstowrite_start = numsamples - smplstowrite_end;
 	}
@@ -836,8 +839,8 @@ void MtxConvSlave::WriteToOutbuf(int numsamples)
 	else
 		outoffset_ += smplstowrite_end;
 
-	if (outoffset_ >= bufsize_)
-		outoffset_ -= bufsize_;
+	if (outoffset_ >= outbufsize_)
+		outoffset_ -= outbufsize_;
 
 	outnodeoffset_ += numsamples;
 }

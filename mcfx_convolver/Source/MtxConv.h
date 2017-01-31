@@ -260,7 +260,7 @@ private:
                      AudioSampleBuffer *inbuf,
                      AudioSampleBuffer *outbuf );
     
-    void SetBufsize ( int bufsize, int blocksize );
+    void SetBufsize ( int inbufsize, int outbufsize, int blocksize );
     
     bool AddFilter ( int in,
                      int out,
@@ -284,7 +284,10 @@ private:
 	
     AudioSampleBuffer   *inbuf_;            // Shared Input Buffer
     AudioSampleBuffer   *outbuf_;           // Shared Output Buffer
-    int                 bufsize_;           // size of the input/output buffer
+	
+	int					inbufsize_;			// size of time domain input buffer (2*maxpart_)
+	int                 outbufsize_;        // size of time domain output buffer (2*maxsize_)
+
     int                 inoffset_;          // current input ring buffer offset
     int                 outoffset_;         // current output ring buffer offset (of shared output buf)
     
@@ -388,7 +391,8 @@ private:
     AudioSampleBuffer   inbuf_;             // Holds the Time Domain Input Samples
     AudioSampleBuffer   outbuf_;            // Hold the Time Domain Output Samples
     
-    int                 bufsize_;           // size of input/output buffer (2*maxsize)
+	int					inbufsize_;			// size of time domain input buffer (2*maxpart_)
+    int                 outbufsize_;        // size of time domain output buffer (2*maxsize_)
     
     int                 inoffset_;          // current ring buffer write offset
     int                 outoffset_;         // current ring buffer read offset
