@@ -409,7 +409,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     conv_data.addIR(in_ch-1, out_ch-1, 0, delay, 0, &TempAudioBuffer, 0, src_samplerate);
                     
                     String debug;
-                    debug << "conv # " << conv_data.getNumIRs() << " " << IrFilename.getFullPathName() << " loaded";
+                    debug << "conv # " << conv_data.getNumIRs() << " " << IrFilename.getFullPathName() << " (" << TempAudioBuffer.getNumSamples() << " smpls) loaded";
                     DebugPrint(debug << "\n");
                     
                 } else {
@@ -582,7 +582,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 #else
     _MaxPartSize = jmin(MAX_PART_SIZE, nextPowerOfTwo(_MaxPartSize));
   
-    mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _ConvBufferSize, conv_data.getMaxLength(), _MaxPartSize);
+    mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _BufferSize, conv_data.getMaxLength(), _ConvBufferSize, _MaxPartSize);
     
     for (int i=0; i < conv_data.getNumIRs(); i++)
     {

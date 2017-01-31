@@ -223,12 +223,9 @@ private:
 class MtxConvSlave : public Thread
 {
 public:
-    MtxConvSlave () : Thread("mtx_convolver_slave")
-    {
-        
-    };
+    MtxConvSlave ();
     
-    ~MtxConvSlave () {};
+    ~MtxConvSlave ();
     
 private:
     friend class MtxConvMaster;
@@ -247,7 +244,7 @@ private:
     void TransformOutput();
 
     // Write the time data to the master output buffer
-    void WriteToOutbuf();
+    void WriteToOutbuf(int numsamples);
 
     // this is called to get the time domain output signal
     void ReadOutput(int numsamples);
@@ -281,6 +278,10 @@ private:
     // print debug info
     void DebugInfo();
     
+	// write to debug file
+	void WriteLog(String &text);
+	
+	
     AudioSampleBuffer   *inbuf_;            // Shared Input Buffer
     AudioSampleBuffer   *outbuf_;           // Shared Output Buffer
     int                 bufsize_;           // size of the input/output buffer
@@ -325,6 +326,7 @@ private:
     OwnedArray<FilterNode> filternodes_;    // holds filter nodes
     OwnedArray<OutNode> outnodes_;          // holds output nodes
     
+	ScopedPointer<FileOutputStream>	debug_out_; // Debug output Text File
 };
 
 
@@ -350,6 +352,7 @@ public:
                      int numouts,
                      int blocksize,
                      int maxsize,
+					 int minpart,
                      int maxpart);
     
     // Add an Impulse Response with dedicated Input/Output assignement
@@ -377,6 +380,9 @@ public:
     // print debug info
     void DebugInfo();
     
+	// write to debug file
+	void WriteLog(String &text);
+	
 private:
     
     AudioSampleBuffer   inbuf_;             // Holds the Time Domain Input Samples
@@ -387,8 +393,11 @@ private:
     int                 inoffset_;          // current ring buffer write offset
     int                 outoffset_;         // current ring buffer read offset
     
-    int                 blocksize_;         // Blocksize of first segment
+    int                 blocksize_;         // Blocksize of host process (how many samples are processed in each callback)
     
+	int					minpart_;			// Size of first partition
+	int					maxpart_;			// Maximum partition size
+	
     int                 numins_;            // Number of Input Channels
     int                 numouts_;           // Number of Output Channels
     
@@ -404,6 +413,7 @@ private:
     
     OwnedArray<MtxConvSlave>    partitions_;// these are my partitions with different size
     
+	ScopedPointer<FileOutputStream>	debug_out_; // Debug output Text File
 };
 
 

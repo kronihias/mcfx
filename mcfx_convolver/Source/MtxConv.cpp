@@ -30,13 +30,24 @@ MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
                                  numouts_(0),
                                  numpartitions_(0),
                                  isprocessing_(false),
-                                 configuration_(false)
+                                 configuration_(false),
+								 debug_out_(nullptr)
 {
-    
+	File file;
+	// file = file.createTempFile(".txt");
+	String filename("MtxConvMaster.txt");
+	file = file.getSpecialLocation(File::SpecialLocationType::tempDirectory).getChildFile(filename);
+	debug_out_ = new FileOutputStream(file);
 }
 
 MtxConvMaster::~MtxConvMaster()
 {
+}
+
+void MtxConvMaster::WriteLog(String &text)
+{
+	if (debug_out_->openedOk())
+		debug_out_->writeText(text, false, false);
 }
 
 void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSampleBuffer &outbuf)
@@ -166,22 +177,26 @@ void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSamp
     
 }
 
-bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsize, int maxpart)
+bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsize, int minpart, int maxpart)
 {
     if (!numins || !numouts || !blocksize || configuration_)
         return false;
     
+	if (minpart < blocksize)
+		minpart = blocksize;
+
     if (maxpart < blocksize)
-        maxsize = blocksize;
+        maxpart = blocksize;
     
+	minpart_ = minpart;
+	maxpart_ = maxpart;
+
+
     numins_ = numins;
     numouts_ = numouts;
     
     
     blocksize_ = nextPowerOfTwo(blocksize);
-    
-    // std::cout << "Blocksize: " << blocksize << " new Block: " << blocksize_ << " maxsize: " << maxsize << std::endl;
-    
     
     maxsize_ = 0;
     
@@ -252,8 +267,11 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
     inbuf_.clear();
     outbuf_.clear();
     
+	// set the outoffset which will be != 0 if minpart_ > blocksize is used
+	outoffset_ = blocksize_ - minpart_;
     
-    
+	if (outoffset_ < 0)
+		outoffset_ += bufsize_;
     
     // set the actual buffersize and compute correct offsets!
     for (int i=0; i < numpartitions_; i++) {
@@ -329,8 +347,12 @@ bool MtxConvMaster::AddFilter(int in, int out, const juce::AudioSampleBuffer &da
 
 void MtxConvMaster::DebugInfo()
 {
-    std::cout << "Blocksize: " << blocksize_ << " Partitions: " << numpartitions_<< " Maxsize: " << maxsize_  << " Bufsize: " << bufsize_ << std::endl;
-    
+	String dbg_text;
+
+	dbg_text << "Blocksize: " << blocksize_ << " MinPart: " << minpart_ << " MaxPart: " << maxpart_ << " Partitions: " << numpartitions_<< " Maxsize: " << maxsize_  << " Bufsize: " << bufsize_  << " InOffset: " << inoffset_ << " Outoffset: " << outoffset_ << "\n";
+    std::cout << dbg_text << std::endl;
+	WriteLog(dbg_text);
+	
     for (int i=0; i < partitions_.size(); i++) {
         partitions_.getUnchecked(i)->DebugInfo();
     }
@@ -339,6 +361,19 @@ void MtxConvMaster::DebugInfo()
 //////////////////////////////////////
 // SLAVE METHODS
 //////////////////////////////////////
+MtxConvSlave::MtxConvSlave() : Thread("mtx_convolver_slave")
+{
+}
+
+MtxConvSlave::~MtxConvSlave()
+{}
+
+void MtxConvSlave::WriteLog(String &text)
+{
+	if (debug_out_->openedOk())
+		debug_out_->writeText(text, false, false);
+}
+
 bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, int priority, AudioSampleBuffer *inbuf, AudioSampleBuffer *outbuf)
 {
     partitionsize_ = partitionsize;
@@ -394,6 +429,18 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
     waitnewdata_.reset();
     waitprocessing_.reset();
     
+	// open debug txt
+	if (debug_out_ == nullptr)
+	{
+		File file;
+		// file = file.createTempFile(".txt");
+		String filename("MtxConvSlave");
+		filename << priority;
+		filename << ".txt";
+		file = file.getSpecialLocation(File::SpecialLocationType::tempDirectory).getChildFile(filename);
+		debug_out_ = new FileOutputStream(file);
+	}
+
     return true;
 }
 
@@ -407,7 +454,9 @@ void MtxConvSlave::SetBufsize(int bufsize, int blocksize)
     
     inoffset_ = bufsize_ - partitionsize_ + 1; // offset due to overlap/save
     
-    outoffset_ = offset_ - partitionsize_ + blocksize;
+    //outoffset_ = offset_ - partitionsize_ + blocksize; // is this correct?
+	outoffset_ = offset_;
+
 }
 
 
@@ -585,25 +634,53 @@ bool MtxConvSlave::AddFilter(int in, int out, const juce::AudioSampleBuffer &dat
     
 }
 
-// thread function - process all partitions > 1
+// thread function - do the background tasks
 void MtxConvSlave::run()
 {
-    while (true)
-    {
-        waitnewdata_.wait();
-        
-        waitnewdata_.reset();
-        
-        if ( threadShouldExit() )
-            return;
-        
-		for (int i = 1; i < numpartitions_; i++)
+	// thread function for highest priority
+	// does only process the later partitions - first partition has to be computed immediateley
+	if (priority_ == 0) 
+	{
+		while (true)
 		{
-			Process(i);
+			waitnewdata_.wait();
+			waitnewdata_.reset();
+			
+			if ( threadShouldExit() )
+				return;
+			
+			for (int i = 1; i < numpartitions_; i++)
+			{
+				Process(i);
+			}
 		}
-        
-        // waitprocessing_.signal();
-    }
+	}
+	else // lower priority - do forward/backward transform in the thread!
+	{
+		while(true)
+		{
+			waitnewdata_.wait();
+			waitnewdata_.reset();
+			
+			if ( threadShouldExit() )
+				return;
+			
+			TransformInput();
+			
+			Process(0);
+
+			TransformOutput();
+			WriteToOutbuf(partitionsize_);
+
+			for (int i = 1; i < numpartitions_; i++)
+			{
+				Process(i);
+			}
+			
+		}
+		
+	}
+    
 }
 
 // this should be done in the callback
@@ -614,6 +691,10 @@ void MtxConvSlave::TransformInput()
 	if (part_idx_ >= numpartitions_)
 		part_idx_ = 0;
 
+	if (finished_part_.get() < numpartitions_)
+		WriteLog(String("Did not finish all partitions\n"));
+	else
+		WriteLog(String("Finished all partitions\n"));
 	// reset the finished counter
 	finished_part_.set(0);
 
@@ -714,6 +795,53 @@ void MtxConvSlave::TransformOutput()
 	// signal that we are done with this partition
 	// waitprocessing_.signal();
 }
+
+void MtxConvSlave::WriteToOutbuf(int numsamples)
+{
+	int smplstowrite_end = numsamples; // write to the end
+	int smplstowrite_start = 0; // write to the start
+
+	if (smplstowrite_end + outoffset_ >= bufsize_)
+	{
+		smplstowrite_end = bufsize_ - outoffset_;
+		// smplstowrite_start = partitionsize_ - smplstowrite_end;
+		smplstowrite_start = numsamples - smplstowrite_end;
+	}
+
+	// std::cout << "outoffset: " << outoffset_ << " end: " << smplstowrite_end << " start: " << smplstowrite_start << " pingpong: " << (int)pingpong_ << std::endl;
+
+
+	int numouts = outnodes_.size();
+
+	// std::cout << "numoutnodes: " << numouts << std::endl;
+
+	for (int i = 0; i < numouts; i++) {
+
+		OutNode *outnode = outnodes_.getUnchecked(i);
+
+		if (smplstowrite_end)
+			outbuf_->addFrom(outnode->out_, outoffset_, outnode->outbuf_, (int)pingpong_, outnodeoffset_, smplstowrite_end);
+
+		if (smplstowrite_start)
+			outbuf_->addFrom(outnode->out_, 0, outnode->outbuf_, (int)pingpong_, outnodeoffset_ + smplstowrite_end, smplstowrite_start);
+
+
+	}
+
+	// std::cout << "outbuf ch1 rms: " << outbuf_->getRMSLevel(0, 0, bufsize_) << "outbuf ch2 rms: " << outbuf_->getRMSLevel(1, 0, bufsize_) << std::endl;
+
+
+	if (smplstowrite_start)
+		outoffset_ = smplstowrite_start;
+	else
+		outoffset_ += smplstowrite_end;
+
+	if (outoffset_ >= bufsize_)
+		outoffset_ -= bufsize_;
+
+	outnodeoffset_ += numsamples;
+}
+
 
 void MtxConvSlave::Process(int filt_part_idx)
 {
@@ -832,61 +960,6 @@ void MtxConvSlave::Process(int filt_part_idx)
 	finished_part_.operator++();
 }
 
-void MtxConvSlave::WriteToOutbuf()
-{
-    if (outnodeoffset_ < partitionsize_) // new data is available
-    {
-        
-        int smplstowrite_end = numsamples; // write to the end
-        int smplstowrite_start = 0; // write to the start
-        
-        if (smplstowrite_end + outoffset_ >= bufsize_)
-        {
-            smplstowrite_end = bufsize_ - outoffset_;
-            // smplstowrite_start = partitionsize_ - smplstowrite_end;
-            smplstowrite_start = numsamples - smplstowrite_end;
-        }
-        
-        // std::cout << "outoffset: " << outoffset_ << " end: " << smplstowrite_end << " start: " << smplstowrite_start << " pingpong: " << (int)pingpong_ << std::endl;
-        
-        
-        int numouts = outnodes_.size();
-        
-        // std::cout << "numoutnodes: " << numouts << std::endl;
-        
-        for (int i=0; i < numouts; i++) {
-            
-            OutNode *outnode = outnodes_.getUnchecked(i);
-            
-            if (smplstowrite_end)
-                outbuf_->addFrom(outnode->out_, outoffset_, outnode->outbuf_, (int)pingpong_, outnodeoffset_, smplstowrite_end);
-            
-            if (smplstowrite_start)
-                outbuf_->addFrom(outnode->out_, 0, outnode->outbuf_, (int)pingpong_, outnodeoffset_+smplstowrite_end, smplstowrite_start);
-            
-            
-        }
-        
-        // std::cout << "outbuf ch1 rms: " << outbuf_->getRMSLevel(0, 0, bufsize_) << "outbuf ch2 rms: " << outbuf_->getRMSLevel(1, 0, bufsize_) << std::endl;
-        
-        
-        if (smplstowrite_start)
-            outoffset_ = smplstowrite_start;
-        else
-            outoffset_ += smplstowrite_end;
-        
-        if (outoffset_ >= bufsize_)
-            outoffset_ -= bufsize_;
-        
-        outnodeoffset_ += numsamples;
-    }
-    else // no new data -> add nothing but continue counting..
-    {
-        // this happens if a smaller buffer is sent -> eg. when looping in reaper -> prevents crash or clicks
-        outnodeoffset_ += numsamples;
-        outoffset_ += numsamples;
-    }
-}
 
 // this is called from the master
 void MtxConvSlave::ReadOutput(int numsamples)
@@ -897,7 +970,7 @@ void MtxConvSlave::ReadOutput(int numsamples)
     // do processing if enough samples arrived
     if (numnewinsamples_ >= partitionsize_)
     {
-		if (priority_ >= 0) // highest priority has to deliver immediateley
+		if (priority_ == 0) // highest priority has to deliver immediateley
 		{
 			TransformInput();
 
@@ -909,18 +982,14 @@ void MtxConvSlave::ReadOutput(int numsamples)
 			
 			TransformOutput();
 
-			WriteToOutbuf();
+			WriteToOutbuf(partitionsize_);
 		}
-		TransformInput();
-
-		// always perform the head partition in callback!
-		Process(0);
-
-		// signal thread to do the other partitions
-		waitnewdata_.signal();
-        
-		// should we make sure the other partitions are finished before this??
-		TransformOutput();
+		else // lower priority has some time for computations...
+		{
+			// signal thread to do the work...
+			waitnewdata_.signal();
+		}
+		
 
         numnewinsamples_ -= partitionsize_;
     }
@@ -975,7 +1044,12 @@ int MtxConvSlave::CheckOutNode(int out, bool create)
 
 void MtxConvSlave::DebugInfo()
 {
-    std::cout << "Partitionsize: " << partitionsize_ << " Subpartitions: " << numpartitions_ << " Offset: " << offset_ << " Inoffset: " << inoffset_ << " Priority: " << priority_ << std::endl;
+	String dbg_text;
+	dbg_text << "Priority: " << priority_ << " Partitionsize: " << partitionsize_ << " Subpartitions: " << numpartitions_ << " Offset: " << offset_ << " Inoffset: " << inoffset_ << " Outoffset: " << outoffset_ << "\n";
+    
+	WriteLog(dbg_text);
+	
+	std::cout << dbg_text << std::endl;
 }
 
 /////////////////////////////////
