@@ -695,9 +695,16 @@ void MtxConvSlave::TransformInput()
 		part_idx_ = 0;
 
 	if (finished_part_.get() < numpartitions_)
-		WriteLog(String("Did not finish all partitions\n"));
+  {
+    String txt = "Did not finish all partitions\n";
+    WriteLog(txt);
+  }
 	else
-		WriteLog(String("Finished all partitions\n"));
+  {
+    String txt = "Finished all partitions\n";
+    WriteLog(txt);
+  }
+  
 	// reset the finished counter
 	finished_part_.set(0);
 
