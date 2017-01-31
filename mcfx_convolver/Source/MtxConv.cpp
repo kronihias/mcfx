@@ -34,11 +34,12 @@ MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
                                  configuration_(false),
 								 debug_out_(nullptr)
 {
+#ifdef DEBUG_COUT
 	File file;
-	// file = file.createTempFile(".txt");
 	String filename("MtxConvMaster.txt");
 	file = file.getSpecialLocation(File::SpecialLocationType::tempDirectory).getChildFile(filename);
 	debug_out_ = new FileOutputStream(file);
+#endif
 }
 
 MtxConvMaster::~MtxConvMaster()
@@ -354,7 +355,9 @@ void MtxConvMaster::DebugInfo()
 
 	dbg_text << "Blocksize: " << blocksize_ << " MinPart: " << minpart_ << " MaxPart: " << maxpart_ << " Partitions: " << numpartitions_<< " Maxsize: " << maxsize_  << " InputBufsize: " << inbufsize_ << " OutputBufsize: " << outbufsize_ << " InOffset: " << inoffset_ << " Outoffset: " << outoffset_ << "\n";
     std::cout << dbg_text << std::endl;
+#ifdef DEBUG_COUT
 	WriteLog(dbg_text);
+#endif
 	
     for (int i=0; i < partitions_.size(); i++) {
         partitions_.getUnchecked(i)->DebugInfo();
@@ -432,7 +435,9 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
     waitnewdata_.reset();
     waitprocessing_.reset();
     
+#ifdef DEBUG_COUT
 	// open debug txt
+	
 	if (debug_out_ == nullptr)
 	{
 		File file;
@@ -443,6 +448,7 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
 		file = file.getSpecialLocation(File::SpecialLocationType::tempDirectory).getChildFile(filename);
 		debug_out_ = new FileOutputStream(file);
 	}
+#endif
 
     return true;
 }
@@ -694,6 +700,7 @@ void MtxConvSlave::TransformInput()
 	if (part_idx_ >= numpartitions_)
 		part_idx_ = 0;
 
+#ifdef DEBUG_COUT
 	if (finished_part_.get() < numpartitions_)
   {
     String txt = "Did not finish all partitions\n";
@@ -704,7 +711,8 @@ void MtxConvSlave::TransformInput()
     String txt = "Finished all partitions\n";
     WriteLog(txt);
   }
-  
+#endif
+
 	// reset the finished counter
 	finished_part_.set(0);
 
@@ -1056,8 +1064,10 @@ void MtxConvSlave::DebugInfo()
 {
 	String dbg_text;
 	dbg_text << "Priority: " << priority_ << " Partitionsize: " << partitionsize_ << " Subpartitions: " << numpartitions_ << " Offset: " << offset_ << " Inoffset: " << inoffset_ << " Outoffset: " << outoffset_ << "\n";
-    
+
+#ifdef DEBUG_COUT
 	WriteLog(dbg_text);
+#endif
 	
 	std::cout << dbg_text << std::endl;
 }
