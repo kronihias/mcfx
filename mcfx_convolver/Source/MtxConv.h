@@ -135,7 +135,7 @@ public:
         numpartitions_ = numpartitions;
 
         out_ = out;
-        outbuf_.setSize(2, partitionsize);
+        outbuf_.setSize(1, partitionsize);
         outbuf_.clear();
         
         // allocate complex output for each partition stage
@@ -202,7 +202,7 @@ private:
     
     Array<FilterNode*>  filternodes_; // a list of all assigned filternodes
     
-    AudioSampleBuffer   outbuf_; // output samples, 2 channels for access
+    AudioSampleBuffer   outbuf_; // output samples, 1 channels (no concur. access problem)
     
     int                 numpartitions_;
     
@@ -293,9 +293,7 @@ private:
     
     int                 numnewinsamples_;   // number of new samples in the input buffer since last process
     int                 outnodeoffset_;     // offset in the outnode buffer
-    
-    bool                pingpong_;         // ping pong for output buffer to allow readout without threading problems
-    
+
     int                 part_idx_;          // partition index for Frequency Domain Delay Line
 
     Atomic<int>         finished_part_;     // counter how many partitions are done

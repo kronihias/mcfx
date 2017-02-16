@@ -393,8 +393,6 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
     numnewinsamples_ = 0;
     outnodeoffset_ = 0;
     
-    pingpong_ = 0;
-    
     part_idx_ = 0;
     
 #if SPLIT_COMPLEX
@@ -775,8 +773,6 @@ void MtxConvSlave::TransformInput()
 // this should be done in callback thread as well
 void MtxConvSlave::TransformOutput()
 {
-	bool pingpong = !pingpong_;
-
     int numouts = outnodes_.size();
     
     for (int i=0; i < numouts; i++)
@@ -795,7 +791,7 @@ void MtxConvSlave::TransformOutput()
         fftwf_execute_dft_c2r (fftwf_plan_c2r_, outnode->c_c_[part_idx_], fft_t_);
 #endif
         
-        outnode->outbuf_.copyFrom(pingpong, 0, fft_t_+partitionsize_-1, partitionsize_);
+        outnode->outbuf_.copyFrom(0, 0, fft_t_+partitionsize_-1, partitionsize_);
         
 // clear freq accumulation buffers
 #if SPLIT_COMPLEX
@@ -805,8 +801,6 @@ void MtxConvSlave::TransformOutput()
         FloatVectorOperations::clear((float*)outnode->c_c_[part_idx_], 2*(partitionsize_+1));
 #endif
     } // end iterate over all outputs
-
-	pingpong_ = pingpong;
     
     outnodeoffset_ = 0;
 
@@ -826,7 +820,7 @@ void MtxConvSlave::WriteToOutbuf(int numsamples)
 		smplstowrite_start = numsamples - smplstowrite_end;
 	}
 
-	// std::cout << "outoffset: " << outoffset_ << " end: " << smplstowrite_end << " start: " << smplstowrite_start << " pingpong: " << (int)pingpong_ << std::endl;
+	// std::cout << "outoffset: " << outoffset_ << " end: " << smplstowrite_end << " start: " << smplstowrite_start << std::endl;
 
 
 	int numouts = outnodes_.size();
@@ -838,10 +832,10 @@ void MtxConvSlave::WriteToOutbuf(int numsamples)
 		OutNode *outnode = outnodes_.getUnchecked(i);
 
 		if (smplstowrite_end)
-			outbuf_->addFrom(outnode->out_, outoffset_, outnode->outbuf_, (int)pingpong_, outnodeoffset_, smplstowrite_end);
+			outbuf_->addFrom(outnode->out_, outoffset_, outnode->outbuf_, 0, outnodeoffset_, smplstowrite_end);
 
 		if (smplstowrite_start)
-			outbuf_->addFrom(outnode->out_, 0, outnode->outbuf_, (int)pingpong_, outnodeoffset_ + smplstowrite_end, smplstowrite_start);
+			outbuf_->addFrom(outnode->out_, 0, outnode->outbuf_, 0, outnodeoffset_ + smplstowrite_end, smplstowrite_start);
 
 
 	}
