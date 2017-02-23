@@ -110,7 +110,12 @@ public:
     unsigned int getMaxPartitionSize();
     void setConvBufferSize(unsigned int bufsize);
     void setMaxPartitionSize(unsigned int maxsize);
-  
+    
+    int getSkippedCyclesCount()
+    {
+        return _skippedCycles.get();
+    }
+
     File presetDir; // where to search for presets
     File lastDir; // for open file dialog...
     
@@ -147,6 +152,8 @@ private:
     
     bool _configLoaded; // is a configuration successfully loaded?
     
+    Atomic<int> _skippedCycles; // the number of skipped cycles do to unfinished partitions
+
     bool loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain=1.f, int offset=0, int length=0);
     
 #ifdef USE_ZITA_CONVOLVER

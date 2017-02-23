@@ -40,7 +40,8 @@ _num_conv(0),
 _MaxPartSize(MAX_PART_SIZE),
 _ConvBufferPos(0),
 _isProcessing(false),
-_configLoaded(false)
+_configLoaded(false),
+_skippedCycles(0)
 
 {
     _SampleRate = getSampleRate();
@@ -194,7 +195,7 @@ void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samples
     
     if (_configLoaded)
     {
-        mtxconv_.Reset();
+        // mtxconv_.Reset();
     }
     
 }
@@ -239,8 +240,8 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
         }
         
 #else
-        mtxconv_.processBlock(buffer, buffer);
-        
+        mtxconv_.processBlock(buffer, buffer, isNonRealtime());
+        _skippedCycles.set(mtxconv_.getSkipCount());
 #endif
         
         _isProcessing = false;
@@ -600,6 +601,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     
     setLatencySamples(_ConvBufferSize-_BufferSize);
     
+    _skippedCycles.set(0);
     
     _min_in_ch = conv_data.getNumInputChannels();
     _min_out_ch = conv_data.getNumOutputChannels();

@@ -30,7 +30,8 @@
 class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public ButtonListener,
                                             public ChangeListener,
-                                            public ComboBoxListener
+                                            public ComboBoxListener,
+                                            public Timer
 {
 public:
     Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter);
@@ -53,6 +54,8 @@ public:
     
     void UpdateText();
     
+    void timerCallback();
+
 private:
     Mcfx_convolverAudioProcessor* getProcessor() const
     {
@@ -70,6 +73,7 @@ private:
     ScopedPointer<Label> label2;
     ScopedPointer<Label> label3;
     ScopedPointer<Label> label4;
+    ScopedPointer<Label> lbl_skippedcycles;
     ScopedPointer<Label> num_ch;
     ScopedPointer<Label> num_spk;
     ScopedPointer<Label> num_hrtf;

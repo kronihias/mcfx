@@ -32,6 +32,7 @@ btn_open (nullptr),
 label2 (nullptr),
 label3 (nullptr),
 label4 (nullptr),
+lbl_skippedcycles (nullptr),
 num_ch (nullptr),
 num_spk (nullptr),
 num_hrtf (nullptr),
@@ -109,6 +110,15 @@ box_maxpart(nullptr)
     label4->setColour (TextEditor::textColourId, Colours::black);
     label4->setColour (TextEditor::backgroundColourId, Colour (0x0));
     
+    addAndMakeVisible(lbl_skippedcycles = new Label("new label",
+        "skipped cycles: "));
+    lbl_skippedcycles->setFont(Font(10.0000f, Font::plain));
+    lbl_skippedcycles->setJustificationType(Justification::centredLeft);
+    lbl_skippedcycles->setEditable(false, false, false);
+    lbl_skippedcycles->setColour(Label::textColourId, Colours::yellow);
+    lbl_skippedcycles->setColour(TextEditor::textColourId, Colours::black);
+    lbl_skippedcycles->setColour(TextEditor::backgroundColourId, Colour(0x0));
+
     addAndMakeVisible (num_ch = new Label ("new label",
                                            "0"));
     num_ch->setFont (Font (15.0000f, Font::plain));
@@ -166,6 +176,10 @@ box_maxpart(nullptr)
     txt_preset->setTooltip(txt_preset->getText());
     
     ownerFilter->addChangeListener(this); // listen to changes of processor
+
+    timerCallback();
+
+    startTimer(1000);
 }
 
 Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
@@ -182,6 +196,7 @@ Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
     label2 = nullptr;
     label3 = nullptr;
     label4 = nullptr;
+    lbl_skippedcycles = nullptr;
     num_ch = nullptr;
     num_spk = nullptr;
     num_hrtf = nullptr;
@@ -250,6 +265,7 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     label2->setBounds (16, 128, 140, 24);
     label3->setBounds (16, 152, 140, 24);
     label4->setBounds (24, 280, 64, 16);
+    lbl_skippedcycles->setBounds(110, 280, 150, 16);
     num_ch->setBounds (150, 104, 40, 24);
     num_spk->setBounds (150, 128, 40, 24);
     num_hrtf->setBounds (150, 152, 40, 24);
@@ -259,6 +275,14 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     box_maxpart->setBounds (270, 157, 65, 20);
 }
 
+void Mcfx_convolverAudioProcessorEditor::timerCallback()
+{
+    Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
+    String text("skipped cycles: ");
+    text << ourProcessor->getSkippedCyclesCount();
+
+    lbl_skippedcycles->setText(text, dontSendNotification);
+}
 
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
 {
@@ -271,9 +295,10 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 
     num_hrtf->setText(String(ourProcessor->_num_conv), dontSendNotification);
 
-    
+    // ONLY A TEST!
     txt_debug->setText(ourProcessor->_DebugText, true);
-    
+    // txt_debug->setText(String(ourProcessor->getSkippedCyclesCount()), true);
+
     txt_preset->setText(ourProcessor->box_preset_str);
     txt_preset->setCaretPosition(txt_preset->getTotalNumChars()-1);
     txt_preset->setTooltip(txt_preset->getText());
