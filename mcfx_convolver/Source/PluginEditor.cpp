@@ -282,6 +282,8 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
     text << ourProcessor->getSkippedCyclesCount();
 
     lbl_skippedcycles->setText(text, dontSendNotification);
+
+    txt_debug->setText(ourProcessor->_DebugText, true);
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
@@ -296,7 +298,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     num_hrtf->setText(String(ourProcessor->_num_conv), dontSendNotification);
 
     // ONLY A TEST!
-    txt_debug->setText(ourProcessor->_DebugText, true);
+    // txt_debug->setText(ourProcessor->_DebugText, true);
     // txt_debug->setText(String(ourProcessor->getSkippedCyclesCount()), true);
 
     txt_preset->setText(ourProcessor->box_preset_str);
@@ -415,7 +417,7 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
             
             File mooseFile (myChooser.getResult());
             //ourProcessor->ScheduleConfiguration(mooseFile);
-            ourProcessor->LoadConfiguration(mooseFile);
+            ourProcessor->LoadConfigurationAsync(mooseFile);
             
             ourProcessor->lastDir = mooseFile.getParentDirectory();
         }
