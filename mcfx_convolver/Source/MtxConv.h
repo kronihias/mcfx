@@ -299,6 +299,7 @@ private:
     int                 part_idx_;          // partition index for Frequency Domain Delay Line
 
     Atomic<int>         finished_part_;     // counter how many partitions are done
+    Atomic<int>         skip_cycles_;       // counter of how many cycles should be skipped on next processing cycle...
 
     int                 numpartitions_;     // number of partitions within this level (-> with same size)
     int                 partitionsize_;     // size of the partition (fft will be 2x this size!)

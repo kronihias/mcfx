@@ -247,7 +247,7 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
 #endif
     
     // resize the in/out buffers
-	inbufsize_ = 2 * maxpart_;
+	inbufsize_ = 4 * maxpart_;
 
     outbufsize_ = jmax(2*maxsize_, blocksize_);
     
@@ -439,6 +439,7 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
 #endif
 
     finished_part_.set(numpartitions_);
+    skip_cycles_.set(0);
 
     return true;
 }
@@ -542,6 +543,7 @@ void MtxConvSlave::Reset()
     }
     
     finished_part_.set(numpartitions_);
+    skip_cycles_.set(0);
 }
 
 bool MtxConvSlave::AddFilter(int in, int out, const juce::AudioSampleBuffer &data)
@@ -664,6 +666,17 @@ void MtxConvSlave::run()
 			if ( threadShouldExit() )
 				return;
 			
+            // first check wheter we have to skip a cycle
+            while (skip_cycles_.get() > 0)
+            {
+                TransformInput(true);
+                TransformOutput(true);
+
+                WriteToOutbuf(partitionsize_, true);
+
+                skip_cycles_.operator--();
+            }
+
 			TransformInput(false);
 			
 			Process(0);
@@ -984,17 +997,14 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
     if (numnewinsamples_ >= partitionsize_)
     {
         if (forcesync)
-            waitprocessing_.wait(5000); // maximum wait for 5 seconds if force sync...
+            waitprocessing_.wait(1000); // maximum wait for 1 seconds if force sync... this is a long time anyway...
         //else
         //    waitprocessing_.wait(1); // should we try to wait in realtime mode as well?
 
         if (finished_part_.get() < numpartitions_)
         {
             // did not finish all partitions... skip this cycle...
-            TransformInput(true);
-            TransformOutput(true);
-
-            WriteToOutbuf(partitionsize_, true);
+            skip_cycles_.operator++(); // signal the next cycle to skip a cycle... (ensure threadsafety...)
 
             skip = true;
         }
@@ -1002,6 +1012,18 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
         {
             if (priority_ == 0) // highest priority has to deliver immediateley
             {
+
+                // first check wheter we have to skip a cycle
+                while (skip_cycles_.get() > 0)
+                {
+                    TransformInput(true);
+                    TransformOutput(true);
+
+                    WriteToOutbuf(partitionsize_, true);
+                    
+                    skip_cycles_.operator--();
+                }
+
                 TransformInput(false);
 
                 // compute first partition directly
