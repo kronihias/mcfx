@@ -41,7 +41,8 @@ _MaxPartSize(MAX_PART_SIZE),
 _ConvBufferPos(0),
 _isProcessing(false),
 _configLoaded(false),
-_skippedCycles(0)
+_skippedCycles(0),
+Thread("mtx_convolver_master")
 
 {
     _SampleRate = getSampleRate();
@@ -240,7 +241,9 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
         }
         
 #else
-        mtxconv_.processBlock(buffer, buffer, isNonRealtime());
+        //mtxconv_.processBlock(buffer, buffer, isNonRealtime()); // if isNotRealtime always set to true!
+        mtxconv_.processBlock(buffer, buffer, true); // try to always wait except - add a special flag to deactivate waiting...
+
         _skippedCycles.set(mtxconv_.getSkipCount());
 #endif
         
@@ -255,10 +258,22 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 }
 
+void Mcfx_convolverAudioProcessor::run()
+{
+    LoadConfiguration(_desConfigFile);
+}
+
+void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile)
+{
+    DebugPrint("Loading preset...\n\n");
+    _desConfigFile = configFile;
+    startThread(6); // medium priority
+}
+
 void Mcfx_convolverAudioProcessor::ReloadConfiguration()
 {
     if (_configLoaded)
-        LoadConfiguration(_configFile);
+        LoadConfigurationAsync(_configFile);
 }
 
 void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
@@ -795,7 +810,7 @@ void Mcfx_convolverAudioProcessor::LoadPreset(unsigned int preset)
     if (preset < (unsigned int)_presetFiles.size())
     {
         // ScheduleConfiguration(_presetFiles.getUnchecked(preset));
-        LoadConfiguration(_presetFiles.getUnchecked(preset));
+        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
     }
 }
 
@@ -806,7 +821,7 @@ void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
     
     if (files.size())
     {
-        LoadConfiguration(files.getUnchecked(0)); // Load first result
+        LoadConfigurationAsync(files.getUnchecked(0)); // Load first result
         box_preset_str = files.getUnchecked(0).getFileNameWithoutExtension();
     }
     

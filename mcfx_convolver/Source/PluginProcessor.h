@@ -36,7 +36,8 @@
 /**
 */
 class Mcfx_convolverAudioProcessor  : public AudioProcessor,
-                                      public ChangeBroadcaster
+                                      public ChangeBroadcaster,
+                                      public Thread
 {
 public:
     //==============================================================================
@@ -85,8 +86,12 @@ public:
     void getStateInformation (MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
 
+    // use a thread to load a configuration
+    void run();
     
-    
+    // do the loading in a background thread
+    void LoadConfigurationAsync(File configFile);
+
     void LoadConfiguration(File configFile); // do the loading
     
     void UnloadConfiguration();
@@ -133,8 +138,11 @@ public:
     
     File _configFile;
     
+
 private:
-    
+
+    File _desConfigFile;
+
     ConvolverData conv_data;
     
     Array<int> _conv_in; // list with input routing
