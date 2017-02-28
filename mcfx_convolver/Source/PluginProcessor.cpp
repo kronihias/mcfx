@@ -272,7 +272,7 @@ void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile)
 
 void Mcfx_convolverAudioProcessor::ReloadConfiguration()
 {
-    if (_configLoaded)
+    if (_configLoaded || activePreset.isNotEmpty())
         LoadConfigurationAsync(_configFile);
 }
 
@@ -823,6 +823,12 @@ void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
     {
         LoadConfigurationAsync(files.getUnchecked(0)); // Load first result
         box_preset_str = files.getUnchecked(0).getFileNameWithoutExtension();
+    }
+    else
+    { // preset not found -> post!
+        String debug_msg;
+        debug_msg << "ERROR loading preset: " << presetName << ", Preset not found in search folder!\n\n";
+        DebugPrint(debug_msg);
     }
     
 }
