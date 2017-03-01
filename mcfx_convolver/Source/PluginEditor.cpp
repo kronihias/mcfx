@@ -442,7 +442,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         FileChooser myChooser ("Please select the new preset folder...",
                                ourProcessor->presetDir,
-                               "*.conf");
+                               "");
         
         if (myChooser.browseForDirectory())
         {
