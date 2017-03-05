@@ -394,6 +394,11 @@ public:
         return skip_count_;
     }
 
+    int getMaxSize()
+    {
+        return maxsize_;
+    }
+
 private:
     
     AudioSampleBuffer   inbuf_;             // Holds the Time Domain Input Samples
