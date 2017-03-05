@@ -406,7 +406,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 }
             }
             
-            if ( ( in_ch < 1 ) || ( in_ch > getTotalNumInputChannels() ) || ( out_ch < 1 ) || ( out_ch > getTotalNumOutputChannels() ) )
+            if ( ( in_ch < 1 ) || ( in_ch > NUM_CHANNELS ) || ( out_ch < 1 ) || ( out_ch > NUM_CHANNELS ) )
             {
                 
                 String debug;
@@ -801,6 +801,7 @@ void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
     _presetFiles.clear();
     
     SearchFolder.findChildFiles(_presetFiles, File::findFiles, true, "*.conf");
+    _presetFiles.sort();
     std::cout << "Found preset files: " << _presetFiles.size() << std::endl;
     
 }
