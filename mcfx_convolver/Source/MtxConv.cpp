@@ -176,8 +176,8 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
     if (maxpart < blocksize)
         maxpart = blocksize;
     
-	minpart_ = minpart;
-	maxpart_ = maxpart;
+	minpart_ = nextPowerOfTwo(minpart);
+	maxpart_ = nextPowerOfTwo(maxpart);
 
 
     numins_ = numins;
@@ -207,7 +207,7 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
     
     // try bit different...
     
-    blocksize = blocksize_;
+    int partsize = minpart_;
     numpartitions_=0;
     int priority = 0;
     int offset = 0;
@@ -221,27 +221,27 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
         partitions_.add(new MtxConvSlave());
         
         
-        if (blocksize >= maxpart)
+        if (partsize >= maxpart_)
         {
             // max partition size reached -> put rest into this partition...
-            numpartitions = (int)ceilf((float)maxsize/(float)blocksize);
+            numpartitions = (int)ceilf((float)maxsize/(float)partsize);
             
         } else {
             
-            numpartitions = jmin(numpartitions, (int)ceilf((float)maxsize/(float)blocksize));
+            numpartitions = jmin(numpartitions, (int)ceilf((float)maxsize/(float)partsize));
             
         }
         
-        partitions_.getLast()->Configure(blocksize, numpartitions, offset, priority, &inbuf_, &outbuf_);
+        partitions_.getLast()->Configure(partsize, numpartitions, offset, priority, &inbuf_, &outbuf_);
         
-        maxsize_ += numpartitions*blocksize;
+        maxsize_ += numpartitions*partsize;
         
-        offset += numpartitions*blocksize;
-        maxsize -= numpartitions*blocksize;
+        offset += numpartitions*partsize;
+        maxsize -= numpartitions*partsize;
         
         priority--;
         
-        blocksize *= 2;
+        partsize *= 2;
         
     }
 #endif
@@ -774,7 +774,24 @@ void MtxConvSlave::TransformInput(bool skip)
 #endif
 
         } // iterate over number of inputs
-    }
+
+    } // end not skip
+    else
+    {
+        // skip - clear innode->a_c_[part_idx_]
+        int numinch = innodes_.size();
+
+        for (int i = 0; i < numinch; i++) {
+            InNode *innode = innodes_.getUnchecked(i);
+#if SPLIT_COMPLEX
+            FloatVectorOperations::clear(innode->a_re_[part_idx_], partitionsize_ + 1);
+            FloatVectorOperations::clear(innode->a_im_[part_idx_], partitionsize_ + 1);
+#else
+            FloatVectorOperations::clear((float*)innode->a_c_[part_idx_], 2 * (partitionsize_ + 1));
+#endif
+        }
+        
+    } // end skip
 
     inoffset_ += partitionsize_;
 
@@ -817,7 +834,25 @@ void MtxConvSlave::TransformOutput(bool skip)
         } // end iterate over all outputs
 
     }// skip
-    
+    else
+    {
+        // only clear buffer
+        int numouts = outnodes_.size();
+
+        for (int i = 0; i < numouts; i++)
+        {
+            OutNode *outnode = outnodes_.getUnchecked(i);
+
+            // clear freq accumulation buffers
+#if SPLIT_COMPLEX
+            FloatVectorOperations::clear(outnode->c_re_[part_idx_], partitionsize_ + 1);
+            FloatVectorOperations::clear(outnode->c_im_[part_idx_], partitionsize_ + 1);
+#else
+            FloatVectorOperations::clear((float*)outnode->c_c_[part_idx_], 2 * (partitionsize_ + 1));
+#endif
+        } // end iterate over all outputs
+    }
+
     outnodeoffset_ = 0;
 
 }
