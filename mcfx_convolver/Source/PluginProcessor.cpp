@@ -276,6 +276,22 @@ void Mcfx_convolverAudioProcessor::ReloadConfiguration()
         LoadConfigurationAsync(_configFile);
 }
 
+void getIntFromLine(int &ret, String &line)
+{
+    if (line.isEmpty())
+        return;
+    ret = line.getIntValue();
+    line = line.fromFirstOccurrenceOf(" ", false, true).trim();
+}
+
+void getFloatFromLine(float &ret, String &line)
+{
+    if (line.isEmpty())
+        return;
+    ret = line.getFloatValue();
+    line = line.fromFirstOccurrenceOf(" ", false, true).trim();
+}
+
 void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 {
     if (!configFile.existsAsFile())
@@ -360,13 +376,16 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             int t_out_ch = 0;
             
             line = line.trimCharactersAtStart("/convolver/new").trim();
-            String::CharPointerType lineChar = line.getCharPointer();
-            
-            sscanf(lineChar, "%i%i", &t_in_ch, &t_out_ch);
-            
+
+            getIntFromLine(t_in_ch, line);
+            getIntFromLine(t_out_ch, line);
             
         } else if (line.contains("/impulse/read"))
         {
+
+            if (threadShouldExit())
+                return;
+
             int in_ch = 0;
             int out_ch = 0;
             float gain = 1.f;
@@ -374,15 +393,22 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             int offset = 0;
             int length = 0;
             int channel = 0;
-            char filename[100];
+            String filename;
             
             line = line.trimCharactersAtStart("/impulse/read").trim();
-            
-            String::CharPointerType lineChar = line.getCharPointer();
-            
-            
-            sscanf(lineChar, "%i%i%f%i%i%i%i%s", &in_ch, &out_ch, &gain, &delay, &offset, &length, &channel, filename);
-            
+
+            getIntFromLine(in_ch, line);
+            getIntFromLine(out_ch, line);
+            getFloatFromLine(gain, line);
+            getIntFromLine(delay, line);
+            getIntFromLine(offset, line);
+            getIntFromLine(length, line);
+            getIntFromLine(channel, line);
+
+            if (line.length() > 0) // the rest is filename
+            {
+                filename = line;
+            }
             // printf("load ir: %i %i %f %i %i %i %i %s \n", in_ch, out_ch, gain, delay, offset, length, channel, filename);
             
             File IrFilename;
@@ -390,7 +416,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             
             // check if /cd is defined in config
             if (directory.isEmpty()) {
-                IrFilename = configFile.getParentDirectory().getChildFile(String(filename));
+                IrFilename = configFile.getParentDirectory().getChildFile(filename);
                 
             } else { // /cd is defined
                 if (File::isAbsolutePath(directory))
@@ -398,11 +424,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     // absolute path is defined
                     File path(directory);
                     
-                    IrFilename = path.getChildFile(String(filename));
+                    IrFilename = path.getChildFile(filename);
                 } else {
                     
                     // relative path to the config file is defined
-                    IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(String(filename));
+                    IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(filename);
                 }
             }
             
@@ -467,21 +493,25 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             int delay = 0;
             int offset = 0;
             int length = 0;
-            char filename[100];
+            String filename("");
             
             line = line.trimCharactersAtStart("/impulse/packedmatrix").trim();
             
-            String::CharPointerType lineChar = line.getCharPointer();
-            
-            
-            sscanf(lineChar, "%i%f%i%i%i%s", &inchannels, &gain, &delay, &offset, &length, filename);
-            
+            getIntFromLine(inchannels, line);
+            getFloatFromLine(gain, line);
+            getIntFromLine(delay, line);
+            getIntFromLine(offset, line);
+            getIntFromLine(length, line);
+
+            if (line.length() > 0)
+                filename = line;
+
+
             File IrFilename;
-            
             
             // check if /cd is defined in config
             if (directory.isEmpty()) {
-                IrFilename = configFile.getParentDirectory().getChildFile(String(filename));
+                IrFilename = configFile.getParentDirectory().getChildFile(filename);
                 
             } else { // /cd is defined
                 if (File::isAbsolutePath(directory))
@@ -489,11 +519,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     // absolute path is defined
                     File path(directory);
                     
-                    IrFilename = path.getChildFile(String(filename));
+                    IrFilename = path.getChildFile(filename);
                 } else {
                     
                     // relative path to the config file is defined
-                    IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(String(filename));
+                    IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(filename);
                 }
             }
             if (inchannels < 1)
@@ -602,7 +632,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     
     for (int i=0; i < conv_data.getNumIRs(); i++)
     {
-        
+        if (threadShouldExit())
+            return;
+
         mtxconv_.AddFilter(conv_data.getInCh(i), conv_data.getOutCh(i), *conv_data.getIR(i));
         // no delay and length yet!
         
