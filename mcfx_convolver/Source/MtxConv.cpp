@@ -417,7 +417,7 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
     fft_c_ = reinterpret_cast<fftwf_complex*>( aligned_malloc( (partitionsize+1)*sizeof(fftwf_complex), 16 ) );
     
     // the following fftw function is not thread safe - we have to protect it...
-    InterProcessLock fftw_lock("convolver-fftw");
+    InterProcessLock fftw_lock("lock-fftw");
     if (!fftw_lock.enter(5000))
         return false;
 

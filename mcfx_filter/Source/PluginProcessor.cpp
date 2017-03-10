@@ -77,8 +77,13 @@ _bufpos(0)
     
     FloatVectorOperations::clear(&fft_c_[0][0], 2*(FFT_LENGTH/2+1));
     
-    fftwf_plan_r2c_ = fftwf_plan_dft_r2c_1d (FFT_LENGTH, fft_t_, fft_c_, fftwopt);
+    fftwf_plan_r2c_ = nullptr;
+
+    InterProcessLock fftw_lock("lock-fftw");
+    if (fftw_lock.enter(5000))
+        fftwf_plan_r2c_ = fftwf_plan_dft_r2c_1d (FFT_LENGTH, fft_t_, fft_c_, fftwopt);
     
+    fftw_lock.exit();
 #endif
     
     _w = reinterpret_cast<float*>( aligned_malloc( FFT_LENGTH*sizeof(float), 16 ) );
@@ -944,7 +949,8 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
             }
             
 #else
-            fftwf_execute_dft_r2c (fftwf_plan_r2c_, fft_t_, fft_c_);
+            if (fftwf_plan_r2c_)
+                fftwf_execute_dft_r2c (fftwf_plan_r2c_, fft_t_, fft_c_);
             
             // get magnitude
             for (int i=0; i<FFT_LENGTH/2+1; i++) {
