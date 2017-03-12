@@ -242,7 +242,7 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
         
 #else
         //mtxconv_.processBlock(buffer, buffer, isNonRealtime()); // if isNotRealtime always set to true!
-        mtxconv_.processBlock(buffer, buffer, true); // try to always wait except - add a special flag to deactivate waiting...
+        mtxconv_.processBlock(buffer, buffer, buffer.getNumSamples(), true); // try to always wait except - add a special flag to deactivate waiting...
 
         _skippedCycles.set(mtxconv_.getSkipCount());
 #endif
