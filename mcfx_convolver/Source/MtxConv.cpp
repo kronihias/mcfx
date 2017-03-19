@@ -1089,15 +1089,6 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
 
         numnewinsamples_ -= partitionsize_;
     }
-    // debug code...
-    else
-    {
-        if (priority_ == 0)
-        {
-            std::cout << "Problem" << std::endl;
-        }
-    }
-    //
 
 #ifdef DEBUG_COUT
     std::cout << "ReadOutput, outnodeoffset_: " << outnodeoffset_ << " outoffset_: " << outoffset_ << std::endl;
