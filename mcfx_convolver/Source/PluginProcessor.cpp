@@ -217,32 +217,34 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
         
         _isProcessing = true;
         
+        int NumSamples = buffer.getNumSamples();
+        
 #ifdef USE_ZITA_CONVOLVER
         
         for (int i=0; i < jmin(conv_data.getNumInputChannels(), getTotalNumInputChannels()) ; i++)
         {
             float* indata = zita_conv.inpdata(i)+_ConvBufferPos;
-            memcpy(indata, buffer.getReadPointer(i), getBlockSize()*sizeof(float));
+            memcpy(indata, buffer.getReadPointer(i), NumSamples*sizeof(float));
         }
         
-        _ConvBufferPos += getBlockSize();
+        //_ConvBufferPos += NumSamples;
         
-        if (_ConvBufferPos >= _ConvBufferSize) {
+        //if (_ConvBufferPos >= _ConvBufferSize) {
             zita_conv.process(THREAD_SYNC_MODE);
-            _ConvBufferPos = 0;
-        }
+        //    _ConvBufferPos = 0;
+        //}
         
         
         
         for (int i=0; i < jmin(conv_data.getNumOutputChannels(), getNumOutputChannels()) ; i++)
         {
             float* outdata = zita_conv.outdata(i)+_ConvBufferPos;
-            memcpy(buffer.getWritePointer(i), outdata, getBlockSize()*sizeof(float));
+            memcpy(buffer.getWritePointer(i), outdata, NumSamples*sizeof(float));
         }
         
 #else
         //mtxconv_.processBlock(buffer, buffer, isNonRealtime()); // if isNotRealtime always set to true!
-        mtxconv_.processBlock(buffer, buffer, buffer.getNumSamples(), true); // try to always wait except - add a special flag to deactivate waiting...
+        mtxconv_.processBlock(buffer, buffer, NumSamples, true); // try to always wait except - add a special flag to deactivate waiting...
 
         _skippedCycles.set(mtxconv_.getSkipCount());
 #endif
@@ -613,12 +615,12 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     
     printf("max length: %lli \n", conv_data.getMaxLength());
     
-    err = zita_conv.configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), (unsigned int)conv_data.getMaxLength(), _ConvBufferSize, _ConvBufferSize, Convproc::MAXPART);
+    err = zita_conv.configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), (unsigned int)conv_data.getMaxLength(), _BufferSize, _ConvBufferSize, Convproc::MAXPART);
     
     for (int i=0; i < conv_data.getNumIRs(); i++)
     {
 
-        err = zita_conv.impdata_create(conv_data.getInCh(i), conv_data.getOutCh(i), 1, (float *)conv_data.getIR(i)->getReadPointer(0), (unsigned int)conv_data.getDelay(i), (unsigned int)conv_data.getLength(i));
+        err = zita_conv.impdata_create(conv_data.getInCh(i), conv_data.getOutCh(i), 1, (float *)conv_data.getIR(i)->getReadPointer(0), 0, (unsigned int)conv_data.getLength(i));
         
     }
     

@@ -154,6 +154,11 @@ IF(WIN32)
   ENDIF (WITH_LIBLO OR WITH_FFTW3)
 ENDIF(WIN32)
 
+IF(WITH_ZITA_CONVOLVER)
+	TARGET_LINK_LIBRARIES( ${SUBPROJECT_NAME}
+		${LIBZITACONVOLVER_LIBRARIES}
+	)
+ENDIF(WITH_ZITA_CONVOLVER)
 
 ################################################
 # change to static linking for ms visual c++
