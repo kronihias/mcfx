@@ -18,22 +18,17 @@ license
 
 mcfx is free software and licensed under the GNU General Public License version 3 (GPLv3).
 
-Please note that Steinbergs VST SDK is not free in the sense of the Free Software Foundation, but is the de facto standard for creating audio plug-ins. Don't use the VST version of this software if you are not comfortable with mixing free and non-free code.
-
 prerequisites for building
 --------------
 
 - cmake, working build environment
 - libsoxr for the convolver (http://soxr.sourceforge.net)
-- Steinberg VST 2.4 SDK
 
 Install LINUX Libraries (Debian, Ubuntu):
 *$ sudo apt-get install libasound-dev libfreetype6-dev libgl1-mesa-dev libx11-dev libxext-dev libxinerama-dev libxcursor-dev freeglut3-dev libxmu-dev libxi-dev*
 
 howto build yourself:
 --------------
-
-copy the Steinberg VST 2.4 SDK into the folder *mcfx/vstsdk2.4* (do to legal reasons those can not be included here)
 
 - use cmake gui or cmake/ccmake from terminal:
 
@@ -101,6 +96,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.5.2 (2017-03-20) - various bugfixes; mcfx_convolver: performance optimizations, adjustable maximum partition size
+
 - 0.5.1 (2016-04-25) - mcfx_convolver: fixed bug in loading packed (dense) matrix; mcfx_gain_delay gui fix
 
 - 0.5.0 (2016-04-08) - add signal generator to mcfx_gain_delay; convolver: support for packed wav file to load a dense FIR matrix from only one .wav file -> have a look at CONVOLVER_CONFIG_HOWTO.txt; filter: smooth iir filter to avoid clicks when parameters change
@@ -124,5 +121,5 @@ _
 - 0.1 (2014-01-10) - first release 
 
 ______________________________
-(C) 2013-2016 Matthias Kronlachner
+(C) 2013-2017 Matthias Kronlachner
 m.kronlachner@gmail.com
