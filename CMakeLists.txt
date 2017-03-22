@@ -8,7 +8,7 @@ PROJECT(mcfx_plugin_suite)
 
 ################################################
 #version
-INCLUDE(VERSION)
+file(READ VERSION VERSION)
 ADD_DEFINITIONS(-DVERSION=${VERSION})
 
 ################################################
