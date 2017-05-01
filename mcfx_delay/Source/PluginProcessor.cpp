@@ -182,7 +182,7 @@ void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuff
     // compute read position
     _buf_read_pos = _buf_write_pos - _delay_smpls;
     if (_buf_read_pos < 0)
-        _buf_read_pos = _buf_size + _buf_read_pos - 1;
+        _buf_read_pos = _buf_size + _buf_read_pos;
     
     // std::cout << "size : " << _buf_size << " read pos: " << _buf_read_pos << std::endl;
     // resize buffer if necessary

@@ -654,7 +654,7 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
   for (int i=0; i < NUM_CHANNELS; i++) {
     _buf_read_pos.set(i, _buf_write_pos - _delay_smpls.getUnchecked(i));
     if (_buf_read_pos.getUnchecked(i) < 0)
-      _buf_read_pos.set(i, _buf_size + _buf_read_pos.getUnchecked(i) - 1);
+      _buf_read_pos.set(i, _buf_size + _buf_read_pos.getUnchecked(i));
   }
   
   
