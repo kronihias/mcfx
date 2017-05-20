@@ -96,6 +96,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.5.4 (2017-05-20) - mcfx_convolver and mcfx_filter: fixed threadsafety to avoid startup crash if other plugins use fftw
+
 - 0.5.3 (2017-05-02) - mcfx_delay and mcfx_gain_delay fixed glitch in delayline
 
 - 0.5.2 (2017-03-20) - various bugfixes; mcfx_convolver: performance optimizations, adjustable maximum partition size
