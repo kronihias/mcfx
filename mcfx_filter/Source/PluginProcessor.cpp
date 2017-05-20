@@ -79,11 +79,9 @@ _bufpos(0)
     
     fftwf_plan_r2c_ = nullptr;
 
-    InterProcessLock fftw_lock("lock-fftw");
-    if (fftw_lock.enter(5000))
-        fftwf_plan_r2c_ = fftwf_plan_dft_r2c_1d (FFT_LENGTH, fft_t_, fft_c_, fftwopt);
-    
-    fftw_lock.exit();
+    fftwf_make_planner_thread_safe(); // make plan creation threadsafe - new in fftw-3.3.6-pl2
+
+    fftwf_plan_r2c_ = fftwf_plan_dft_r2c_1d (FFT_LENGTH, fft_t_, fft_c_, fftwopt);
 #endif
     
     _w = reinterpret_cast<float*>( aligned_malloc( FFT_LENGTH*sizeof(float), 16 ) );
