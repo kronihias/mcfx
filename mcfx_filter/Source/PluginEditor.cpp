@@ -205,7 +205,7 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     sld_p2_f->setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
     sld_p2_f->addListener (this);
     sld_p2_f->setSkewFactor (0.55);
-    sld_p2_f->setDoubleClickReturnValue(true, 2817.f);
+    sld_p2_f->setDoubleClickReturnValue(true, 1428.f);
 
     addAndMakeVisible (sld_p2_g = new Slider ("new slider"));
     sld_p2_g->setTooltip (TRANS("peak2 gain"));

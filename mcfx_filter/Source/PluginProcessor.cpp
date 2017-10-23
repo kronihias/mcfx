@@ -38,7 +38,7 @@ _pf1_gain_param(0.5f),
 _pf1_freq_param(0.3f),
 _pf1_q_param(0.27f), // Q=0.7
 _pf2_gain_param(0.5f),
-_pf2_freq_param(0.7f),
+_pf2_freq_param(0.6f),
 _pf2_q_param(0.27f), // Q=0.7
 _ls_gain_param(0.5f),
 _ls_freq_param(0.2f),
