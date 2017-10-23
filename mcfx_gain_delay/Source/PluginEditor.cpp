@@ -49,7 +49,7 @@ inline float freq2param(float freq)
 
 //==============================================================================
 Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_gain_delayAudioProcessor* ownerFilter)
-    : AudioProcessorEditor (ownerFilter)
+    : AudioProcessorEditor (ownerFilter), isStrgDown(false)
 {
     
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
@@ -637,6 +637,11 @@ void Mcfx_gain_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThat
     
 }
 
+void Mcfx_gain_delayAudioProcessorEditor::modifierKeysChanged(const ModifierKeys & modifiers)
+{
+  isStrgDown = modifiers.isCtrlDown();
+}
+
 void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
     
@@ -692,12 +697,19 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
     } // end paste button
     else if (buttonThatWasClicked == btn_mute_reset)
     {
+        bool state = btn_mute_reset->getToggleState();
+
+        if (state)
+          btn_mute_reset->setTooltip(TRANS("Unmute all Channels"));
+        else
+          btn_mute_reset->setTooltip(TRANS("Mute all Channels"));
+
         for (int i=0; i < NUM_CHANNELS; i++)
         {
-            btn_mute.getUnchecked(i)->setToggleState(false, sendNotification);
+            btn_mute.getUnchecked(i)->setToggleState(state, sendNotification);
         }
         
-        btn_mute_reset->setToggleState(false, dontSendNotification);
+        // btn_mute_reset->setToggleState(state, dontSendNotification);
         
     } // end mute reset button
     else if (buttonThatWasClicked == btn_solo_reset)
@@ -755,7 +767,18 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
             
-            ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH+2, val);
+            if (!isStrgDown) // modifier key
+              ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 2, val);
+            else
+            {
+              for (int i = 0; i < NUM_CHANNELS; i++)
+              {
+                if (ch_nr == i)
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 2, 1.);
+                else
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 2, 0.);
+              }
+            }
         }
         // mute button pressed
         else if (btn_nr < 2*NUM_CHANNELS)
@@ -765,7 +788,18 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
             
-            ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH+3, val);
+            if (!isStrgDown) // modifier key
+              ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH+3, val);
+            else
+            {
+              for (int i = 0; i < NUM_CHANNELS; i++)
+              {
+                if (ch_nr == i)
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 3, 1.);
+                else
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 3, 0.);
+              }
+            }
         }
         // solo button pressed
         else if (btn_nr < 3*NUM_CHANNELS)
@@ -775,7 +809,18 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
             
-            ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH+4, val);
+            if (!isStrgDown) // modifier key
+              ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 4, val);
+            else
+            {
+              for (int i = 0; i < NUM_CHANNELS; i++)
+              {
+                if (ch_nr == i)
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 4, 1.);
+                else
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 4, 0.);
+              }
+            }
         }
         else
         { // siggenerator pressed
@@ -784,7 +829,18 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
             
-            ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH+5, val);
+            if (!isStrgDown) // modifier key
+              ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 5, val);
+            else
+            {
+              for (int i = 0; i < NUM_CHANNELS; i++)
+              {
+                if (ch_nr == i)
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 5, 1.);
+                else
+                  ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 5, 0.);
+              }
+            }
         }
         
     }

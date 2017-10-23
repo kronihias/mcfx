@@ -55,7 +55,8 @@ public:
     void sliderValueChanged (Slider* sliderThatWasMoved);
     void buttonClicked (Button* buttonThatWasClicked);
     void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
-    
+    void modifierKeysChanged(const ModifierKeys & modifiers);
+
     void changeListenerCallback (ChangeBroadcaster *source);
     
     // Binary resources:
@@ -123,6 +124,8 @@ private:
     ScopedPointer<Label> label6;
     ScopedPointer<Label> label7;
     
+    bool isStrgDown;
+
     Mcfx_gain_delayAudioProcessor* getProcessor() const
     {
         return static_cast <Mcfx_gain_delayAudioProcessor*> (getAudioProcessor());
