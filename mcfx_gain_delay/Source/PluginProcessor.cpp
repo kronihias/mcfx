@@ -306,8 +306,10 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
         }
         else if (newValue <= 0.5f)
         {
+          if (_stepper_on)
+            _channelstepper->stop();
+
           _stepper_on = false;
-          _channelstepper->stop();
         }
         break;
         
