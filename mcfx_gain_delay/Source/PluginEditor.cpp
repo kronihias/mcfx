@@ -126,6 +126,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
     box_signal->addItem (TRANS("sawtooth"), 4);
     box_signal->addItem (TRANS("square"), 5);
     box_signal->addItem (TRANS("dirac"), 6);
+    box_signal->addItem(TRANS("toneburst"), 7);
     box_signal->addListener (this);
     box_signal->setColour(ComboBox::buttonColourId, Colours::grey);
   

@@ -297,7 +297,7 @@ public:
   {
     f_ = 440.f;
     samplerate_ = 44100.f;
-    
+    sigtablen_ = SIGTABLEN;
   }
   
   virtual ~MyToneGenerator() {};
@@ -319,7 +319,7 @@ public:
     
     f_ = f;
     
-    dphase_ = SIGTABLEN * f_ / samplerate_;
+    dphase_ = sigtablen_ * f_ / samplerate_;
   }
   
   float getFreq()
@@ -349,8 +349,8 @@ public:
       
       phase_ += dphase_;
       
-      if (phase_ >= (double)SIGTABLEN)
-        phase_ -= (double)SIGTABLEN;
+      if (phase_ >= (double)sigtablen_)
+        phase_ -= (double)sigtablen_;
     }
   }
   
@@ -361,6 +361,7 @@ protected:
   float samplerate_;
   float f_;
   
+  int sigtablen_;
   AudioSampleBuffer sigtable_;
   
   double phase_; // current phase
@@ -385,15 +386,15 @@ private:
   
   void updateTable() // update the sine table
   {
-    sigtable_.setSize(1, SIGTABLEN+1);
+    sigtable_.setSize(1, sigtablen_+1);
     sigtable_.clear();
     
     double phase = 0.f;
-    double phaseinc = 2.*M_PI/(double)SIGTABLEN;
+    double phaseinc = 2.*M_PI/(double)sigtablen_;
     
     float* wp = sigtable_.getWritePointer(0);
     
-    for (int i=0; i<SIGTABLEN+1; i++) {
+    for (int i=0; i<sigtablen_+1; i++) {
       (*wp++) = (float)sin(phase);
       phase += phaseinc;
     }
@@ -420,16 +421,16 @@ private:
   
   void updateTable() // update the table
   {
-    sigtable_.setSize(1, SIGTABLEN+1);
+    sigtable_.setSize(1, sigtablen_+1);
     sigtable_.clear();
     
     float* wp = sigtable_.getWritePointer(0);
     
     double val = -1.;
     
-    double inc = 2./SIGTABLEN;
+    double inc = 2./sigtablen_;
     
-    for (int i=0; i<SIGTABLEN; i++) {
+    for (int i=0; i<sigtablen_; i++) {
       (*wp++) = (float)val*0.707f;
       val += inc;
     }
@@ -457,16 +458,16 @@ private:
   void updateTable() // update the table
   {
     
-    sigtable_.setSize(1, SIGTABLEN+1);
+    sigtable_.setSize(1, sigtablen_+1);
     sigtable_.clear();
     
     float* wp = sigtable_.getWritePointer(0);
     
-    for (int i=0; i<SIGTABLEN/2; i++) {
+    for (int i=0; i<sigtablen_/2; i++) {
       (*wp++) = 0.707f;
     }
     
-    for (int i=0; i<SIGTABLEN/2; i++) {
+    for (int i=0; i<sigtablen_/2; i++) {
       (*wp++) = -0.707f;
     }
     
@@ -475,6 +476,81 @@ private:
   
 };
 
+/* Toneburst Generator */
+class MyToneburstGenerator : public MyToneGenerator
+{
+public:
+  MyToneburstGenerator()
+  {
+    pausecount_ = 0.6 * 48000;
+    sigtablen_ = ceil(6.5 * SIGTABLEN); // this includes several cycles plus the pause
+    updateTable();
+  }
+
+  ~MyToneburstGenerator()
+  {}
+
+
+  /* Override fill buffer methode to include pause in signal */
+  void fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
+  {
+    int numSamples = buffer.getNumSamples();
+
+    float *out = buffer.getWritePointer(ch);
+    float *tab = sigtable_.getWritePointer(0);
+
+    for (int i = 0; i<numSamples; i++)
+    {
+      // one cycle is over -> pause!
+      if (phase_ >= (double)sigtablen_)
+      {
+        if (pausecount_-- <= 0)
+        {
+          phase_ -= (double)sigtablen_;
+          pausecount_ = 0.6 * samplerate_;
+        }
+        *out++ = 0.;
+      } 
+      else 
+      {
+        float phase = floor(phase_);
+
+        float frac = (float)phase_ - phase;
+
+        float *addr = tab + (int)phase;
+
+        float f1 = addr[0];
+        float f2 = addr[1];
+
+        *out++ = f1 + frac * (f2 - f1); // linear interpolation
+
+        phase_ += dphase_;
+      }
+      
+    }
+  }
+
+private:
+
+  int pausecount_;
+
+  void updateTable() // update the sine table
+  {
+    sigtable_.setSize(1, sigtablen_ + 1);
+    sigtable_.clear();
+
+    double phase = 0.f;
+    double phaseinc = 1. / sigtablen_;
+
+    float* wp = sigtable_.getWritePointer(0);
+
+    for (int i = 0; i<sigtablen_ + 1; i++) {
+      (*wp++) = (float) 0.5* (1.-cos(2*M_PI*phase)) * sin(2 * M_PI * phase * 6.5);
+      phase += phaseinc;
+    }
+  }
+
+};
 
 class MySignalGenerator
 {
@@ -484,7 +560,7 @@ public:
   ~MySignalGenerator();
   
   /* enum defs */
-  enum sigtype { white, pink, sine, sawtooth, square, dirac, numSigTypeParams };
+  enum sigtype { white, pink, sine, sawtooth, square, dirac, toneburst, numSigTypeParams };
   enum sigtime { steady, pulsed, numSigTimeParams };
   
   /* member functs */
@@ -539,7 +615,8 @@ private:
   MySineGenerator sine_generator_;
   MySawtoothGenerator sawtooth_generator_;
   MySquareGenerator square_generator_;
-  
+  MyToneburstGenerator tuneburst_generator_;
+
   sigtype signal_type_;
   sigtime signal_time_;
   

@@ -67,7 +67,8 @@ void MySignalGenerator::setSamplerate(float samplerate)
   sine_generator_.setSamplerate(samplerate_);
   sawtooth_generator_.setSamplerate(samplerate_);
   square_generator_.setSamplerate(samplerate_);
-  
+  tuneburst_generator_.setSamplerate(samplerate_);
+
   setPulseLength(0.);
 }
 
@@ -171,7 +172,11 @@ String MySignalGenerator::getSignalTypeText()
     case MySignalGenerator::sigtype::dirac:
       return "Dirac";
       break;
-      
+
+    case MySignalGenerator::sigtype::toneburst:
+      return "Toneburst";
+      break;
+
     default:
       return "";
       break;
@@ -236,6 +241,7 @@ void MySignalGenerator::setFreq(float f)
   sine_generator_.setFreq(f);
   sawtooth_generator_.setFreq(f);
   square_generator_.setFreq(f);
+  tuneburst_generator_.setFreq(f/6.5);
 }
 
 float MySignalGenerator::getFreq()
@@ -306,7 +312,10 @@ void MySignalGenerator::fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
       }
       
       cur_time_smpl_+= numSamples;
-      
+      break;
+
+    case toneburst:
+      tuneburst_generator_.fillBufferWithSignal(buffer, ch);
       break;
       
     default:
