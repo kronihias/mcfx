@@ -396,19 +396,19 @@ void FilterGraph::mouseWheelMove (const MouseEvent &event, const MouseWheelDetai
             break;
             
         case 1:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::LSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::LSQParam)+wheel.deltaY*0.7f));
+            myprocessor_->setParameter(LowhighpassAudioProcessor::LSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::LSQParam)+wheel.deltaY*0.5f));
             break;
             
         case 2:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF1QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF1QParam)+wheel.deltaY*0.7f));
+            myprocessor_->setParameter(LowhighpassAudioProcessor::PF1QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF1QParam)+wheel.deltaY*0.5f));
             break;
             
         case 3:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF2QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF2QParam)+wheel.deltaY*0.7f));
+            myprocessor_->setParameter(LowhighpassAudioProcessor::PF2QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF2QParam)+wheel.deltaY*0.5f));
             break;
             
         case 4:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::HSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::HSQParam)+wheel.deltaY*0.7f));
+            myprocessor_->setParameter(LowhighpassAudioProcessor::HSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::HSQParam)+wheel.deltaY*0.5f));
             break;
             
         default:

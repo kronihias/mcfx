@@ -105,7 +105,8 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
     addAndMakeVisible (sld_siggain = new Slider ("new slider"));
     sld_siggain->setTooltip (TRANS("Signalgenerator Gain"));
     sld_siggain->setRange (-99, 6, 0.1);
-    sld_siggain->setSliderStyle (Slider::Rotary);
+    sld_siggain->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+    sld_siggain->setVelocityBasedMode(true);
     sld_siggain->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
     sld_siggain->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_siggain->setColour (Slider::trackColourId, Colour (0xff797900));
@@ -145,7 +146,8 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
     sld_sigfreq->setTooltip (TRANS("Signalgenerator Frequency"));
     sld_sigfreq->setExplicitFocusOrder (20000);
     sld_sigfreq->setRange (24, 21618, 1);
-    sld_sigfreq->setSliderStyle (Slider::Rotary);
+    sld_sigfreq->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_sigfreq->setVelocityBasedMode(true);
     sld_sigfreq->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
     sld_sigfreq->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_sigfreq->setColour (Slider::trackColourId, Colours::yellow);
@@ -159,7 +161,8 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
     sld_sigstepinterval->setTooltip (TRANS("Step Interval"));
     sld_sigstepinterval->setExplicitFocusOrder (5000);
     sld_sigstepinterval->setRange (50, 5000, 1);
-    sld_sigstepinterval->setSliderStyle (Slider::Rotary);
+    sld_sigstepinterval->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_sigstepinterval->setVelocityBasedMode(true);
     sld_sigstepinterval->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
     sld_sigstepinterval->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_sigstepinterval->setColour (Slider::trackColourId, Colours::yellow);
@@ -327,7 +330,8 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
             sld_del.getUnchecked(i)->setTooltip(tooltip);
             
             sld_del.getUnchecked(i)->setRange (0, MAX_DELAYTIME_S*1000.f, 0.1);
-            sld_del.getUnchecked(i)->setSliderStyle (Slider::Rotary);
+            sld_del.getUnchecked(i)->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+            sld_del.getUnchecked(i)->setVelocityBasedMode(true);
             sld_del.getUnchecked(i)->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
             sld_del.getUnchecked(i)->setColour (Slider::rotarySliderFillColourId, Colours::red);
             sld_del.getUnchecked(i)->addListener (this);
@@ -346,7 +350,8 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
             sld_gain.getUnchecked(i)->setTooltip(tooltip);
             
             sld_gain.getUnchecked(i)->setRange (-18, 18, 0.01);
-            sld_gain.getUnchecked(i)->setSliderStyle (Slider::Rotary);
+            sld_gain.getUnchecked(i)->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+            sld_gain.getUnchecked(i)->setVelocityBasedMode(true);
             sld_gain.getUnchecked(i)->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
             sld_gain.getUnchecked(i)->setColour (Slider::rotarySliderFillColourId, Colours::yellow);
             sld_gain.getUnchecked(i)->addListener (this);

@@ -59,7 +59,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_lc_f = new Slider ("new slider"));
     sld_lc_f->setTooltip (TRANS("low cutoff frequency"));
     sld_lc_f->setRange (24, 21618, 1);
-    sld_lc_f->setSliderStyle (Slider::Rotary);
+    sld_lc_f->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+    sld_lc_f->setVelocityBasedMode(true);
     sld_lc_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
     sld_lc_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_lc_f->setColour (Slider::trackColourId, Colours::coral);
@@ -96,7 +97,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_hc_f = new Slider ("new slider"));
     sld_hc_f->setTooltip (TRANS("high cutoff frequency"));
     sld_hc_f->setRange (24, 21618, 1);
-    sld_hc_f->setSliderStyle (Slider::Rotary);
+    sld_hc_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hc_f->setVelocityBasedMode(true);
     sld_hc_f->setTextBoxStyle (Slider::TextBoxLeft, false, 55, 18);
     sld_hc_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_hc_f->setColour (Slider::trackColourId, Colours::coral);
@@ -121,7 +123,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_hs_f = new Slider ("new slider"));
     sld_hs_f->setTooltip (TRANS("high shelf frequency"));
     sld_hs_f->setRange (24, 21618, 1);
-    sld_hs_f->setSliderStyle (Slider::Rotary);
+    sld_hs_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hs_f->setVelocityBasedMode(true);
     sld_hs_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
     sld_hs_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_hs_f->setColour (Slider::trackColourId, Colours::chocolate);
@@ -134,7 +137,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_hs_g = new Slider ("new slider"));
     sld_hs_g->setTooltip (TRANS("high shelf gain"));
     sld_hs_g->setRange (-18, 18, 0.1);
-    sld_hs_g->setSliderStyle (Slider::Rotary);
+    sld_hs_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hs_g->setVelocityBasedMode(true);
     sld_hs_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
     sld_hs_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_hs_g->setColour (Slider::trackColourId, Colours::yellow);
@@ -145,8 +149,9 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
 
     addAndMakeVisible (sld_hs_q = new Slider ("new slider"));
     sld_hs_q->setTooltip (TRANS("high shelf q"));
-    sld_hs_q->setRange (0.2, 20, 0.1);
-    sld_hs_q->setSliderStyle (Slider::Rotary);
+    sld_hs_q->setRange (0.2, 20, 0.01);
+    sld_hs_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hs_q->setVelocityBasedMode(true);
     sld_hs_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
     sld_hs_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_hs_q->setColour (Slider::trackColourId, Colours::aqua);
@@ -159,7 +164,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_p1_f = new Slider ("new slider"));
     sld_p1_f->setTooltip (TRANS("peak1 frequency"));
     sld_p1_f->setRange (24, 21618, 1);
-    sld_p1_f->setSliderStyle (Slider::Rotary);
+    sld_p1_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p1_f->setVelocityBasedMode(true);
     sld_p1_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
     sld_p1_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_p1_f->setColour (Slider::trackColourId, Colours::chocolate);
@@ -172,7 +178,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_p1_g = new Slider ("new slider"));
     sld_p1_g->setTooltip (TRANS("peak1 gain"));
     sld_p1_g->setRange (-18, 18, 0.1);
-    sld_p1_g->setSliderStyle (Slider::Rotary);
+    sld_p1_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p1_g->setVelocityBasedMode(true);
     sld_p1_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
     sld_p1_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_p1_g->setColour (Slider::trackColourId, Colours::yellow);
@@ -183,8 +190,9 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
 
     addAndMakeVisible (sld_p1_q = new Slider ("new slider"));
     sld_p1_q->setTooltip (TRANS("peak1 q"));
-    sld_p1_q->setRange (0.2, 20, 0.1);
-    sld_p1_q->setSliderStyle (Slider::Rotary);
+    sld_p1_q->setRange (0.2, 20, 0.01);
+    sld_p1_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p1_q->setVelocityBasedMode(true);
     sld_p1_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
     sld_p1_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_p1_q->setColour (Slider::trackColourId, Colours::aqua);
@@ -197,7 +205,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_p2_f = new Slider ("new slider"));
     sld_p2_f->setTooltip (TRANS("peak2 frequency"));
     sld_p2_f->setRange (24, 21618, 1);
-    sld_p2_f->setSliderStyle (Slider::Rotary);
+    sld_p2_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p2_f->setVelocityBasedMode(true);
     sld_p2_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
     sld_p2_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_p2_f->setColour (Slider::trackColourId, Colours::chocolate);
@@ -210,7 +219,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_p2_g = new Slider ("new slider"));
     sld_p2_g->setTooltip (TRANS("peak2 gain"));
     sld_p2_g->setRange (-18, 18, 0.1);
-    sld_p2_g->setSliderStyle (Slider::Rotary);
+    sld_p2_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p2_g->setVelocityBasedMode(true);
     sld_p2_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
     sld_p2_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_p2_g->setColour (Slider::trackColourId, Colours::yellow);
@@ -221,8 +231,9 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
 
     addAndMakeVisible (sld_p2_q = new Slider ("new slider"));
     sld_p2_q->setTooltip (TRANS("peak2 q"));
-    sld_p2_q->setRange (0.2, 20, 0.1);
-    sld_p2_q->setSliderStyle (Slider::Rotary);
+    sld_p2_q->setRange (0.2, 20, 0.01);
+    sld_p2_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p2_q->setVelocityBasedMode(true);
     sld_p2_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
     sld_p2_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_p2_q->setColour (Slider::trackColourId, Colours::aqua);
@@ -235,7 +246,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_ls_f = new Slider ("new slider"));
     sld_ls_f->setTooltip (TRANS("low shelf frequency"));
     sld_ls_f->setRange (24, 21618, 1);
-    sld_ls_f->setSliderStyle (Slider::Rotary);
+    sld_ls_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_ls_f->setVelocityBasedMode(true);
     sld_ls_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
     sld_ls_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_ls_f->setColour (Slider::trackColourId, Colours::chocolate);
@@ -248,7 +260,8 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     addAndMakeVisible (sld_ls_g = new Slider ("new slider"));
     sld_ls_g->setTooltip (TRANS("low shelf gain"));
     sld_ls_g->setRange (-18, 18, 0.1);
-    sld_ls_g->setSliderStyle (Slider::Rotary);
+    sld_ls_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_ls_g->setVelocityBasedMode(true);
     sld_ls_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
     sld_ls_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_ls_g->setColour (Slider::trackColourId, Colours::yellow);
@@ -259,8 +272,9 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
 
     addAndMakeVisible (sld_ls_q = new Slider ("new slider"));
     sld_ls_q->setTooltip (TRANS("low shelf q"));
-    sld_ls_q->setRange (0.2, 20, 0.1);
-    sld_ls_q->setSliderStyle (Slider::Rotary);
+    sld_ls_q->setRange (0.2, 20, 0.01);
+    sld_ls_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_ls_q->setVelocityBasedMode(true);
     sld_ls_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
     sld_ls_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
     sld_ls_q->setColour (Slider::trackColourId, Colours::aqua);
@@ -461,16 +475,16 @@ void LowhighpassAudioProcessorEditor::resized()
     btn_hc_order->setBounds (562, 242, 27, 21);
     sld_hs_f->setBounds (423, 264, 85, 24);
     sld_hs_g->setBounds (423, 239, 75, 24);
-    sld_hs_q->setBounds (423, 215, 70, 22);
+    sld_hs_q->setBounds (423, 215, 70, 24);
     sld_p1_f->setBounds (213, 264, 85, 24);
     sld_p1_g->setBounds (213, 239, 75, 24);
-    sld_p1_q->setBounds (213, 215, 70, 22);
+    sld_p1_q->setBounds (213, 215, 70, 24);
     sld_p2_f->setBounds (324, 264, 85, 24);
     sld_p2_g->setBounds (324, 239, 75, 24);
-    sld_p2_q->setBounds (324, 215, 70, 22);
+    sld_p2_q->setBounds (324, 215, 70, 24);
     sld_ls_f->setBounds (109, 266, 85, 24);
     sld_ls_g->setBounds (109, 241, 75, 24);
-    sld_ls_q->setBounds (109, 217, 70, 22);
+    sld_ls_q->setBounds (109, 217, 70, 24);
     filtergraph->setBounds (26, 21, 580, 170);
     btn_analyzer->setBounds (27, 193, 58, 20);
     //[UserResized] Add your own custom resize handling here..

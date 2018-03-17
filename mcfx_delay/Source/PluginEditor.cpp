@@ -49,7 +49,8 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
     
     sld_del_ms->setRange (0, MAX_DELAYTIME_S*1000, 0.01);
     
-    sld_del_ms->setSliderStyle (Slider::Rotary);
+    sld_del_ms->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+    sld_del_ms->setVelocityBasedMode(true);
     sld_del_ms->setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
     sld_del_ms->setColour (Slider::rotarySliderFillColourId, Colours::red);
     sld_del_ms->addListener (this);
@@ -77,7 +78,8 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
     
     sld_del_smpl->setRange (0, ownerFilter->_samplerate*MAX_DELAYTIME_S, 1);
     
-    sld_del_smpl->setSliderStyle (Slider::Rotary);
+    sld_del_smpl->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_del_smpl->setVelocityBasedMode(true);
     sld_del_smpl->setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
     sld_del_smpl->setColour (Slider::rotarySliderFillColourId, Colours::red);
     sld_del_smpl->addListener (this);
