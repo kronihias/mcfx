@@ -454,6 +454,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     
                     String debug;
                     debug << "conv # " << conv_data.getNumIRs() << " " << IrFilename.getFullPathName() << " (" << TempAudioBuffer.getNumSamples() << " smpls) loaded";
+                    if (src_samplerate != _SampleRate)
+                      debug << " (resampled to " << conv_data.getLength(conv_data.getNumIRs()-1) <<  " smpls)";
                     DebugPrint(debug << "\n");
                     
                 } else {
