@@ -160,6 +160,8 @@ private:
     
     bool _configLoaded; // is a configuration successfully loaded?
     
+	bool _paramReload; // vst parameter to allow triggering reload of configuration
+
     Atomic<int> _skippedCycles; // the number of skipped cycles do to unfinished partitions
 
     bool loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain=1.f, int offset=0, int length=0);

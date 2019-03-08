@@ -41,6 +41,7 @@ _MaxPartSize(MAX_PART_SIZE),
 _ConvBufferPos(0),
 _isProcessing(false),
 _configLoaded(false),
+_paramReload(false),
 _skippedCycles(0),
 Thread("mtx_convolver_master")
 
@@ -83,26 +84,34 @@ const String Mcfx_convolverAudioProcessor::getName() const
 
 int Mcfx_convolverAudioProcessor::getNumParameters()
 {
-    return 0;
+    return 1;
 }
 
 float Mcfx_convolverAudioProcessor::getParameter (int index)
 {
-    return 0.0f;
+    return (float)_paramReload;
 }
 
 void Mcfx_convolverAudioProcessor::setParameter (int index, float newValue)
 {
+    bool newParamReload = (newValue <= 0.5f) ? false : true;
+    if (newParamReload && !_paramReload)
+        ReloadConfiguration();
+
+    _paramReload = newParamReload;
 }
 
 const String Mcfx_convolverAudioProcessor::getParameterName (int index)
 {
-    return String::empty;
+    return "ReloadConfig";
 }
 
 const String Mcfx_convolverAudioProcessor::getParameterText (int index)
 {
-    return String::empty;
+    if (_paramReload)
+        return "Reload";
+    else
+        return "";
 }
 
 const String Mcfx_convolverAudioProcessor::getInputChannelName (int channelIndex) const
