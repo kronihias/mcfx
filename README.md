@@ -96,6 +96,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.5.6 (2019-03-20) - mcfx_convolver - maintain fir filter gain if resampled, add plugin parameter to trigger reload of configuration
+
 - 0.5.5 (2018-03-16) - filter, gain_delay, delay: slider behavior changed for more accurate control; gain_delay: ctrl+click for exclusive solo/phase/mute, add toneburst for signalgenerator, bugfix saving channel state of signalgenerator
 
 - 0.5.4 (2017-05-20) - mcfx_convolver and mcfx_filter: fixed threadsafety to avoid startup crash if other plugins use fftw
