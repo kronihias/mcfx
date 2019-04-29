@@ -193,6 +193,7 @@ SET ( JUCE_SOURCE
         ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
         ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_extra/juce_gui_extra.mm
 #        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_opengl/juce_opengl.mm
+		${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_osc/juce_osc.cpp
 #        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_video/juce_video.mm
 )
 
@@ -225,6 +226,7 @@ SET ( JUCE_SOURCE
         ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_basics/juce_gui_basics.cpp
         ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_extra/juce_gui_extra.cpp
 #        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_opengl/juce_opengl.cpp
+		${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_osc/juce_osc.cpp
 #        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_video/juce_video.cpp
 )
 

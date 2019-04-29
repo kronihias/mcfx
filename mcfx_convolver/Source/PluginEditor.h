@@ -31,7 +31,8 @@ class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public ButtonListener,
                                             public ChangeListener,
                                             public ComboBoxListener,
-                                            public Timer
+                                            public Timer,
+                                            public TextEditorListener
 {
 public:
     Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter);
@@ -48,6 +49,10 @@ public:
     
     void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
     
+    void textEditorFocusLost(TextEditor& ed);
+    
+    void textEditorReturnKeyPressed(TextEditor& ed);
+
     static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
     
     void UpdatePresets();
@@ -80,7 +85,8 @@ private:
     ScopedPointer<TextButton> btn_preset_folder;
     ScopedPointer<ComboBox> box_conv_buffer;
     ScopedPointer<ComboBox> box_maxpart;
-  
+    ScopedPointer<TextEditor> txt_rcv_port;
+    ScopedPointer<ToggleButton> tgl_rcv_active;
     
 };
 

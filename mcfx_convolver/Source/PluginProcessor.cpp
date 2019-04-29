@@ -43,6 +43,8 @@ _isProcessing(false),
 _configLoaded(false),
 _paramReload(false),
 _skippedCycles(0),
+_osc_in_port(7200),
+_osc_in(false),
 Thread("mtx_convolver_master")
 
 {
@@ -63,6 +65,9 @@ Thread("mtx_convolver_master")
     
     // this is for the open dialog of the gui
     lastDir = lastDir.getSpecialLocation(File::userHomeDirectory);
+
+    oscReceiver = new OSCReceiver;
+
 }
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
@@ -800,6 +805,74 @@ void Mcfx_convolverAudioProcessor::setMaxPartitionSize(unsigned int maxsize)
     }
 }
 
+void Mcfx_convolverAudioProcessor::setOscIn(bool arg)
+{
+  if (arg) {
+
+    if (oscReceiver->connect(_osc_in_port))
+    {
+      oscReceiver->addListener(this, "/reload");
+      oscReceiver->addListener(this, "/load");
+      _osc_in = true;
+    }
+    else
+    { 
+      DebugPrint("Could not open UDP port, try a different port.\n");
+    }
+      
+
+  } else { // turn off osc
+
+    _osc_in = false;
+
+    oscReceiver->removeListener(this);
+
+    oscReceiver->disconnect();
+
+  }
+}
+
+bool Mcfx_convolverAudioProcessor::getOscIn()
+{
+  return _osc_in;
+}
+
+void Mcfx_convolverAudioProcessor::setOscInPort(int port)
+{
+  _osc_in_port = port;
+
+  if (_osc_in)
+  {
+    setOscIn(false);
+    setOscIn(true);
+  }
+}
+
+int Mcfx_convolverAudioProcessor::getOscInPort()
+{
+  return _osc_in_port;
+}
+
+void Mcfx_convolverAudioProcessor::oscMessageReceived(const OSCMessage & message)
+{
+  if (message.getAddressPattern() == "/reload")
+  {
+    DebugPrint("Received Reload via OSC (/reload).\n");
+    ReloadConfiguration();
+  }
+  else if (message.getAddressPattern() == "/load")
+  {
+
+    DebugPrint("Received Load via OSC (/load).\n");
+
+    if (message.size() < 1)
+      return;
+
+    if (message[0].isString())
+      LoadPresetByName(message[0].getString());
+  }
+}
+
 void Mcfx_convolverAudioProcessor::UnloadConfiguration()
 {
     // delete configuration
@@ -905,6 +978,9 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("presetDir", presetDir.getFullPathName());
     xml.setAttribute("ConvBufferSize", (int)_ConvBufferSize);
     xml.setAttribute("MaxPartSize", (int)_MaxPartSize);
+    xml.setAttribute("oscIn", _osc_in);
+    xml.setAttribute("oscInPort", _osc_in_port);
+
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
 }
@@ -930,6 +1006,10 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             
             _ConvBufferSize = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
             _MaxPartSize = xmlState->getIntAttribute("MaxPartSize", _MaxPartSize);
+
+            _osc_in_port = xmlState->getIntAttribute("oscInPort", _osc_in_port);
+            if (xmlState->getBoolAttribute("oscIn"))
+              setOscIn(true);
         }
         
         File tempDir(newPresetDir);

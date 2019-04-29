@@ -37,7 +37,8 @@
 */
 class Mcfx_convolverAudioProcessor  : public AudioProcessor,
                                       public ChangeBroadcaster,
-                                      public Thread
+                                      public Thread,
+                                      private OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>
 {
 public:
     //==============================================================================
@@ -121,6 +122,12 @@ public:
         return _skippedCycles.get();
     }
 
+    void setOscIn(bool arg); // activate osc in
+    bool getOscIn();
+    void setOscInPort(int port);
+    int getOscInPort();
+    void oscMessageReceived(const OSCMessage& message);
+
     File presetDir; // where to search for presets
     File lastDir; // for open file dialog...
     
@@ -172,6 +179,10 @@ private:
     MtxConvMaster mtxconv_;
 #endif
     
+    ScopedPointer<OSCReceiver> oscReceiver;
+    int _osc_in_port;
+    bool _osc_in;
+
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_convolverAudioProcessor)
 };

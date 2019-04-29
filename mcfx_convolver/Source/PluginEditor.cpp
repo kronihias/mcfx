@@ -165,6 +165,24 @@ box_maxpart(nullptr)
     box_maxpart->setEditableText (false);
     box_maxpart->setJustificationType (Justification::centredLeft);
     box_maxpart->setColour(ComboBox::backgroundColourId, Colour (0xffa8a8a8));
+
+    addAndMakeVisible(txt_rcv_port = new TextEditor("new text editor"));
+    txt_rcv_port->setTooltip(TRANS("OSC receive port"));
+    txt_rcv_port->setMultiLine(false);
+    txt_rcv_port->setReturnKeyStartsNewLine(false);
+    txt_rcv_port->setScrollbarsShown(false);
+    txt_rcv_port->setCaretVisible(false);
+    txt_rcv_port->setPopupMenuEnabled(true);
+    txt_rcv_port->setText(TRANS("7200"));
+    txt_rcv_port->addListener(this);
+
+    addAndMakeVisible(tgl_rcv_active = new ToggleButton("new toggle button"));
+    tgl_rcv_active->setButtonText(TRANS("OSC receive port: "));
+    tgl_rcv_active->setTooltip(TRANS("enable OSC receive, supported messages: /reload, /load <preset.conf> (preset needs to be within the search path)"));
+    tgl_rcv_active->addListener(this);
+    tgl_rcv_active->setToggleState(true, dontSendNotification);
+    tgl_rcv_active->setColour(ToggleButton::textColourId, Colours::white);
+
     setSize (350, 300);
     
     UpdateText();
@@ -203,6 +221,8 @@ Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
     btn_preset_folder = nullptr;
     box_conv_buffer = nullptr;
     box_maxpart = nullptr;
+    txt_rcv_port = nullptr;
+    tgl_rcv_active = nullptr;
 }
 
 
@@ -222,7 +242,7 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.drawRect (0, 0, 350, 300, 1);
     
     g.setColour (Colour (0x410000ff));
-    g.fillRoundedRectangle (18.0f, 100.0f, 190.0f, 76.0f, 10.0000f);
+    g.fillRoundedRectangle (18.0f, 105.0f, 190.0f, 76.0f, 10.0000f);
     
     g.setColour (Colours::white);
     g.setFont (Font (17.2000f, Font::bold));
@@ -273,6 +293,9 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     
     box_conv_buffer->setBounds (270, 119, 67, 20);
     box_maxpart->setBounds (270, 157, 65, 20);
+
+    txt_rcv_port->setBounds(146, 80, 40, 18);
+    tgl_rcv_active->setBounds(16, 77, 130, 24);
 }
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()
@@ -339,6 +362,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     }
     box_maxpart->setSelectedItemIndex(sel, dontSendNotification);
     
+    tgl_rcv_active->setToggleState(ourProcessor->getOscIn(), dontSendNotification);
+    txt_rcv_port->setText(String(ourProcessor->getOscInPort()), dontSendNotification);
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
@@ -456,7 +481,10 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             UpdatePresets();
         }
     }
-    
+    else if (buttonThatWasClicked == tgl_rcv_active)
+    {
+      ourProcessor->setOscIn(tgl_rcv_active->getToggleState());
+    }
 }
 
 void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
@@ -483,4 +511,18 @@ void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThat
         ourProcessor->setMaxPartitionSize(val);
     }
     
+}
+
+void Mcfx_convolverAudioProcessorEditor::textEditorFocusLost(TextEditor & ed)
+{
+  Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
+  if (&ed == txt_rcv_port)
+  {
+    ourProcessor->setOscInPort(txt_rcv_port->getText().getIntValue());
+  }
+}
+
+void Mcfx_convolverAudioProcessorEditor::textEditorReturnKeyPressed(TextEditor & ed)
+{
+  textEditorFocusLost(ed);
 }
