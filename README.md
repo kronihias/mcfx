@@ -96,6 +96,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.5.7 (2019-04-28) - mcfx_convolver - osc receive support: /reload, /load <preset.conf> -> allows remote control of reloading/loading presets, port can be set in GUI
+
 - 0.5.6 (2019-03-20) - mcfx_convolver - maintain fir filter gain if resampled, add plugin parameter to trigger reload of configuration
 
 - 0.5.5 (2018-03-16) - filter, gain_delay, delay: slider behavior changed for more accurate control; gain_delay: ctrl+click for exclusive solo/phase/mute, add toneburst for signalgenerator, bugfix saving channel state of signalgenerator
