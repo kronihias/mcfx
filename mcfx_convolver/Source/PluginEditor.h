@@ -87,6 +87,7 @@ private:
     ScopedPointer<ComboBox> box_maxpart;
     ScopedPointer<TextEditor> txt_rcv_port;
     ScopedPointer<ToggleButton> tgl_rcv_active;
+    ScopedPointer<ToggleButton> tgl_save_preset;
     
 };
 

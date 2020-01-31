@@ -45,6 +45,8 @@ _paramReload(false),
 _skippedCycles(0),
 _osc_in_port(7200),
 _osc_in(false),
+_storeConfigDataInProject(1),
+_readyToSaveConfiguration(false),
 Thread("mtx_convolver_master")
 
 {
@@ -79,6 +81,8 @@ Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
     mtxconv_.StopProc();
     mtxconv_.Cleanup();
 #endif
+
+    DeleteTemporaryFiles();
 }
 
 //==============================================================================
@@ -331,7 +335,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         
         std::cout << "Unloading Config..." << std::endl;
         UnloadConfiguration();
-        _DebugText = String(); // clear debug window
+        DebugPrint("", true); // clear debug window
         std::cout << "Config Unloaded..." << std::endl;
     }
     
@@ -355,8 +359,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     DebugPrint(debug);
     
     activePreset = configFile.getFileName(); // store filename only, on restart search preset folder for it!
-    box_preset_str = configFile.getFileNameWithoutExtension();
+    //box_preset_str = configFile.getFileNameWithoutExtension();
     
+    Array<File> configFileAndDataFiles;
+    configFileAndDataFiles.add(configFile);
+
     StringArray myLines;
     
     configFile.readLines(myLines);
@@ -447,7 +454,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(filename);
                 }
             }
-            
+
+            configFileAndDataFiles.addIfNotAlreadyThere(IrFilename);
+
             if ( ( in_ch < 1 ) || ( in_ch > NUM_CHANNELS ) || ( out_ch < 1 ) || ( out_ch > NUM_CHANNELS ) )
             {
                 
@@ -544,6 +553,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(filename);
                 }
             }
+
+            configFileAndDataFiles.addIfNotAlreadyThere(IrFilename);
+
             if (inchannels < 1)
             {
                 String debug;
@@ -675,6 +687,42 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     _configFile = configFile;
     
     sendChangeMessage(); // notify editor
+
+
+    /* save preset files as temporary .zip file, save this zip file later in the chunk if user wants to store preset within project */
+
+    _tempConfigZipFile = _tempConfigZipFile.createTempFile(".zip");
+
+    _cleanUpFilesOnExit.add(_tempConfigZipFile); // delete the file when we exit the plugin
+
+    ZipFile::Builder compressedConfigFileAndDataFiles;
+    for (int i = 0; i < configFileAndDataFiles.size(); i++)
+    {
+      String storedPath = ""; // add relative path
+      if (i > 0)
+        storedPath = configFileAndDataFiles.getUnchecked(i).getRelativePathFrom(configFileAndDataFiles.getUnchecked(0));
+
+        compressedConfigFileAndDataFiles.addFile(configFileAndDataFiles.getUnchecked(i), 5, storedPath);
+    }
+
+    FileOutputStream outputStream(_tempConfigZipFile);
+    if (outputStream.openedOk())
+    {
+      outputStream.setPosition(0); // overwrite file if already exists
+      outputStream.truncate();
+
+      double progress = 0.;
+      compressedConfigFileAndDataFiles.writeToStream(outputStream, &progress);
+
+      _readyToSaveConfiguration.set(true);
+      /*
+          String debugText = "Configuration File and Data Stored to: ";
+          debugText << _tempConfigZipFile.getFullPathName() << "\n";
+          DebugPrint(debugText);
+      */
+    }
+
+    sendChangeMessage(); // notify editor again
 }
 
 bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain, int offset, int length)
@@ -899,19 +947,49 @@ void Mcfx_convolverAudioProcessor::UnloadConfiguration()
     conv_data.clear();
         
     std::cout << "Unloaded Convolution..." << std::endl;
-    
+
+    DeleteTemporaryFiles();
 }
 
-void Mcfx_convolverAudioProcessor::DebugPrint(String debugText)
+void Mcfx_convolverAudioProcessor::DeleteTemporaryFiles()
 {
+    _readyToSaveConfiguration.set(false);
+
+    for (int i = 0; i < _cleanUpFilesOnExit.size(); i++)
+    {
+        _cleanUpFilesOnExit.getUnchecked(i).deleteRecursively();
+    }
+    _cleanUpFilesOnExit.clear();
+}
+
+void Mcfx_convolverAudioProcessor::DebugPrint(String debugText, bool reset)
+{
+    ScopedLock lock(_DebugTextMutex);
     String temp;
     
-    temp << debugText;
+    if (!reset)
+        temp << debugText;
+
     temp << _DebugText;
     
     // std::cout << debugText << std::endl;
     
     _DebugText = temp;
+}
+
+bool Mcfx_convolverAudioProcessor::SaveConfiguration(File zipFile)
+{
+    if (_readyToSaveConfiguration.get())
+        return _tempConfigZipFile.copyFileTo(zipFile);
+    else
+        return false;
+}
+
+String Mcfx_convolverAudioProcessor::getDebugString()
+{
+  ScopedLock lock(_DebugTextMutex);
+
+  return _DebugText;
 }
 
 void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
@@ -930,6 +1008,7 @@ void Mcfx_convolverAudioProcessor::LoadPreset(unsigned int preset)
     {
         // ScheduleConfiguration(_presetFiles.getUnchecked(preset));
         LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
+        box_preset_str = _presetFiles.getUnchecked(preset).getFileNameWithoutExtension();
     }
 }
 
@@ -980,6 +1059,15 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute("MaxPartSize", (int)_MaxPartSize);
     xml.setAttribute("oscIn", _osc_in);
     xml.setAttribute("oscInPort", _osc_in_port);
+    xml.setAttribute("storeConfigDataInProject", _storeConfigDataInProject.get());
+
+    // add .zip configuration as base64 dump
+    if (_tempConfigZipFile.existsAsFile() && _storeConfigDataInProject.get())
+    {
+      MemoryBlock tempFileBlock;
+      if (_tempConfigZipFile.loadFileAsData(tempFileBlock))
+        xml.setAttribute("configData", tempFileBlock.toBase64Encoding());
+    }
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -990,6 +1078,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
     
+    // probably we should switch to value tree which can include binary data more efficiently and gzip the data...!
+
     ScopedPointer<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
     
     if (xmlState != nullptr)
@@ -1010,6 +1100,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             _osc_in_port = xmlState->getIntAttribute("oscInPort", _osc_in_port);
             if (xmlState->getBoolAttribute("oscIn"))
               setOscIn(true);
+
+            _storeConfigDataInProject.set(xmlState->getIntAttribute("storeConfigDataInProject", 0)); // -> default: don't store convolver data for existing projects
         }
         
         File tempDir(newPresetDir);
@@ -1017,7 +1109,35 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             presetDir = tempDir;
             SearchPresets(presetDir);
         }
-        
+
+        // load config from chunk data
+        if (xmlState->hasAttribute("configData") && _storeConfigDataInProject.get())
+        {
+          DebugPrint("Load configuration from saved project data\n");
+          // todo....!
+          MemoryBlock tempMem;
+          tempMem.fromBase64Encoding(xmlState->getStringAttribute("configData"));
+          MemoryInputStream tempInStream(tempMem, false);
+          ZipFile dataZip(tempInStream);
+          File tempConfigFolder =  File::createTempFile("");
+          dataZip.uncompressTo(tempConfigFolder, true); // we should later delete those files!!
+
+          _cleanUpFilesOnExit.add(tempConfigFolder);
+
+          Array <File> configfiles; // should be exactly one...
+          tempConfigFolder.findChildFiles(configfiles, File::findFiles, false, activePreset);
+
+          if (configfiles.size() == 1)
+          {
+              LoadConfigurationAsync(configfiles.getUnchecked(0));
+              box_preset_str = configfiles.getUnchecked(0).getFileNameWithoutExtension();
+              box_preset_str << " (saved within project)";
+          }
+
+          return;
+        }
+
+        // load preset from file in case it was not stored
         if (activePreset.isNotEmpty()) {
             LoadPresetByName(activePreset);
         }

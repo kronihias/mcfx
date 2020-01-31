@@ -98,13 +98,13 @@ public:
     void UnloadConfiguration();
     
     void ReloadConfiguration();
-    
-    void DebugPrint(String debugText);
-    
-    String _DebugText;
-    
+
     // for gui
-    
+    bool SaveConfiguration(File zipFile);
+    Atomic<int> _readyToSaveConfiguration;
+
+    String getDebugString();
+
     void SearchPresets(File SearchFolder);
     
     void LoadPreset(unsigned int preset);
@@ -128,6 +128,8 @@ public:
     int getOscInPort();
     void oscMessageReceived(const OSCMessage& message);
 
+    Atomic<int> _storeConfigDataInProject;
+
     File presetDir; // where to search for presets
     File lastDir; // for open file dialog...
     
@@ -148,7 +150,18 @@ public:
 
 private:
 
+    void DeleteTemporaryFiles();
+
+    void DebugPrint(String debugText, bool reset=false);
+
+    String _DebugText;
+    CriticalSection _DebugTextMutex;
+
+
     File _desConfigFile;
+
+    File _tempConfigZipFile;
+    Array<File> _cleanUpFilesOnExit;
 
     ConvolverData conv_data;
     

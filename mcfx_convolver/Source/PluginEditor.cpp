@@ -183,7 +183,14 @@ box_maxpart(nullptr)
     tgl_rcv_active->setToggleState(true, dontSendNotification);
     tgl_rcv_active->setColour(ToggleButton::textColourId, Colours::white);
 
-    setSize (350, 300);
+    addAndMakeVisible(tgl_save_preset = new ToggleButton("new toggle button"));
+    tgl_save_preset->setButtonText(TRANS("Save preset within project"));
+    tgl_save_preset->setTooltip(TRANS("this will save the preset and data within the project and reload it from there; CAUTION: may slow down saving/opening your project and increases project file size!"));
+    tgl_save_preset->addListener(this);
+    tgl_save_preset->setToggleState(true, dontSendNotification);
+    tgl_save_preset->setColour(ToggleButton::textColourId, Colours::white);
+
+    setSize (350, 330);
     
     UpdateText();
     
@@ -223,8 +230,8 @@ Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
     box_maxpart = nullptr;
     txt_rcv_port = nullptr;
     tgl_rcv_active = nullptr;
+    tgl_save_preset = nullptr;
 }
-
 
 //==============================================================================
 void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
@@ -236,13 +243,13 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
                                        Colours::black,
                                        (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
                                        true));
-    g.fillRect (0, 0, 350, 300);
+    g.fillRect (0, 0, 350, 330);
     
     g.setColour (Colours::black);
-    g.drawRect (0, 0, 350, 300, 1);
+    g.drawRect (0, 0, 350, 330, 1);
     
     g.setColour (Colour (0x410000ff));
-    g.fillRoundedRectangle (18.0f, 105.0f, 190.0f, 76.0f, 10.0000f);
+    g.fillRoundedRectangle (18.0f, 132.0f, 190.0f, 77.0f, 10.0000f);
     
     g.setColour (Colours::white);
     g.setFont (Font (17.2000f, Font::bold));
@@ -258,10 +265,10 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     
     g.setFont (Font (12.4000f, Font::plain));
     g.drawText ("First Partition Size",
-                200, 98, 135, 30,
+                200, 104, 135, 30,
                 Justification::centredRight, true);
     g.drawText ("Maximum Partition Size",
-              200, 136, 135, 30,
+              200, 145, 135, 30,
               Justification::centredRight, true);
   
   
@@ -277,25 +284,27 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
 void Mcfx_convolverAudioProcessorEditor::resized()
 {
-    label->setBounds (16, 104, 140, 24);
+    label->setBounds (16, 134, 140, 24);
     txt_preset->setBounds (72, 50, 200, 24);
     label5->setBounds (8, 50, 56, 24);
-    txt_debug->setBounds (16, 184, 320, 96);
+    txt_debug->setBounds (16, 214, 320, 96);
     btn_open->setBounds (280, 50, 56, 24);
-    label2->setBounds (16, 128, 140, 24);
-    label3->setBounds (16, 152, 140, 24);
-    label4->setBounds (24, 280, 64, 16);
-    lbl_skippedcycles->setBounds(110, 280, 150, 16);
-    num_ch->setBounds (150, 104, 40, 24);
-    num_spk->setBounds (150, 128, 40, 24);
-    num_hrtf->setBounds (150, 152, 40, 24);
+    label2->setBounds (16, 158, 140, 24);
+    label3->setBounds (16, 182, 140, 24);
+    label4->setBounds (24, 310, 64, 16);
+    lbl_skippedcycles->setBounds(110, 310, 150, 16);
+    num_ch->setBounds (150, 134, 40, 24);
+    num_spk->setBounds (150, 158, 40, 24);
+    num_hrtf->setBounds (150, 182, 40, 24);
     btn_preset_folder->setBounds (245, 80, 94, 24);
     
-    box_conv_buffer->setBounds (270, 119, 67, 20);
-    box_maxpart->setBounds (270, 157, 65, 20);
+    box_conv_buffer->setBounds (270, 126, 67, 20);
+    box_maxpart->setBounds (270, 169, 65, 20);
 
-    txt_rcv_port->setBounds(146, 80, 40, 18);
-    tgl_rcv_active->setBounds(16, 77, 130, 24);
+    tgl_save_preset->setBounds(16, 79, 200, 24);
+
+    txt_rcv_port->setBounds(146, 108, 40, 18);
+    tgl_rcv_active->setBounds(16, 105, 130, 24);
 }
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()
@@ -306,23 +315,19 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
 
     lbl_skippedcycles->setText(text, dontSendNotification);
 
-    txt_debug->setText(ourProcessor->_DebugText, true);
+    txt_debug->setText(ourProcessor->getDebugString(), true);
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
 {
     Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
-	
+
     
     num_ch->setText(String(ourProcessor->_min_in_ch), dontSendNotification);
     
     num_spk->setText(String(ourProcessor->_min_out_ch), dontSendNotification);
 
     num_hrtf->setText(String(ourProcessor->_num_conv), dontSendNotification);
-
-    // ONLY A TEST!
-    // txt_debug->setText(ourProcessor->_DebugText, true);
-    // txt_debug->setText(String(ourProcessor->getSkippedCyclesCount()), true);
 
     txt_preset->setText(ourProcessor->box_preset_str);
     txt_preset->setCaretPosition(txt_preset->getTotalNumChars()-1);
@@ -364,6 +369,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     
     tgl_rcv_active->setToggleState(ourProcessor->getOscIn(), dontSendNotification);
     txt_rcv_port->setText(String(ourProcessor->getOscInPort()), dontSendNotification);
+
+    tgl_save_preset->setToggleState(ourProcessor->_storeConfigDataInProject.get(), dontSendNotification);
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
@@ -415,8 +422,15 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
         }
     }
     
-    popup_presets.addItem(-1, String("open from file..."));
-    
+
+    if (ourProcessor->activePreset.isNotEmpty())
+    {
+        popup_presets.addSeparator();
+        popup_presets.addItem(-2, String("save preset to .zip file..."), ourProcessor->_readyToSaveConfiguration.get());
+    }
+
+    popup_presets.addSeparator();
+    popup_presets.addItem(-1, String("open preset from file..."));
 }
 
 
@@ -444,6 +458,19 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
             //ourProcessor->ScheduleConfiguration(mooseFile);
             ourProcessor->LoadConfigurationAsync(mooseFile);
             
+            ourProcessor->lastDir = mooseFile.getParentDirectory();
+        }
+    }
+    else if (result == -2)
+    {
+        FileChooser myChooser("Save the loaded preset as .zip file...",
+            ourProcessor->lastDir.getChildFile(ourProcessor->activePreset),
+            "*.zip");
+        if (myChooser.browseForFileToSave(true))
+        {
+            File mooseFile(myChooser.getResult());
+            ourProcessor->SaveConfiguration(mooseFile);
+
             ourProcessor->lastDir = mooseFile.getParentDirectory();
         }
     }
@@ -485,6 +512,11 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
       ourProcessor->setOscIn(tgl_rcv_active->getToggleState());
     }
+    else if (buttonThatWasClicked == tgl_save_preset)
+    {
+        ourProcessor->_storeConfigDataInProject = tgl_save_preset->getToggleState();
+    }
+
 }
 
 void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
