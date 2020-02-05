@@ -18,7 +18,7 @@ SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in second
 SET(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
 
 IF(UNIX AND NOT APPLE AND NOT ANDROID)
-	SET(WITH_ZITA_CONVOLVER TRUE CACHE BOOL "build with zita-convolver (better performance under linux)")
+	SET(WITH_ZITA_CONVOLVER FALSE CACHE BOOL "build with zita-convolver (better performance under linux)")
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
 IF(BUILD_STANDALONE)
