@@ -336,7 +336,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     box_conv_buffer->clear(dontSendNotification);
     
     unsigned int buf = jmax(ourProcessor->getBufferSize(), (unsigned int) 1);
-    unsigned int conv_buf = jmax(ourProcessor->getConvBufferSize(), ourProcessor->getBufferSize());
+    unsigned int conv_buf = jmax(ourProcessor->getConvBufferSize(), buf);
   
     int sel = 0;
     unsigned int val = 0;
