@@ -97,6 +97,8 @@ multichannel level meter with RMS, peak and peak hold
 changelog:
 ==============
 
+- 0.5.9 (2020-02-05) - mcfx_convolver - fix dropouts/artifacts for hosts that send incomplete block sizes (eg. Adobe, Steinberg), fix reloading of stored presets, add filter length and latency debug messages, fix gui crash in Adobe hosts
+
 - 0.5.8 (2020-01-31) - mcfx_convolver - option to store preset within the project -> allows to exchange a DAW (eg. Reaper) project without need to provide the preset files extra, allow to export stored preset as .zip file for recovering it from the project
 
 - 0.5.7 (2019-04-28) - mcfx_convolver - osc receive support: /reload, /load <preset.conf> -> allows remote control of reloading/loading presets, port can be set in GUI
