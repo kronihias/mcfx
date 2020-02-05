@@ -42,6 +42,7 @@ _ConvBufferPos(0),
 _isProcessing(false),
 _configLoaded(false),
 _paramReload(false),
+safemode_(false),
 _skippedCycles(0),
 _osc_in_port(7200),
 _osc_in(false),
@@ -318,7 +319,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     {
         
         String debug;
-        debug << "Configuration file does not exist!" << configFile.getFullPathName() << "\n\n";
+        debug << "Configuration file does not exist:\n" << configFile.getFullPathName() << "\n\n";
         
         //std::cout << debug << std::endl;
         DebugPrint(debug);
@@ -657,9 +658,13 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     
 #else
     _MaxPartSize = jmin(MAX_PART_SIZE, nextPowerOfTwo(_MaxPartSize));
-  
-    mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _BufferSize, conv_data.getMaxLength(), _ConvBufferSize, _MaxPartSize);
-    
+
+    // try autodetecting host and deciding whether we need safemode (to avoid having to add another user parameter - let's see how this works for testers) 
+    PluginHostType me;
+    safemode_ = me.isAdobeAudition() || me.isPremiere() || me.isSteinberg(); // probably an incomplete list
+
+    mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _BufferSize, conv_data.getMaxLength(), _ConvBufferSize, _MaxPartSize, safemode_);
+
     for (int i=0; i < conv_data.getNumIRs(); i++)
     {
         if (threadShouldExit())
@@ -675,8 +680,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 #endif
     
     _configLoaded = true;
-    
-    setLatencySamples(_ConvBufferSize-_BufferSize);
+
+    if (safemode_)
+        setLatencySamples(_ConvBufferSize);
+    else
+        setLatencySamples(_ConvBufferSize-_BufferSize);
     
     _skippedCycles.set(0);
     
@@ -948,7 +956,6 @@ void Mcfx_convolverAudioProcessor::UnloadConfiguration()
         
     std::cout << "Unloaded Convolution..." << std::endl;
 
-    DeleteTemporaryFiles();
 }
 
 void Mcfx_convolverAudioProcessor::DeleteTemporaryFiles()
@@ -1006,7 +1013,7 @@ void Mcfx_convolverAudioProcessor::LoadPreset(unsigned int preset)
 {
     if (preset < (unsigned int)_presetFiles.size())
     {
-        // ScheduleConfiguration(_presetFiles.getUnchecked(preset));
+        DeleteTemporaryFiles();
         LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
         box_preset_str = _presetFiles.getUnchecked(preset).getFileNameWithoutExtension();
     }
@@ -1019,6 +1026,7 @@ void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
     
     if (files.size())
     {
+        DeleteTemporaryFiles();
         LoadConfigurationAsync(files.getUnchecked(0)); // Load first result
         box_preset_str = files.getUnchecked(0).getFileNameWithoutExtension();
     }

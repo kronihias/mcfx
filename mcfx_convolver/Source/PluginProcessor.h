@@ -192,6 +192,8 @@ private:
     MtxConvMaster mtxconv_;
 #endif
     
+    bool safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
+
     ScopedPointer<OSCReceiver> oscReceiver;
     int _osc_in_port;
     bool _osc_in;
