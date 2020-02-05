@@ -694,6 +694,12 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     
     _configFile = configFile;
     
+
+    debug.clear();
+    debug << "Configuration loaded, maximum filter length: " << String(conv_data.getMaxLengthInSeconds(), 2) << "[s], " << conv_data.getMaxLength() << " [smpls] \n";
+    debug << "Plugin Latency: " << getLatencySamples() << " [smpls] \n";
+    DebugPrint(debug << "\n\n");
+
     sendChangeMessage(); // notify editor
 
 

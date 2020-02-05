@@ -155,6 +155,11 @@ int ConvolverData::getMaxLength()
     return MaxLen;
 }
 
+double ConvolverData::getMaxLengthInSeconds()
+{
+    return (double)MaxLen/SampleRate;
+}
+
 void ConvolverData::setSampleRate(double samplerate)
 {
     if (samplerate > 0.f)
