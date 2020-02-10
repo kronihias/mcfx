@@ -2,28 +2,28 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
+namespace juce
+{
 
-BitmapLEDProgram::BitmapLEDProgram (LEDGrid& lg)  : Program (lg) {}
+BitmapLEDProgram::BitmapLEDProgram (Block& b)  : Program (b) {}
 
 /*
     The heap format for this program is just an array of 15x15 5:6:5 colours,
@@ -32,27 +32,31 @@ BitmapLEDProgram::BitmapLEDProgram (LEDGrid& lg)  : Program (lg) {}
 
 void BitmapLEDProgram::setLED (uint32 x, uint32 y, LEDColour colour)
 {
-    auto w = (uint32) ledGrid.getNumColumns();
-    auto h = (uint32) ledGrid.getNumRows();
-
-    if (x < w && y < h)
+    if (auto ledGrid = block.getLEDGrid())
     {
-        auto bit = (x + y * w) * 16;
+        auto w = (uint32) ledGrid->getNumColumns();
+        auto h = (uint32) ledGrid->getNumRows();
 
-        ledGrid.setDataBits (bit,      5, colour.getRed()   >> 3);
-        ledGrid.setDataBits (bit + 5,  6, colour.getGreen() >> 2);
-        ledGrid.setDataBits (bit + 11, 5, colour.getBlue()  >> 3);
+        if (x < w && y < h)
+        {
+            auto bit = (x + y * w) * 16;
+
+            block.setDataBits (bit,      5, (uint32) (colour.getRed()   >> 3));
+            block.setDataBits (bit + 5,  6, (uint32) (colour.getGreen() >> 2));
+            block.setDataBits (bit + 11, 5, (uint32) (colour.getBlue()  >> 3));
+        }
+    }
+    else
+    {
+        jassertfalse;
     }
 }
 
-uint32 BitmapLEDProgram::getHeapSize()
+String BitmapLEDProgram::getLittleFootProgram()
 {
-    return 15 * 15 * 16;
-}
+    String program (R"littlefoot(
 
-juce::String BitmapLEDProgram::getLittleFootProgram()
-{
-    auto program = R"littlefoot(
+    #heapsize: 15 * 15 * 2
 
     void repaint()
     {
@@ -62,17 +66,22 @@ juce::String BitmapLEDProgram::getLittleFootProgram()
             {
                 int bit = (x + y * NUM_COLUMNS) * 16;
 
-                setLED (x, y, makeARGB (255,
-                                        getHeapBits (bit,      5) << 3,
-                                        getHeapBits (bit + 5,  6) << 2,
-                                        getHeapBits (bit + 11, 5) << 3));
+                fillPixel (makeARGB (255,
+                                     getHeapBits (bit,      5) << 3,
+                                     getHeapBits (bit + 5,  6) << 2,
+                                     getHeapBits (bit + 11, 5) << 3), x, y);
             }
         }
     }
 
-    )littlefoot";
+    )littlefoot");
 
-    return juce::String (program)
-             .replace ("NUM_COLUMNS", juce::String (ledGrid.getNumColumns()))
-             .replace ("NUM_ROWS",    juce::String (ledGrid.getNumRows()));
+    if (auto ledGrid = block.getLEDGrid())
+        return program.replace ("NUM_COLUMNS", String (ledGrid->getNumColumns()))
+                      .replace ("NUM_ROWS",    String (ledGrid->getNumRows()));
+
+    jassertfalse;
+    return {};
 }
+
+} // namespace juce

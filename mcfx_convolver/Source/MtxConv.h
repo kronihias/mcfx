@@ -330,7 +330,7 @@ private:
     OwnedArray<FilterNode> filternodes_;    // holds filter nodes
     OwnedArray<OutNode> outnodes_;          // holds output nodes
     
-	ScopedPointer<FileOutputStream>	debug_out_; // Debug output Text File
+	std::unique_ptr<FileOutputStream>   debug_out_; // Debug output Text File
 };
 
 
@@ -425,15 +425,13 @@ private:
 
     int                 maxsize_;           // maximum filter length
 
-    bool                isprocessing_;      // true = Processing is active
-
     bool                configuration_;     // isconfigured
 
     CriticalSection     lock_;              // lock critical section
 
     OwnedArray<MtxConvSlave>    partitions_;// these are my partitions with different size
 
-	ScopedPointer<FileOutputStream>	debug_out_; // Debug output Text File
+    std::unique_ptr<FileOutputStream>   debug_out_; // Debug output Text File
 };
 
 

@@ -2,29 +2,30 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
+   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
+   27th April 2017).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-5-licence
+   Privacy Policy: www.juce.com/juce-5-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
-#ifndef JUCE_GRAPHICSCONTEXT_H_INCLUDED
-#define JUCE_GRAPHICSCONTEXT_H_INCLUDED
-
+namespace juce
+{
 
 //==============================================================================
 /**
@@ -38,8 +39,10 @@
     that image.
 
     @see Component::paint
+
+    @tags{Graphics}
 */
-class JUCE_API  Graphics
+class JUCE_API  Graphics  final
 {
 public:
     //==============================================================================
@@ -81,9 +84,11 @@ public:
     */
     void setOpacity (float newOpacity);
 
-    /** Sets the context to use a gradient for its fill pattern.
-    */
+    /** Sets the context to use a gradient for its fill pattern. */
     void setGradientFill (const ColourGradient& gradient);
+
+    /** Sets the context to use a gradient for its fill pattern. */
+    void setGradientFill (ColourGradient&& gradient);
 
     /** Sets the context to use a tiled image pattern for filling.
         Make sure that you don't delete this image while it's still being used by
@@ -100,10 +105,6 @@ public:
 
     //==============================================================================
     /** Changes the font to use for subsequent text-drawing functions.
-
-        Note there's also a setFont (float, int) method to quickly change the size and
-        style of the current font.
-
         @see drawSingleLineText, drawMultiLineText, drawText, drawFittedText
     */
     void setFont (const Font& newFont);
@@ -138,13 +139,16 @@ public:
 
         This will break the text onto a new line where there's a new-line or
         carriage-return character, or at a word-boundary when the text becomes wider
-        than the size specified by the maximumLineWidth parameter.
+        than the size specified by the maximumLineWidth parameter. New-lines
+        will be vertically separated by the specified leading.
 
         @see setFont, drawSingleLineText, drawFittedText, GlyphArrangement::addJustifiedText
     */
     void drawMultiLineText (const String& text,
                             int startX, int baselineY,
-                            int maximumLineWidth) const;
+                            int maximumLineWidth,
+                            Justification justification = Justification::left,
+                            float leading = 0.0f) const;
 
     /** Draws a line of text within a specified rectangle.
 
@@ -191,7 +195,7 @@ public:
     /** Tries to draw a text string inside a given space.
 
         This does its best to make the given text readable within the specified rectangle,
-        so it useful for labelling things.
+        so it's useful for labelling things.
 
         If the text is too big, it'll be squashed horizontally or broken over multiple lines
         if the maximumLinesToUse value allows this. If the text just won't fit into the space,
@@ -216,7 +220,7 @@ public:
     /** Tries to draw a text string inside a given space.
 
         This does its best to make the given text readable within the specified rectangle,
-        so it useful for labelling things.
+        so it's useful for labelling things.
 
         If the text is too big, it'll be squashed horizontally or broken over multiple lines
         if the maximumLinesToUse value allows this. If the text just won't fit into the space,
@@ -301,8 +305,8 @@ public:
                                float cornerSize) const;
 
     /** Fills a rectangle with a checkerboard pattern, alternating between two colours. */
-    void fillCheckerBoard (Rectangle<int> area,
-                           int checkWidth, int checkHeight,
+    void fillCheckerBoard (Rectangle<float> area,
+                           float checkWidth, float checkHeight,
                            Colour colour1, Colour colour2) const;
 
     /** Draws a rectangular outline, using the current colour or brush.
@@ -340,12 +344,6 @@ public:
     */
     void drawRoundedRectangle (Rectangle<float> rectangle,
                                float cornerSize, float lineThickness) const;
-
-    /** Fills a 1x1 pixel using the current colour or brush.
-        Note that because the context may be transformed, this is effectively the same as
-        calling fillRect (x, y, 1, 1), and the actual result may involve multiple pixels.
-    */
-    void setPixel (int x, int y) const;
 
     //==============================================================================
     /** Fills an ellipse with the current colour or brush.
@@ -391,14 +389,14 @@ public:
         TIP: If you're trying to draw horizontal or vertical lines, don't use this -
         it's better to use fillRect() instead unless you really need an angled line.
     */
-    void drawLine (const Line<float>& line) const;
+    void drawLine (Line<float> line) const;
 
     /** Draws a line between two points with a given thickness.
         @see Path::addLineSegment
         TIP: If you're trying to draw horizontal or vertical lines, don't use this -
         it's better to use fillRect() instead unless you really need an angled line.
     */
-    void drawLine (const Line<float>& line, float lineThickness) const;
+    void drawLine (Line<float> line, float lineThickness) const;
 
     /** Draws a dashed line using a custom set of dash-lengths.
 
@@ -411,7 +409,7 @@ public:
         @param dashIndexToStartFrom     the index in the dash-length array to use for the first segment
         @see PathStrokeType::createDashedStroke
     */
-    void drawDashedLine (const Line<float>& line,
+    void drawDashedLine (Line<float> line,
                          const float* dashLengths, int numDashLengths,
                          float lineThickness = 1.0f,
                          int dashIndexToStartFrom = 0) const;
@@ -444,7 +442,7 @@ public:
     /** Draws a path's outline using the currently selected colour or brush. */
     void strokePath (const Path& path,
                      const PathStrokeType& strokeType,
-                     const AffineTransform& transform = AffineTransform()) const;
+                     const AffineTransform& transform = {}) const;
 
     /** Draws a line with an arrowhead at its end.
 
@@ -453,7 +451,7 @@ public:
         @param arrowheadWidth   the width of the arrow head (perpendicular to the line)
         @param arrowheadLength  the length of the arrow head (along the length of the line)
     */
-    void drawArrow (const Line<float>& line,
+    void drawArrow (Line<float> line,
                     float lineThickness,
                     float arrowheadWidth,
                     float arrowheadLength) const;
@@ -494,7 +492,7 @@ public:
     /** Draws part of an image, rescaling it to fit in a given target region.
 
         The specified area of the source image is rescaled and drawn to fill the
-        specifed destination rectangle.
+        specified destination rectangle.
 
         Images are composited using the context's current opacity, so if you
         don't want it to be drawn semi-transparently, be sure to call setOpacity (1.0f)
@@ -743,14 +741,13 @@ public:
 
 private:
     //==============================================================================
+    std::unique_ptr<LowLevelGraphicsContext> contextHolder;
     LowLevelGraphicsContext& context;
-    ScopedPointer<LowLevelGraphicsContext> contextToDelete;
 
-    bool saveStatePending;
+    bool saveStatePending = false;
     void saveStateIfPending();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Graphics)
 };
 
-
-#endif   // JUCE_GRAPHICSCONTEXT_H_INCLUDED
+} // namespace juce

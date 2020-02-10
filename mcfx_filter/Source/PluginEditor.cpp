@@ -33,271 +33,275 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
 {
     //[Constructor_pre] You can add your own custom stuff here..
     //[/Constructor_pre]
+    setLookAndFeel (&MyLookAndFeel); // rotary wheel look of V3 is better for this plugin...
+
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
-    addAndMakeVisible (lbl_gd = new Label ("new label",
-                                           TRANS("mcfx_filter")));
-    lbl_gd->setFont (Font (15.00f, Font::plain));
-    lbl_gd->setJustificationType (Justification::centredLeft);
-    lbl_gd->setEditable (false, false, false);
-    lbl_gd->setColour (Label::textColourId, Colours::aquamarine);
-    lbl_gd->setColour (TextEditor::textColourId, Colours::black);
-    lbl_gd->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (lbl_gd);
+    lbl_gd.setText("mcfx_filter", dontSendNotification);
+    lbl_gd.setFont (Font (15.00f, Font::plain));
+    lbl_gd.setJustificationType (Justification::centredLeft);
+    lbl_gd.setEditable (false, false, false);
+    lbl_gd.setColour (Label::textColourId, Colours::aquamarine);
+    lbl_gd.setColour (TextEditor::textColourId, Colours::black);
+    lbl_gd.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
-    addAndMakeVisible (btn_lc_on = new ImageButton ("new button"));
-    btn_lc_on->setTooltip (TRANS("low cut off"));
-    btn_lc_on->addListener (this);
+    addAndMakeVisible (btn_lc_on);
+    btn_lc_on.setTooltip ("low cut off");
+    btn_lc_on.addListener (this);
 
-    btn_lc_on->setImages (false, true, true,
+    btn_lc_on.setImages (false, true, true,
                           ImageCache::getFromMemory (lc_off_png, lc_off_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (lc_over_png, lc_over_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (lc_on_png, lc_on_pngSize), 1.000f, Colour (0x00000000));
     
-    btn_lc_on->setClickingTogglesState(true);
+    btn_lc_on.setClickingTogglesState(true);
     
     
-    addAndMakeVisible (sld_lc_f = new Slider ("new slider"));
-    sld_lc_f->setTooltip (TRANS("low cutoff frequency"));
-    sld_lc_f->setRange (24, 21618, 1);
-    sld_lc_f->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
-    sld_lc_f->setVelocityBasedMode(true);
-    sld_lc_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
-    sld_lc_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_lc_f->setColour (Slider::trackColourId, Colours::coral);
-    sld_lc_f->setColour (Slider::rotarySliderFillColourId, Colours::coral);
-    sld_lc_f->setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
-    sld_lc_f->addListener (this);
-    sld_lc_f->setSkewFactor (0.55);
-    sld_lc_f->setDoubleClickReturnValue(true, 48.f);
+    addAndMakeVisible (sld_lc_f);
+    sld_lc_f.setTooltip ("low cutoff frequency");
+    sld_lc_f.setRange (24, 21618, 1);
+    sld_lc_f.setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+    sld_lc_f.setVelocityBasedMode(true);
+    sld_lc_f.setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
+    sld_lc_f.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_lc_f.setColour (Slider::trackColourId, Colours::coral);
+    sld_lc_f.setColour (Slider::rotarySliderFillColourId, Colours::coral);
+    sld_lc_f.setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
+    sld_lc_f.addListener (this);
+    sld_lc_f.setSkewFactor (0.55);
+    sld_lc_f.setDoubleClickReturnValue(true, 48.f);
     
-    addAndMakeVisible (btn_lc_order = new ImageButton ("new button"));
-    btn_lc_order->setTooltip (TRANS("2nd order low cut"));
-    btn_lc_order->addListener (this);
+    addAndMakeVisible (btn_lc_order);
+    btn_lc_order.setTooltip ("2nd order low cut");
+    btn_lc_order.addListener (this);
 
-    btn_lc_order->setImages (false, true, true,
+    btn_lc_order.setImages (false, true, true,
                              ImageCache::getFromMemory (_2nd_png, _2nd_pngSize), 1.000f, Colour (0x00000000),
                              Image(), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (_4th_png, _4th_pngSize), 1.000f, Colour (0x00000000));
     
-    btn_lc_order->setClickingTogglesState(true);
+    btn_lc_order.setClickingTogglesState(true);
     
     
-    addAndMakeVisible (btn_hc_on = new ImageButton ("new button"));
-    btn_hc_on->setTooltip (TRANS("high cut off"));
-    btn_hc_on->addListener (this);
+    addAndMakeVisible (btn_hc_on);
+    btn_hc_on.setTooltip ("high cut off");
+    btn_hc_on.addListener (this);
 
-    btn_hc_on->setImages (false, true, true,
+    btn_hc_on.setImages (false, true, true,
                           ImageCache::getFromMemory (hc_off_png, hc_off_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (hc_over_png, hc_over_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (hc_on_png, hc_on_pngSize), 1.000f, Colour (0x00000000));
     
-    btn_hc_on->setClickingTogglesState(true);
+    btn_hc_on.setClickingTogglesState(true);
     
     
-    addAndMakeVisible (sld_hc_f = new Slider ("new slider"));
-    sld_hc_f->setTooltip (TRANS("high cutoff frequency"));
-    sld_hc_f->setRange (24, 21618, 1);
-    sld_hc_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_hc_f->setVelocityBasedMode(true);
-    sld_hc_f->setTextBoxStyle (Slider::TextBoxLeft, false, 55, 18);
-    sld_hc_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_hc_f->setColour (Slider::trackColourId, Colours::coral);
-    sld_hc_f->setColour (Slider::rotarySliderFillColourId, Colours::coral);
-    sld_hc_f->setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
-    sld_hc_f->addListener (this);
-    sld_hc_f->setSkewFactor (0.55);
-    sld_hc_f->setDoubleClickReturnValue(true, 10960.f);
+    addAndMakeVisible (sld_hc_f);
+    sld_hc_f.setTooltip ("high cutoff frequency");
+    sld_hc_f.setRange (24, 21618, 1);
+    sld_hc_f.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hc_f.setVelocityBasedMode(true);
+    sld_hc_f.setTextBoxStyle (Slider::TextBoxLeft, false, 55, 18);
+    sld_hc_f.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_hc_f.setColour (Slider::trackColourId, Colours::coral);
+    sld_hc_f.setColour (Slider::rotarySliderFillColourId, Colours::coral);
+    sld_hc_f.setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
+    sld_hc_f.addListener (this);
+    sld_hc_f.setSkewFactor (0.55);
+    sld_hc_f.setDoubleClickReturnValue(true, 10960.f);
+    //sld_hc_f.setLookAndFeel(&slider_look_and_feel);
     
-    addAndMakeVisible (btn_hc_order = new ImageButton ("new button"));
-    btn_hc_order->setTooltip (TRANS("2nd order high cut"));
-    btn_hc_order->addListener (this);
+    addAndMakeVisible (btn_hc_order);
+    btn_hc_order.setTooltip ("2nd order high cut");
+    btn_hc_order.addListener (this);
 
-    btn_hc_order->setImages (false, true, true,
+    btn_hc_order.setImages (false, true, true,
                              ImageCache::getFromMemory (_2nd_png, _2nd_pngSize), 1.000f, Colour (0x00000000),
                              Image(), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (_4th_png, _4th_pngSize), 1.000f, Colour (0x00000000));
     
-    btn_hc_order->setClickingTogglesState(true);
+    btn_hc_order.setClickingTogglesState(true);
     
     
-    addAndMakeVisible (sld_hs_f = new Slider ("new slider"));
-    sld_hs_f->setTooltip (TRANS("high shelf frequency"));
-    sld_hs_f->setRange (24, 21618, 1);
-    sld_hs_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_hs_f->setVelocityBasedMode(true);
-    sld_hs_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
-    sld_hs_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_hs_f->setColour (Slider::trackColourId, Colours::chocolate);
-    sld_hs_f->setColour (Slider::rotarySliderFillColourId, Colours::coral);
-    sld_hs_f->setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
-    sld_hs_f->addListener (this);
-    sld_hs_f->setSkewFactor (0.55);
-    sld_hs_f->setDoubleClickReturnValue(true, 2817.f);
+    addAndMakeVisible (sld_hs_f);
+    sld_hs_f.setTooltip ("high shelf frequency");
+    sld_hs_f.setRange (24, 21618, 1);
+    sld_hs_f.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hs_f.setVelocityBasedMode(true);
+    sld_hs_f.setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
+    sld_hs_f.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_hs_f.setColour (Slider::trackColourId, Colours::chocolate);
+    sld_hs_f.setColour (Slider::rotarySliderFillColourId, Colours::coral);
+    sld_hs_f.setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
+    sld_hs_f.addListener (this);
+    sld_hs_f.setSkewFactor (0.55);
+    sld_hs_f.setDoubleClickReturnValue(true, 2817.f);
 
-    addAndMakeVisible (sld_hs_g = new Slider ("new slider"));
-    sld_hs_g->setTooltip (TRANS("high shelf gain"));
-    sld_hs_g->setRange (-18, 18, 0.1);
-    sld_hs_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_hs_g->setVelocityBasedMode(true);
-    sld_hs_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
-    sld_hs_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_hs_g->setColour (Slider::trackColourId, Colours::yellow);
-    sld_hs_g->setColour (Slider::rotarySliderFillColourId, Colours::yellow);
-    sld_hs_g->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
-    sld_hs_g->addListener (this);
-    sld_hs_g->setDoubleClickReturnValue(true, 0.f);
+    addAndMakeVisible (sld_hs_g);
+    sld_hs_g.setTooltip ("high shelf gain");
+    sld_hs_g.setRange (-18, 18, 0.1);
+    sld_hs_g.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hs_g.setVelocityBasedMode(true);
+    sld_hs_g.setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
+    sld_hs_g.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_hs_g.setColour (Slider::trackColourId, Colours::yellow);
+    sld_hs_g.setColour (Slider::rotarySliderFillColourId, Colours::yellow);
+    sld_hs_g.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_hs_g.addListener (this);
+    sld_hs_g.setDoubleClickReturnValue(true, 0.f);
 
-    addAndMakeVisible (sld_hs_q = new Slider ("new slider"));
-    sld_hs_q->setTooltip (TRANS("high shelf q"));
-    sld_hs_q->setRange (0.2, 20, 0.01);
-    sld_hs_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_hs_q->setVelocityBasedMode(true);
-    sld_hs_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
-    sld_hs_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_hs_q->setColour (Slider::trackColourId, Colours::aqua);
-    sld_hs_q->setColour (Slider::rotarySliderFillColourId, Colours::aqua);
-    sld_hs_q->setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
-    sld_hs_q->addListener (this);
-    sld_hs_q->setSkewFactor (0.5);
-    sld_hs_q->setDoubleClickReturnValue(true, 0.7f);
+    addAndMakeVisible (sld_hs_q);
+    sld_hs_q.setTooltip ("high shelf q");
+    sld_hs_q.setRange (0.2, 20, 0.01);
+    sld_hs_q.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_hs_q.setVelocityBasedMode(true);
+    sld_hs_q.setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
+    sld_hs_q.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_hs_q.setColour (Slider::trackColourId, Colours::aqua);
+    sld_hs_q.setColour (Slider::rotarySliderFillColourId, Colours::aqua);
+    sld_hs_q.setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
+    sld_hs_q.addListener (this);
+    sld_hs_q.setSkewFactor (0.5);
+    sld_hs_q.setDoubleClickReturnValue(true, 0.7f);
 
-    addAndMakeVisible (sld_p1_f = new Slider ("new slider"));
-    sld_p1_f->setTooltip (TRANS("peak1 frequency"));
-    sld_p1_f->setRange (24, 21618, 1);
-    sld_p1_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_p1_f->setVelocityBasedMode(true);
-    sld_p1_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
-    sld_p1_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_p1_f->setColour (Slider::trackColourId, Colours::chocolate);
-    sld_p1_f->setColour (Slider::rotarySliderFillColourId, Colours::coral);
-    sld_p1_f->setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
-    sld_p1_f->addListener (this);
-    sld_p1_f->setSkewFactor (0.55);
-    sld_p1_f->setDoubleClickReturnValue(true, 186.f);
+    addAndMakeVisible (sld_p1_f);
+    sld_p1_f.setTooltip ("peak1 frequency");
+    sld_p1_f.setRange (24, 21618, 1);
+    sld_p1_f.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p1_f.setVelocityBasedMode(true);
+    sld_p1_f.setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
+    sld_p1_f.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_p1_f.setColour (Slider::trackColourId, Colours::chocolate);
+    sld_p1_f.setColour (Slider::rotarySliderFillColourId, Colours::coral);
+    sld_p1_f.setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
+    sld_p1_f.addListener (this);
+    sld_p1_f.setSkewFactor (0.55);
+    sld_p1_f.setDoubleClickReturnValue(true, 186.f);
 
-    addAndMakeVisible (sld_p1_g = new Slider ("new slider"));
-    sld_p1_g->setTooltip (TRANS("peak1 gain"));
-    sld_p1_g->setRange (-18, 18, 0.1);
-    sld_p1_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_p1_g->setVelocityBasedMode(true);
-    sld_p1_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
-    sld_p1_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_p1_g->setColour (Slider::trackColourId, Colours::yellow);
-    sld_p1_g->setColour (Slider::rotarySliderFillColourId, Colours::yellow);
-    sld_p1_g->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
-    sld_p1_g->addListener (this);
-    sld_p1_g->setDoubleClickReturnValue(true, 0.f);
+    addAndMakeVisible (sld_p1_g);
+    sld_p1_g.setTooltip ("peak1 gain");
+    sld_p1_g.setRange (-18, 18, 0.1);
+    sld_p1_g.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p1_g.setVelocityBasedMode(true);
+    sld_p1_g.setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
+    sld_p1_g.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_p1_g.setColour (Slider::trackColourId, Colours::yellow);
+    sld_p1_g.setColour (Slider::rotarySliderFillColourId, Colours::yellow);
+    sld_p1_g.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_p1_g.addListener (this);
+    sld_p1_g.setDoubleClickReturnValue(true, 0.f);
 
-    addAndMakeVisible (sld_p1_q = new Slider ("new slider"));
-    sld_p1_q->setTooltip (TRANS("peak1 q"));
-    sld_p1_q->setRange (0.2, 20, 0.01);
-    sld_p1_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_p1_q->setVelocityBasedMode(true);
-    sld_p1_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
-    sld_p1_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_p1_q->setColour (Slider::trackColourId, Colours::aqua);
-    sld_p1_q->setColour (Slider::rotarySliderFillColourId, Colours::aqua);
-    sld_p1_q->setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
-    sld_p1_q->addListener (this);
-    sld_p1_q->setSkewFactor (0.5);
-    sld_p1_q->setDoubleClickReturnValue(true, 0.7f);
+    addAndMakeVisible (sld_p1_q);
+    sld_p1_q.setTooltip ("peak1 q");
+    sld_p1_q.setRange (0.2, 20, 0.01);
+    sld_p1_q.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p1_q.setVelocityBasedMode(true);
+    sld_p1_q.setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
+    sld_p1_q.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_p1_q.setColour (Slider::trackColourId, Colours::aqua);
+    sld_p1_q.setColour (Slider::rotarySliderFillColourId, Colours::aqua);
+    sld_p1_q.setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
+    sld_p1_q.addListener (this);
+    sld_p1_q.setSkewFactor (0.5);
+    sld_p1_q.setDoubleClickReturnValue(true, 0.7f);
 
-    addAndMakeVisible (sld_p2_f = new Slider ("new slider"));
-    sld_p2_f->setTooltip (TRANS("peak2 frequency"));
-    sld_p2_f->setRange (24, 21618, 1);
-    sld_p2_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_p2_f->setVelocityBasedMode(true);
-    sld_p2_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
-    sld_p2_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_p2_f->setColour (Slider::trackColourId, Colours::chocolate);
-    sld_p2_f->setColour (Slider::rotarySliderFillColourId, Colours::coral);
-    sld_p2_f->setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
-    sld_p2_f->addListener (this);
-    sld_p2_f->setSkewFactor (0.55);
-    sld_p2_f->setDoubleClickReturnValue(true, 1428.f);
+    addAndMakeVisible (sld_p2_f);
+    sld_p2_f.setTooltip ("peak2 frequency");
+    sld_p2_f.setRange (24, 21618, 1);
+    sld_p2_f.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p2_f.setVelocityBasedMode(true);
+    sld_p2_f.setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
+    sld_p2_f.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_p2_f.setColour (Slider::trackColourId, Colours::chocolate);
+    sld_p2_f.setColour (Slider::rotarySliderFillColourId, Colours::coral);
+    sld_p2_f.setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
+    sld_p2_f.addListener (this);
+    sld_p2_f.setSkewFactor (0.55);
+    sld_p2_f.setDoubleClickReturnValue(true, 1428.f);
 
-    addAndMakeVisible (sld_p2_g = new Slider ("new slider"));
-    sld_p2_g->setTooltip (TRANS("peak2 gain"));
-    sld_p2_g->setRange (-18, 18, 0.1);
-    sld_p2_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_p2_g->setVelocityBasedMode(true);
-    sld_p2_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
-    sld_p2_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_p2_g->setColour (Slider::trackColourId, Colours::yellow);
-    sld_p2_g->setColour (Slider::rotarySliderFillColourId, Colours::yellow);
-    sld_p2_g->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
-    sld_p2_g->addListener (this);
-    sld_p2_g->setDoubleClickReturnValue(true, 0.f);
+    addAndMakeVisible (sld_p2_g);
+    sld_p2_g.setTooltip ("peak2 gain");
+    sld_p2_g.setRange (-18, 18, 0.1);
+    sld_p2_g.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p2_g.setVelocityBasedMode(true);
+    sld_p2_g.setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
+    sld_p2_g.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_p2_g.setColour (Slider::trackColourId, Colours::yellow);
+    sld_p2_g.setColour (Slider::rotarySliderFillColourId, Colours::yellow);
+    sld_p2_g.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_p2_g.addListener (this);
+    sld_p2_g.setDoubleClickReturnValue(true, 0.f);
 
-    addAndMakeVisible (sld_p2_q = new Slider ("new slider"));
-    sld_p2_q->setTooltip (TRANS("peak2 q"));
-    sld_p2_q->setRange (0.2, 20, 0.01);
-    sld_p2_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_p2_q->setVelocityBasedMode(true);
-    sld_p2_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
-    sld_p2_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_p2_q->setColour (Slider::trackColourId, Colours::aqua);
-    sld_p2_q->setColour (Slider::rotarySliderFillColourId, Colours::aqua);
-    sld_p2_q->setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
-    sld_p2_q->addListener (this);
-    sld_p2_q->setSkewFactor (0.5);
-    sld_p2_q->setDoubleClickReturnValue(true, 0.7f);
+    addAndMakeVisible (sld_p2_q);
+    sld_p2_q.setTooltip ("peak2 q");
+    sld_p2_q.setRange (0.2, 20, 0.01);
+    sld_p2_q.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_p2_q.setVelocityBasedMode(true);
+    sld_p2_q.setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
+    sld_p2_q.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_p2_q.setColour (Slider::trackColourId, Colours::aqua);
+    sld_p2_q.setColour (Slider::rotarySliderFillColourId, Colours::aqua);
+    sld_p2_q.setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
+    sld_p2_q.addListener (this);
+    sld_p2_q.setSkewFactor (0.5);
+    sld_p2_q.setDoubleClickReturnValue(true, 0.7f);
 
-    addAndMakeVisible (sld_ls_f = new Slider ("new slider"));
-    sld_ls_f->setTooltip (TRANS("low shelf frequency"));
-    sld_ls_f->setRange (24, 21618, 1);
-    sld_ls_f->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_ls_f->setVelocityBasedMode(true);
-    sld_ls_f->setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
-    sld_ls_f->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_ls_f->setColour (Slider::trackColourId, Colours::chocolate);
-    sld_ls_f->setColour (Slider::rotarySliderFillColourId, Colours::coral);
-    sld_ls_f->setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
-    sld_ls_f->addListener (this);
-    sld_ls_f->setSkewFactor (0.55);
-    sld_ls_f->setDoubleClickReturnValue(true, 94.f);
+    addAndMakeVisible (sld_ls_f);
+    sld_ls_f.setTooltip ("low shelf frequency");
+    sld_ls_f.setRange (24, 21618, 1);
+    sld_ls_f.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_ls_f.setVelocityBasedMode(true);
+    sld_ls_f.setTextBoxStyle (Slider::TextBoxRight, false, 55, 18);
+    sld_ls_f.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_ls_f.setColour (Slider::trackColourId, Colours::chocolate);
+    sld_ls_f.setColour (Slider::rotarySliderFillColourId, Colours::coral);
+    sld_ls_f.setColour (Slider::rotarySliderOutlineColourId, Colours::coral);
+    sld_ls_f.addListener (this);
+    sld_ls_f.setSkewFactor (0.55);
+    sld_ls_f.setDoubleClickReturnValue(true, 94.f);
 
-    addAndMakeVisible (sld_ls_g = new Slider ("new slider"));
-    sld_ls_g->setTooltip (TRANS("low shelf gain"));
-    sld_ls_g->setRange (-18, 18, 0.1);
-    sld_ls_g->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_ls_g->setVelocityBasedMode(true);
-    sld_ls_g->setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
-    sld_ls_g->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_ls_g->setColour (Slider::trackColourId, Colours::yellow);
-    sld_ls_g->setColour (Slider::rotarySliderFillColourId, Colours::yellow);
-    sld_ls_g->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
-    sld_ls_g->addListener (this);
-    sld_ls_g->setDoubleClickReturnValue(true, 0.f);
+    addAndMakeVisible (sld_ls_g);
+    sld_ls_g.setTooltip ("low shelf gain");
+    sld_ls_g.setRange (-18, 18, 0.1);
+    sld_ls_g.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_ls_g.setVelocityBasedMode(true);
+    sld_ls_g.setTextBoxStyle (Slider::TextBoxRight, false, 45, 18);
+    sld_ls_g.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_ls_g.setColour (Slider::trackColourId, Colours::yellow);
+    sld_ls_g.setColour (Slider::rotarySliderFillColourId, Colours::yellow);
+    sld_ls_g.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_ls_g.addListener (this);
+    sld_ls_g.setDoubleClickReturnValue(true, 0.f);
 
-    addAndMakeVisible (sld_ls_q = new Slider ("new slider"));
-    sld_ls_q->setTooltip (TRANS("low shelf q"));
-    sld_ls_q->setRange (0.2, 20, 0.01);
-    sld_ls_q->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_ls_q->setVelocityBasedMode(true);
-    sld_ls_q->setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
-    sld_ls_q->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_ls_q->setColour (Slider::trackColourId, Colours::aqua);
-    sld_ls_q->setColour (Slider::rotarySliderFillColourId, Colours::aqua);
-    sld_ls_q->setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
-    sld_ls_q->addListener (this);
-    sld_ls_q->setSkewFactor (0.5);
-    sld_ls_q->setDoubleClickReturnValue(true, 0.7f);
+    addAndMakeVisible (sld_ls_q);
+    sld_ls_q.setTooltip ("low shelf q");
+    sld_ls_q.setRange (0.2, 20, 0.01);
+    sld_ls_q.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_ls_q.setVelocityBasedMode(true);
+    sld_ls_q.setTextBoxStyle (Slider::TextBoxRight, false, 40, 18);
+    sld_ls_q.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_ls_q.setColour (Slider::trackColourId, Colours::aqua);
+    sld_ls_q.setColour (Slider::rotarySliderFillColourId, Colours::aqua);
+    sld_ls_q.setColour (Slider::rotarySliderOutlineColourId, Colours::aqua);
+    sld_ls_q.addListener (this);
+    sld_ls_q.setSkewFactor (0.5);
+    sld_ls_q.setDoubleClickReturnValue(true, 0.7f);
 
-    addAndMakeVisible (filtergraph = new FilterGraph(ownerFilter, ownerFilter));
+    filtergraph = std::make_unique<FilterGraph>(ownerFilter, ownerFilter);
+    addAndMakeVisible (filtergraph.get());
     filtergraph->setName ("new component");
     
     filtergraph->analyzeron_ = ownerFilter->_freqanalysis;
     
-    addAndMakeVisible (btn_analyzer = new ImageButton ("new button"));
-    btn_analyzer->addListener (this);
+    addAndMakeVisible (btn_analyzer);
+    btn_analyzer.addListener (this);
     
-    btn_analyzer->setImages (false, true, true,
+    btn_analyzer.setImages (false, true, true,
                              ImageCache::getFromMemory (analyzer_off_png, analyzer_off_pngSize), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (analyzer_over_png, analyzer_over_pngSize), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (analyzer_on_png, analyzer_on_pngSize), 1.000f, Colour (0x00000000));
-    btn_analyzer->setClickingTogglesState(true);
-    btn_analyzer->setToggleState(ownerFilter->_freqanalysis, dontSendNotification);
+    btn_analyzer.setClickingTogglesState(true);
+    btn_analyzer.setToggleState(ownerFilter->_freqanalysis, dontSendNotification);
     
     
     
@@ -330,29 +334,6 @@ LowhighpassAudioProcessorEditor::~LowhighpassAudioProcessorEditor()
     
     
     getProcessor()->_editorOpen = false;
-    
-    lbl_gd = nullptr;
-    btn_lc_on = nullptr;
-    sld_lc_f = nullptr;
-    btn_lc_order = nullptr;
-    btn_hc_on = nullptr;
-    sld_hc_f = nullptr;
-    btn_hc_order = nullptr;
-    sld_hs_f = nullptr;
-    sld_hs_g = nullptr;
-    sld_hs_q = nullptr;
-    sld_p1_f = nullptr;
-    sld_p1_g = nullptr;
-    sld_p1_q = nullptr;
-    sld_p2_f = nullptr;
-    sld_p2_g = nullptr;
-    sld_p2_q = nullptr;
-    sld_ls_f = nullptr;
-    sld_ls_g = nullptr;
-    sld_ls_q = nullptr;
-    filtergraph = nullptr;
-    btn_analyzer = nullptr;
-
 
     //[Destructor]. You can add your own custom destruction code here..
     //[/Destructor]
@@ -466,27 +447,27 @@ void LowhighpassAudioProcessorEditor::resized()
     //[UserPreResize] Add your own custom resize code here..
     //[/UserPreResize]
 
-    lbl_gd->setBounds (0, 0, 115, 16);
-    btn_lc_on->setBounds (36, 240, 27, 21);
-    sld_lc_f->setBounds (7, 262, 86, 24);
-    btn_lc_order->setBounds (65, 240, 27, 21);
-    btn_hc_on->setBounds (534, 242, 27, 21);
-    sld_hc_f->setBounds (535, 264, 86, 24);
-    btn_hc_order->setBounds (562, 242, 27, 21);
-    sld_hs_f->setBounds (423, 264, 85, 24);
-    sld_hs_g->setBounds (423, 239, 75, 24);
-    sld_hs_q->setBounds (423, 215, 70, 24);
-    sld_p1_f->setBounds (213, 264, 85, 24);
-    sld_p1_g->setBounds (213, 239, 75, 24);
-    sld_p1_q->setBounds (213, 215, 70, 24);
-    sld_p2_f->setBounds (324, 264, 85, 24);
-    sld_p2_g->setBounds (324, 239, 75, 24);
-    sld_p2_q->setBounds (324, 215, 70, 24);
-    sld_ls_f->setBounds (109, 266, 85, 24);
-    sld_ls_g->setBounds (109, 241, 75, 24);
-    sld_ls_q->setBounds (109, 217, 70, 24);
+    lbl_gd.setBounds (0, 0, 115, 16);
+    btn_lc_on.setBounds (36, 240, 27, 21);
+    sld_lc_f.setBounds (7, 262, 86, 24);
+    btn_lc_order.setBounds (65, 240, 27, 21);
+    btn_hc_on.setBounds (534, 242, 27, 21);
+    sld_hc_f.setBounds (535, 264, 86, 24);
+    btn_hc_order.setBounds (562, 242, 27, 21);
+    sld_hs_f.setBounds (423, 264, 85, 24);
+    sld_hs_g.setBounds (423, 239, 75, 24);
+    sld_hs_q.setBounds (423, 215, 70, 24);
+    sld_p1_f.setBounds (213, 264, 85, 24);
+    sld_p1_g.setBounds (213, 239, 75, 24);
+    sld_p1_q.setBounds (213, 215, 70, 24);
+    sld_p2_f.setBounds (324, 264, 85, 24);
+    sld_p2_g.setBounds (324, 239, 75, 24);
+    sld_p2_q.setBounds (324, 215, 70, 24);
+    sld_ls_f.setBounds (109, 266, 85, 24);
+    sld_ls_g.setBounds (109, 241, 75, 24);
+    sld_ls_q.setBounds (109, 217, 70, 24);
     filtergraph->setBounds (26, 21, 580, 170);
-    btn_analyzer->setBounds (27, 193, 58, 20);
+    btn_analyzer.setBounds (27, 193, 58, 20);
     //[UserResized] Add your own custom resize handling here..
     //[/UserResized]
 }
@@ -496,32 +477,32 @@ void LowhighpassAudioProcessorEditor::updateSliders()
     LowhighpassAudioProcessor* ourProcessor = getProcessor();
     
     float lc_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::LCfreqParam));
-    sld_lc_f->setValue(lc_f, dontSendNotification);
+    sld_lc_f.setValue(lc_f, dontSendNotification);
     float ls_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::LSfreqParam));
-    sld_ls_f->setValue(ls_f, dontSendNotification);
+    sld_ls_f.setValue(ls_f, dontSendNotification);
     float p1_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::PF1freqParam));
-    sld_p1_f->setValue(p1_f, dontSendNotification);
+    sld_p1_f.setValue(p1_f, dontSendNotification);
     float p2_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::PF2freqParam));
-    sld_p2_f->setValue(p2_f, dontSendNotification);
+    sld_p2_f.setValue(p2_f, dontSendNotification);
     float hs_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::HSfreqParam));
-    sld_hs_f->setValue(hs_f, dontSendNotification);
+    sld_hs_f.setValue(hs_f, dontSendNotification);
     float hc_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::HCfreqParam));
-    sld_hc_f->setValue(hc_f, dontSendNotification);
+    sld_hc_f.setValue(hc_f, dontSendNotification);
     
     
-    sld_ls_q->setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::LSQParam)), dontSendNotification);
-    sld_p1_q->setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::PF1QParam)), dontSendNotification);
-    sld_p2_q->setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::PF2QParam)), dontSendNotification);
-    sld_hs_q->setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::HSQParam)), dontSendNotification);
+    sld_ls_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::LSQParam)), dontSendNotification);
+    sld_p1_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::PF1QParam)), dontSendNotification);
+    sld_p2_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::PF2QParam)), dontSendNotification);
+    sld_hs_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::HSQParam)), dontSendNotification);
     
     float ls_g = param2db(ourProcessor->getParameter(LowhighpassAudioProcessor::LSGainParam));
-    sld_ls_g->setValue(ls_g, dontSendNotification);
+    sld_ls_g.setValue(ls_g, dontSendNotification);
     float p1_g = param2db(ourProcessor->getParameter(LowhighpassAudioProcessor::PF1GainParam));
-    sld_p1_g->setValue(p1_g, dontSendNotification);
+    sld_p1_g.setValue(p1_g, dontSendNotification);
     float p2_g = param2db(ourProcessor->getParameter(LowhighpassAudioProcessor::PF2GainParam));
-    sld_p2_g->setValue(p2_g, dontSendNotification);
+    sld_p2_g.setValue(p2_g, dontSendNotification);
     float hs_g = param2db(ourProcessor->getParameter(LowhighpassAudioProcessor::HSGainParam));
-    sld_hs_g->setValue(hs_g, dontSendNotification);
+    sld_hs_g.setValue(hs_g, dontSendNotification);
     
     
     filtergraph->setDragButton(0, lc_f, 0.f);
@@ -533,25 +514,25 @@ void LowhighpassAudioProcessorEditor::updateSliders()
     
     
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::LCOnParam) > 0.5f)
-        btn_lc_on->setToggleState(true, dontSendNotification);
+        btn_lc_on.setToggleState(true, dontSendNotification);
     else
-        btn_lc_on->setToggleState(false, dontSendNotification);
+        btn_lc_on.setToggleState(false, dontSendNotification);
     
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::HCOnParam) > 0.5f)
-        btn_hc_on->setToggleState(true, dontSendNotification);
+        btn_hc_on.setToggleState(true, dontSendNotification);
     else
-        btn_hc_on->setToggleState(false, dontSendNotification);
+        btn_hc_on.setToggleState(false, dontSendNotification);
     
     
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::LCorderParam) > 0.5f)
-        btn_lc_order->setToggleState(true, dontSendNotification);
+        btn_lc_order.setToggleState(true, dontSendNotification);
     else
-        btn_lc_order->setToggleState(false, dontSendNotification);
+        btn_lc_order.setToggleState(false, dontSendNotification);
     
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::HCorderParam) > 0.5f)
-        btn_hc_order->setToggleState(true, dontSendNotification);
+        btn_hc_order.setToggleState(true, dontSendNotification);
     else
-        btn_hc_order->setToggleState(false, dontSendNotification);
+        btn_hc_order.setToggleState(false, dontSendNotification);
 }
 
 void LowhighpassAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
@@ -565,26 +546,26 @@ void LowhighpassAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicke
 {
     LowhighpassAudioProcessor* ourProcessor = getProcessor();
 
-    if (buttonThatWasClicked == btn_lc_on)
+    if (buttonThatWasClicked == &btn_lc_on)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::LCOnParam, btn_lc_on->getToggleState()==true ? 1.f : 0.f);
+        ourProcessor->setParameter(LowhighpassAudioProcessor::LCOnParam, btn_lc_on.getToggleState()==true ? 1.f : 0.f);
     }
-    else if (buttonThatWasClicked == btn_lc_order)
+    else if (buttonThatWasClicked == &btn_lc_order)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::LCorderParam, btn_lc_order->getToggleState()==true ? 1.f : 0.f);
+        ourProcessor->setParameter(LowhighpassAudioProcessor::LCorderParam, btn_lc_order.getToggleState()==true ? 1.f : 0.f);
     }
-    else if (buttonThatWasClicked == btn_hc_on)
+    else if (buttonThatWasClicked == &btn_hc_on)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::HCOnParam, btn_hc_on->getToggleState()==true ? 1.f : 0.f);
+        ourProcessor->setParameter(LowhighpassAudioProcessor::HCOnParam, btn_hc_on.getToggleState()==true ? 1.f : 0.f);
     }
-    else if (buttonThatWasClicked == btn_hc_order)
+    else if (buttonThatWasClicked == &btn_hc_order)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::HCorderParam, btn_hc_order->getToggleState()==true ? 1.f : 0.f);
+        ourProcessor->setParameter(LowhighpassAudioProcessor::HCorderParam, btn_hc_order.getToggleState()==true ? 1.f : 0.f);
     }
-    else if (buttonThatWasClicked == btn_analyzer)
+    else if (buttonThatWasClicked == &btn_analyzer)
     {
-        getProcessor()->freqanalysis(btn_analyzer->getToggleState());
-        filtergraph->analyzeron_ = btn_analyzer->getToggleState();
+        getProcessor()->freqanalysis(btn_analyzer.getToggleState());
+        filtergraph->analyzeron_ = btn_analyzer.getToggleState();
     }
 
     //[UserbuttonClicked_Post]
@@ -595,61 +576,61 @@ void LowhighpassAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasM
 {
     LowhighpassAudioProcessor* ourProcessor = getProcessor();
 
-    if (sliderThatWasMoved == sld_lc_f)
+    if (sliderThatWasMoved == &sld_lc_f)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::LCfreqParam, freq2param(sld_lc_f->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::LCfreqParam, freq2param(sld_lc_f.getValue()));
     }
-    else if (sliderThatWasMoved == sld_hc_f)
+    else if (sliderThatWasMoved == &sld_hc_f)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::HCfreqParam, freq2param(sld_hc_f->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::HCfreqParam, freq2param(sld_hc_f.getValue()));
     }
-    else if (sliderThatWasMoved == sld_hs_f)
+    else if (sliderThatWasMoved == &sld_hs_f)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::HSfreqParam, freq2param(sld_hs_f->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::HSfreqParam, freq2param(sld_hs_f.getValue()));
     }
-    else if (sliderThatWasMoved == sld_hs_g)
+    else if (sliderThatWasMoved == &sld_hs_g)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::HSGainParam, db2param(sld_hs_g->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::HSGainParam, db2param(sld_hs_g.getValue()));
     }
-    else if (sliderThatWasMoved == sld_hs_q)
+    else if (sliderThatWasMoved == &sld_hs_q)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::HSQParam, q2param(sld_hs_q->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::HSQParam, q2param(sld_hs_q.getValue()));
     }
-    else if (sliderThatWasMoved == sld_p1_f)
+    else if (sliderThatWasMoved == &sld_p1_f)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::PF1freqParam, freq2param(sld_p1_f->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::PF1freqParam, freq2param(sld_p1_f.getValue()));
     }
-    else if (sliderThatWasMoved == sld_p1_g)
+    else if (sliderThatWasMoved == &sld_p1_g)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::PF1GainParam, db2param(sld_p1_g->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::PF1GainParam, db2param(sld_p1_g.getValue()));
     }
-    else if (sliderThatWasMoved == sld_p1_q)
+    else if (sliderThatWasMoved == &sld_p1_q)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::PF1QParam, q2param(sld_p1_q->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::PF1QParam, q2param(sld_p1_q.getValue()));
     }
-    else if (sliderThatWasMoved == sld_p2_f)
+    else if (sliderThatWasMoved == &sld_p2_f)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::PF2freqParam, freq2param(sld_p2_f->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::PF2freqParam, freq2param(sld_p2_f.getValue()));
     }
-    else if (sliderThatWasMoved == sld_p2_g)
+    else if (sliderThatWasMoved == &sld_p2_g)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::PF2GainParam, db2param(sld_p2_g->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::PF2GainParam, db2param(sld_p2_g.getValue()));
     }
-    else if (sliderThatWasMoved == sld_p2_q)
+    else if (sliderThatWasMoved == &sld_p2_q)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::PF2QParam, q2param(sld_p2_q->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::PF2QParam, q2param(sld_p2_q.getValue()));
     }
-    else if (sliderThatWasMoved == sld_ls_f)
+    else if (sliderThatWasMoved == &sld_ls_f)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::LSfreqParam, freq2param(sld_ls_f->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::LSfreqParam, freq2param(sld_ls_f.getValue()));
     }
-    else if (sliderThatWasMoved == sld_ls_g)
+    else if (sliderThatWasMoved == &sld_ls_g)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::LSGainParam, db2param(sld_ls_g->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::LSGainParam, db2param(sld_ls_g.getValue()));
     }
-    else if (sliderThatWasMoved == sld_ls_q)
+    else if (sliderThatWasMoved == &sld_ls_q)
     {
-        ourProcessor->setParameter(LowhighpassAudioProcessor::LSQParam, q2param(sld_ls_q->getValue()));
+        ourProcessor->setParameter(LowhighpassAudioProcessor::LSQParam, q2param(sld_ls_q.getValue()));
     }
 
     //[UsersliderValueChanged_Post]

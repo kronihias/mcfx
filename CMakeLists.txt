@@ -1,7 +1,5 @@
 cmake_minimum_required(VERSION 2.8)
 
-cmake_policy(SET CMP0026 OLD) # supress warnings regarding JUCE STATIC LOCATION
-
 ################################################
 #set name
 PROJECT(mcfx_plugin_suite)
@@ -16,6 +14,9 @@ ADD_DEFINITIONS(-DVERSION=${VERSION})
 SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
 SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 SET(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
+
+SET(VSTSDK_PATH "~/SDKs/VST3" CACHE PATH "Path to VST SDK")
+
 
 IF(UNIX AND NOT APPLE AND NOT ANDROID)
 	SET(WITH_ZITA_CONVOLVER FALSE CACHE BOOL "build with zita-convolver (better performance under linux)")
@@ -94,7 +95,7 @@ IF(UNIX AND NOT APPLE AND NOT ANDROID)
 	find_package(FFTW3 COMPONENTS single threads)
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
-include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS})
+include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS} ${VSTSDK_PATH})
 
 
 ################################################

@@ -2,29 +2,30 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
+   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
+   27th April 2017).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-5-licence
+   Privacy Policy: www.juce.com/juce-5-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
-#ifndef JUCE_OSCSENDER_H_INCLUDED
-#define JUCE_OSCSENDER_H_INCLUDED
-
+namespace juce
+{
 
 //==============================================================================
 /**
@@ -32,7 +33,9 @@
 
     An OSCSender object can connect to a network port. It then can send OSC
     messages and bundles to a specified host over an UDP socket.
- */
+
+    @tags{OSC}
+*/
 class JUCE_API  OSCSender
 {
 public:
@@ -47,23 +50,34 @@ public:
     /** Connects to a datagram socket and prepares the socket for sending OSC
         packets to the specified target.
 
+        Note: The operating system will choose which specific network adapter(s)
+        to bind your socket to, and which local port to use for the sender.
+
         @param  targetHostName   The remote host to which messages will be send.
         @param  targetPortNumber The remote UDP port number on which the host will
                                  receive the messages.
 
         @returns true if the connection was successful; false otherwise.
-
-        Note: the operating system will choose which specific network adapter(s)
-        to bind your socket to, and which local port to use for the sender.
-
         @see send, disconnect.
     */
     bool connect (const String& targetHostName, int targetPortNumber);
 
+    /** Uses an existing datagram socket for sending OSC packets to the specified target.
+
+        @param  socket           An existing datagram socket. Make sure this doesn't
+                                 get deleted while this class is still using it!
+        @param  targetHostName   The remote host to which messages will be send.
+        @param  targetPortNumber The remote UDP port number on which the host will
+                                 receive the messages.
+
+        @returns true if the connection was successful; false otherwise.
+        @see connect, send, disconnect.
+    */
+    bool connectToSocket (DatagramSocket& socket, const String& targetHostName, int targetPortNumber);
+
     //==============================================================================
     /** Disconnects from the currently used UDP port.
         @returns true if the disconnection was successful; false otherwise.
-
         @see connect.
     */
     bool disconnect();
@@ -101,7 +115,6 @@ public:
     bool sendToIPAddress (const String& targetIPAddress, int targetPortNumber,
                           const OSCBundle& bundle);
 
-   #if JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES && JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
     /** Creates a new OSC message with the specified address pattern and list
         of arguments, and sends it to the target.
 
@@ -124,33 +137,28 @@ public:
     template <typename... Args>
     bool sendToIPAddress (const String& targetIPAddress, int targetPortNumber,
                           const OSCAddressPattern& address, Args&&... args);
-   #endif
 
 private:
     //==============================================================================
     struct Pimpl;
-    friend struct Pimpl;
-    friend struct ContainerDeletePolicy<Pimpl>;
-    ScopedPointer<Pimpl> pimpl;
+    std::unique_ptr<Pimpl> pimpl;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (OSCSender)
 };
 
 
 //==============================================================================
-#if JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES && JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
- template <typename... Args>
- bool OSCSender::send (const OSCAddressPattern& address, Args&&... args)
- {
-     return send (OSCMessage (address, std::forward<Args> (args)...));
- }
+template <typename... Args>
+bool OSCSender::send (const OSCAddressPattern& address, Args&&... args)
+{
+    return send (OSCMessage (address, std::forward<Args> (args)...));
+}
 
- template <typename... Args>
- bool OSCSender::sendToIPAddress (const String& targetIPAddress, int targetPortNumber,
-                                  const OSCAddressPattern& address, Args&&... args)
- {
-     return sendToIPAddress (targetIPAddress, targetPortNumber, OSCMessage (address, std::forward<Args> (args)...));
- }
-#endif // JUCE_COMPILER_SUPPORTS_VARIADIC_TEMPLATES && JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
+template <typename... Args>
+bool OSCSender::sendToIPAddress (const String& targetIPAddress, int targetPortNumber,
+                                 const OSCAddressPattern& address, Args&&... args)
+{
+    return sendToIPAddress (targetIPAddress, targetPortNumber, OSCMessage (address, std::forward<Args> (args)...));
+}
 
-#endif // JUCE_OSCSENDER_H_INCLUDED
+} // namespace juce

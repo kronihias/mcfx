@@ -28,11 +28,11 @@
 /**
 */
 class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
-                                            public ButtonListener,
+                                            public Button::Listener,
                                             public ChangeListener,
-                                            public ComboBoxListener,
+                                            public ComboBox::Listener,
                                             public Timer,
-                                            public TextEditorListener
+                                            public TextEditor::Listener
 {
 public:
     Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter);
@@ -68,27 +68,28 @@ private:
     }
     TooltipWindow tooltipWindow;
     
-    ScopedPointer<Label> label;
-    ScopedPointer<TextEditor> txt_preset;
+    Label label;
+    TextEditor txt_preset;
     PopupMenu popup_presets;
     OwnedArray<PopupMenu> popup_submenu;
-    ScopedPointer<Label> label5;
-    ScopedPointer<TextEditor> txt_debug;
-    ScopedPointer<TextButton> btn_open;
-    ScopedPointer<Label> label2;
-    ScopedPointer<Label> label3;
-    ScopedPointer<Label> label4;
-    ScopedPointer<Label> lbl_skippedcycles;
-    ScopedPointer<Label> num_ch;
-    ScopedPointer<Label> num_spk;
-    ScopedPointer<Label> num_hrtf;
-    ScopedPointer<TextButton> btn_preset_folder;
-    ScopedPointer<ComboBox> box_conv_buffer;
-    ScopedPointer<ComboBox> box_maxpart;
-    ScopedPointer<TextEditor> txt_rcv_port;
-    ScopedPointer<ToggleButton> tgl_rcv_active;
-    ScopedPointer<ToggleButton> tgl_save_preset;
+    Label label5;
+    TextEditor txt_debug;
+    TextButton btn_open;
+    Label label2;
+    Label label3;
+    Label label4;
+    Label lbl_skippedcycles;
+    Label num_ch;
+    Label num_spk;
+    Label num_hrtf;
+    TextButton btn_preset_folder;
+    ComboBox box_conv_buffer;
+    ComboBox box_maxpart;
+    TextEditor txt_rcv_port;
+    ToggleButton tgl_rcv_active;
+    ToggleButton tgl_save_preset;
     
+    LookAndFeel_V3 MyLookAndFeel;
 };
 
 

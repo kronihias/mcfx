@@ -2,26 +2,28 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
+namespace juce
+{
+namespace BlocksProtocol
+{
 
 /**
     All sysex messages to or from a BLOCKS device begin with these header bytes.
@@ -44,12 +46,17 @@ static uint8 calculatePacketChecksum (const uint8* data, uint32 size) noexcept
 
 
 //==============================================================================
+/**
+    Helper class to define an integer with a specific bit size.
+
+    @tags{Blocks}
+*/
 template <int numBits>
 struct IntegerWithBitSize
 {
-    IntegerWithBitSize() noexcept = default;
-    IntegerWithBitSize (const IntegerWithBitSize&) noexcept = default;
-    IntegerWithBitSize& operator= (const IntegerWithBitSize&) noexcept = default;
+    IntegerWithBitSize() = default;
+    IntegerWithBitSize (const IntegerWithBitSize&) = default;
+    IntegerWithBitSize& operator= (const IntegerWithBitSize&) = default;
 
     IntegerWithBitSize (uint32 v) noexcept : value (v)
     {
@@ -94,6 +101,8 @@ struct IntegerWithBitSize
 /**
     This helper class allocates a block of 7-bit bytes and can push sequences of bits into it.
     @see Packed7BitArrayReader
+
+    @tags{Blocks}
 */
 template <int allocatedBytes>
 struct Packed7BitArrayBuilder
@@ -172,7 +181,7 @@ struct Packed7BitArrayBuilder
             {
                 const int bitsToDo = jmin (7 - bitsInCurrentByte, numBits);
 
-                data[bytesWritten] |= ((value & ((1 << bitsToDo) - 1)) << bitsInCurrentByte);
+                data[bytesWritten] |= ((value & (uint32) ((1 << bitsToDo) - 1)) << bitsInCurrentByte);
                 value >>= bitsToDo;
                 numBits -= bitsToDo;
                 bitsInCurrentByte += bitsToDo;
@@ -186,6 +195,7 @@ struct Packed7BitArrayBuilder
         }
     }
 
+    /** Describes the current building state */
     struct State
     {
         int bytesWritten, bitsInCurrentByte;
@@ -203,7 +213,7 @@ struct Packed7BitArrayBuilder
     }
 
 private:
-    uint8 data[allocatedBytes];
+    uint8 data[(size_t) allocatedBytes];
     int bytesWritten = 0, bitsInCurrentByte = 0;
 };
 
@@ -212,6 +222,8 @@ private:
 /**
     This helper class reads from a block of 7-bit bytes as sequences of bits.
     @see Packed7BitArrayBuilder
+
+    @tags{Blocks}
 */
 struct Packed7BitArrayReader
 {
@@ -241,13 +253,13 @@ struct Packed7BitArrayReader
 
         while (numBits > 0)
         {
-            const uint32 valueInCurrentByte = (*data >> bitsReadInCurrentByte);
+            const auto valueInCurrentByte = (uint32) (*data >> bitsReadInCurrentByte);
 
             const int bitsAvailable = 7 - bitsReadInCurrentByte;
 
             if (bitsAvailable > numBits)
             {
-                value |= ((valueInCurrentByte & ((1 << numBits) - 1)) << bitsSoFar);
+                value |= ((valueInCurrentByte & (uint32) ((1 << numBits) - 1)) << bitsSoFar);
                 bitsReadInCurrentByte += numBits;
                 break;
             }
@@ -272,3 +284,6 @@ private:
     const uint8* data;
     int totalBits, bitsReadInCurrentByte = 0;
 };
+
+} // namespace BlocksProtocol
+} // namespace juce

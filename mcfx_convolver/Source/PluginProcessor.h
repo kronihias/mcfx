@@ -173,8 +173,6 @@ private:
     unsigned int _BufferSize; // size of the processing Block
     unsigned int _ConvBufferSize; // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
     unsigned int _MaxPartSize; // maximum size of the partition
-  
-    unsigned int _ConvBufferPos; // the position of the read/write head
     
     bool _isProcessing;
     
@@ -194,7 +192,7 @@ private:
     
     bool safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
 
-    ScopedPointer<OSCReceiver> oscReceiver;
+    OSCReceiver oscReceiver;
     int _osc_in_port;
     bool _osc_in;
 

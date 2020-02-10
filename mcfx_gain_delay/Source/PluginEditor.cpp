@@ -48,162 +48,167 @@ inline float freq2param(float freq)
 }
 
 //==============================================================================
-Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_gain_delayAudioProcessor* ownerFilter)
-    : AudioProcessorEditor (ownerFilter), isStrgDown(false)
+Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_gain_delayAudioProcessor* ownerFilter) :
+AudioProcessorEditor (ownerFilter),
+btn_phase_reset("new drawablebutton", DrawableButton::ImageFitted),
+btn_mute_reset("new drawablebutton", DrawableButton::ImageFitted),
+btn_solo_reset ("new drawablebutton", DrawableButton::ImageFitted),
+btn_sig_reset("new drawablebutton", DrawableButton::ImageFitted),
+isStrgDown(false)
 {
-    
+    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
-    addAndMakeVisible (lbl_gd = new Label ("new label",
-                                           TRANS("mcfx_gain_delay")));
-    lbl_gd->setFont (Font (15.00f, Font::plain));
-    lbl_gd->setJustificationType (Justification::centredLeft);
-    lbl_gd->setEditable (false, false, false);
-    lbl_gd->setColour (Label::textColourId, Colours::aquamarine);
-    lbl_gd->setColour (TextEditor::textColourId, Colours::black);
-    lbl_gd->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (lbl_gd);
+    lbl_gd.setText("mcfx_gain_delay", dontSendNotification);
+    lbl_gd.setFont (Font (15.00f, Font::plain));
+    lbl_gd.setJustificationType (Justification::centredLeft);
+    lbl_gd.setEditable (false, false, false);
+    lbl_gd.setColour (Label::textColourId, Colours::aquamarine);
+    lbl_gd.setColour (TextEditor::textColourId, Colours::black);
+    lbl_gd.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
-    addAndMakeVisible (label2 = new Label ("new label",
-                                           TRANS("gain [dB]\n")));
-    label2->setFont (Font (13.00f, Font::plain));
-    label2->setJustificationType (Justification::centredRight);
-    label2->setEditable (false, false, false);
-    label2->setColour (Label::textColourId, Colours::white);
-    label2->setColour (TextEditor::textColourId, Colours::black);
-    label2->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label2);
+    label2.setText("gain [dB]\n", dontSendNotification);
+    label2.setFont (Font (13.00f, Font::plain));
+    label2.setJustificationType (Justification::centredRight);
+    label2.setEditable (false, false, false);
+    label2.setColour (Label::textColourId, Colours::white);
+    label2.setColour (TextEditor::textColourId, Colours::black);
+    label2.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
-    addAndMakeVisible (label3 = new Label ("new label",
-                                           TRANS("delay [ms]\n")));
-    label3->setFont (Font (13.00f, Font::plain));
-    label3->setJustificationType (Justification::centredRight);
-    label3->setEditable (false, false, false);
-    label3->setColour (Label::textColourId, Colours::white);
-    label3->setColour (TextEditor::textColourId, Colours::black);
-    label3->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label3);
+    label3.setText("delay [ms]\n", dontSendNotification);
+    label3.setFont (Font (13.00f, Font::plain));
+    label3.setJustificationType (Justification::centredRight);
+    label3.setEditable (false, false, false);
+    label3.setColour (Label::textColourId, Colours::white);
+    label3.setColour (TextEditor::textColourId, Colours::black);
+    label3.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
 
-    addAndMakeVisible (btn_paste_gain = new ImageButton ("new button"));
-    btn_paste_gain->setTooltip (TRANS("paste gain values from clipboard"));
-    btn_paste_gain->addListener (this);
+    addAndMakeVisible (btn_paste_gain);
+    btn_paste_gain.setTooltip ("paste gain values from clipboard");
+    btn_paste_gain.addListener (this);
 
-    btn_paste_gain->setImages (false, true, true,
+    btn_paste_gain.setImages (false, true, true,
                                 ImageCache::getFromMemory (clipboard35_grey_png, clipboard35_grey_pngSize), 1.000f, Colour (0x00000000),
                                 ImageCache::getFromMemory (clipboard35_png, clipboard35_pngSize), 1.000f, Colour (0x00000000),
                                 Image(), 1.000f, Colour (0x00000000));
     
-    addAndMakeVisible (btn_paste_gain2 = new ImageButton ("new button"));
-    btn_paste_gain2->setTooltip (TRANS("paste delay values from clipboard"));
-    btn_paste_gain2->addListener (this);
+    addAndMakeVisible (btn_paste_gain2);
+    btn_paste_gain2.setTooltip ("paste delay values from clipboard");
+    btn_paste_gain2.addListener (this);
 
-    btn_paste_gain2->setImages (false, true, true,
+    btn_paste_gain2.setImages (false, true, true,
                                 ImageCache::getFromMemory (clipboard35_grey_png, clipboard35_grey_pngSize), 1.000f, Colour (0x00000000),
                                 ImageCache::getFromMemory (clipboard35_png, clipboard35_pngSize), 1.000f, Colour (0x00000000),
                                 Image(), 1.000f, Colour (0x00000000));
 
 
     
-    addAndMakeVisible (sld_siggain = new Slider ("new slider"));
-    sld_siggain->setTooltip (TRANS("Signalgenerator Gain"));
-    sld_siggain->setRange (-99, 6, 0.1);
-    sld_siggain->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
-    sld_siggain->setVelocityBasedMode(true);
-    sld_siggain->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
-    sld_siggain->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_siggain->setColour (Slider::trackColourId, Colour (0xff797900));
-    sld_siggain->setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
-    sld_siggain->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
-    sld_siggain->addListener (this);
-    sld_siggain->setDoubleClickReturnValue(true, -40.f);
+    addAndMakeVisible (sld_siggain);
+    sld_siggain.setTooltip ("Signalgenerator Gain");
+    sld_siggain.setRange (-99, 6, 0.1);
+    sld_siggain.setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+    sld_siggain.setVelocityBasedMode(true);
+    sld_siggain.setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+    sld_siggain.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_siggain.setColour (Slider::trackColourId, Colour (0xff797900));
+    sld_siggain.setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
+    sld_siggain.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_siggain.addListener (this);
+    sld_siggain.setDoubleClickReturnValue(true, -40.f);
     
-    addAndMakeVisible (box_signal = new ComboBox ("new combo box"));
-    box_signal->setTooltip (TRANS("Signal Type"));
-    box_signal->setEditableText (false);
-    box_signal->setJustificationType (Justification::centredLeft);
-    box_signal->setTextWhenNothingSelected (TRANS("white"));
-    box_signal->setTextWhenNoChoicesAvailable (TRANS("(no choices)"));
-    box_signal->addItem (TRANS("white"), 1);
-    box_signal->addItem (TRANS("pink"), 2);
-    box_signal->addItem (TRANS("sine"), 3);
-    box_signal->addItem (TRANS("sawtooth"), 4);
-    box_signal->addItem (TRANS("square"), 5);
-    box_signal->addItem (TRANS("dirac"), 6);
-    box_signal->addItem(TRANS("toneburst"), 7);
-    box_signal->addListener (this);
-    box_signal->setColour(ComboBox::buttonColourId, Colours::grey);
+    addAndMakeVisible (box_signal);
+    box_signal.setTooltip ("Signal Type");
+    box_signal.setEditableText (false);
+    box_signal.setJustificationType (Justification::centredLeft);
+    box_signal.setTextWhenNothingSelected ("white");
+    box_signal.setTextWhenNoChoicesAvailable ("(no choices)");
+    box_signal.addItem ("white", 1);
+    box_signal.addItem ("pink", 2);
+    box_signal.addItem ("sine", 3);
+    box_signal.addItem ("sawtooth", 4);
+    box_signal.addItem ("square", 5);
+    box_signal.addItem ("dirac", 6);
+    box_signal.addItem("toneburst", 7);
+    box_signal.addListener (this);
+    box_signal.setColour(ComboBox::buttonColourId, Colours::grey);
   
-    addAndMakeVisible (box_sigtime = new ComboBox ("new combo box"));
-    box_sigtime->setTooltip (TRANS("Signal generator time sequence"));
-    box_sigtime->setEditableText (false);
-    box_sigtime->setJustificationType (Justification::centredLeft);
-    box_sigtime->setTextWhenNothingSelected (TRANS("steady"));
-    box_sigtime->setTextWhenNoChoicesAvailable (TRANS("(no choices)"));
-    box_sigtime->addItem (TRANS("steady"), 1);
-    box_sigtime->addItem (TRANS("pulsed"), 2);
-    box_sigtime->addListener (this);
-    box_sigtime->setColour(ComboBox::buttonColourId, Colours::grey);
+    addAndMakeVisible (box_sigtime);
+    box_sigtime.setTooltip ("Signal generator time sequence");
+    box_sigtime.setEditableText (false);
+    box_sigtime.setJustificationType (Justification::centredLeft);
+    box_sigtime.setTextWhenNothingSelected ("steady");
+    box_sigtime.setTextWhenNoChoicesAvailable ("(no choices)");
+    box_sigtime.addItem ("steady", 1);
+    box_sigtime.addItem ("pulsed", 2);
+    box_sigtime.addListener (this);
+    box_sigtime.setColour(ComboBox::buttonColourId, Colours::grey);
   
-    addAndMakeVisible (sld_sigfreq = new Slider ("new slider"));
-    sld_sigfreq->setTooltip (TRANS("Signalgenerator Frequency"));
-    sld_sigfreq->setExplicitFocusOrder (20000);
-    sld_sigfreq->setRange (24, 21618, 1);
-    sld_sigfreq->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_sigfreq->setVelocityBasedMode(true);
-    sld_sigfreq->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
-    sld_sigfreq->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_sigfreq->setColour (Slider::trackColourId, Colours::yellow);
-    sld_sigfreq->setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
-    sld_sigfreq->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
-    sld_sigfreq->addListener (this);
-    sld_sigfreq->setSkewFactor(0.5f);
-    sld_sigfreq->setDoubleClickReturnValue(true, 440.f);
+    addAndMakeVisible (sld_sigfreq);
+    sld_sigfreq.setTooltip ("Signalgenerator Frequency");
+    sld_sigfreq.setExplicitFocusOrder (20000);
+    sld_sigfreq.setRange (24, 21618, 1);
+    sld_sigfreq.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_sigfreq.setVelocityBasedMode(true);
+    sld_sigfreq.setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+    sld_sigfreq.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_sigfreq.setColour (Slider::trackColourId, Colours::yellow);
+    sld_sigfreq.setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
+    sld_sigfreq.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_sigfreq.addListener (this);
+    sld_sigfreq.setSkewFactor(0.5f);
+    sld_sigfreq.setDoubleClickReturnValue(true, 440.f);
     
-    addAndMakeVisible (sld_sigstepinterval = new Slider ("new slider"));
-    sld_sigstepinterval->setTooltip (TRANS("Step Interval"));
-    sld_sigstepinterval->setExplicitFocusOrder (5000);
-    sld_sigstepinterval->setRange (50, 5000, 1);
-    sld_sigstepinterval->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_sigstepinterval->setVelocityBasedMode(true);
-    sld_sigstepinterval->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
-    sld_sigstepinterval->setColour (Slider::thumbColourId, Colour (0xff5a5a90));
-    sld_sigstepinterval->setColour (Slider::trackColourId, Colours::yellow);
-    sld_sigstepinterval->setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
-    sld_sigstepinterval->setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
-    sld_sigstepinterval->addListener (this);
-    sld_sigstepinterval->setDoubleClickReturnValue(true, 400);
+    addAndMakeVisible (sld_sigstepinterval);
+    sld_sigstepinterval.setTooltip ("Step Interval");
+    sld_sigstepinterval.setExplicitFocusOrder (5000);
+    sld_sigstepinterval.setRange (50, 5000, 1);
+    sld_sigstepinterval.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_sigstepinterval.setVelocityBasedMode(true);
+    sld_sigstepinterval.setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+    sld_sigstepinterval.setColour (Slider::thumbColourId, Colour (0xff5a5a90));
+    sld_sigstepinterval.setColour (Slider::trackColourId, Colours::yellow);
+    sld_sigstepinterval.setColour (Slider::rotarySliderFillColourId, Colours::aliceblue);
+    sld_sigstepinterval.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
+    sld_sigstepinterval.addListener (this);
+    sld_sigstepinterval.setDoubleClickReturnValue(true, 400);
     
-    addAndMakeVisible (tgl_sigstep = new ToggleButton ("new toggle button"));
-    tgl_sigstep->setTooltip (TRANS("Signalgenerator step through channels"));
-    tgl_sigstep->setButtonText (TRANS("step through channels"));
-    tgl_sigstep->addListener (this);
-    tgl_sigstep->setColour (ToggleButton::textColourId, Colours::white);
-    tgl_sigstep->setColour (TextButton::buttonColourId, Colours::grey);
+    addAndMakeVisible (tgl_sigstep);
+    tgl_sigstep.setTooltip ("Signalgenerator step through channels");
+    tgl_sigstep.setButtonText ("step through channels");
+    tgl_sigstep.addListener (this);
+    tgl_sigstep.setColour (ToggleButton::textColourId, Colours::white);
+    tgl_sigstep.setColour (TextButton::buttonColourId, Colours::grey);
   
-    addAndMakeVisible (label4 = new Label ("new label",
-                                           TRANS("gain [dB]\n")));
-    label4->setFont (Font (13.00f, Font::plain));
-    label4->setJustificationType (Justification::centredLeft);
-    label4->setEditable (false, false, false);
-    label4->setColour (Label::textColourId, Colours::white);
-    label4->setColour (TextEditor::textColourId, Colours::black);
-    label4->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label4);
+    label4.setText("gain [dB]\n", dontSendNotification);
+    label4.setFont (Font (13.00f, Font::plain));
+    label4.setJustificationType (Justification::centredLeft);
+    label4.setEditable (false, false, false);
+    label4.setColour (Label::textColourId, Colours::white);
+    label4.setColour (TextEditor::textColourId, Colours::black);
+    label4.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
     
-    addAndMakeVisible (label6 = new Label ("new label",
-                                           TRANS("[Hz]")));
-    label6->setFont (Font (13.00f, Font::plain));
-    label6->setJustificationType (Justification::centredLeft);
-    label6->setEditable (false, false, false);
-    label6->setColour (Label::textColourId, Colours::white);
-    label6->setColour (TextEditor::textColourId, Colours::black);
-    label6->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label6);
+    label6.setText("[Hz]", dontSendNotification);
+    label6.setFont (Font (13.00f, Font::plain));
+    label6.setJustificationType (Justification::centredLeft);
+    label6.setEditable (false, false, false);
+    label6.setColour (Label::textColourId, Colours::white);
+    label6.setColour (TextEditor::textColourId, Colours::black);
+    label6.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
     
-    addAndMakeVisible (label7 = new Label ("new label",
-                                           TRANS("[ms]")));
-    label7->setFont (Font (13.00f, Font::plain));
-    label7->setJustificationType (Justification::centredLeft);
-    label7->setEditable (false, false, false);
-    label7->setColour (Label::textColourId, Colours::white);
-    label7->setColour (TextEditor::textColourId, Colours::black);
-    label7->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label7);
+    label7.setText("[ms]", dontSendNotification);
+    label7.setFont (Font (13.00f, Font::plain));
+    label7.setJustificationType (Justification::centredLeft);
+    label7.setEditable (false, false, false);
+    label7.setColour (Label::textColourId, Colours::white);
+    label7.setColour (TextEditor::textColourId, Colours::black);
+    label7.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
     
     //////////////
     //////////////
@@ -230,12 +235,12 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
   
     ////////////////
   
-    addAndMakeVisible (btn_mute_reset = new DrawableButton ("new drawablebutton", DrawableButton::ImageFitted));
-    btn_mute_reset->setVisible(true);
-    btn_mute_reset->setTooltip (TRANS("Unmute all channels"));
-    btn_mute_reset->addListener (this);
+    addAndMakeVisible (btn_mute_reset);
+    btn_mute_reset.setVisible(true);
+    btn_mute_reset.setTooltip ("Unmute all channels");
+    btn_mute_reset.addListener (this);
     
-    btn_mute_reset->setImages ( &mute_normal,
+    btn_mute_reset.setImages ( &mute_normal,
                                          &mute_over,
                                          &mute_act,
                                          &mute_normal,
@@ -244,16 +249,17 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                          &mute_act,
                                          &mute_act);
     
-    btn_mute_reset->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
-    btn_mute_reset->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-    btn_mute_reset->setClickingTogglesState(true);
+    btn_mute_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+    btn_mute_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+    btn_mute_reset.setClickingTogglesState(true);
     
-    addAndMakeVisible (btn_solo_reset = new DrawableButton ("new drawablebutton", DrawableButton::ImageFitted));
-    btn_solo_reset->setVisible(true);
-    btn_solo_reset->setTooltip (TRANS("Unsolo all channels"));
-    btn_solo_reset->addListener (this);
     
-    btn_solo_reset->setImages ( &solo_normal,
+    addAndMakeVisible (btn_solo_reset);
+    btn_solo_reset.setVisible(true);
+    btn_solo_reset.setTooltip ("Unsolo all channels");
+    btn_solo_reset.addListener (this);
+    
+    btn_solo_reset.setImages ( &solo_normal,
                                &solo_over,
                                &solo_act,
                                &solo_normal,
@@ -262,16 +268,17 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                &solo_act,
                                &solo_act);
     
-    btn_solo_reset->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
-    btn_solo_reset->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-    btn_solo_reset->setClickingTogglesState(true);
+    btn_solo_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+    btn_solo_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+    btn_solo_reset.setClickingTogglesState(true);
     
-    addAndMakeVisible (btn_sig_reset = new DrawableButton ("new drawablebutton", DrawableButton::ImageFitted));
-    btn_sig_reset->setVisible(true);
-    btn_sig_reset->setTooltip (TRANS("Turn On Signal Generator for all Channels"));
-    btn_sig_reset->addListener (this);
     
-    btn_sig_reset->setImages ( &sig_normal,
+    addAndMakeVisible (btn_sig_reset);
+    btn_sig_reset.setVisible(true);
+    btn_sig_reset.setTooltip ("Turn On Signal Generator for all Channels");
+    btn_sig_reset.addListener (this);
+    
+    btn_sig_reset.setImages ( &sig_normal,
                                &sig_over,
                                &sig_act,
                                &sig_normal,
@@ -280,16 +287,17 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                &sig_act,
                                &sig_act);
     
-    btn_sig_reset->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
-    btn_sig_reset->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-    btn_sig_reset->setClickingTogglesState(true);
+    btn_sig_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+    btn_sig_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+    btn_sig_reset.setClickingTogglesState(true);
     
-    addAndMakeVisible (btn_phase_reset = new DrawableButton ("new drawablebutton", DrawableButton::ImageFitted));
-    btn_phase_reset->setVisible(true);
-    btn_phase_reset->setTooltip (TRANS("Reset phase for all channels"));
-    btn_phase_reset->addListener (this);
     
-    btn_phase_reset->setImages ( &phase_normal,
+    addAndMakeVisible (btn_phase_reset);
+    btn_phase_reset.setVisible(true);
+    btn_phase_reset.setTooltip ("Reset phase for all channels");
+    btn_phase_reset.addListener (this);
+    
+    btn_phase_reset.setImages ( &phase_normal,
                                &phase_over,
                                &phase_inv,
                                &phase_normal,
@@ -298,9 +306,9 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
                                &phase_inv,
                                &phase_inv);
     
-    btn_phase_reset->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
-    btn_phase_reset->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-    btn_phase_reset->setClickingTogglesState(true);
+    btn_phase_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
+    btn_phase_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+    btn_phase_reset.setClickingTogglesState(true);
     
     
     // create labels and knobs!
@@ -364,7 +372,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
             btn_phase.add(PHASE);
             addChildComponent(btn_phase.getUnchecked(i));
             btn_phase.getUnchecked(i)->setVisible(true);
-            btn_phase.getUnchecked(i)->setTooltip (TRANS("phase normal"));
+            btn_phase.getUnchecked(i)->setTooltip ("phase normal");
             btn_phase.getUnchecked(i)->addListener (this);
             
             btn_phase.getUnchecked(i)->setImages (&phase_normal,
@@ -388,7 +396,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
             btn_mute.add(MUTE);
             addChildComponent(btn_mute.getUnchecked(i));
             btn_mute.getUnchecked(i)->setVisible(true);
-            btn_mute.getUnchecked(i)->setTooltip (TRANS("Not muted"));
+            btn_mute.getUnchecked(i)->setTooltip ("Not muted");
             btn_mute.getUnchecked(i)->addListener (this);
             
             btn_mute.getUnchecked(i)->setImages ( &mute_normal,
@@ -412,7 +420,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
             btn_solo.add(SOLO);
             addChildComponent(btn_solo.getUnchecked(i));
             btn_solo.getUnchecked(i)->setVisible(true);
-            btn_solo.getUnchecked(i)->setTooltip (TRANS("Not soloed"));
+            btn_solo.getUnchecked(i)->setTooltip ("Not soloed");
             btn_solo.getUnchecked(i)->addListener (this);
             
             btn_solo.getUnchecked(i)->setImages ( &solo_normal,
@@ -436,7 +444,7 @@ Mcfx_gain_delayAudioProcessorEditor::Mcfx_gain_delayAudioProcessorEditor (Mcfx_g
             btn_sig.add(SIGGEN);
             addChildComponent(btn_sig.getUnchecked(i));
             btn_sig.getUnchecked(i)->setVisible(true);
-            btn_sig.getUnchecked(i)->setTooltip (TRANS("Signalgenerator Off"));
+            btn_sig.getUnchecked(i)->setTooltip ("Signalgenerator Off");
             btn_sig.getUnchecked(i)->addListener (this);
             
             btn_sig.getUnchecked(i)->setImages ( &sig_normal,
@@ -478,26 +486,6 @@ Mcfx_gain_delayAudioProcessorEditor::~Mcfx_gain_delayAudioProcessorEditor()
     // remove me as listener for changes
     ourProcessor->removeChangeListener(this);
     
-    lbl_gd = nullptr;
-    label2 = nullptr;
-    label3 = nullptr;
-    btn_paste_gain = nullptr;
-    btn_paste_gain2 = nullptr;
-    
-    btn_mute_reset = nullptr;
-    btn_solo_reset = nullptr;
-    btn_phase_reset = nullptr;
-    btn_sig_reset = nullptr;
-    
-    sld_siggain = nullptr;
-    box_signal = nullptr;
-    box_sigtime = nullptr;
-    sld_sigfreq = nullptr;
-    sld_sigstepinterval = nullptr;
-    tgl_sigstep = nullptr;
-    label4 = nullptr;
-    label6 = nullptr;
-    label7 = nullptr;
 }
 
 //==============================================================================
@@ -522,7 +510,7 @@ void Mcfx_gain_delayAudioProcessorEditor::paint (Graphics& g)
     
     g.setColour (Colour (0xfff64e0a));
     g.setFont (Font (15.00f, Font::plain));
-    g.drawText (TRANS("Signalgenerator"),
+    g.drawText ("Signalgenerator",
                 16, getHeight()-84.f, 107, 24,
                 Justification::centredLeft, true);
     ////////////////////
@@ -545,28 +533,28 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
     //[UserPreResize] Add your own custom resize code here..
     //[/UserPreResize]
 
-    lbl_gd->setBounds (0, 0, 115, 16);
-    label2->setBounds (35, 26, 66, 16);
-    label3->setBounds (115, 26, 75, 16);
+    lbl_gd.setBounds (0, 0, 115, 16);
+    label2.setBounds (35, 26, 66, 16);
+    label3.setBounds (115, 26, 75, 16);
     
-    btn_paste_gain->setBounds (29, 26, 16, 16);
-    btn_paste_gain2->setBounds (109, 26, 16, 16);
+    btn_paste_gain.setBounds (29, 26, 16, 16);
+    btn_paste_gain2.setBounds (109, 26, 16, 16);
   
-    btn_phase_reset->setBounds (206-18, 26, 19, 19);
-    btn_mute_reset->setBounds (212-6, 26, 19, 19);
-    btn_solo_reset->setBounds (235-12, 26, 19, 19);
-    btn_sig_reset->setBounds (235+5, 26, 19, 19);
+    btn_phase_reset.setBounds (206-18, 26, 19, 19);
+    btn_mute_reset.setBounds (212-6, 26, 19, 19);
+    btn_solo_reset.setBounds (235-12, 26, 19, 19);
+    btn_sig_reset.setBounds (235+5, 26, 19, 19);
   
     /* signalgenerator */
-    sld_siggain->setBounds (132, getHeight()+127-210, 80, 24);
-    box_signal->setBounds (17, getHeight()+155-210, 80, 18);
-    box_sigtime->setBounds (106, getHeight()+155-210, 67, 18);
-    sld_sigfreq->setBounds (184, getHeight()+150-210, 79, 26);
-    sld_sigstepinterval->setBounds (185, getHeight()+177-210, 72, 26);
-    tgl_sigstep->setBounds (14, getHeight()+178-210, 164, 24);
-    label4->setBounds (208, getHeight()+129-210, 62, 16);
-    label6->setBounds (258, getHeight()+155-210, 32, 16);
-    label7->setBounds (256, getHeight()+181-210, 35, 16);
+    sld_siggain.setBounds (132, getHeight()+127-210, 80, 24);
+    box_signal.setBounds (17, getHeight()+155-210, 80, 18);
+    box_sigtime.setBounds (106, getHeight()+155-210, 67, 18);
+    sld_sigfreq.setBounds (184, getHeight()+150-210, 79, 26);
+    sld_sigstepinterval.setBounds (185, getHeight()+177-210, 72, 26);
+    tgl_sigstep.setBounds (14, getHeight()+178-210, 164, 24);
+    label4.setBounds (208, getHeight()+129-210, 62, 16);
+    label6.setBounds (258, getHeight()+155-210, 32, 16);
+    label7.setBounds (256, getHeight()+181-210, 35, 16);
     /*                */
   
     int num_groups_first_col = jmax(1, (int)floorf((jmax(NUM_CHANNELS,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f));
@@ -617,16 +605,16 @@ void Mcfx_gain_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThat
 {
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
     
-    if (sliderThatWasMoved == sld_siggain) {
-        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+0, jmap((float)sld_siggain->getValue(), -99.f, 6.f, 0.f, 1.f));
+    if (sliderThatWasMoved == &sld_siggain) {
+        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+0, jmap((float)sld_siggain.getValue(), -99.f, 6.f, 0.f, 1.f));
     }
-    else if (sliderThatWasMoved == sld_sigfreq)
+    else if (sliderThatWasMoved == &sld_sigfreq)
     {
-        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+3, freq2param(sld_sigfreq->getValue()));
+        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+3, freq2param(sld_sigfreq.getValue()));
     } // sld_sigfreq
-    else if (sliderThatWasMoved == sld_sigstepinterval)
+    else if (sliderThatWasMoved == &sld_sigstepinterval)
     {
-        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+5, jmap((float)sld_sigstepinterval->getValue(), 50.f, 5000.f, 0.f, 1.f));
+        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+5, jmap((float)sld_sigstepinterval.getValue(), 50.f, 5000.f, 0.f, 1.f));
     } // sld_sigstepinterval
     else
     {
@@ -655,7 +643,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
     
     
     // paste button was pressed...
-    if ((buttonThatWasClicked == btn_paste_gain) || (buttonThatWasClicked == btn_paste_gain2))
+    if ((buttonThatWasClicked == &btn_paste_gain) || (buttonThatWasClicked == &btn_paste_gain2))
     {
         
         // prepare the clipboard
@@ -681,7 +669,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
             }
         }
         
-        if (buttonThatWasClicked == btn_paste_gain)
+        if (buttonThatWasClicked == &btn_paste_gain)
         {
             if (values.size() > 0)
             {
@@ -691,7 +679,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
             }
             
         }
-        else if (buttonThatWasClicked == btn_paste_gain2)
+        else if (buttonThatWasClicked == &btn_paste_gain2)
         {
             if (values.size() > 0)
             {
@@ -701,36 +689,36 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
             }
         }
     } // end paste button
-    else if (buttonThatWasClicked == btn_mute_reset)
+    else if (buttonThatWasClicked == &btn_mute_reset)
     {
-        bool state = btn_mute_reset->getToggleState();
+        bool state = btn_mute_reset.getToggleState();
 
         if (state)
-          btn_mute_reset->setTooltip(TRANS("Unmute all Channels"));
+          btn_mute_reset.setTooltip("Unmute all Channels");
         else
-          btn_mute_reset->setTooltip(TRANS("Mute all Channels"));
+          btn_mute_reset.setTooltip("Mute all Channels");
 
         for (int i=0; i < NUM_CHANNELS; i++)
         {
             btn_mute.getUnchecked(i)->setToggleState(state, sendNotification);
         }
         
-        // btn_mute_reset->setToggleState(state, dontSendNotification);
+        // btn_mute_reset.setToggleState(state, dontSendNotification);
         
     } // end mute reset button
-    else if (buttonThatWasClicked == btn_solo_reset)
+    else if (buttonThatWasClicked == &btn_solo_reset)
     {
         for (int i=0; i < NUM_CHANNELS; i++)
         {
             btn_solo.getUnchecked(i)->setToggleState(false, sendNotification);
         }
         
-        btn_solo_reset->setToggleState(false, dontSendNotification);
+        btn_solo_reset.setToggleState(false, dontSendNotification);
         
     } // end solo reset button
-    else if (buttonThatWasClicked == btn_phase_reset)
+    else if (buttonThatWasClicked == &btn_phase_reset)
     {
-        bool state = btn_phase_reset->getToggleState();
+        bool state = btn_phase_reset.getToggleState();
         
         for (int i=0; i < NUM_CHANNELS; i++)
         {
@@ -738,14 +726,14 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         }
         
     } // end phase reset button
-    else if (buttonThatWasClicked == btn_sig_reset)
+    else if (buttonThatWasClicked == &btn_sig_reset)
     {
-        bool state = btn_sig_reset->getToggleState();
+        bool state = btn_sig_reset.getToggleState();
         
         if (state)
-            btn_sig_reset->setTooltip (TRANS("Turn Off Signal Generator for all Channels"));
+            btn_sig_reset.setTooltip ("Turn Off Signal Generator for all Channels");
         else
-            btn_sig_reset->setTooltip (TRANS("Turn On Signal Generator for all Channels"));
+            btn_sig_reset.setTooltip ("Turn On Signal Generator for all Channels");
         
         for (int i=0; i < NUM_CHANNELS; i++)
         {
@@ -753,9 +741,9 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         }
         
     } // end siggenerator reset button
-    else if (buttonThatWasClicked == tgl_sigstep)
+    else if (buttonThatWasClicked == &tgl_sigstep)
     {
-        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+4, (float)tgl_sigstep->getToggleState());
+        ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+4, (float)tgl_sigstep.getToggleState());
     } // end tgl_sigstep button clicked
   
   ////////////////////////
@@ -858,13 +846,13 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
 void Mcfx_gain_delayAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
-    if (comboBoxThatHasChanged == box_signal)
+    if (comboBoxThatHasChanged == &box_signal)
     {
-        ourProcessor->setParameterNotifyingHost(PARAMS_PER_CH*NUM_CHANNELS+1, (float)(box_signal->getSelectedId()-1)/(float)(box_signal->getNumItems()-1));
+        ourProcessor->setParameterNotifyingHost(PARAMS_PER_CH*NUM_CHANNELS+1, (float)(box_signal.getSelectedId()-1)/(float)(box_signal.getNumItems()-1));
     }
-    else if (comboBoxThatHasChanged == box_sigtime)
+    else if (comboBoxThatHasChanged == &box_sigtime)
     {
-        ourProcessor->setParameterNotifyingHost(PARAMS_PER_CH*NUM_CHANNELS+2, (float)(box_sigtime->getSelectedId()-1)/(float)(box_sigtime->getNumItems()-1));
+        ourProcessor->setParameterNotifyingHost(PARAMS_PER_CH*NUM_CHANNELS+2, (float)(box_sigtime.getSelectedId()-1)/(float)(box_sigtime.getNumItems()-1));
     }
     
 }
@@ -873,19 +861,19 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
 {
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
   
-    sld_siggain->setValue(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+0), -99.f, 6.f), dontSendNotification);
+    sld_siggain.setValue(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+0), -99.f, 6.f), dontSendNotification);
     
-    box_signal->setSelectedItemIndex((int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+1), 0.f, (float)box_signal->getNumItems()-1.f) + 0.5f), dontSendNotification );
+    box_signal.setSelectedItemIndex((int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+1), 0.f, (float)box_signal.getNumItems()-1.f) + 0.5f), dontSendNotification );
     
-    box_sigtime->setSelectedItemIndex((int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+2), 0.f, (float)box_sigtime->getNumItems()-1.f) + 0.5f), dontSendNotification );
+    box_sigtime.setSelectedItemIndex((int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+2), 0.f, (float)box_sigtime.getNumItems()-1.f) + 0.5f), dontSendNotification );
     
-    sld_sigfreq->setValue(param2freq(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+3)), dontSendNotification);
+    sld_sigfreq.setValue(param2freq(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+3)), dontSendNotification);
     
-    tgl_sigstep->setToggleState((bool)ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+4), dontSendNotification);
+    tgl_sigstep.setToggleState((bool)ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+4), dontSendNotification);
     
-    sld_sigstepinterval->setValue(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+5), 50.f, 5000.f), dontSendNotification);
+    sld_sigstepinterval.setValue(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+5), 50.f, 5000.f), dontSendNotification);
     
-    // box_signal->setSelectedId( (int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+1), 0.f, (float)box_signal->getNumItems()-1.f) + 0.5f), dontSendNotification );
+    // box_signal.setSelectedId( (int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+1), 0.f, (float)box_signal.getNumItems()-1.f) + 0.5f), dontSendNotification );
     
     for (int i=0; i < NUM_CHANNELS; i++)
     {
@@ -900,7 +888,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
           tooltip << " phase inverted";
           btn_phase.getUnchecked(i)->setToggleState(true, dontSendNotification);
           btn_phase.getUnchecked(i)->setTooltip (tooltip);
-          btn_phase_reset->setToggleState(true, dontSendNotification);
+          btn_phase_reset.setToggleState(true, dontSendNotification);
         } else {
           String tooltip = "ch";
           tooltip.append(String(i+1), 3);
@@ -915,7 +903,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
             tooltip.append(String(i+1), 3);
             tooltip << " muted";
             btn_mute.getUnchecked(i)->setToggleState(true, dontSendNotification);
-            btn_mute_reset->setToggleState(true, dontSendNotification);
+            btn_mute_reset.setToggleState(true, dontSendNotification);
             btn_mute.getUnchecked(i)->setTooltip (tooltip);
         } else {
             String tooltip = "ch";
@@ -931,7 +919,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
             tooltip.append(String(i+1), 3);
             tooltip << " soloed";
             btn_solo.getUnchecked(i)->setToggleState(true, dontSendNotification);
-            btn_solo_reset->setToggleState(true, dontSendNotification);
+            btn_solo_reset.setToggleState(true, dontSendNotification);
             btn_solo.getUnchecked(i)->setTooltip (tooltip);
         } else {
             String tooltip = "ch";
@@ -948,7 +936,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
             tooltip << " signal generator on";
             btn_sig.getUnchecked(i)->setToggleState(true, dontSendNotification);
             btn_sig.getUnchecked(i)->setTooltip (tooltip);
-            btn_sig_reset->setToggleState(true, dontSendNotification);
+            btn_sig_reset.setToggleState(true, dontSendNotification);
         } else {
             String tooltip = "ch";
             tooltip.append(String(i+1), 3);

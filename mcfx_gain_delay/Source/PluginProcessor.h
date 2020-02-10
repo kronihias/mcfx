@@ -110,7 +110,7 @@ private:
   
   float _stepspeed; // hold time for each channel while iterating
   bool _stepper_on; // step through channels with testsignal on/off
-  ScopedPointer<ChannelStepper> _channelstepper; // helper object to iterate testsignal over channels
+  ChannelStepper _channelstepper; // helper object to iterate testsignal over channels
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_gain_delayAudioProcessor)
 };

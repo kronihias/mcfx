@@ -76,11 +76,9 @@ FilterGraph::FilterGraph(FilterInfo* filterinfo, AudioProcessor* processor) :   
         btn_drag.getLast()->setTooltip(tooltip);
     }
     
+    addAndMakeVisible (graph_);
     
-    addAndMakeVisible (graph_ = new GraphComponent ());
-    
-    addAndMakeVisible(analyzer_ = new AnalyzerComponent () );
-    
+    addAndMakeVisible(analyzer_);
     
     startTimer(150);
 }
@@ -88,8 +86,6 @@ FilterGraph::FilterGraph(FilterInfo* filterinfo, AudioProcessor* processor) :   
 FilterGraph::~FilterGraph()
 {
     stopTimer();
-    graph_ = nullptr;
-    analyzer_ = nullptr;
     
     btn_drag.clear();
     
@@ -257,7 +253,7 @@ void FilterGraph::timerCallback()
     if (analyzeron_)
     {
         calcPathAnalyzer();
-        analyzer_->setPath(&path_in_mag_, &path_out_mag_);
+        analyzer_.setPath(&path_in_mag_, &path_out_mag_);
     }
     
     if (changed_)
@@ -269,8 +265,8 @@ void FilterGraph::timerCallback()
         
         // btn_drag_lc->setBounds (hztoxpos(), 107, 9, 10);
         
-        graph_->setPath(&path_mag_);
-        graph_->repaint();
+        graph_.setPath(&path_mag_);
+        graph_.repaint();
     }
 }
 
@@ -279,8 +275,8 @@ void FilterGraph::resized()
     int width = getWidth();
     int height = getHeight();
     
-    graph_->setBounds (0, 0, width, height);
-    analyzer_->setBounds (0, 0, width, height);
+    graph_.setBounds (0, 0, width, height);
+    analyzer_.setBounds (0, 0, width, height);
     
     
     // create the grid path

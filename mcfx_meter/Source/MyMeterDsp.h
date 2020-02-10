@@ -54,8 +54,6 @@ private:
     float _rms;
     float _peak;
     
-    float _pow_sum;
-    
     int hold_smpl_count;
     
     // params

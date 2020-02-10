@@ -30,11 +30,9 @@ MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
                                  numins_(0),
                                  numouts_(0),
                                  numpartitions_(0),
-                                 maxsize_(0),
                                  skip_count_(0),
-                                 isprocessing_(false),
-                                 configuration_(false),
-                                 debug_out_(nullptr)
+                                 maxsize_(0),
+                                 configuration_(false)
 {
 #ifdef DEBUG_COUT
 	File file;
@@ -55,7 +53,7 @@ MtxConvMaster::~MtxConvMaster()
 void MtxConvMaster::WriteLog(String &text)
 {
 	if (debug_out_->openedOk())
-		debug_out_->writeText(text, false, false);
+		debug_out_->writeText(text, false, false, nullptr);
 }
 
 void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSampleBuffer &outbuf, int numsamples, bool forcesync)
@@ -375,7 +373,7 @@ MtxConvSlave::~MtxConvSlave()
 void MtxConvSlave::WriteLog(String &text)
 {
 	if (debug_out_->openedOk())
-		debug_out_->writeText(text, false, false);
+		debug_out_->writeText(text, false, false, nullptr);
 }
 
 bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, int priority, AudioSampleBuffer *inbuf, AudioSampleBuffer *outbuf)

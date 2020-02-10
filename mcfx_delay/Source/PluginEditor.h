@@ -36,7 +36,7 @@
                                                                     //[/Comments]
 */
 class Mcfx_delayAudioProcessorEditor  : public AudioProcessorEditor,
-                                        public SliderListener,
+                                        public Slider::Listener,
                                         public ChangeListener
 {
 public:
@@ -59,15 +59,17 @@ private:
     //[/UserVariables]
 
     //==============================================================================
-    ScopedPointer<Label> lbl_g;
-    ScopedPointer<Slider> sld_del_ms;
-    ScopedPointer<Label> label3;
-    ScopedPointer<Label> label2;
-    ScopedPointer<Slider> sld_del_smpl;
-    ScopedPointer<Label> label4;
+    Label lbl_g;
+    Slider sld_del_ms;
+    Label label3;
+    Label label2;
+    Slider sld_del_smpl;
+    Label label4;
 
     TooltipWindow tooltipWindow;
-    
+
+    LookAndFeel_V3 MyLookAndFeel;
+
     Mcfx_delayAudioProcessor* getProcessor() const
     {
         return static_cast <Mcfx_delayAudioProcessor*> (getAudioProcessor());

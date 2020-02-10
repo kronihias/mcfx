@@ -2,45 +2,36 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
+   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
+   27th April 2017).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-5-licence
+   Privacy Policy: www.juce.com/juce-5-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
-OSCArgument::OSCArgument (int32 value) noexcept
-    : type (OSCTypes::int32), intValue (value)
+namespace juce
 {
-}
 
-OSCArgument::OSCArgument (float value) noexcept
-    : type (OSCTypes::float32), floatValue (value)
-{
-}
-
-OSCArgument::OSCArgument (const String& value) noexcept
-    : type (OSCTypes::string), stringValue (value)
-{
-}
-
-OSCArgument::OSCArgument (const MemoryBlock& b)
-    : type (OSCTypes::blob), blob (b)
-{
-}
+OSCArgument::OSCArgument (int32 v)              : type (OSCTypes::int32),   intValue (v) {}
+OSCArgument::OSCArgument (float v)              : type (OSCTypes::float32), floatValue (v) {}
+OSCArgument::OSCArgument (const String& s)      : type (OSCTypes::string),  stringValue (s) {}
+OSCArgument::OSCArgument (MemoryBlock b)        : type (OSCTypes::blob),    blob (std::move (b)) {}
+OSCArgument::OSCArgument (OSCColour c)          : type (OSCTypes::colour),  intValue ((int32) c.toInt32()) {}
 
 //==============================================================================
 String OSCArgument::getString() const noexcept
@@ -49,7 +40,7 @@ String OSCArgument::getString() const noexcept
         return stringValue;
 
     jassertfalse; // you must check the type of an argument before attempting to get its value!
-    return String();
+    return {};
 }
 
 int32 OSCArgument::getInt32() const noexcept
@@ -78,6 +69,15 @@ const MemoryBlock& OSCArgument::getBlob() const noexcept
     return blob;
 }
 
+OSCColour OSCArgument::getColour() const noexcept
+{
+    if (isColour())
+        return OSCColour::fromInt32 ((uint32) intValue);
+
+    jassertfalse; // you must check the type of an argument before attempting to get its value!
+    return { 0, 0, 0, 0 };
+}
+
 
 //==============================================================================
 //==============================================================================
@@ -86,7 +86,9 @@ const MemoryBlock& OSCArgument::getBlob() const noexcept
 class OSCArgumentTests  : public UnitTest
 {
 public:
-    OSCArgumentTests() : UnitTest ("OSCArgument class") {}
+    OSCArgumentTests()
+         : UnitTest ("OSCArgument class", UnitTestCategories::osc)
+    {}
 
 
     MemoryBlock getMemoryBlockWithRandomData (size_t numBytes)
@@ -115,11 +117,11 @@ public:
             OSCArgument arg (value);
 
             expect (arg.getType() == OSCTypes::int32);
-
             expect (arg.isInt32());
             expect (! arg.isFloat32());
             expect (! arg.isString());
             expect (! arg.isBlob());
+            expect (! arg.isColour());
 
             expect (arg.getInt32() == value);
         }
@@ -131,15 +133,13 @@ public:
             OSCArgument arg (value);
 
             expect (arg.getType() == OSCTypes::float32);
-
             expect (! arg.isInt32());
             expect (arg.isFloat32());
             expect (! arg.isString());
             expect (! arg.isBlob());
+            expect (! arg.isColour());
 
             expect (arg.getFloat32() == value);
-
-
         }
 
         beginTest ("String");
@@ -148,11 +148,11 @@ public:
             OSCArgument arg (value);
 
             expect (arg.getType() == OSCTypes::string);
-
             expect (! arg.isInt32());
             expect (! arg.isFloat32());
             expect (arg.isString());
             expect (! arg.isBlob());
+            expect (! arg.isColour());
 
             expect (arg.getString() == value);
         }
@@ -162,30 +162,52 @@ public:
             OSCArgument arg ("Hello, World!");
 
             expect (arg.getType() == OSCTypes::string);
-
             expect (! arg.isInt32());
             expect (! arg.isFloat32());
             expect (arg.isString());
             expect (! arg.isBlob());
+            expect (! arg.isColour());
 
-            expect (arg.getString() == String ("Hello, World!"));
+            expect (arg.getString() == "Hello, World!");
         }
 
         beginTest ("Blob");
         {
-            const size_t numBytes = 412;
-            MemoryBlock blob = getMemoryBlockWithRandomData (numBytes);
-
+            auto blob = getMemoryBlockWithRandomData (413);
             OSCArgument arg (blob);
 
             expect (arg.getType() == OSCTypes::blob);
-
             expect (! arg.isInt32());
             expect (! arg.isFloat32());
             expect (! arg.isString());
             expect (arg.isBlob());
+            expect (! arg.isColour());
 
             expect (arg.getBlob() == blob);
+        }
+
+        beginTest ("Colour");
+        {
+            Random rng = getRandom();
+
+            for (int i = 100; --i >= 0;)
+            {
+                OSCColour col = { (uint8) rng.nextInt (256),
+                                  (uint8) rng.nextInt (256),
+                                  (uint8) rng.nextInt (256),
+                                  (uint8) rng.nextInt (256) };
+
+                OSCArgument arg (col);
+
+                expect (arg.getType() == OSCTypes::colour);
+                expect (! arg.isInt32());
+                expect (! arg.isFloat32());
+                expect (! arg.isString());
+                expect (! arg.isBlob());
+                expect (arg.isColour());
+
+                expect (arg.getColour().toInt32() == col.toInt32());
+            }
         }
 
         beginTest ("Copy, move and assignment");
@@ -216,17 +238,6 @@ public:
                 assignment = copy;
                 expect (assignment.getType() == OSCTypes::blob);
                 expect (assignment.getBlob() == blob);
-
-               #if JUCE_COMPILER_SUPPORTS_MOVE_SEMANTICS
-                OSCArgument move = std::move (arg);
-                expect (move.getType() == OSCTypes::blob);
-                expect (move.getBlob() == blob);
-
-                OSCArgument moveAssignment ("this will be overwritten!");
-                moveAssignment = std::move (copy);
-                expect (moveAssignment.getType() == OSCTypes::blob);
-                expect (moveAssignment.getBlob() == blob);
-               #endif
            }
         }
     }
@@ -234,4 +245,6 @@ public:
 
 static OSCArgumentTests OSCArgumentUnitTests;
 
-#endif // JUCE_UNIT_TESTS
+#endif
+
+} // namespace juce

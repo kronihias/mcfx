@@ -2,33 +2,37 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
+   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
+   27th April 2017).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-5-licence
+   Privacy Policy: www.juce.com/juce-5-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
-//==============================================================================
+namespace juce
+{
+
 // This is an AudioTransportSource which will own it's assigned source
 struct AudioSourceOwningTransportSource  : public AudioTransportSource
 {
-    AudioSourceOwningTransportSource (PositionableAudioSource* s)  : source (s)
+    AudioSourceOwningTransportSource (PositionableAudioSource* s, double sr)  : source (s)
     {
-        AudioTransportSource::setSource (s);
+        AudioTransportSource::setSource (s, 0, nullptr, sr);
     }
 
     ~AudioSourceOwningTransportSource()
@@ -37,7 +41,7 @@ struct AudioSourceOwningTransportSource  : public AudioTransportSource
     }
 
 private:
-    ScopedPointer<PositionableAudioSource> source;
+    std::unique_ptr<PositionableAudioSource> source;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioSourceOwningTransportSource)
 };
@@ -45,24 +49,25 @@ private:
 //==============================================================================
 // An AudioSourcePlayer which will remove itself from the AudioDeviceManager's
 // callback list once it finishes playing its source
-struct AutoRemovingTransportSource : public AudioTransportSource, private Timer
+struct AutoRemovingTransportSource  : public AudioTransportSource,
+                                      private Timer
 {
     AutoRemovingTransportSource (MixerAudioSource& mixerToUse, AudioTransportSource* ts, bool ownSource,
-                                 int samplesPerBlock, double sampleRate)
+                                 int samplesPerBlock, double requiredSampleRate)
         : mixer (mixerToUse), transportSource (ts, ownSource)
     {
         jassert (ts != nullptr);
 
         setSource (transportSource);
 
-        prepareToPlay (samplesPerBlock, sampleRate);
+        prepareToPlay (samplesPerBlock, requiredSampleRate);
         start();
 
         mixer.addInputSource (this, true);
         startTimerHz (10);
     }
 
-    ~AutoRemovingTransportSource()
+    ~AutoRemovingTransportSource() override
     {
         setSource (nullptr);
     }
@@ -81,12 +86,11 @@ private:
 };
 
 // An AudioSource which simply outputs a buffer
-class AudioSampleBufferSource  : public PositionableAudioSource
+class AudioBufferSource  : public PositionableAudioSource
 {
 public:
-    AudioSampleBufferSource (AudioSampleBuffer* audioBuffer, bool ownBuffer, bool playOnAllChannels)
+    AudioBufferSource (AudioBuffer<float>* audioBuffer, bool ownBuffer, bool playOnAllChannels)
         : buffer (audioBuffer, ownBuffer),
-          position (0), looping (false),
           playAcrossAllChannels (playOnAllChannels)
     {}
 
@@ -140,11 +144,11 @@ public:
 
 private:
     //==============================================================================
-    OptionalScopedPointer<AudioSampleBuffer> buffer;
-    int position;
-    bool looping, playAcrossAllChannels;
+    OptionalScopedPointer<AudioBuffer<float>> buffer;
+    int position = 0;
+    bool looping = false, playAcrossAllChannels;
 
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioSampleBufferSource)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (AudioBufferSource)
 };
 
 SoundPlayer::SoundPlayer()
@@ -178,16 +182,16 @@ void SoundPlayer::play (const void* resourceData, size_t resourceSize)
 void SoundPlayer::play (AudioFormatReader* reader, bool deleteWhenFinished)
 {
     if (reader != nullptr)
-        play (new AudioFormatReaderSource (reader, deleteWhenFinished), true);
+        play (new AudioFormatReaderSource (reader, deleteWhenFinished), true, reader->sampleRate);
 }
 
-void SoundPlayer::play (AudioSampleBuffer* buffer, bool deleteWhenFinished, bool playOnAllOutputChannels)
+void SoundPlayer::play (AudioBuffer<float>* buffer, bool deleteWhenFinished, bool playOnAllOutputChannels)
 {
     if (buffer != nullptr)
-        play (new AudioSampleBufferSource (buffer, deleteWhenFinished, playOnAllOutputChannels), true);
+        play (new AudioBufferSource (buffer, deleteWhenFinished, playOnAllOutputChannels), true);
 }
 
-void SoundPlayer::play (PositionableAudioSource* audioSource, bool deleteWhenFinished)
+void SoundPlayer::play (PositionableAudioSource* audioSource, bool deleteWhenFinished, double fileSampleRate)
 {
     if (audioSource != nullptr)
     {
@@ -197,12 +201,12 @@ void SoundPlayer::play (PositionableAudioSource* audioSource, bool deleteWhenFin
         {
             if (deleteWhenFinished)
             {
-                transport = new AudioSourceOwningTransportSource (audioSource);
+                transport = new AudioSourceOwningTransportSource (audioSource, fileSampleRate);
             }
             else
             {
                 transport = new AudioTransportSource();
-                transport->setSource (audioSource);
+                transport->setSource (audioSource, 0, nullptr, fileSampleRate);
                 deleteWhenFinished = true;
             }
         }
@@ -221,14 +225,13 @@ void SoundPlayer::play (PositionableAudioSource* audioSource, bool deleteWhenFin
 
 void SoundPlayer::playTestSound()
 {
-    const int soundLength = (int) sampleRate;
+    auto soundLength = (int) sampleRate;
+    double frequency = 440.0;
+    float amplitude = 0.5f;
 
-    const double frequency = 440.0;
-    const float amplitude = 0.5f;
+    auto phasePerSample = MathConstants<double>::twoPi / (sampleRate / frequency);
 
-    const double phasePerSample = double_Pi * 2.0 / (sampleRate / frequency);
-
-    AudioSampleBuffer* newSound = new AudioSampleBuffer (1, soundLength);
+    auto* newSound = new AudioBuffer<float> (1, soundLength);
 
     for (int i = 0; i < soundLength; ++i)
         newSound->setSample (0, i, amplitude * (float) std::sin (i * phasePerSample));
@@ -271,3 +274,5 @@ void SoundPlayer::audioDeviceError (const String& errorMessage)
 {
     player.audioDeviceError (errorMessage);
 }
+
+} // namespace juce

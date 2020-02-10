@@ -143,7 +143,7 @@ void Mcfx_delayAudioProcessor::setCurrentProgram (int index)
 
 const String Mcfx_delayAudioProcessor::getProgramName (int index)
 {
-    return String::empty;
+    return String();
 }
 
 void Mcfx_delayAudioProcessor::changeProgramName (int index, const String& newName)
@@ -300,7 +300,7 @@ void Mcfx_delayAudioProcessor::setStateInformation (const void* data, int sizeIn
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
     
-    ScopedPointer<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    std::unique_ptr<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
     
     if (xmlState != nullptr)
     {

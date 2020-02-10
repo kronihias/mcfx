@@ -24,171 +24,163 @@
 //==============================================================================
 Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter)
     : AudioProcessorEditor (ownerFilter),
-label (nullptr),
-txt_preset(nullptr),
-label5 (nullptr),
-txt_debug (nullptr),
-btn_open (nullptr),
-label2 (nullptr),
-label3 (nullptr),
-label4 (nullptr),
-lbl_skippedcycles (nullptr),
-num_ch (nullptr),
-num_spk (nullptr),
-num_hrtf (nullptr),
-btn_preset_folder (nullptr),
-box_conv_buffer (nullptr),
-box_maxpart(nullptr)
+label ("new label", "Input channels: "),
+txt_preset("new text editor"),
+label5 ("new label", "Preset"),
+txt_debug ("new text editor"),
+btn_open ("new button"),
+label2 ("new label", "Output channels: "),
+label3 ("new label", "Impulse responses: "),
+label4 ("new label", "debug window"),
+lbl_skippedcycles ("new label", "skipped cycles: "),
+num_ch ("new label", "0"),
+num_spk ("new label", "0"),
+num_hrtf ("new label", "0"),
+btn_preset_folder ("new button"),
+box_conv_buffer ("new combobox"),
+box_maxpart("new combobox")
 {
-    
+    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
+
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
-    
-    addAndMakeVisible (label = new Label ("new label",
-                                          "Input channels: "));
-    label->setFont (Font (15.0000f, Font::plain));
-    label->setJustificationType (Justification::centredRight);
-    label->setEditable (false, false, false);
-    label->setColour (Label::textColourId, Colours::white);
-    label->setColour (TextEditor::textColourId, Colours::black);
-    label->setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
-    
-    addAndMakeVisible (txt_preset = new TextEditor ("new text editor"));
-    txt_preset->setReadOnly(true);
-    txt_preset->setPopupMenuEnabled(false);
-    
-    addAndMakeVisible (label5 = new Label ("new label",
-                                           "Preset"));
-    label5->setFont (Font (15.0000f, Font::plain));
-    label5->setJustificationType (Justification::centredRight);
-    label5->setEditable (false, false, false);
-    label5->setColour (Label::textColourId, Colours::white);
-    label5->setColour (TextEditor::textColourId, Colours::white);
-    label5->setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
-    addAndMakeVisible (txt_debug = new TextEditor ("new text editor"));
-    txt_debug->setMultiLine (true);
-    txt_debug->setReturnKeyStartsNewLine (false);
-    txt_debug->setReadOnly (true);
-    txt_debug->setScrollbarsShown (true);
-    txt_debug->setCaretVisible (false);
-    txt_debug->setPopupMenuEnabled (true);
-    txt_debug->setText ("debug window");
-    txt_debug->setFont(Font(10,1));
-    
-    addAndMakeVisible (btn_open = new TextButton ("new button"));
-    btn_open->setTooltip ("browse presets or open from file");
-    btn_open->setButtonText ("open");
-    btn_open->addListener (this);
-    btn_open->setColour (TextButton::buttonColourId, Colours::white);
-    btn_open->setColour (TextButton::buttonOnColourId, Colours::blue);
-    
-    addAndMakeVisible (label2 = new Label ("new label",
-                                           "Output channels: "));
-    label2->setFont (Font (15.0000f, Font::plain));
-    label2->setJustificationType (Justification::centredRight);
-    label2->setEditable (false, false, false);
-    label2->setColour (Label::textColourId, Colours::white);
-    label2->setColour (TextEditor::textColourId, Colours::black);
-    label2->setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
-    addAndMakeVisible (label3 = new Label ("new label",
-                                           "Impulse responses: "));
-    label3->setFont (Font (15.0000f, Font::plain));
-    label3->setJustificationType (Justification::centredRight);
-    label3->setEditable (false, false, false);
-    label3->setColour (Label::textColourId, Colours::white);
-    label3->setColour (TextEditor::textColourId, Colours::black);
-    label3->setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
-    addAndMakeVisible (label4 = new Label ("new label",
-                                           "debug window"));
-    label4->setFont (Font (10.0000f, Font::plain));
-    label4->setJustificationType (Justification::centredLeft);
-    label4->setEditable (false, false, false);
-    label4->setColour (Label::textColourId, Colours::white);
-    label4->setColour (TextEditor::textColourId, Colours::black);
-    label4->setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
-    addAndMakeVisible(lbl_skippedcycles = new Label("new label",
-        "skipped cycles: "));
-    lbl_skippedcycles->setFont(Font(10.0000f, Font::plain));
-    lbl_skippedcycles->setJustificationType(Justification::centredLeft);
-    lbl_skippedcycles->setEditable(false, false, false);
-    lbl_skippedcycles->setColour(Label::textColourId, Colours::yellow);
-    lbl_skippedcycles->setColour(TextEditor::textColourId, Colours::black);
-    lbl_skippedcycles->setColour(TextEditor::backgroundColourId, Colour(0x0));
 
-    addAndMakeVisible (num_ch = new Label ("new label",
-                                           "0"));
-    num_ch->setFont (Font (15.0000f, Font::plain));
-    num_ch->setJustificationType (Justification::centredRight);
-    num_ch->setEditable (false, false, false);
-    num_ch->setColour (Label::textColourId, Colours::white);
-    num_ch->setColour (TextEditor::textColourId, Colours::black);
-    num_ch->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (label);
+    label.setFont (Font (15.0000f, Font::plain));
+    label.setJustificationType (Justification::centredRight);
+    label.setEditable (false, false, false);
+    label.setColour (Label::textColourId, Colours::white);
+    label.setColour (TextEditor::textColourId, Colours::black);
+    label.setColour (TextEditor::backgroundColourId, Colour (0x0));
+
+    addAndMakeVisible (txt_preset);
+    txt_preset.setReadOnly(true);
+    txt_preset.setPopupMenuEnabled(false);
     
-    addAndMakeVisible (num_spk = new Label ("new label",
-                                            "0"));
-    num_spk->setFont (Font (15.0000f, Font::plain));
-    num_spk->setJustificationType (Justification::centredRight);
-    num_spk->setEditable (false, false, false);
-    num_spk->setColour (Label::textColourId, Colours::white);
-    num_spk->setColour (TextEditor::textColourId, Colours::black);
-    num_spk->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (label5);
+    label5.setFont (Font (15.0000f, Font::plain));
+    label5.setJustificationType (Justification::centredRight);
+    label5.setEditable (false, false, false);
+    label5.setColour (Label::textColourId, Colours::white);
+    label5.setColour (TextEditor::textColourId, Colours::white);
+    label5.setColour (TextEditor::backgroundColourId, Colour (0x0));
     
-    addAndMakeVisible (num_hrtf = new Label ("new label",
-                                             "0"));
-    num_hrtf->setFont (Font (15.0000f, Font::plain));
-    num_hrtf->setJustificationType (Justification::centredRight);
-    num_hrtf->setEditable (false, false, false);
-    num_hrtf->setColour (Label::textColourId, Colours::white);
-    num_hrtf->setColour (TextEditor::textColourId, Colours::black);
-    num_hrtf->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (txt_debug);
+    txt_debug.setMultiLine (true);
+    txt_debug.setReturnKeyStartsNewLine (false);
+    txt_debug.setReadOnly (true);
+    txt_debug.setScrollbarsShown (true);
+    txt_debug.setCaretVisible (false);
+    txt_debug.setPopupMenuEnabled (true);
+    txt_debug.setText ("debug window");
+    txt_debug.setFont(Font(10,1));
     
-    addAndMakeVisible (btn_preset_folder = new TextButton ("new button"));
-    btn_preset_folder->setTooltip ("choose another preset folder");
-    btn_preset_folder->setButtonText ("preset folder");
-    btn_preset_folder->addListener (this);
-    btn_preset_folder->setColour (TextButton::buttonColourId, Colours::white);
-    btn_preset_folder->setColour (TextButton::buttonOnColourId, Colours::blue);
+    addAndMakeVisible (btn_open);
+    btn_open.setTooltip ("browse presets or open from file");
+    btn_open.setButtonText ("open");
+    btn_open.addListener (this);
+    btn_open.setColour (TextButton::buttonColourId, Colours::white);
+    btn_open.setColour (TextButton::buttonOnColourId, Colours::blue);
     
-    addAndMakeVisible(box_conv_buffer = new ComboBox ("new combobox"));
-    box_conv_buffer->setTooltip("set higher buffer size to optimize CPU performance but increased latency");
-    box_conv_buffer->addListener(this);
-    box_conv_buffer->setEditableText (false);
-    box_conv_buffer->setJustificationType (Justification::centredLeft);
+    addAndMakeVisible (label2);
+    label2.setFont (Font (15.0000f, Font::plain));
+    label2.setJustificationType (Justification::centredRight);
+    label2.setEditable (false, false, false);
+    label2.setColour (Label::textColourId, Colours::white);
+    label2.setColour (TextEditor::textColourId, Colours::black);
+    label2.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    
+    addAndMakeVisible (label3);
+    label3.setFont (Font (15.0000f, Font::plain));
+    label3.setJustificationType (Justification::centredRight);
+    label3.setEditable (false, false, false);
+    label3.setColour (Label::textColourId, Colours::white);
+    label3.setColour (TextEditor::textColourId, Colours::black);
+    label3.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    
+    addAndMakeVisible (label4);
+    label4.setFont (Font (10.0000f, Font::plain));
+    label4.setJustificationType (Justification::centredLeft);
+    label4.setEditable (false, false, false);
+    label4.setColour (Label::textColourId, Colours::white);
+    label4.setColour (TextEditor::textColourId, Colours::black);
+    label4.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    
+    addAndMakeVisible(lbl_skippedcycles);
+    lbl_skippedcycles.setFont(Font(10.0000f, Font::plain));
+    lbl_skippedcycles.setJustificationType(Justification::centredLeft);
+    lbl_skippedcycles.setEditable(false, false, false);
+    lbl_skippedcycles.setColour(Label::textColourId, Colours::yellow);
+    lbl_skippedcycles.setColour(TextEditor::textColourId, Colours::black);
+    lbl_skippedcycles.setColour(TextEditor::backgroundColourId, Colour(0x0));
+
+    addAndMakeVisible (num_ch);
+    num_ch.setFont (Font (15.0000f, Font::plain));
+    num_ch.setJustificationType (Justification::centredRight);
+    num_ch.setEditable (false, false, false);
+    num_ch.setColour (Label::textColourId, Colours::white);
+    num_ch.setColour (TextEditor::textColourId, Colours::black);
+    num_ch.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    
+    addAndMakeVisible (num_spk);
+    num_spk.setFont (Font (15.0000f, Font::plain));
+    num_spk.setJustificationType (Justification::centredRight);
+    num_spk.setEditable (false, false, false);
+    num_spk.setColour (Label::textColourId, Colours::white);
+    num_spk.setColour (TextEditor::textColourId, Colours::black);
+    num_spk.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    
+    addAndMakeVisible (num_hrtf);
+    num_hrtf.setFont (Font (15.0000f, Font::plain));
+    num_hrtf.setJustificationType (Justification::centredRight);
+    num_hrtf.setEditable (false, false, false);
+    num_hrtf.setColour (Label::textColourId, Colours::white);
+    num_hrtf.setColour (TextEditor::textColourId, Colours::black);
+    num_hrtf.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    
+    addAndMakeVisible (btn_preset_folder);
+    btn_preset_folder.setTooltip ("choose another preset folder");
+    btn_preset_folder.setButtonText ("preset folder");
+    btn_preset_folder.addListener (this);
+    btn_preset_folder.setColour (TextButton::buttonColourId, Colours::white);
+    btn_preset_folder.setColour (TextButton::buttonOnColourId, Colours::blue);
+    
+    addAndMakeVisible(box_conv_buffer);
+    box_conv_buffer.setTooltip("set higher buffer size to optimize CPU performance but increased latency");
+    box_conv_buffer.addListener(this);
+    box_conv_buffer.setEditableText (false);
+    box_conv_buffer.setJustificationType (Justification::centredLeft);
   
-    addAndMakeVisible(box_maxpart = new ComboBox ("new combobox"));
-    box_maxpart->setTooltip("set maximum partition size for CPU load optimizations, leave it at 8192 if you don't know what you are doing!");
-    box_maxpart->addListener(this);
-    box_maxpart->setEditableText (false);
-    box_maxpart->setJustificationType (Justification::centredLeft);
-    box_maxpart->setColour(ComboBox::backgroundColourId, Colour (0xffa8a8a8));
+    addAndMakeVisible(box_maxpart);
+    box_maxpart.setTooltip("set maximum partition size for CPU load optimizations, leave it at 8192 if you don't know what you are doing!");
+    box_maxpart.addListener(this);
+    box_maxpart.setEditableText (false);
+    box_maxpart.setJustificationType (Justification::centredLeft);
+    box_maxpart.setColour(ComboBox::backgroundColourId, Colour (0xffa8a8a8));
 
-    addAndMakeVisible(txt_rcv_port = new TextEditor("new text editor"));
-    txt_rcv_port->setTooltip(TRANS("OSC receive port"));
-    txt_rcv_port->setMultiLine(false);
-    txt_rcv_port->setReturnKeyStartsNewLine(false);
-    txt_rcv_port->setScrollbarsShown(false);
-    txt_rcv_port->setCaretVisible(false);
-    txt_rcv_port->setPopupMenuEnabled(true);
-    txt_rcv_port->setText(TRANS("7200"));
-    txt_rcv_port->addListener(this);
+    addAndMakeVisible(txt_rcv_port);
+    txt_rcv_port.setTooltip(TRANS("OSC receive port"));
+    txt_rcv_port.setMultiLine(false);
+    txt_rcv_port.setReturnKeyStartsNewLine(false);
+    txt_rcv_port.setScrollbarsShown(false);
+    txt_rcv_port.setCaretVisible(false);
+    txt_rcv_port.setReadOnly(false);
+    txt_rcv_port.setPopupMenuEnabled(true);
+    txt_rcv_port.setText(TRANS("7200"));
+    txt_rcv_port.addListener(this);
 
-    addAndMakeVisible(tgl_rcv_active = new ToggleButton("new toggle button"));
-    tgl_rcv_active->setButtonText(TRANS("OSC receive port: "));
-    tgl_rcv_active->setTooltip(TRANS("enable OSC receive, supported messages: /reload, /load <preset.conf> (preset needs to be within the search path)"));
-    tgl_rcv_active->addListener(this);
-    tgl_rcv_active->setToggleState(true, dontSendNotification);
-    tgl_rcv_active->setColour(ToggleButton::textColourId, Colours::white);
+    addAndMakeVisible(tgl_rcv_active);// = new ToggleButton("new toggle button"));
+    tgl_rcv_active.setButtonText(TRANS("OSC receive port: "));
+    tgl_rcv_active.setTooltip(TRANS("enable OSC receive, supported messages: /reload, /load <preset.conf> (preset needs to be within the search path)"));
+    tgl_rcv_active.addListener(this);
+    tgl_rcv_active.setToggleState(true, dontSendNotification);
+    tgl_rcv_active.setColour(ToggleButton::textColourId, Colours::white);
 
-    addAndMakeVisible(tgl_save_preset = new ToggleButton("new toggle button"));
-    tgl_save_preset->setButtonText(TRANS("Save preset within project"));
-    tgl_save_preset->setTooltip(TRANS("this will save the preset and data within the project and reload it from there; CAUTION: may slow down saving/opening your project and increases project file size!"));
-    tgl_save_preset->addListener(this);
-    tgl_save_preset->setToggleState(true, dontSendNotification);
-    tgl_save_preset->setColour(ToggleButton::textColourId, Colours::white);
+    addAndMakeVisible(tgl_save_preset);// = new ToggleButton("new toggle button"));
+    tgl_save_preset.setButtonText(TRANS("Save preset within project"));
+    tgl_save_preset.setTooltip(TRANS("this will save the preset and data within the project and reload it from there; CAUTION: may slow down saving/opening your project and increases project file size!"));
+    tgl_save_preset.addListener(this);
+    tgl_save_preset.setToggleState(true, dontSendNotification);
+    tgl_save_preset.setColour(ToggleButton::textColourId, Colours::white);
 
     setSize (350, 330);
     
@@ -196,9 +188,9 @@ box_maxpart(nullptr)
     
     UpdatePresets();
     
-    txt_preset->setText(ownerFilter->box_preset_str);
-    txt_preset->setCaretPosition(txt_preset->getTotalNumChars()-1);
-    txt_preset->setTooltip(txt_preset->getText());
+    txt_preset.setText(ownerFilter->box_preset_str);
+    txt_preset.setCaretPosition(txt_preset.getTotalNumChars()-1);
+    txt_preset.setTooltip(txt_preset.getText());
     
     ownerFilter->addChangeListener(this); // listen to changes of processor
 
@@ -212,25 +204,6 @@ Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
     Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
     
     ourProcessor->removeChangeListener(this);
-    
-    label = nullptr;
-    txt_preset = nullptr;
-    label5 = nullptr;
-    txt_debug = nullptr;
-    btn_open = nullptr;
-    label2 = nullptr;
-    label3 = nullptr;
-    label4 = nullptr;
-    lbl_skippedcycles = nullptr;
-    num_ch = nullptr;
-    num_spk = nullptr;
-    num_hrtf = nullptr;
-    btn_preset_folder = nullptr;
-    box_conv_buffer = nullptr;
-    box_maxpart = nullptr;
-    txt_rcv_port = nullptr;
-    tgl_rcv_active = nullptr;
-    tgl_save_preset = nullptr;
 }
 
 //==============================================================================
@@ -284,27 +257,27 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
 void Mcfx_convolverAudioProcessorEditor::resized()
 {
-    label->setBounds (16, 134, 140, 24);
-    txt_preset->setBounds (72, 50, 200, 24);
-    label5->setBounds (8, 50, 56, 24);
-    txt_debug->setBounds (16, 214, 320, 96);
-    btn_open->setBounds (280, 50, 56, 24);
-    label2->setBounds (16, 158, 140, 24);
-    label3->setBounds (16, 182, 140, 24);
-    label4->setBounds (24, 310, 64, 16);
-    lbl_skippedcycles->setBounds(110, 310, 150, 16);
-    num_ch->setBounds (150, 134, 40, 24);
-    num_spk->setBounds (150, 158, 40, 24);
-    num_hrtf->setBounds (150, 182, 40, 24);
-    btn_preset_folder->setBounds (245, 80, 94, 24);
+    label.setBounds (16, 134, 140, 24);
+    txt_preset.setBounds (72, 50, 200, 24);
+    label5.setBounds (8, 50, 56, 24);
+    txt_debug.setBounds (16, 214, 320, 96);
+    btn_open.setBounds (280, 50, 56, 24);
+    label2.setBounds (16, 158, 140, 24);
+    label3.setBounds (16, 182, 140, 24);
+    label4.setBounds (24, 310, 64, 16);
+    lbl_skippedcycles.setBounds(110, 310, 150, 16);
+    num_ch.setBounds (150, 134, 40, 24);
+    num_spk.setBounds (150, 158, 40, 24);
+    num_hrtf.setBounds (150, 182, 40, 24);
+    btn_preset_folder.setBounds (245, 80, 94, 24);
     
-    box_conv_buffer->setBounds (270, 126, 67, 20);
-    box_maxpart->setBounds (270, 169, 65, 20);
+    box_conv_buffer.setBounds (270, 126, 67, 20);
+    box_maxpart.setBounds (270, 169, 65, 20);
 
-    tgl_save_preset->setBounds(16, 79, 200, 24);
+    tgl_save_preset.setBounds(16, 79, 200, 24);
 
-    txt_rcv_port->setBounds(146, 108, 40, 18);
-    tgl_rcv_active->setBounds(16, 105, 130, 24);
+    txt_rcv_port.setBounds(146, 108, 40, 18);
+    tgl_rcv_active.setBounds(16, 105, 130, 24);
 }
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()
@@ -313,9 +286,9 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
     String text("skipped cycles: ");
     text << ourProcessor->getSkippedCyclesCount();
 
-    lbl_skippedcycles->setText(text, dontSendNotification);
+    lbl_skippedcycles.setText(text, dontSendNotification);
 
-    txt_debug->setText(ourProcessor->getDebugString(), true);
+    txt_debug.setText(ourProcessor->getDebugString(), true);
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
@@ -323,17 +296,17 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
 
     
-    num_ch->setText(String(ourProcessor->_min_in_ch), dontSendNotification);
+    num_ch.setText(String(ourProcessor->_min_in_ch), dontSendNotification);
     
-    num_spk->setText(String(ourProcessor->_min_out_ch), dontSendNotification);
+    num_spk.setText(String(ourProcessor->_min_out_ch), dontSendNotification);
 
-    num_hrtf->setText(String(ourProcessor->_num_conv), dontSendNotification);
+    num_hrtf.setText(String(ourProcessor->_num_conv), dontSendNotification);
 
-    txt_preset->setText(ourProcessor->box_preset_str);
-    txt_preset->setCaretPosition(txt_preset->getTotalNumChars()-1);
-    txt_preset->setTooltip(txt_preset->getText());
+    txt_preset.setText(ourProcessor->box_preset_str);
+    txt_preset.setCaretPosition(txt_preset.getTotalNumChars()-1);
+    txt_preset.setTooltip(txt_preset.getText());
 
-    box_conv_buffer->clear(dontSendNotification);
+    box_conv_buffer.clear(dontSendNotification);
     
     unsigned int buf = jmax(ourProcessor->getBufferSize(), (unsigned int) 1);
     unsigned int conv_buf = jmax(ourProcessor->getConvBufferSize(), buf);
@@ -345,14 +318,14 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         
         val = (unsigned int)floor(buf*pow(2,i));
         
-        box_conv_buffer->addItem(String(val), i+1);
+        box_conv_buffer.addItem(String(val), i+1);
         
         if (val == conv_buf)
             sel = i;
     }
-    box_conv_buffer->setSelectedItemIndex(sel, dontSendNotification);
+    box_conv_buffer.setSelectedItemIndex(sel, dontSendNotification);
   
-    box_maxpart->clear(dontSendNotification);
+    box_maxpart.clear(dontSendNotification);
     sel = 0;
     val = 0;
     unsigned int max_part_size = ourProcessor->getMaxPartitionSize();
@@ -360,17 +333,17 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
       
       val = (unsigned int)floor(conv_buf*pow(2,i));
       
-      box_maxpart->addItem(String(val), i+1);
+      box_maxpart.addItem(String(val), i+1);
       
       if (val == max_part_size)
         sel = i;
     }
-    box_maxpart->setSelectedItemIndex(sel, dontSendNotification);
+    box_maxpart.setSelectedItemIndex(sel, dontSendNotification);
     
-    tgl_rcv_active->setToggleState(ourProcessor->getOscIn(), dontSendNotification);
-    txt_rcv_port->setText(String(ourProcessor->getOscInPort()), dontSendNotification);
+    tgl_rcv_active.setToggleState(ourProcessor->getOscIn(), dontSendNotification);
+    txt_rcv_port.setText(String(ourProcessor->getOscInPort()), dontSendNotification);
 
-    tgl_save_preset->setToggleState(ourProcessor->_storeConfigDataInProject.get(), dontSendNotification);
+    tgl_save_preset.setToggleState(ourProcessor->_storeConfigDataInProject.get(), dontSendNotification);
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
@@ -486,11 +459,11 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
 {
     Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
     
-    if (buttonThatWasClicked == btn_open)
+    if (buttonThatWasClicked == &btn_open)
     {
         popup_presets.showMenuAsync(PopupMenu::Options().withTargetComponent (btn_open), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
     }
-    else if (buttonThatWasClicked == btn_preset_folder)
+    else if (buttonThatWasClicked == &btn_preset_folder)
     {
         FileChooser myChooser ("Please select the new preset folder...",
                                ourProcessor->presetDir,
@@ -508,13 +481,13 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             UpdatePresets();
         }
     }
-    else if (buttonThatWasClicked == tgl_rcv_active)
+    else if (buttonThatWasClicked == &tgl_rcv_active)
     {
-      ourProcessor->setOscIn(tgl_rcv_active->getToggleState());
+      ourProcessor->setOscIn(tgl_rcv_active.getToggleState());
     }
-    else if (buttonThatWasClicked == tgl_save_preset)
+    else if (buttonThatWasClicked == &tgl_save_preset)
     {
-        ourProcessor->_storeConfigDataInProject = tgl_save_preset->getToggleState();
+        ourProcessor->_storeConfigDataInProject = tgl_save_preset.getToggleState();
     }
 
 }
@@ -530,16 +503,16 @@ void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThat
 {
     Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
     
-    if (comboBoxThatHasChanged == box_conv_buffer)
+    if (comboBoxThatHasChanged == &box_conv_buffer)
     {
-        int val = box_conv_buffer->getText().getIntValue();
+        int val = box_conv_buffer.getText().getIntValue();
         
         // std::cout << "set size: " << val << std::endl;
         ourProcessor->setConvBufferSize(val);
     }
-    else if (comboBoxThatHasChanged == box_maxpart)
+    else if (comboBoxThatHasChanged == &box_maxpart)
     {
-        int val = box_maxpart->getText().getIntValue();
+        int val = box_maxpart.getText().getIntValue();
         ourProcessor->setMaxPartitionSize(val);
     }
     
@@ -548,9 +521,9 @@ void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThat
 void Mcfx_convolverAudioProcessorEditor::textEditorFocusLost(TextEditor & ed)
 {
   Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
-  if (&ed == txt_rcv_port)
+  if (&ed == &txt_rcv_port)
   {
-    ourProcessor->setOscInPort(txt_rcv_port->getText().getIntValue());
+    ourProcessor->setOscInPort(txt_rcv_port.getText().getIntValue());
   }
 }
 

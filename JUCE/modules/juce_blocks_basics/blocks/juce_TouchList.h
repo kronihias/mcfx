@@ -2,26 +2,26 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
+namespace juce
+{
 
 /**
     Utility class to hold a list of TouchSurface::Touch objects with different
@@ -30,16 +30,18 @@
 
     The Type template is a user-defined type of object that will be stored for
     each touch element. The type must be default-constructable and copyable.
+
+    @tags{Blocks}
 */
 template <typename Type>
 class TouchList
 {
 public:
     /** Creates an empty touch list. */
-    TouchList() {}
+    TouchList() = default;
 
     /** Destructor. */
-    ~TouchList() {}
+    ~TouchList() = default;
 
     /** Returns the number of entries in the touch list. */
     int size() const noexcept { return touches.size(); }
@@ -106,7 +108,7 @@ public:
     /** If a touch is in the list, returns a pointer to the TouchEntry.
         Otherwise, returns nullptr.
     */
-    TouchEntry* find (const TouchSurface::Touch& touch) const noexcept
+    const TouchEntry* find (const TouchSurface::Touch& touch) const noexcept
     {
         for (auto& t : touches)
             if (matches (t.touch, touch))
@@ -115,27 +117,36 @@ public:
         return nullptr;
     }
 
-    /** Allows iterator access to the list of touch entries. */
-    TouchEntry* begin() const noexcept      { return touches.begin(); }
+    TouchEntry* find (const TouchSurface::Touch& touch) noexcept
+    {
+        return const_cast<TouchEntry*> (static_cast<const TouchList&> (*this).find (touch));
+    }
 
     /** Allows iterator access to the list of touch entries. */
-    TouchEntry* end() const noexcept        { return touches.end(); }
+    TouchEntry* begin() noexcept               { return touches.begin(); }
+    const TouchEntry* begin() const noexcept   { return touches.begin(); }
 
-    /** Retrieve a reference to particular item in the list of touch entires. */
-    TouchEntry& operator[] (const int index) { return touches.getReference (index); }
+    /** Allows iterator access to the list of touch entries. */
+    TouchEntry* end() noexcept                 { return touches.end(); }
+    const TouchEntry* end() const noexcept     { return touches.end(); }
+
+    /** Retrieve a reference to particular item in the list of touch entries. */
+    TouchEntry& operator[] (const int index)   { return touches.getReference (index); }
 
     /** Resets all contents, doest not generate any call-backs. */
-    void clear() noexcept                   { touches.clear(); }
+    void clear() noexcept                      { touches.clear(); }
 
 private:
-    //==========================================================================
+    //==============================================================================
     static bool matches (const TouchSurface::Touch& t1,
                          const TouchSurface::Touch& t2) noexcept
     {
         return t1.index == t2.index && t1.blockUID == t2.blockUID;
     }
 
-    juce::Array<TouchEntry> touches;
+    Array<TouchEntry> touches;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TouchList)
 };
+
+} // namespace juce

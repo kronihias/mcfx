@@ -2,30 +2,34 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
+namespace juce
+{
+namespace BlocksProtocol
+{
 
 /**
     Parses data packets from a BLOCKS device, and translates them into callbacks
     on a handler object
+
+    @tags{Blocks}
 */
 template <typename Handler>
 struct HostPacketDecoder
@@ -45,25 +49,38 @@ struct HostPacketDecoder
             auto packetTimestamp = reader.read<PacketTimestamp>();
             deviceIndex &= 63; // top bit is used as a direction indicator
 
-            while (processNextMessage (handler, reader, deviceIndex, packetTimestamp))
-            {}
+            for (;;)
+            {
+                auto nextMessageType = getMessageType (reader);
+
+                if (nextMessageType == 0)
+                    break;
+
+                if (! processNextMessage (handler, reader, (MessageFromDevice) nextMessageType, deviceIndex, packetTimestamp))
+                    break;
+            }
         }
     }
 
-    static bool processNextMessage (Handler& handler, Packed7BitArrayReader& reader,
-                                    TopologyIndex deviceIndex, PacketTimestamp packetTimestamp)
+    static uint32 getMessageType (Packed7BitArrayReader& reader)
     {
         if (reader.getRemainingBits() < MessageType::bits)
-            return false;
+            return 0;
 
-        auto messageType = reader.read<MessageType>().get();
+        return reader.read<MessageType>().get();
+    }
 
-        if (messageType == 0)
-            return false;
-
-        switch ((MessageFromDevice) messageType)
+    static bool processNextMessage (Handler& handler, Packed7BitArrayReader& reader,
+                                    MessageFromDevice messageType, TopologyIndex deviceIndex,
+                                    PacketTimestamp packetTimestamp)
+    {
+        switch (messageType)
         {
-            case MessageFromDevice::deviceTopology:           return handleTopology (handler, reader);
+            case MessageFromDevice::deviceTopology:           return handleTopology (handler, reader, true);
+            case MessageFromDevice::deviceTopologyExtend:     return handleTopology (handler, reader, false);
+            case MessageFromDevice::deviceTopologyEnd:        return handleTopologyEnd (handler, reader);
+            case MessageFromDevice::deviceVersion:            return handleVersion (handler, reader);
+            case MessageFromDevice::deviceName:               return handleName (handler, reader);
             case MessageFromDevice::touchStart:               return handleTouch (handler, reader, deviceIndex, packetTimestamp, true, false);
             case MessageFromDevice::touchMove:                return handleTouch (handler, reader, deviceIndex, packetTimestamp, false, false);
             case MessageFromDevice::touchEnd:                 return handleTouch (handler, reader, deviceIndex, packetTimestamp, false, true);
@@ -72,7 +89,11 @@ struct HostPacketDecoder
             case MessageFromDevice::touchEndWithVelocity:     return handleTouchWithVelocity (handler, reader, deviceIndex, packetTimestamp, false, true);
             case MessageFromDevice::controlButtonDown:        return handleButtonDownOrUp (handler, reader, deviceIndex, packetTimestamp, true);
             case MessageFromDevice::controlButtonUp:          return handleButtonDownOrUp (handler, reader, deviceIndex, packetTimestamp, false);
+            case MessageFromDevice::programEventMessage:      return handleCustomMessage (handler, reader, deviceIndex, packetTimestamp);
             case MessageFromDevice::packetACK:                return handlePacketACK (handler, reader, deviceIndex);
+            case MessageFromDevice::firmwareUpdateACK:        return handleFirmwareUpdateACK (handler, reader, deviceIndex);
+            case MessageFromDevice::configMessage:            return handleConfigMessage (handler, reader, deviceIndex);
+            case MessageFromDevice::logMessage:               return handleLogMessage (handler, reader, deviceIndex);
 
             default:
                 jassertfalse; // got an invalid message type, could be a corrupt packet, or a
@@ -81,9 +102,9 @@ struct HostPacketDecoder
         }
     }
 
-    static bool handleTopology (Handler& handler, Packed7BitArrayReader& reader)
+    static bool handleTopology (Handler& handler, Packed7BitArrayReader& reader, bool newTopology)
     {
-        if (reader.getRemainingBits() < DeviceCount::bits + ConnectionCount::bits)
+        if (reader.getRemainingBits() < (int) DeviceCount::bits + (int) ConnectionCount::bits)
         {
             jassertfalse; // not enough data available for this message type!
             return false;
@@ -107,7 +128,10 @@ struct HostPacketDecoder
             return false;
         }
 
-        handler.beginTopology ((int) numDevices, (int) numConnections);
+        if (newTopology)
+            handler.beginTopology ((int) numDevices, (int) numConnections);
+        else
+            handler.extendTopology ((int) numDevices, (int) numConnections);
 
         for (uint32 i = 0; i < numDevices; ++i)
             handleTopologyDevice (handler, reader);
@@ -115,8 +139,24 @@ struct HostPacketDecoder
         for (uint32 i = 0; i < numConnections; ++i)
             handleTopologyConnection (handler, reader);
 
-        handler.endTopology();
+        // Packet must be last in topology, otherwise wait for topology end message
+        if (numDevices < maxBlocksInTopologyPacket && numConnections < maxConnectionsInTopologyPacket)
+            handler.endTopology();
 
+        return true;
+    }
+
+    static bool handleTopologyEnd (Handler& handler, Packed7BitArrayReader& reader)
+    {
+        auto deviceProtocolVersion = reader.read<ProtocolVersion>();
+
+        if (deviceProtocolVersion > currentProtocolVersion)
+        {
+            jassertfalse;
+            return false;
+        }
+
+        handler.endTopology();
         return true;
     }
 
@@ -124,8 +164,11 @@ struct HostPacketDecoder
     {
         DeviceStatus status;
 
-        for (uint32 i = 0; i < sizeof (BlockSerialNumber); ++i)
-            status.serialNumber.serial[i] = (uint8) reader.readBits (7);
+        for (uint32 i = 0; i < BlockSerialNumber::maxLength; ++i)
+        {
+            status.serialNumber.data[i] = (uint8) reader.readBits (7);
+            ++status.serialNumber.length;
+        }
 
         status.index            = (TopologyIndex) reader.readBits (topologyIndexBits);
         status.batteryLevel     = reader.read<BatteryLevel>();
@@ -146,10 +189,38 @@ struct HostPacketDecoder
         handler.handleTopologyConnection (connection);
     }
 
+    static bool handleVersion (Handler& handler, Packed7BitArrayReader& reader)
+    {
+        DeviceVersion version;
+
+        version.index = (TopologyIndex) reader.readBits (topologyIndexBits);
+        version.version.length = (uint8) reader.readBits (7);
+
+        for (uint32 i = 0; i < version.version.length; ++i)
+            version.version.data[i] = (uint8) reader.readBits (7);
+
+        handler.handleVersion (version);
+        return true;
+    }
+
+    static bool handleName (Handler& handler, Packed7BitArrayReader& reader)
+    {
+        DeviceName name;
+
+        name.index = (TopologyIndex) reader.readBits (topologyIndexBits);
+        name.name.length = (uint8) reader.readBits (7);
+
+        for (uint32 i = 0; i < name.name.length; ++i)
+            name.name.data[i] = (uint8) reader.readBits (7);
+
+        handler.handleName (name);
+        return true;
+    }
+
     static bool handleTouch (Handler& handler, Packed7BitArrayReader& reader, TopologyIndex deviceIndex,
                              PacketTimestamp packetTimestamp, bool isStart, bool isEnd)
     {
-        if (reader.getRemainingBits() < BitSizes::touchMessage - MessageType::bits)
+        if (reader.getRemainingBits() < (int) BitSizes::touchMessage - (int) MessageType::bits)
         {
             jassertfalse; // not enough data available for this message type!
             return false;
@@ -169,7 +240,7 @@ struct HostPacketDecoder
     static bool handleTouchWithVelocity (Handler& handler, Packed7BitArrayReader& reader, TopologyIndex deviceIndex,
                                          PacketTimestamp packetTimestamp, bool isStart, bool isEnd)
     {
-        if (reader.getRemainingBits() < BitSizes::touchMessageWithVelocity - MessageType::bits)
+        if (reader.getRemainingBits() < (int) BitSizes::touchMessageWithVelocity - (int) MessageType::bits)
         {
             jassertfalse; // not enough data available for this message type!
             return false;
@@ -198,7 +269,7 @@ struct HostPacketDecoder
     static bool handleButtonDownOrUp (Handler& handler, Packed7BitArrayReader& reader, TopologyIndex deviceIndex,
                                       PacketTimestamp packetTimestamp, bool isDown)
     {
-        if (reader.getRemainingBits() < BitSizes::controlButtonMessage - MessageType::bits)
+        if (reader.getRemainingBits() < (int) BitSizes::controlButtonMessage - (int) MessageType::bits)
         {
             jassertfalse; // not enough data available for this message type!
             return false;
@@ -211,9 +282,27 @@ struct HostPacketDecoder
         return true;
     }
 
+    static bool handleCustomMessage (Handler& handler, Packed7BitArrayReader& reader,
+                                     TopologyIndex deviceIndex, PacketTimestamp packetTimestamp)
+    {
+        if (reader.getRemainingBits() < BitSizes::programEventMessage - (int) MessageType::bits)
+        {
+            jassertfalse; // not enough data available for this message type!
+            return false;
+        }
+
+        int32 data[numProgramMessageInts] = {};
+
+        for (uint32 i = 0; i < numProgramMessageInts; ++i)
+            data[i] = (int32) reader.read<IntegerWithBitSize<32>>().get();
+
+        handler.handleCustomMessage (deviceIndex, packetTimestamp.get(), data);
+        return true;
+    }
+
     static bool handlePacketACK (Handler& handler, Packed7BitArrayReader& reader, TopologyIndex deviceIndex)
     {
-        if (reader.getRemainingBits() < BitSizes::packetACK - MessageType::bits)
+        if (reader.getRemainingBits() < BitSizes::packetACK - (int) MessageType::bits)
         {
             jassertfalse; // not enough data available for this message type!
             return false;
@@ -222,4 +311,73 @@ struct HostPacketDecoder
         handler.handlePacketACK (deviceIndex, reader.read<PacketCounter>());
         return true;
     }
+
+    static bool handleFirmwareUpdateACK (Handler& handler, Packed7BitArrayReader& reader, TopologyIndex deviceIndex)
+    {
+        if (reader.getRemainingBits() < FirmwareUpdateACKCode::bits)
+        {
+            jassertfalse; // not enough data available for this message type!
+            return false;
+        }
+
+        auto ackCode   = reader.read<FirmwareUpdateACKCode>();
+        auto ackDetail = reader.read<FirmwareUpdateACKDetail>();
+
+        handler.handleFirmwareUpdateACK (deviceIndex, ackCode, ackDetail);
+        return true;
+    }
+
+    static bool handleConfigMessage (Handler& handler, Packed7BitArrayReader& reader, TopologyIndex deviceIndex)
+    {
+        ConfigCommand type = reader.read<ConfigCommand>().get();
+
+        if (type == updateConfig)
+        {
+            auto item  = (int32) reader.read<IntegerWithBitSize<8>>().get();
+            auto value = (int32) reader.read<IntegerWithBitSize<32>>().get();
+            auto min   = (int32) reader.read<IntegerWithBitSize<32>>().get();
+            auto max   = (int32) reader.read<IntegerWithBitSize<32>>().get();
+
+            handler.handleConfigUpdateMessage (deviceIndex, item, value, min, max);
+            return true;
+        }
+
+        if (type == setConfig)
+        {
+            auto item  = (int32) reader.read<IntegerWithBitSize<8>>().get();
+            auto value = (int32) reader.read<IntegerWithBitSize<32>>().get();
+
+            handler.handleConfigSetMessage (deviceIndex, item, value);
+            return true;
+        }
+
+        if (type == factorySyncEnd)
+        {
+            handler.handleConfigFactorySyncEndMessage (deviceIndex);
+        }
+
+        if (type == factorySyncReset)
+        {
+            handler.handleConfigFactorySyncResetMessage (deviceIndex);
+        }
+
+        return true;
+    }
+
+    static bool handleLogMessage (Handler& handler, Packed7BitArrayReader& reader, TopologyIndex deviceIndex)
+    {
+        String message;
+
+        while (reader.getRemainingBits() >= 7)
+        {
+            uint32 c = reader.read<IntegerWithBitSize<7>>();
+            message << (char) c;
+        }
+
+        handler.handleLogMessage (deviceIndex, message);
+        return true;
+    }
 };
+
+} // namespace BlocksProtocol
+} // namespace juce

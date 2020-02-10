@@ -2,29 +2,33 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
+namespace juce
+{
+namespace BlocksProtocol
+{
 
 /**
     Helper class for constructing a packet for sending to a BLOCKS device
+
+    @tags{Blocks}
 */
 template <int maxPacketBytes>
 struct HostPacketBuilder
@@ -54,7 +58,7 @@ struct HostPacketBuilder
     //==============================================================================
     bool deviceControlMessage (DeviceCommand command) noexcept
     {
-        if (! data.hasCapacity (MessageType::bits + DeviceCommand::bits))
+        if (! data.hasCapacity ((int) MessageType::bits + (int) DeviceCommand::bits))
             return false;
 
         writeMessageType (MessageFromHost::deviceCommandMessage);
@@ -65,7 +69,7 @@ struct HostPacketBuilder
     //==============================================================================
     bool beginDataChanges (PacketIndex packetIndex) noexcept
     {
-        if (! data.hasCapacity (MessageType::bits + PacketIndex::bits + DataChangeCommand::bits))
+        if (! data.hasCapacity ((int) MessageType::bits + (int) PacketIndex::bits + (int) DataChangeCommand::bits))
             return false;
 
         writeMessageType (MessageFromHost::sharedDataChange);
@@ -212,6 +216,101 @@ struct HostPacketBuilder
         return true;
     }
 
+    bool addFirmwareUpdatePacket (const uint8* packetData, uint8 size)
+    {
+        if (! data.hasCapacity (MessageType::bits + FirmwareUpdatePacketSize::bits + 7 * size))
+            return false;
+
+        writeMessageType (MessageFromHost::firmwareUpdatePacket);
+        data << FirmwareUpdatePacketSize (size);
+
+        for (uint8 i = 0; i < size; ++i)
+            data << IntegerWithBitSize<7> ((uint32) packetData[i]);
+
+        return true;
+    }
+
+    //==============================================================================
+    bool addConfigSetMessage (int32 item, int32 value)
+    {
+        if (! data.hasCapacity (BitSizes::configSetMessage))
+            return false;
+
+        writeMessageType(MessageFromHost::configMessage);
+        ConfigCommand type = ConfigCommands::setConfig;
+        data << type << IntegerWithBitSize<8> ((uint32) item) << IntegerWithBitSize<32>((uint32) value);
+        return true;
+    }
+
+    bool addRequestMessage (int32 item)
+    {
+        if (! data.hasCapacity (BitSizes::configSetMessage))
+            return false;
+
+        writeMessageType(MessageFromHost::configMessage);
+        ConfigCommand type = ConfigCommands::requestConfig;
+        data << type << IntegerWithBitSize<32> (0) << IntegerWithBitSize<8> ((uint32) item);
+        return true;
+    }
+
+    bool addRequestFactorySyncMessage()
+    {
+        if (! data.hasCapacity ((int) MessageType::bits + (int) ConfigCommand::bits))
+            return false;
+
+        writeMessageType (MessageFromHost::configMessage);
+        ConfigCommand type = ConfigCommands::requestFactorySync;
+        data << type;
+        return true;
+    }
+
+    bool addRequestUserSyncMessage()
+    {
+        if (! data.hasCapacity ((int) MessageType::bits + (int) ConfigCommand::bits))
+            return false;
+
+        writeMessageType (MessageFromHost::configMessage);
+        ConfigCommand type = ConfigCommands::requestUserSync;
+        data << type;
+        return true;
+    }
+
+    //==============================================================================
+    bool addFactoryReset()
+    {
+        if (! data.hasCapacity (MessageType::bits))
+            return false;
+
+        writeMessageType (MessageFromHost::factoryReset);
+        return true;
+    }
+
+    bool addBlockReset()
+    {
+        if (! data.hasCapacity (MessageType::bits))
+            return false;
+
+        writeMessageType (MessageFromHost::blockReset);
+        return true;
+    }
+
+    bool addSetBlockName (const String& name)
+    {
+        if (name.length() > 32 || ! data.hasCapacity (MessageType::bits + 7 + (7 * name.length())))
+            return false;
+
+        writeMessageType (MessageFromHost::setName);
+
+        data << IntegerWithBitSize<7> ((uint32) name.length());
+
+        for (auto i = 0; i < name.length(); ++i)
+            data << IntegerWithBitSize<7> ((uint32) name.toRawUTF8()[i]);
+
+        data << IntegerWithBitSize<7> (0);
+
+        return true;
+    }
+
     //==============================================================================
 private:
     Packed7BitArrayBuilder<maxPacketBytes> data;
@@ -221,3 +320,6 @@ private:
         data << MessageType ((uint32) type);
     }
 };
+
+} // namespace BlocksProtocol
+} // namespace juce
