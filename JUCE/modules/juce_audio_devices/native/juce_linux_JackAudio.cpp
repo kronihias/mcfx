@@ -175,30 +175,8 @@ public:
         {
             juce::jack_set_error_function (errorCallback);
 
-            // open input ports
-            const StringArray inputChannels (getInputChannelNames());
-            for (int i = 0; i < inputChannels.size(); ++i)
-            {
-                String inputName;
-                inputName << "in_" << ++totalNumberOfInputChannels;
+            // add ports when clear how much we need!
 
-                inputPorts.add (juce::jack_port_register (client, inputName.toUTF8(),
-                                                          JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0));
-            }
-
-            // open output ports
-            const StringArray outputChannels (getOutputChannelNames());
-            for (int i = 0; i < outputChannels.size(); ++i)
-            {
-                String outputName;
-                outputName << "out_" << ++totalNumberOfOutputChannels;
-
-                outputPorts.add (juce::jack_port_register (client, outputName.toUTF8(),
-                                                           JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0));
-            }
-
-            inChans.calloc (totalNumberOfInputChannels + 2);
-            outChans.calloc (totalNumberOfOutputChannels + 2);
         }
     }
 
@@ -262,6 +240,29 @@ public:
 
         lastError.clear();
         close();
+        // std::cout << "Num Ins: " << inputChannels.getHighestBit()+1 << " Outputs: " << outputChannels.getHighestBit()+1 << std::endl;
+        // open input ports
+            for (int i = 0; i < inputChannels.getHighestBit()+1; ++i)
+            {
+                String inputName;
+                inputName << "in_" << ++totalNumberOfInputChannels;
+
+                inputPorts.add (juce::jack_port_register (client, inputName.toUTF8(),
+                                                          JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0));
+            }
+
+            // open output ports
+            for (int i = 0; i < outputChannels.getHighestBit()+1; ++i)
+            {
+                String outputName;
+                outputName << "out_" << ++totalNumberOfOutputChannels;
+
+                outputPorts.add (juce::jack_port_register (client, outputName.toUTF8(),
+                                                           JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0));
+            }
+
+            inChans.calloc (totalNumberOfInputChannels + 2);
+            outChans.calloc (totalNumberOfOutputChannels + 2);
 
         xruns = 0;
         juce::jack_set_process_callback (client, processCallback, this);
@@ -271,6 +272,8 @@ public:
         juce::jack_activate (client);
         deviceIsOpen = true;
 
+        // do not auto connect!
+        /*
         if (! inputChannels.isZero())
         {
             for (JackPortIterator i (client, true); i.next();)
@@ -296,6 +299,7 @@ public:
                 }
             }
         }
+	*/
 
         updateActivePorts();
 
