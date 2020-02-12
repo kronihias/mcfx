@@ -2,25 +2,30 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
+   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
+   27th April 2017).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-5-licence
+   Privacy Policy: www.juce.com/juce-5-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
+
+namespace juce
+{
 
 #if JUCE_MSVC
  #pragma warning (push)
@@ -61,6 +66,18 @@ namespace pnglibNamespace
   #if JUCE_CLANG
    #pragma clang diagnostic push
    #pragma clang diagnostic ignored "-Wsign-conversion"
+   #if __has_warning("-Wzero-as-null-pointer-constant")
+    #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
+   #endif
+   #if __has_warning("-Wcomma")
+    #pragma clang diagnostic ignored "-Wcomma"
+   #endif
+  #endif
+
+  #if JUCE_GCC
+   #pragma GCC diagnostic push
+   #pragma GCC diagnostic ignored "-Wsign-conversion"
+   #pragma GCC diagnostic ignored "-Wzero-as-null-pointer-constant"
   #endif
 
   #undef check
@@ -76,7 +93,6 @@ namespace pnglibNamespace
   #define PNG_ALIGNED_MEMORY_SUPPORTED
   #define PNG_BENIGN_ERRORS_SUPPORTED
   #define PNG_BENIGN_READ_ERRORS_SUPPORTED
-  #define PNG_BUILD_GRAYSCALE_PALETTE_SUPPORTED
   #define PNG_CHECK_FOR_INVALID_INDEX_SUPPORTED
   #define PNG_COLORSPACE_SUPPORTED
   #define PNG_CONSOLE_IO_SUPPORTED
@@ -92,7 +108,6 @@ namespace pnglibNamespace
   #define PNG_INCH_CONVERSIONS_SUPPORTED
   #define PNG_INFO_IMAGE_SUPPORTED
   #define PNG_IO_STATE_SUPPORTED
-  #define PNG_MNG_FEATURES_SUPPORTED
   #define PNG_POINTER_INDEXING_SUPPORTED
   #define PNG_PROGRESSIVE_READ_SUPPORTED
   #define PNG_READ_16BIT_SUPPORTED
@@ -256,6 +271,19 @@ namespace pnglibNamespace
   #define PNG_sCAL_PRECISION 5
   #define PNG_sRGB_PROFILE_CHECKS 2
 
+  #define PNG_LINKAGE_API
+  #define PNG_LINKAGE_FUNCTION
+
+  #define PNG_ARM_NEON_OPT 0
+
+  #if ! defined (PNG_USER_WIDTH_MAX)
+   #define PNG_USER_WIDTH_MAX 1000000
+  #endif
+
+  #if ! defined (PNG_USER_HEIGHT_MAX)
+   #define PNG_USER_HEIGHT_MAX 1000000
+  #endif
+
   #define png_debug(a, b)
   #define png_debug1(a, b, c)
   #define png_debug2(a, b, c, d)
@@ -271,6 +299,24 @@ namespace pnglibNamespace
   #include "pnglib/pngread.c"
   #include "pnglib/pngpread.c"
   #include "pnglib/pngrio.c"
+
+  void png_do_expand_palette (png_row_infop, png_bytep, png_const_colorp, png_const_bytep, int);
+  void png_do_expand (png_row_infop, png_bytep, png_const_color_16p);
+  void png_do_chop (png_row_infop, png_bytep);
+  void png_do_quantize (png_row_infop, png_bytep, png_const_bytep, png_const_bytep);
+  void png_do_gray_to_rgb (png_row_infop, png_bytep);
+  void png_do_unshift (png_row_infop, png_bytep, png_const_color_8p);
+  void png_do_unpack (png_row_infop, png_bytep);
+  int png_do_rgb_to_gray (png_structrp, png_row_infop, png_bytep);
+  void png_do_compose (png_row_infop, png_bytep, png_structrp);
+  void png_do_gamma (png_row_infop, png_bytep, png_structrp);
+  void png_do_encode_alpha (png_row_infop, png_bytep, png_structrp);
+  void png_do_scale_16_to_8 (png_row_infop, png_bytep);
+  void png_do_expand_16 (png_row_infop, png_bytep);
+  void png_do_read_filler (png_row_infop, png_bytep, png_uint_32, png_uint_32);
+  void png_do_read_invert_alpha (png_row_infop, png_bytep);
+  void png_do_read_swap_alpha (png_row_infop, png_bytep);
+
   #include "pnglib/pngrtran.c"
   #include "pnglib/pngrutil.c"
   #include "pnglib/pngset.c"
@@ -283,6 +329,11 @@ namespace pnglibNamespace
   #if JUCE_CLANG
    #pragma clang diagnostic pop
   #endif
+
+  #if JUCE_GCC
+   #pragma GCC diagnostic pop
+  #endif
+
 #else
   extern "C"
   {
@@ -320,7 +371,11 @@ namespace PNGHelpers
 
     static void JUCE_CDECL errorCallback (png_structp p, png_const_charp)
     {
+       #ifdef PNG_SETJMP_SUPPORTED
+        setjmp(png_jmpbuf(p));
+       #else
         longjmp (*(jmp_buf*) p->error_ptr, 1);
+       #endif
     }
 
     static void JUCE_CDECL warningCallback (png_structp, png_const_charp) {}
@@ -343,7 +398,7 @@ namespace PNGHelpers
             png_get_IHDR (pngReadStruct, pngInfoStruct,
                           &width, &height,
                           &bitDepth, &colorType,
-                          &interlaceType, 0, 0);
+                          &interlaceType, nullptr, nullptr);
 
             if (bitDepth == 16)
                 png_set_strip_16 (pngReadStruct);
@@ -442,8 +497,13 @@ namespace PNGHelpers
             for (size_t y = 0; y < height; ++y)
                 rows[y] = (png_bytep) (tempBuffer + lineStride * y);
 
+            png_bytep trans_alpha = nullptr;
+            png_color_16p trans_color = nullptr;
+            int num_trans = 0;
+            png_get_tRNS (pngReadStruct, pngInfoStruct, &trans_alpha, &num_trans, &trans_color);
+
             if (readImageData (pngReadStruct, pngInfoStruct, errorJumpBuf, rows))
-                return createImageFromData ((colorType & PNG_COLOR_MASK_ALPHA) != 0 || pngInfoStruct->num_trans > 0,
+                return createImageFromData ((colorType & PNG_COLOR_MASK_ALPHA) != 0 || num_trans != 0,
                                             (int) width, (int) height, rows);
         }
 
@@ -452,16 +512,16 @@ namespace PNGHelpers
 
     static Image readImage (InputStream& in)
     {
-        if (png_structp pngReadStruct = png_create_read_struct (PNG_LIBPNG_VER_STRING, 0, 0, 0))
+        if (png_structp pngReadStruct = png_create_read_struct (PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr))
         {
             if (png_infop pngInfoStruct = png_create_info_struct (pngReadStruct))
             {
                 Image image (readImage (in, pngReadStruct, pngInfoStruct));
-                png_destroy_read_struct (&pngReadStruct, &pngInfoStruct, 0);
+                png_destroy_read_struct (&pngReadStruct, &pngInfoStruct, nullptr);
                 return image;
             }
 
-            png_destroy_read_struct (&pngReadStruct, 0, 0);
+            png_destroy_read_struct (&pngReadStruct, nullptr, nullptr);
         }
 
         return Image();
@@ -503,23 +563,23 @@ Image PNGImageFormat::decodeImage (InputStream& in)
 bool PNGImageFormat::writeImageToStream (const Image& image, OutputStream& out)
 {
     using namespace pnglibNamespace;
-    const int width = image.getWidth();
-    const int height = image.getHeight();
+    auto width = image.getWidth();
+    auto height = image.getHeight();
 
-    png_structp pngWriteStruct = png_create_write_struct (PNG_LIBPNG_VER_STRING, 0, 0, 0);
+    auto pngWriteStruct = png_create_write_struct (PNG_LIBPNG_VER_STRING, nullptr, nullptr, nullptr);
 
     if (pngWriteStruct == nullptr)
         return false;
 
-    png_infop pngInfoStruct = png_create_info_struct (pngWriteStruct);
+    auto pngInfoStruct = png_create_info_struct (pngWriteStruct);
 
     if (pngInfoStruct == nullptr)
     {
-        png_destroy_write_struct (&pngWriteStruct, (png_infopp) nullptr);
+        png_destroy_write_struct (&pngWriteStruct, nullptr);
         return false;
     }
 
-    png_set_write_fn (pngWriteStruct, &out, PNGHelpers::writeDataCallback, 0);
+    png_set_write_fn (pngWriteStruct, &out, PNGHelpers::writeDataCallback, nullptr);
 
     png_set_IHDR (pngWriteStruct, pngInfoStruct, (png_uint_32) width, (png_uint_32) height, 8,
                   image.hasAlphaChannel() ? PNG_COLOR_TYPE_RGB_ALPHA
@@ -528,7 +588,7 @@ bool PNGImageFormat::writeImageToStream (const Image& image, OutputStream& out)
                   PNG_COMPRESSION_TYPE_BASE,
                   PNG_FILTER_TYPE_BASE);
 
-    HeapBlock<uint8> rowData ((size_t) width * 4);
+    HeapBlock<uint8> rowData (width * 4);
 
     png_color_8 sig_bit;
     sig_bit.red   = 8;
@@ -584,3 +644,5 @@ bool PNGImageFormat::writeImageToStream (const Image& image, OutputStream& out)
 
     return true;
 }
+
+} // namespace juce

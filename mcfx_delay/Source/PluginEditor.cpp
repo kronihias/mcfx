@@ -30,68 +30,66 @@
 Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioProcessor* ownerFilter)
     : AudioProcessorEditor (ownerFilter)
 {
-    //[Constructor_pre] You can add your own custom stuff here..
-    //[/Constructor_pre]
+    setLookAndFeel (&MyLookAndFeel);
+
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
     
-    addAndMakeVisible (lbl_g = new Label ("new label",
-                                          TRANS("mcfx_delay")));
-    lbl_g->setFont (Font (15.00f, Font::plain));
-    lbl_g->setJustificationType (Justification::centredLeft);
-    lbl_g->setEditable (false, false, false);
-    lbl_g->setColour (Label::textColourId, Colours::aquamarine);
-    lbl_g->setColour (TextEditor::textColourId, Colours::black);
-    lbl_g->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (lbl_g);
+    lbl_g.setText("mcfx_delay", dontSendNotification);
+    lbl_g.setFont (Font (15.00f, Font::plain));
+    lbl_g.setJustificationType (Justification::centredLeft);
+    lbl_g.setEditable (false, false, false);
+    lbl_g.setColour (Label::textColourId, Colours::aquamarine);
+    lbl_g.setColour (TextEditor::textColourId, Colours::black);
+    lbl_g.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
-    addAndMakeVisible (sld_del_ms = new Slider ("new slider"));
-    sld_del_ms->setTooltip (TRANS("delay in milliseconds"));
+    addAndMakeVisible (sld_del_ms);
+    sld_del_ms.setTooltip ("delay in milliseconds");
     
-    sld_del_ms->setRange (0, MAX_DELAYTIME_S*1000, 0.01);
+    sld_del_ms.setRange (0, MAX_DELAYTIME_S*1000, 0.01);
     
-    sld_del_ms->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
-    sld_del_ms->setVelocityBasedMode(true);
-    sld_del_ms->setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
-    sld_del_ms->setColour (Slider::rotarySliderFillColourId, Colours::red);
-    sld_del_ms->addListener (this);
+    sld_del_ms.setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+    sld_del_ms.setVelocityBasedMode(true);
+    sld_del_ms.setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
+    sld_del_ms.setColour (Slider::rotarySliderFillColourId, Colours::red);
+    sld_del_ms.addListener (this);
 
-    addAndMakeVisible (label3 = new Label ("new label",
-                                           TRANS("delay all channels")));
-    label3->setFont (Font (13.00f, Font::plain));
-    label3->setJustificationType (Justification::centredRight);
-    label3->setEditable (false, false, false);
-    label3->setColour (Label::textColourId, Colours::white);
-    label3->setColour (TextEditor::textColourId, Colours::black);
-    label3->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label3);
+    label3.setText("delay all channels", dontSendNotification);
+    label3.setFont (Font (13.00f, Font::plain));
+    label3.setJustificationType (Justification::centredRight);
+    label3.setEditable (false, false, false);
+    label3.setColour (Label::textColourId, Colours::white);
+    label3.setColour (TextEditor::textColourId, Colours::black);
+    label3.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
-    addAndMakeVisible (label2 = new Label ("new label",
-                                           TRANS("[ms]")));
-    label2->setFont (Font (13.00f, Font::plain));
-    label2->setJustificationType (Justification::centredLeft);
-    label2->setEditable (false, false, false);
-    label2->setColour (Label::textColourId, Colours::white);
-    label2->setColour (TextEditor::textColourId, Colours::black);
-    label2->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label2);
+    label2.setText("[ms]", dontSendNotification);
+    label2.setFont (Font (13.00f, Font::plain));
+    label2.setJustificationType (Justification::centredLeft);
+    label2.setEditable (false, false, false);
+    label2.setColour (Label::textColourId, Colours::white);
+    label2.setColour (TextEditor::textColourId, Colours::black);
+    label2.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
-    addAndMakeVisible (sld_del_smpl = new Slider ("new slider"));
-    sld_del_smpl->setTooltip (TRANS("delay in samples"));
-    
-    sld_del_smpl->setRange (0, ownerFilter->_samplerate*MAX_DELAYTIME_S, 1);
-    
-    sld_del_smpl->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
-    sld_del_smpl->setVelocityBasedMode(true);
-    sld_del_smpl->setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
-    sld_del_smpl->setColour (Slider::rotarySliderFillColourId, Colours::red);
-    sld_del_smpl->addListener (this);
+    addAndMakeVisible (sld_del_smpl);
+    sld_del_smpl.setTooltip ("delay in samples");
+    sld_del_smpl.setRange (0, ownerFilter->_samplerate*MAX_DELAYTIME_S, 1);
+    sld_del_smpl.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_del_smpl.setVelocityBasedMode(true);
+    sld_del_smpl.setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
+    sld_del_smpl.setColour (Slider::rotarySliderFillColourId, Colours::red);
+    sld_del_smpl.addListener (this);
 
-    addAndMakeVisible (label4 = new Label ("new label",
-                                           TRANS("[samples]")));
-    label4->setFont (Font (13.00f, Font::plain));
-    label4->setJustificationType (Justification::centredLeft);
-    label4->setEditable (false, false, false);
-    label4->setColour (Label::textColourId, Colours::white);
-    label4->setColour (TextEditor::textColourId, Colours::black);
-    label4->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+    addAndMakeVisible (label4);
+    label4.setText("[samples]", dontSendNotification);
+    label4.setFont (Font (13.00f, Font::plain));
+    label4.setJustificationType (Justification::centredLeft);
+    label4.setEditable (false, false, false);
+    label4.setColour (Label::textColourId, Colours::white);
+    label4.setColour (TextEditor::textColourId, Colours::black);
+    label4.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
 
     //[UserPreSize]
     //[/UserPreSize]
@@ -112,14 +110,6 @@ Mcfx_delayAudioProcessorEditor::~Mcfx_delayAudioProcessorEditor()
     
     // remove me as listener for changes
     ourProcessor->removeChangeListener(this);
-
-    lbl_g = nullptr;
-    sld_del_ms = nullptr;
-    label3 = nullptr;
-    label2 = nullptr;
-    sld_del_smpl = nullptr;
-    label4 = nullptr;
-
 
     //[Destructor]. You can add your own custom destruction code here..
     //[/Destructor]
@@ -157,12 +147,12 @@ void Mcfx_delayAudioProcessorEditor::resized()
     //[UserPreResize] Add your own custom resize code here..
     //[/UserPreResize]
 
-    lbl_g->setBounds (0, 0, 115, 16);
-    sld_del_ms->setBounds (22, 49, 93, 24);
-    label3->setBounds (11, 24, 109, 16);
-    label2->setBounds (110, 53, 35, 16);
-    sld_del_smpl->setBounds (22, 79, 93, 24);
-    label4->setBounds (112, 82, 68, 16);
+    lbl_g.setBounds (0, 0, 115, 16);
+    sld_del_ms.setBounds (22, 49, 93, 24);
+    label3.setBounds (11, 24, 109, 16);
+    label2.setBounds (110, 53, 35, 16);
+    sld_del_smpl.setBounds (22, 79, 93, 24);
+    label4.setBounds (112, 82, 68, 16);
     //[UserResized] Add your own custom resize handling here..
     //[/UserResized]
 }
@@ -171,13 +161,13 @@ void Mcfx_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasMo
 {
     Mcfx_delayAudioProcessor* ourProcessor = getProcessor();
 
-    if (sliderThatWasMoved == sld_del_ms)
+    if (sliderThatWasMoved == &sld_del_ms)
     {
-        ourProcessor->setParameter(0, sld_del_ms->getValue()/1000/MAX_DELAYTIME_S);
+        ourProcessor->setParameter(0, sld_del_ms.getValue()/1000/MAX_DELAYTIME_S);
     }
-    else if (sliderThatWasMoved == sld_del_smpl)
+    else if (sliderThatWasMoved == &sld_del_smpl)
     {
-        ourProcessor->setParameter(0, (double)sld_del_smpl->getValue()/ourProcessor->_samplerate/(double)MAX_DELAYTIME_S);
+        ourProcessor->setParameter(0, (double)sld_del_smpl.getValue()/ourProcessor->_samplerate/(double)MAX_DELAYTIME_S);
     }
 
     //[UsersliderValueChanged_Post]
@@ -187,6 +177,6 @@ void Mcfx_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasMo
 void Mcfx_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
     Mcfx_delayAudioProcessor* ourProcessor = getProcessor();
-    sld_del_ms->setValue(ourProcessor->getDelayInMs(), dontSendNotification);
-    sld_del_smpl->setValue(ourProcessor->getDelayInSmpls(), dontSendNotification);
+    sld_del_ms.setValue(ourProcessor->getDelayInMs(), dontSendNotification);
+    sld_del_smpl.setValue(ourProcessor->getDelayInSmpls(), dontSendNotification);
 }

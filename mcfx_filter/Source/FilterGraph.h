@@ -92,7 +92,7 @@ private:
 
 class FilterGraph    :  public Component,
                         public SettableTooltipClient,
-                        public ButtonListener,
+                        public Button::Listener,
                         public Timer
 {
     friend class GraphComponent;
@@ -142,13 +142,11 @@ private:
     
     FilterInfo* filterinfo_;
     
-    ScopedPointer<GraphComponent> graph_;
+    GraphComponent graph_;
     
-    ScopedPointer<AnalyzerComponent> analyzer_;
+    AnalyzerComponent analyzer_;
     
     OwnedArray<ImageButton> btn_drag;
-    
-    // ScopedPointer<ImageButton> btn_drag_lc;
     
     
     float minf_;        // minimum displayed frequency

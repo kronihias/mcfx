@@ -42,7 +42,8 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
   _buf_write_pos(0),
   _buf_size(256),
   _stepspeed(0.1f),
-  _stepper_on(false)
+  _stepper_on(false),
+  _channelstepper(this)
 {
   _delay_ms.resize(NUM_CHANNELS);
   _delay_smpls.resize(NUM_CHANNELS);
@@ -57,9 +58,7 @@ Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
   _siggen_flag.resize(NUM_CHANNELS);
   
   _solocount = 0;
-  
-  _channelstepper = new ChannelStepper(this);
-  
+    
   for (int i = 0; i < NUM_CHANNELS; i++) {
     _delay_ms.set(i, 0.f);
     _delay_smpls.set(i, 0);
@@ -300,14 +299,14 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
         if (newValue > 0.5f)
         {
           if (!_stepper_on)
-            _channelstepper->start(jmap(_stepspeed, 50.f, 5000.f));
+            _channelstepper.start(jmap(_stepspeed, 50.f, 5000.f));
           
           _stepper_on = true;
         }
         else if (newValue <= 0.5f)
         {
           if (_stepper_on)
-            _channelstepper->stop();
+            _channelstepper.stop();
 
           _stepper_on = false;
         }
@@ -316,7 +315,7 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
       case 5: // step speed
         _stepspeed = newValue;
         if (_stepper_on)
-          _channelstepper->setInterval(jmap(_stepspeed, 50.f, 5000.f));
+          _channelstepper.setInterval(jmap(_stepspeed, 50.f, 5000.f));
         break;
         
       default:
@@ -608,7 +607,7 @@ void Mcfx_gain_delayAudioProcessor::setCurrentProgram (int index)
 
 const String Mcfx_gain_delayAudioProcessor::getProgramName (int index)
 {
-    return String::empty;
+    return String();
 }
 
 void Mcfx_gain_delayAudioProcessor::changeProgramName (int index, const String& newName)
@@ -789,7 +788,7 @@ void Mcfx_gain_delayAudioProcessor::setStateInformation (const void* data, int s
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
     
-    ScopedPointer<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    std::unique_ptr<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
     
     if (xmlState != nullptr)
     {

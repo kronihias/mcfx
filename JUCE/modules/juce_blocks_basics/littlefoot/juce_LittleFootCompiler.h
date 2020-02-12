@@ -2,40 +2,44 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
+#if JUCE_MSVC
+ #pragma warning (push)
+ #pragma warning (disable: 4702)
+#endif
+
 namespace littlefoot
 {
-
-using namespace juce;
 
 /**
     This class compiles littlefoot source code into a littlefoot::Program object
     which can be executed by a littlefoot::Runner.
+
+    @tags{Blocks}
 */
 struct Compiler
 {
-    Compiler() {}
+    Compiler() = default;
 
-    /**
+    /** Gives the compiler a zero-terminated list of native function prototypes to
+        use when parsing function calls.
     */
     void addNativeFunctions (const char* const* functionPrototypes)
     {
@@ -43,7 +47,8 @@ struct Compiler
             nativeFunctions.add (NativeFunction (*functionPrototypes, nullptr));
     }
 
-    /**
+    /** Tells the compiler to use the list of native function prototypes from
+        this littlefoot::Runner object.
     */
     template <typename RunnerType>
     void addNativeFunctions (const RunnerType& runner)
@@ -52,20 +57,22 @@ struct Compiler
             nativeFunctions.add (runner.getNativeFunction (i));
     }
 
-    /**
+    /** Compiles a littlefoot program.
+        If there's an error, this returns it, otherwise the compiled bytecode is
+        placed in the compiledObjectCode member.
     */
-    Result compile (const String& sourceCode, uint32 heapSizeBytesRequired)
+    Result compile (const String& sourceCode, uint32 defaultHeapSize, const Array<File>& searchPaths = {})
     {
         try
         {
-            SyntaxTreeBuilder stb (sourceCode);
+            SyntaxTreeBuilder stb (sourceCode, nativeFunctions, defaultHeapSize, searchPaths);
             stb.compile();
             stb.simplify();
 
             compiledObjectCode.clear();
 
-            CodeGenerator codeGen (compiledObjectCode, nativeFunctions, stb.functions);
-            codeGen.generateCode (stb.blockBeingParsed, (heapSizeBytesRequired + 3) & ~3u);
+            CodeGenerator codeGen (compiledObjectCode, stb);
+            codeGen.generateCode (stb.blockBeingParsed, stb.heapSizeRequired);
             return Result::ok();
         }
         catch (String error)
@@ -74,16 +81,27 @@ struct Compiler
         }
     }
 
-    /**
+    /** After a successful compilation, this returns the finished Program. */
+    Program getCompiledProgram() const noexcept
+    {
+        return Program (compiledObjectCode.begin(), (uint32) compiledObjectCode.size());
+    }
+
+    /** After a successful call to compile(), this contains the bytecode generated.
+        A littlefoot::Program object can be created directly from this array.
     */
     Array<uint8> compiledObjectCode;
 
 private:
+
+   #ifndef DOXYGEN
+
     struct Statement;
     struct Expression;
+    struct Variable;
     struct BlockStatement;
     struct Function;
-    struct AllocatedObject  { virtual ~AllocatedObject() noexcept {} };
+    struct AllocatedObject  { virtual ~AllocatedObject() = default; };
     using StatementPtr = Statement*;
     using ExpPtr = Expression*;
     using BlockPtr = BlockStatement*;
@@ -93,10 +111,10 @@ private:
         X(if_,      "if")       X(else_,   "else")    X(do_,     "do") \
         X(while_,   "while")    X(for_,    "for")     X(break_,  "break")   X(continue_, "continue") \
         X(void_,    "void")     X(int_,    "int")     X(float_,  "float")   X(bool_,     "bool") \
-        X(return_,  "return")   X(true_,   "true")    X(false_,  "false")
+        X(return_,  "return")   X(true_,   "true")    X(false_,  "false")   X(const_,    "const")
 
     #define LITTLEFOOT_OPERATORS(X) \
-        X(semicolon,     ";")        X(dot,          ".")       X(comma,        ",") \
+        X(semicolon,     ";")        X(dot,          ".")       X(comma,        ",")    X(hash,       "#") \
         X(openParen,     "(")        X(closeParen,   ")")       X(openBrace,    "{")    X(closeBrace, "}") \
         X(openBracket,   "[")        X(closeBracket, "]")       X(colon,        ":")    X(question,   "?") \
         X(equals,        "==")       X(assign,       "=")       X(notEquals,    "!=")   X(logicalNot, "!") \
@@ -124,10 +142,10 @@ private:
     //==============================================================================
     struct CodeLocation
     {
-        CodeLocation (const String& code) noexcept        : program (code), location (program.getCharPointer()) {}
-        CodeLocation (const CodeLocation& other) noexcept : program (other.program), location (other.location) {}
+        CodeLocation (const String& code, const File& srcFile) noexcept : program (code), location (program.getCharPointer()), sourceFile (srcFile) {}
+        CodeLocation (const CodeLocation& other) = default;
 
-        void throwError (const String& message) const
+        [[noreturn]] void throwError (const String& message) const
         {
             int col = 1, line = 1;
 
@@ -137,17 +155,19 @@ private:
                 if (*i == '\n')  { col = 1; ++line; }
             }
 
-            throw "Line " + String (line) + ", column " + String (col) + " : " + message;
+            auto filePath = sourceFile == File() ? String() : (sourceFile.getFullPathName() + ": ");
+            throw filePath + "Line " + String (line) + ", column " + String (col) + " : " + message;
         }
 
         String program;
         String::CharPointerType location;
+        File sourceFile;
     };
 
     //==============================================================================
     struct TokenIterator
     {
-        TokenIterator (const String& code) : location (code), p (code.getCharPointer()) { skip(); }
+        TokenIterator (const String& code) : location (code, {}), p (code.getCharPointer()) { skip(); }
 
         TokenType skip()
         {
@@ -172,23 +192,24 @@ private:
         bool matchesAny (TokenType t1, Args... others) const noexcept   { return currentType == t1 || matchesAny (others...); }
         bool matchesAny (TokenType t1) const noexcept                   { return currentType == t1; }
 
+        void throwErrorExpecting (const String& expected)    { location.throwError ("Found " + getTokenDescription (currentType) + " when expecting " + expected); }
+
         CodeLocation location;
         TokenType currentType;
         var currentValue;
 
-        void throwErrorExpecting (const String& expected)    { location.throwError ("Found " + getTokenDescription (currentType) + " when expecting " + expected); }
-
-    private:
+    protected:
         String::CharPointerType p;
 
-        static bool isIdentifierStart (const juce_wchar c) noexcept   { return CharacterFunctions::isLetter (c)        || c == '_'; }
-        static bool isIdentifierBody  (const juce_wchar c) noexcept   { return CharacterFunctions::isLetterOrDigit (c) || c == '_'; }
+    private:
+        static bool isIdentifierStart (juce_wchar c) noexcept   { return CharacterFunctions::isLetter (c)        || c == '_'; }
+        static bool isIdentifierBody  (juce_wchar c) noexcept   { return CharacterFunctions::isLetterOrDigit (c) || c == '_'; }
 
         TokenType matchNextToken()
         {
             if (isIdentifierStart (*p))
             {
-                String::CharPointerType end (p);
+                auto end = p;
                 while (isIdentifierBody (*++end)) {}
 
                 const size_t len = (size_t) (end - p);
@@ -233,7 +254,7 @@ private:
 
                 if (*p == '/')
                 {
-                    const juce_wchar c2 = p[1];
+                    auto c2 = p[1];
 
                     if (c2 == '/')  { p = CharacterFunctions::find (p, (juce_wchar) '\n'); continue; }
 
@@ -312,7 +333,7 @@ private:
 
         bool parseOctalLiteral()
         {
-            String::CharPointerType t (p);
+            auto t = p;
             int64 v = *t - '0';
             if (v != 0) return false;  // first digit of octal must be 0
 
@@ -348,14 +369,35 @@ private:
     //==============================================================================
     struct SyntaxTreeBuilder  : private TokenIterator
     {
-        SyntaxTreeBuilder (const String& code)  : TokenIterator (code) {}
+        SyntaxTreeBuilder (const String& code, const Array<NativeFunction>& nativeFns, uint32 defaultHeapSize, const Array<File>& searchPathsToUse)
+            : TokenIterator (code), searchPaths (searchPathsToUse), nativeFunctions (nativeFns), heapSizeRequired (defaultHeapSize) {}
 
         void compile()
         {
             blockBeingParsed = allocate<BlockStatement> (location, nullptr, nullptr, false);
+            parseCode();
+            heapSizeRequired += arrayHeapSize;
+        }
+
+        void parseCode()
+        {
+            const auto programHash = location.program.hashCode64();
+
+            if (includedSourceCode.contains (programHash))
+                return;
+
+            includedSourceCode.add (programHash);
 
             while (currentType != Token::eof)
             {
+                if (matchIf (Token::hash))
+                {
+                    parseCompilerDirective();
+                    continue;
+                }
+
+                const bool isConstVariable = matchIf (Token::const_);
+
                 if (! matchesAnyTypeOrVoid())
                     throwErrorExpecting ("a global variable or function");
 
@@ -364,6 +406,9 @@ private:
 
                 if (matchIf (Token::openParen))
                 {
+                    if (isConstVariable)
+                        location.throwError ("Return type of a function cannot be const");
+
                     parseFunctionDeclaration (type, name);
                     continue;
                 }
@@ -371,19 +416,7 @@ private:
                 if (type == Type::void_)
                     location.throwError ("A variable type cannot be 'void'");
 
-                int arraySize = matchIf (Token::openBracket) ? parseArraySize() : 0;
-
-                if (arraySize > 0)
-                    location.throwError ("Arrays not yet implemented!");
-
-                while (matchIf (Token::comma))
-                {
-                    blockBeingParsed->addVariable (name, type, location);
-                    name = parseIdentifier();
-                }
-
-                blockBeingParsed->addVariable (name, type, location);
-                match (Token::semicolon);
+                parseGlobalVariableDeclaraion (isConstVariable, type, name);
             }
         }
 
@@ -393,9 +426,32 @@ private:
                 f->block->simplify (*this);
         }
 
+        const Function* findFunction (FunctionID functionID) const noexcept
+        {
+            for (auto f : functions)
+                if (f->functionID == functionID)
+                    return f;
+
+            return nullptr;
+        }
+
+        const NativeFunction* findNativeFunction (FunctionID functionID) const noexcept
+        {
+            for (auto& f : nativeFunctions)
+                if (f.functionID == functionID)
+                    return &f;
+
+            return nullptr;
+        }
+
         //==============================================================================
         BlockPtr blockBeingParsed = nullptr;
         Array<Function*> functions;
+        Array<File> searchPaths;
+        Array<int64> includedSourceCode;
+        const Array<NativeFunction>& nativeFunctions;
+        uint32 heapSizeRequired;
+        uint32 arrayHeapSize = 0;
 
         template <typename Type, typename... Args>
         Type* allocate (Args... args)   { auto o = new Type (args...); allAllocatedObjects.add (o); return o; }
@@ -404,15 +460,181 @@ private:
         OwnedArray<AllocatedObject> allAllocatedObjects;
 
         //==============================================================================
+        void parseCompilerDirective()
+        {
+            auto name = parseIdentifier();
+
+            if (name == "heapsize")
+            {
+                match (Token::colon);
+                heapSizeRequired = (((uint32) parseIntegerLiteral()) + 3) & ~3u;
+            }
+            else if (name == "include")
+            {
+                parseIncludeDirective();
+            }
+            else
+            {
+                location.throwError ("Unknown compiler directive");
+            }
+        }
+
+        void parseIncludeDirective()
+        {
+            match (Token::literal);
+
+            if (! currentValue.isString())
+            {
+                location.throwError ("Expected file path");
+                return;
+            }
+
+            File fileToInclude = resolveIncludePath (currentValue.toString());
+
+            if (fileToInclude == File())
+                return;
+
+            searchPaths.add (fileToInclude);
+            auto codeToInclude = fileToInclude.loadFileAsString();
+
+            auto locationToRestore = location;
+            auto currentTypeToRestore = currentType;
+            auto currentValueToRestore = currentValue;
+            auto pToRestore = p;
+
+            location = CodeLocation (codeToInclude, fileToInclude);
+            p = codeToInclude.getCharPointer();
+            skip();
+
+            parseCode();
+
+            location = locationToRestore;
+            currentType = currentTypeToRestore;
+            currentValue = currentValueToRestore;
+            p = pToRestore;
+        }
+
+        File resolveIncludePath (String include)
+        {
+            if (include.substring (include.length() - 11) != ".littlefoot")
+            {
+                location.throwError ("File extension must be .littlefoot");
+                return {};
+            }
+
+            if (File::isAbsolutePath (include) && File (include).existsAsFile())
+                return { include };
+
+            auto fileName = include.fromLastOccurrenceOf ("/", false, false);
+
+            for (auto path : searchPaths)
+            {
+                if (path == File())
+                    continue;
+
+                if (! path.isDirectory())
+                    path = path.getParentDirectory();
+
+                if (path.getChildFile (include).existsAsFile())
+                    return path.getChildFile (include);
+
+                if (path.getChildFile (fileName).existsAsFile())
+                    return path.getChildFile (fileName);
+            }
+
+            location.throwError ("File not found: " + include);
+        }
+
+        //TODO:   should there be a max array size?
+        void parseGlobalVariableDeclaraion (bool isConst, Type type, String name)
+        {
+            for (;;)
+            {
+                if (matchIf (Token::openBracket))
+                {
+                    int arraySize = 0;
+                    parseGlobalArray (arraySize, type, name, nullptr);
+                    arrayHeapSize += uint32 (arraySize * 4);
+                }
+                else
+                {
+                    parseGlobalVariable (isConst, type, name);
+                }
+
+                if (matchIf (Token::comma))
+                {
+                    name = parseIdentifier();
+                    continue;
+                }
+
+                match (Token::semicolon);
+                break;
+            }
+        }
+
+        void parseGlobalArray (int& arraySize, Type type, const String& name, Variable* parent)
+        {
+            const auto value = parseIntegerLiteral();
+            match (Token::closeBracket);
+
+            blockBeingParsed->addVariable ({ {}, type, true, false, {}, value, parent }, location);
+
+            auto& newArray = blockBeingParsed->arrays.getReference (blockBeingParsed->arrays.size() - 1);
+
+            if (parent != nullptr)
+                parent->nextArray = &newArray;
+
+            if (matchIf (Token::openBracket))
+            {
+                parseGlobalArray (arraySize, type, name, &newArray);
+                arraySize *= value;
+            }
+            else
+            {
+                newArray.name = name;
+                arraySize = value;
+            }
+        }
+
+        void parseGlobalVariable (bool isConst, Type type, String name)
+        {
+            var constantInitialiser;
+
+            if (isConst)
+                constantInitialiser = parseConstantExpressionInitialiser (type);
+
+            blockBeingParsed->addVariable ({ name, type, true, isConst, constantInitialiser, 0 }, location);
+        }
+
+        var parseConstantExpressionInitialiser (Type expectedType)
+        {
+            var result;
+            match (Token::assign);
+            auto e = parseExpression();
+
+            if (auto literal = dynamic_cast<LiteralValue*> (e->simplify (*this)))
+            {
+                result = literal->value;
+
+                if (getTypeOfVar (result) != expectedType)
+                    location.throwError ("Expected a constant expression of type " + getTypeName (expectedType));
+            }
+            else
+            {
+                location.throwError ("Expected a constant expression");
+            }
+
+            return result;
+        }
+
         void parseFunctionDeclaration (Type returnType, const String& name)
         {
             auto f = allocate<Function>();
-            functions.add (f);
 
             while (matchesAnyType())
             {
                 auto type = tokenToType (skip());
-                f->arguments.add ({ parseIdentifier(), type });
+                f->arguments.add ({ parseIdentifier(), type, false, false, 0 });
 
                 if (f->arguments.size() > 127)
                     location.throwError ("Too many function arguments");
@@ -425,6 +647,12 @@ private:
 
             match (Token::closeParen);
             f->functionID = createFunctionID (name, returnType, f->getArgumentTypes());
+
+            if (findFunction (f->functionID) != nullptr || findNativeFunction (f->functionID) != nullptr)
+                location.throwError ("Duplicate function declaration");
+
+            functions.add (f);
+
             f->block = parseBlock (true);
             f->returnType = returnType;
 
@@ -437,12 +665,11 @@ private:
             }
         }
 
-        int parseArraySize()
+        int parseIntegerLiteral()
         {
             auto e = parseExpression();
-            e->simplify (*this);
 
-            if (auto literal = dynamic_cast<LiteralValue*> (e))
+            if (auto literal = dynamic_cast<LiteralValue*> (e->simplify (*this)))
             {
                 if (literal->value.isInt() || literal->value.isInt64())
                 {
@@ -453,7 +680,7 @@ private:
                 }
             }
 
-            location.throwError ("An array size must be a constant integer");
+            location.throwError ("Expected an integer constant");
             return 0;
         }
 
@@ -485,7 +712,8 @@ private:
             if (matchIf (Token::plusplus))         return matchEndOfStatement (parsePreIncDec (Token::plus));
             if (matchIf (Token::minusminus))       return matchEndOfStatement (parsePreIncDec (Token::minus));
             if (matchesAny (Token::openParen))     return matchEndOfStatement (parseFactor());
-            if (matchesAnyType())                  return parseVariableDeclaration (tokenToType (skip()));
+            if (matchIf (Token::const_))           return parseVariableDeclaration (true);
+            if (matchesAnyType())                  return parseVariableDeclaration (false);
 
             if (matchesAny (Token::identifier, Token::literal, Token::minus))
                 return matchEndOfStatement (parseExpression());
@@ -498,7 +726,7 @@ private:
         {
             auto lhs = parseLogicOperator();
 
-            if (matchIf (Token::question))          return parseTerneryOperator (lhs);
+            if (matchIf (Token::question))          return parseTernaryOperator (lhs);
             if (matchIf (Token::plusEquals))        return parseInPlaceOpExpression (lhs, Token::plus);
             if (matchIf (Token::minusEquals))       return parseInPlaceOpExpression (lhs, Token::minus);
             if (matchIf (Token::timesEquals))       return parseInPlaceOpExpression (lhs, Token::times);
@@ -510,15 +738,15 @@ private:
             if (matchIf (Token::assign))
             {
                 auto loc = location;
-                return allocate<Assignment> (loc, blockBeingParsed, getIdentifierFromExpression (lhs), parseExpression(), false);
+                return allocate<Assignment> (loc, blockBeingParsed, lhs, parseExpression(), false);
             }
 
             return lhs;
         }
 
-        ExpPtr parseTerneryOperator (ExpPtr condition)
+        ExpPtr parseTernaryOperator (ExpPtr condition)
         {
-            auto e = allocate<TerneryOp> (location, blockBeingParsed);
+            auto e = allocate<TernaryOp> (location, blockBeingParsed);
             e->condition = condition;
             e->trueBranch = parseExpression();
             match (Token::colon);
@@ -612,8 +840,8 @@ private:
         {
             if (currentType == Token::identifier)  return parseSuffixes (allocate<Identifier> (location, blockBeingParsed, parseIdentifier()));
             if (matchIf (Token::openParen))        return parseSuffixes (matchCloseParen (parseExpression()));
-            if (matchIf (Token::true_))            return parseSuffixes (allocate<LiteralValue> (location, blockBeingParsed, (int) 1));
-            if (matchIf (Token::false_))           return parseSuffixes (allocate<LiteralValue> (location, blockBeingParsed, (int) 0));
+            if (matchIf (Token::true_))            return parseSuffixes (allocate<LiteralValue> (location, blockBeingParsed, true));
+            if (matchIf (Token::false_))           return parseSuffixes (allocate<LiteralValue> (location, blockBeingParsed, false));
 
             if (currentType == Token::literal)
             {
@@ -640,26 +868,31 @@ private:
                 return {};
             }
 
-            if (matchIf (Token::openBracket))
-            {
-                auto s = allocate<ArraySubscript> (location, blockBeingParsed);
-                s->object = input;
-                s->index = parseExpression();
-                match (Token::closeBracket);
-                return parseSuffixes (s);
-            }
-
-            if (matchIf (Token::plusplus))   return parsePostIncDec (input, Token::plus);
-            if (matchIf (Token::minusminus)) return parsePostIncDec (input, Token::minus);
+            if (matchIf (Token::openBracket)) return parseArraySubscript (input);
+            if (matchIf (Token::plusplus))    return parsePostIncDec (input, Token::plus);
+            if (matchIf (Token::minusminus))  return parsePostIncDec (input, Token::minus);
 
             return input;
+        }
+
+        ExpPtr parseArraySubscript (ExpPtr input)
+        {
+            auto s = allocate<ArraySubscript> (location, blockBeingParsed);
+            s->object = input;
+            s->index = parseExpression();
+            match (Token::closeBracket);
+
+            if (matchIf (Token::openBracket))
+                return parseArraySubscript (s);
+
+            return s;
         }
 
         ExpPtr parseInPlaceOpExpression (ExpPtr lhs, TokenType opType)
         {
             auto loc = location;
             auto rhs = parseExpression();
-            return allocate<Assignment> (loc, blockBeingParsed, getIdentifierFromExpression (lhs),
+            return allocate<Assignment> (loc, blockBeingParsed, lhs,
                                          allocate<BinaryOperator> (location, blockBeingParsed, lhs, rhs, opType), false);
         }
 
@@ -667,14 +900,14 @@ private:
         {
             auto lhs = parseFactor();
             auto one = allocate<LiteralValue> (location, blockBeingParsed, (int) 1);
-            return allocate<Assignment> (location, blockBeingParsed, getIdentifierFromExpression (lhs),
+            return allocate<Assignment> (location, blockBeingParsed, lhs,
                                          allocate<BinaryOperator> (location, blockBeingParsed, lhs, one, opType), false);
         }
 
         ExpPtr parsePostIncDec (ExpPtr lhs, TokenType opType)
         {
             auto one = allocate<LiteralValue> (location, blockBeingParsed, (int) 1);
-            return allocate<Assignment> (location, blockBeingParsed, getIdentifierFromExpression (lhs),
+            return allocate<Assignment> (location, blockBeingParsed, lhs,
                                          allocate<BinaryOperator> (location, blockBeingParsed, lhs, one, opType), true);
         }
 
@@ -696,43 +929,57 @@ private:
             return returnStatement;
         }
 
-        StatementPtr parseVariableDeclaration (Type type)
+        StatementPtr parseVariableDeclaration (bool isConst)
         {
+            if (isConst && ! matchesAnyType())
+                throwErrorExpecting ("a type");
+
+            auto type = tokenToType (skip());
+
             for (StatementPtr result = nullptr;;)
             {
-                auto name = parseIdentifier();
+                auto identifier = allocate<Identifier> (location, blockBeingParsed, parseIdentifier());
                 auto loc = location;
-                blockBeingParsed->addVariable (name, type, loc);
 
-                auto assignedValue = matchIf (Token::assign) ? parseExpression() : nullptr;
-
-                if (auto literal = dynamic_cast<LiteralValue*> (assignedValue))
-                    if (static_cast<double> (literal->value) == 0)
-                        assignedValue = nullptr;
-
-                if (assignedValue != nullptr || ! blockBeingParsed->isMainBlockOfFunction) // no need to assign 0 for variables in the outer scope
+                if (isConst)
                 {
-                    if (assignedValue == nullptr)
-                        assignedValue = allocate<LiteralValue> (loc, blockBeingParsed, (int) 0);
+                    auto constantValue = parseConstantExpressionInitialiser (type);
+                    blockBeingParsed->addVariable ({ identifier->getIdentifier(), type, false, true, constantValue }, loc);
+                }
+                else
+                {
+                    blockBeingParsed->addVariable ({ identifier->getIdentifier(), type, false, false, {} }, loc);
 
-                    auto assignment = allocate<Assignment> (loc, blockBeingParsed, name, assignedValue, false);
+                    auto assignedValue = matchIf (Token::assign) ? parseExpression() : nullptr;
 
-                    if (result == nullptr)
+                    if (auto literal = dynamic_cast<LiteralValue*> (assignedValue))
+                        if (static_cast<double> (literal->value) == 0)
+                            assignedValue = nullptr;
+
+                    if (assignedValue != nullptr || ! blockBeingParsed->isMainBlockOfFunction) // no need to assign 0 for variables in the outer scope
                     {
-                        result = assignment;
-                    }
-                    else
-                    {
-                        auto block = dynamic_cast<BlockPtr> (result);
+                        if (assignedValue == nullptr)
+                            assignedValue = allocate<LiteralValue> (loc, blockBeingParsed, (int) 0);
 
-                        if (block == nullptr)
+                        auto assignment = allocate<Assignment> (loc, blockBeingParsed, identifier, assignedValue, false);
+
+                        if (result == nullptr)
                         {
-                            block = allocate<BlockStatement> (loc, blockBeingParsed, functions.getLast(), false);
-                            block->statements.add (result);
-                            result = block;
+                            result = assignment;
                         }
+                        else
+                        {
+                            auto block = dynamic_cast<BlockPtr> (result);
 
-                        block->statements.add (assignment);
+                            if (block == nullptr)
+                            {
+                                block = allocate<BlockStatement> (loc, blockBeingParsed, functions.getLast(), false);
+                                block->statements.add (result);
+                                result = block;
+                            }
+
+                            block->statements.add (assignment);
+                        }
                     }
                 }
 
@@ -786,18 +1033,9 @@ private:
 
         String parseIdentifier()
         {
-            String name = currentValue.toString();
+            auto name = currentValue.toString();
             match (Token::identifier);
             return name;
-        }
-
-        String getIdentifierFromExpression (ExpPtr e)
-        {
-            if (auto i = dynamic_cast<Identifier*> (e))
-                return i->name;
-
-            location.throwError ("This operator requires an assignable variable");
-            return {};
         }
 
         ExpPtr parseFunctionCall (const String& name)
@@ -829,12 +1067,12 @@ private:
     //==============================================================================
     struct CodeGenerator
     {
-        CodeGenerator (Array<uint8>& output, const Array<NativeFunction>& nativeFns, const Array<Function*>& fns)
-            : outputCode (output), nativeFunctions (nativeFns), functions (fns) {}
+        CodeGenerator (Array<uint8>& output, SyntaxTreeBuilder& stb)
+            : outputCode (output), syntaxTree (stb) {}
 
         void generateCode (BlockPtr outerBlock, uint32 heapSizeBytesRequired)
         {
-            for (auto f : functions)
+            for (auto f : syntaxTree.functions)
             {
                 f->address = createMarker();
                 f->unwindAddress = createMarker();
@@ -842,16 +1080,19 @@ private:
 
             emit ((int16) 0); // checksum
             emit ((int16) 0); // size
-            emit ((int16) functions.size());
+            emit ((int16) syntaxTree.functions.size());
             emit ((int16) outerBlock->variables.size());
             emit ((int16) heapSizeBytesRequired);
 
-            for (auto f : functions)
+            for (auto f : syntaxTree.functions)
                 emit (f->functionID, f->address);
 
-            for (auto f : functions)
+            auto codeStart = outputCode.size();
+
+            for (auto f : syntaxTree.functions)
                 f->emit (*this);
 
+            removeJumpsToNextInstruction (codeStart);
             resolveMarkers();
 
             Program::writeInt16 (outputCode.begin() + 2, (int16) outputCode.size());
@@ -862,39 +1103,92 @@ private:
 
         //==============================================================================
         Array<uint8>& outputCode;
-        const Array<NativeFunction>& nativeFunctions;
-        const Array<Function*>& functions;
+        SyntaxTreeBuilder& syntaxTree;
 
         struct Marker  { int index = 0; };
-        struct MarkerAndAddress  { int markerIndex, address; };
+        struct MarkerAndAddress  { Marker marker; int address; };
 
         int nextMarker = 0;
         Array<MarkerAndAddress> markersToResolve, resolvedMarkers;
 
         Marker createMarker() noexcept  { Marker m; m.index = ++nextMarker; return m; }
-        void attachMarker (Marker m)    { resolvedMarkers.add ({ m.index, outputCode.size() }); }
+        void attachMarker (Marker m)    { resolvedMarkers.add ({ m, outputCode.size() }); }
 
-        int getResolvedMarkerAddress (int markerIndex) const
+        int getResolvedMarkerAddress (Marker marker) const
         {
             for (auto m : resolvedMarkers)
-                if (m.markerIndex == markerIndex)
+                if (m.marker.index == marker.index)
                     return m.address;
 
             jassertfalse;
             return 0;
         }
 
+        Marker getMarkerAtAddress (int address) const noexcept
+        {
+            for (auto m : markersToResolve)
+                if (m.address == address)
+                    return m.marker;
+
+            jassertfalse;
+            return {};
+        }
+
         void resolveMarkers()
         {
             for (auto m : markersToResolve)
-                Program::writeInt16 (outputCode.begin() + m.address, (int16) getResolvedMarkerAddress (m.markerIndex));
+                Program::writeInt16 (outputCode.begin() + m.address, (int16) getResolvedMarkerAddress (m.marker));
+        }
+
+        void removeCode (int address, int size)
+        {
+            outputCode.removeRange (address, size);
+
+            for (int i = markersToResolve.size(); --i >= 0;)
+            {
+                auto& m = markersToResolve.getReference (i);
+
+                if (m.address >= address + size)
+                    m.address -= size;
+                else if (m.address >= address)
+                    markersToResolve.remove (i);
+            }
+
+            for (auto& m : resolvedMarkers)
+                if (m.address >= address + size)
+                    m.address -= size;
+        }
+
+        void removeJumpsToNextInstruction (int address)
+        {
+            while (address < outputCode.size())
+            {
+                auto op = (OpCode) outputCode.getUnchecked (address);
+                auto opSize = 1 + Program::getNumExtraBytesForOpcode (op);
+
+                if (op == OpCode::jump)
+                {
+                    auto marker = getMarkerAtAddress (address + 1);
+
+                    if (marker.index != 0)
+                    {
+                        if (getResolvedMarkerAddress (marker) == address + opSize)
+                        {
+                            removeCode (address, opSize);
+                            continue;
+                        }
+                    }
+                }
+
+                address += opSize;
+            }
         }
 
         Marker breakTarget, continueTarget;
 
         //==============================================================================
         void emit (OpCode op)           { emit ((int8) op); }
-        void emit (Marker m)            { markersToResolve.add ({ m.index, outputCode.size() }); emit ((int16) 0); }
+        void emit (Marker m)            { markersToResolve.add ({ m, outputCode.size() }); emit ((int16) 0); }
         void emit (int8 value)          { outputCode.add ((uint8) value); }
         void emit (int16 value)         { uint8 d[2]; Program::writeInt16 (d, value); outputCode.insertArray (-1, d, (int) sizeof (d)); }
         void emit (int32 value)         { uint8 d[4]; Program::writeInt32 (d, value); outputCode.insertArray (-1, d, (int) sizeof (d)); }
@@ -949,7 +1243,7 @@ private:
                 index += stackDepth;
 
                 if (index == 0)
-                    emit ((OpCode) ((int) OpCode::dup));
+                    emit (OpCode::dup);
                 else if (index < 8)
                     emit ((OpCode) ((int) OpCode::dupOffset_01 + index - 1));
                 else if (index >= 128)
@@ -961,23 +1255,42 @@ private:
             emitCast (sourceType, requiredType, location);
         }
 
-        //==============================================================================
-        Function* findFunction (FunctionID functionID) const noexcept
+        void emitArrayElementIndex (const Expression* target, BlockPtr parentBlock,
+                                    int stackDepth, const CodeLocation& errorLocation)
         {
-            for (auto f : functions)
-                if (f->functionID == functionID)
-                    return f;
+            if (auto currentSubscript = dynamic_cast<const ArraySubscript*> (target))
+            {
+                const auto identifier = currentSubscript->getIdentifier();
+                auto array = parentBlock->getArray (identifier, errorLocation);
 
-            return nullptr;
-        }
+                ExpPtr elementIndent = nullptr;
+                auto currentArray = &array;
 
-        NativeFunction* findNativeFunction (FunctionID functionID) const noexcept
-        {
-            for (auto& f : nativeFunctions)
-                if (f.functionID == functionID)
-                    return &f;
+                while (currentSubscript != nullptr && currentArray != nullptr)
+                {
+                    auto lhs = syntaxTree.allocate<LiteralValue> (errorLocation, parentBlock, parentBlock->getArrayElementSizeInBytes (*currentArray));
+                    ExpPtr subscriptIndent = syntaxTree.allocate<BinaryOperator> (errorLocation, parentBlock, lhs, currentSubscript->index, Token::times);
 
-            return nullptr;
+                    if (elementIndent == nullptr)
+                        elementIndent = subscriptIndent;
+                    else
+                        elementIndent = syntaxTree.allocate<BinaryOperator> (errorLocation, parentBlock, elementIndent, subscriptIndent, Token::plus);
+
+                    currentSubscript = dynamic_cast<ArraySubscript*> (currentSubscript->object);
+                    currentArray = currentArray->previousArray;
+                }
+
+                auto arrayStart = (int) (syntaxTree.heapSizeRequired - syntaxTree.arrayHeapSize) + parentBlock->getArrayStart (identifier, errorLocation);
+                auto lhs = syntaxTree.allocate<LiteralValue> (errorLocation, parentBlock, arrayStart);
+                elementIndent = syntaxTree.allocate<BinaryOperator> (errorLocation, parentBlock, lhs, elementIndent, Token::plus);
+
+                elementIndent = elementIndent->simplify (syntaxTree);
+                elementIndent->emit (*this, Type::int_, stackDepth);
+            }
+            else
+            {
+                errorLocation.throwError ("Cannot cast Expression to ArraySubscript");
+            }
         }
     };
 
@@ -985,10 +1298,16 @@ private:
     //==============================================================================
     struct Statement  : public AllocatedObject
     {
+        struct Visitor
+        {
+            virtual ~Visitor() = default;
+            virtual void operator()(StatementPtr) = 0;
+        };
+
         Statement (const CodeLocation& l, BlockPtr parent) noexcept : location (l), parentBlock (parent) {}
         virtual void emit (CodeGenerator&, Type, int /*stackDepth*/) const {}
         virtual bool alwaysReturns() const                  { return false; }
-        virtual void visitSubStatements (std::function<void(StatementPtr)>) const {}
+        virtual void visitSubStatements (Visitor&) const {}
         virtual Statement* simplify (SyntaxTreeBuilder&)    { return this; }
 
         CodeLocation location;
@@ -999,12 +1318,27 @@ private:
     {
         Expression (const CodeLocation& l, BlockPtr parent) noexcept : Statement (l, parent) {}
         virtual Type getType (CodeGenerator&) const = 0;
+        ExpPtr simplify (SyntaxTreeBuilder&) override    { return this; }
+        virtual String getIdentifier() const { location.throwError ("This operator requires an assignable variable"); return {}; }
     };
 
     struct Variable
     {
+        // VS2015 requires a constructor to avoid aggregate initialization
+        Variable (const String& n, Type t, bool isGlobalVar, bool isConstVar, const var& cv,
+                  int nElements = 0, Variable* pArray = nullptr, Variable* nArray = nullptr)
+           : name (n), type (t), isGlobal (isGlobalVar), isConst (isConstVar), constantValue (cv),
+             numElements (nElements), previousArray (pArray), nextArray (nArray)
+        {
+        }
+
         String name;
         Type type;
+        bool isGlobal, isConst;
+        var constantValue;
+        int numElements = 0;
+        Variable* previousArray = nullptr;
+        Variable* nextArray = nullptr;
     };
 
     //==============================================================================
@@ -1077,15 +1411,25 @@ private:
 
         static int countMaxNumLocalVariables (StatementPtr s) noexcept
         {
-            int num = 0;
+            struct Counter : Statement::Visitor
+            {
+                void operator() (StatementPtr sub) override
+                {
+                    num = jmax (num, countMaxNumLocalVariables (sub));
+                }
+
+                int num = 0;
+            };
+
+            Counter counter;
 
             if (s != nullptr)
-                s->visitSubStatements ([&] (StatementPtr sub) { num = jmax (num, countMaxNumLocalVariables (sub)); });
+                s->visitSubStatements (counter);
 
             if (auto block = dynamic_cast<BlockPtr> (s))
-                num += block->variables.size();
+                counter.num += block->variables.size();
 
-            return num;
+            return counter.num;
         }
     };
 
@@ -1109,7 +1453,7 @@ private:
             return ! statements.isEmpty() && statements.getLast()->alwaysReturns();
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             for (auto s : statements)
                 visit (s);
@@ -1126,23 +1470,63 @@ private:
         // returns -ve values for globals
         int getVariableDepth (const String& name, const CodeLocation& locationForError) const
         {
-            int index = indexOf (variables, name);
+            auto index = indexOf (variables, name);
+
             if (index >= 0)
                 return getNumVariablesInParentBlocks() + index;
 
             if (! isMainBlockOfFunction)
                 return parentBlock->getVariableDepth (name, locationForError);
 
-            for (int i = function->arguments.size(); --i >= 0;)
-                if (function->arguments.getReference(i).name == name)
-                    return i + 1 + function->getNumLocals();
+            if (function != nullptr)
+                for (int i = function->arguments.size(); --i >= 0;)
+                    if (function->arguments.getReference(i).name == name)
+                        return i + 1 + function->getNumLocals();
 
             index = indexOf (getGlobalVariables(), name);
+
             if (index >= 0)
                 return -(index + 1);
 
             locationForError.throwError ("Unknown variable '" + name + "'");
-            return 0;
+        }
+
+        Variable getArray (const String& name, const CodeLocation& locationForError) const
+        {
+            for (const auto& array : getGlobalArrays())
+                if (array.name == name)
+                    return array;
+
+            locationForError.throwError ("Unknown array '" + name + "'");
+        }
+
+        int getArraySizeInBytes (const Variable& array) const
+        {
+            return array.numElements * getArrayElementSizeInBytes (array);
+        }
+
+        int getArrayElementSizeInBytes (const Variable& array) const
+        {
+            if (array.nextArray != nullptr)
+                return getArraySizeInBytes (*array.nextArray);
+
+            return numBytesInType;
+        }
+
+        int getArrayStart (const String& name, const CodeLocation& locationForError) const
+        {
+            int start = 0;
+
+            for (const auto& array : getGlobalArrays())
+            {
+                if (array.name == name)
+                    return start;
+
+                if (array.name.isNotEmpty())
+                    start += getArraySizeInBytes (array);
+            }
+
+            locationForError.throwError ("Unknown array '" + name + "'");
         }
 
         int getNumVariablesInParentBlocks() const noexcept
@@ -1151,38 +1535,49 @@ private:
                                                  + parentBlock->variables.size());
         }
 
-        const Array<Variable>& getGlobalVariables() const noexcept
-        {
-            return parentBlock != nullptr ? parentBlock->getGlobalVariables() : variables;
-        }
+        const Array<Variable>& getGlobalVariables() const noexcept  { return parentBlock != nullptr ? parentBlock->getGlobalVariables() : variables; }
+        const Array<Variable>& getGlobalConstants() const noexcept  { return parentBlock != nullptr ? parentBlock->getGlobalConstants() : constants; }
+        const Array<Variable>& getGlobalArrays() const noexcept     { return parentBlock != nullptr ? parentBlock->getGlobalArrays() : arrays; }
 
-        Type getVariableType (const String& name, const CodeLocation& locationForError) const
+        const Variable& getVariable (const String& name, const CodeLocation& locationForError) const
         {
+            for (auto& v : constants)
+                if (v.name == name)
+                    return v;
+
             for (auto& v : variables)
                 if (v.name == name)
-                    return v.type;
+                    return v;
 
-            if (! isMainBlockOfFunction)
-                return parentBlock->getVariableType (name, locationForError);
+            if (! isMainBlockOfFunction && parentBlock != nullptr)
+                return parentBlock->getVariable (name, locationForError);
 
-            for (auto& v : function->arguments)
+            if (function != nullptr)
+                for (auto& v : function->arguments)
+                    if (v.name == name)
+                        return v;
+
+            for (auto& v : getGlobalConstants())
                 if (v.name == name)
-                    return v.type;
+                    return v;
 
             for (auto& v : getGlobalVariables())
                 if (v.name == name)
-                    return v.type;
+                    return v;
+
+            for (auto& v : getGlobalArrays())
+                if (v.name == name)
+                    return v;
 
             locationForError.throwError ("Unknown variable '" + name + "'");
-            return {};
         }
 
-        void addVariable (const String& name, Type type, const CodeLocation& locationForError)
+        void addVariable (Variable v, const CodeLocation& locationForError)
         {
-            if (indexOf (variables, name) >= 0)
-                locationForError.throwError ("Variable '" + name + "' already exists");
+            if (v.name.isNotEmpty() && (indexOf (variables, v.name) >= 0 || indexOf (constants, v.name) >= 0 || indexOf (arrays, v.name) >= 0))
+                locationForError.throwError ("Variable '" + v.name + "' already exists");
 
-            variables.add ({ name, type });
+            (v.numElements == 0 ? (v.isConst ? constants : variables) : arrays).add (v);
         }
 
         static int indexOf (const Array<Variable>& vars, const String& name) noexcept
@@ -1196,7 +1591,7 @@ private:
 
         Function* function;
         Array<StatementPtr> statements;
-        Array<Variable> variables;
+        Array<Variable> variables, constants, arrays;
         bool isMainBlockOfFunction;
     };
 
@@ -1234,14 +1629,14 @@ private:
             return trueBranch->alwaysReturns() && falseBranch != nullptr && falseBranch->alwaysReturns();
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (condition); visit (trueBranch); visit (falseBranch);
         }
 
         Statement* simplify (SyntaxTreeBuilder& stb) override
         {
-            condition   = dynamic_cast<ExpPtr> (condition->simplify (stb));
+            condition   = condition->simplify (stb);
             trueBranch  = trueBranch->simplify (stb);
             falseBranch = falseBranch != nullptr ? falseBranch->simplify (stb) : nullptr;
 
@@ -1255,9 +1650,9 @@ private:
         StatementPtr trueBranch, falseBranch;
     };
 
-    struct TerneryOp  : public Expression
+    struct TernaryOp  : public Expression
     {
-        TerneryOp (const CodeLocation& l, BlockPtr parent)  : Expression (l, parent) {}
+        TernaryOp (const CodeLocation& l, BlockPtr parent)  : Expression (l, parent) {}
 
         void emit (CodeGenerator& cg, Type requiredType, int stackDepth) const override
         {
@@ -1276,22 +1671,22 @@ private:
         {
             auto type = trueBranch->getType (cg);
 
-            if (type == Type::void_)                location.throwError ("The ternery operator cannot take void arguments");
-            if (type != falseBranch->getType (cg))  location.throwError ("Expected both branches of this ternery operator to have the same type");
+            if (type == Type::void_)                location.throwError ("The ternary operator cannot take void arguments");
+            if (type != falseBranch->getType (cg))  location.throwError ("Expected both branches of this ternary operator to have the same type");
 
             return type;
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (condition); visit (trueBranch); visit (falseBranch);
         }
 
-        Statement* simplify (SyntaxTreeBuilder& stb) override
+        ExpPtr simplify (SyntaxTreeBuilder& stb) override
         {
-            condition   = dynamic_cast<ExpPtr> (condition->simplify (stb));
-            trueBranch  = dynamic_cast<ExpPtr> (trueBranch->simplify (stb));
-            falseBranch = dynamic_cast<ExpPtr> (falseBranch->simplify (stb));
+            condition   = condition->simplify (stb);
+            trueBranch  = trueBranch->simplify (stb);
+            falseBranch = falseBranch->simplify (stb);
 
             if (auto literal = dynamic_cast<LiteralValue*> (condition))
                 return literal->value ? trueBranch : falseBranch;
@@ -1340,7 +1735,16 @@ private:
             cg.continueTarget = oldContinueTarget;
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        StatementPtr simplify (SyntaxTreeBuilder& stb) override
+        {
+            initialiser = initialiser->simplify (stb);
+            iterator = iterator->simplify (stb);
+            body = body->simplify (stb);
+            condition = condition->simplify (stb);
+            return this;
+        }
+
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (condition); visit (initialiser); visit (iterator); visit (body);
         }
@@ -1363,9 +1767,7 @@ private:
                 else if (fn->returnType != Type::void_)
                     location.throwError ("Cannot return a value from a void function");
 
-                if (parentBlock->statements.getLast() != this)
-                    cg.emit (OpCode::jump, fn->unwindAddress);
-
+                cg.emit (OpCode::jump, fn->unwindAddress);
                 return;
             }
 
@@ -1374,7 +1776,15 @@ private:
 
         bool alwaysReturns() const override     { return true; }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        StatementPtr simplify (SyntaxTreeBuilder& stb) override
+        {
+            if (returnValue != nullptr)
+                returnValue = returnValue->simplify (stb);
+
+            return this;
+        }
+
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (returnValue);
         }
@@ -1456,7 +1866,22 @@ private:
 
         Type getType (CodeGenerator&) const override
         {
-            return parentBlock->getVariableType (name, location);
+            return parentBlock->getVariable (name, location).type;
+        }
+
+        ExpPtr simplify (SyntaxTreeBuilder& stb) override
+        {
+            auto& v = parentBlock->getVariable (name, location);
+
+            if (v.isConst)
+                return stb.allocate<LiteralValue> (location, parentBlock, v.constantValue);
+
+            return this;
+        }
+
+        String getIdentifier() const override
+        {
+            return name;
         }
 
         String name;
@@ -1508,14 +1933,14 @@ private:
             return  Type::int_;
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (source);
         }
 
-        Statement* simplify (SyntaxTreeBuilder& stb) override
+        ExpPtr simplify (SyntaxTreeBuilder& stb) override
         {
-            source = dynamic_cast<ExpPtr> (source->simplify (stb));
+            source = source->simplify (stb);
 
             if (auto literal = dynamic_cast<LiteralValue*> (source))
             {
@@ -1627,12 +2052,12 @@ private:
             return getResultType (lhs->getType (cg), rhs->getType (cg));
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (lhs); visit (rhs);
         }
 
-        Statement* simplifyFloat (double a, double b, LiteralValue* literal)
+        ExpPtr simplifyFloat (double a, double b, LiteralValue* literal)
         {
             if (operation == Token::plus)                 { literal->value = a + b;  return literal; }
             if (operation == Token::minus)                { literal->value = a - b;  return literal; }
@@ -1647,14 +2072,14 @@ private:
             return this;
         }
 
-        Statement* simplifyBool (bool a, bool b, LiteralValue* literal)
+        ExpPtr simplifyBool (bool a, bool b, LiteralValue* literal)
         {
             if (operation == Token::logicalOr)            { literal->value = a || b; return literal; }
             if (operation == Token::logicalAnd)           { literal->value = a && b; return literal; }
             return this;
         }
 
-        Statement* simplifyInt (int a, int b, LiteralValue* literal)
+        ExpPtr simplifyInt (int a, int b, LiteralValue* literal)
         {
             if (operation == Token::plus)                 { literal->value = a +  b; return literal; }
             if (operation == Token::minus)                { literal->value = a -  b; return literal; }
@@ -1677,10 +2102,10 @@ private:
             return this;
         }
 
-        Statement* simplify (SyntaxTreeBuilder& stb) override
+        ExpPtr simplify (SyntaxTreeBuilder& stb) override
         {
-            lhs = dynamic_cast<ExpPtr> (lhs->simplify (stb));
-            rhs = dynamic_cast<ExpPtr> (rhs->simplify (stb));
+            lhs = lhs->simplify (stb);
+            rhs = rhs->simplify (stb);
 
             if (auto literal1 = dynamic_cast<LiteralValue*> (lhs))
             {
@@ -1701,7 +2126,7 @@ private:
 
     struct Assignment  : public Expression
     {
-        Assignment (const CodeLocation& l, BlockPtr parent, const String& dest, ExpPtr source, bool isPost) noexcept
+        Assignment (const CodeLocation& l, BlockPtr parent, ExpPtr dest, ExpPtr source, bool isPost) noexcept
             : Expression (l, parent), target (dest), newValue (source), isPostAssignment (isPost) {}
 
         void emit (CodeGenerator& cg, Type requiredType, int stackDepth) const override
@@ -1710,57 +2135,64 @@ private:
 
             if (isPostAssignment && requiredType != Type::void_)
             {
-                cg.emitVariableRead (variableType, requiredType, stackDepth,
-                                     parentBlock->getVariableDepth (target, location), location);
+                target->emit (cg, requiredType, stackDepth);
                 ++stackDepth;
                 requiredType = Type::void_;
             }
 
             newValue->emit (cg, variableType, stackDepth);
-            auto index = parentBlock->getVariableDepth (target, location);
 
-            if (requiredType != Type::void_)
+            if (auto a = dynamic_cast<ArraySubscript*> (target))
             {
-                cg.emit (OpCode::dup);
-                ++stackDepth;
-            }
-
-            if (index < 0)
-            {
-                cg.emit (OpCode::dropToGlobal, (int16) ((-index) - 1));
+                cg.emitArrayElementIndex (a, parentBlock, ++stackDepth, location);
+                cg.emit (OpCode::setHeapInt);
             }
             else
             {
-                index += stackDepth;
+                auto index = parentBlock->getVariableDepth (target->getIdentifier(), location);
 
-                if (index >= 128)
-                    cg.emit (OpCode::dropToStack16, (int16) index);
+                if (requiredType != Type::void_)
+                {
+                    cg.emit (OpCode::dup);
+                    ++stackDepth;
+                }
+
+                if (index < 0)
+                {
+                    cg.emit (OpCode::dropToGlobal, (int16) ((-index) - 1));
+                }
                 else
-                    cg.emit (OpCode::dropToStack, (int8) index);
-            }
+                {
+                    index += stackDepth;
 
-            if (requiredType != Type::void_)
-                cg.emitCast (variableType, requiredType, location);
+                    if (index >= 128)
+                        cg.emit (OpCode::dropToStack16, (int16) index);
+                    else
+                        cg.emit (OpCode::dropToStack, (int8) index);
+                }
+
+                if (requiredType != Type::void_)
+                    cg.emitCast (variableType, requiredType, location);
+            }
         }
 
         Type getType (CodeGenerator&) const override
         {
-            return parentBlock->getVariableType (target, location);
+            return parentBlock->getVariable (target->getIdentifier(), location).type;
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (newValue);
         }
 
-        Statement* simplify (SyntaxTreeBuilder& stb) override
+        ExpPtr simplify (SyntaxTreeBuilder& stb) override
         {
-            newValue = dynamic_cast<ExpPtr> (newValue->simplify (stb));
+            newValue = newValue->simplify (stb);
             return this;
         }
 
-        String target;
-        ExpPtr newValue;
+        ExpPtr target, newValue;
         bool isPostAssignment;
     };
 
@@ -1776,7 +2208,7 @@ private:
 
             auto functionID = getFunctionID (cg);
 
-            if (auto fn = cg.findFunction (functionID))
+            if (auto fn = cg.syntaxTree.findFunction (functionID))
             {
                 emitArgs (cg, fn->getArgumentTypes(), stackDepth);
                 cg.emit (OpCode::call, fn->address);
@@ -1784,7 +2216,7 @@ private:
                 return;
             }
 
-            if (auto nativeFn = cg.findNativeFunction (functionID))
+            if (auto nativeFn = cg.syntaxTree.findNativeFunction (functionID))
             {
                 emitArgs (cg, getArgTypesFromFunctionName (nativeFn->nameAndArguments), stackDepth);
                 cg.emit (OpCode::callNative, nativeFn->functionID);
@@ -1814,10 +2246,10 @@ private:
 
             auto functionID = getFunctionID (cg);
 
-            if (auto fn = cg.findFunction (functionID))
+            if (auto fn = cg.syntaxTree.findFunction (functionID))
                 return fn->returnType;
 
-            if (auto nativeFn = cg.findNativeFunction (functionID))
+            if (auto nativeFn = cg.syntaxTree.findNativeFunction (functionID))
                 return nativeFn->returnType;
 
             if (auto b = findBuiltInFunction (functionID))
@@ -1863,6 +2295,9 @@ private:
 
         void emitCast (CodeGenerator& cg, Type destType, int stackDepth) const
         {
+            if (arguments.size() != 1)
+                location.throwError (getTypeName (destType) + " cast operation requires a single argument");
+
             auto* arg = arguments.getReference (0);
             const auto sourceType = arg->getType (cg);
             arg->emit (cg, sourceType, stackDepth);
@@ -1896,10 +2331,18 @@ private:
             location.throwError ("Cannot find matching function: " + desc.quoted());
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             for (auto& arg : arguments)
                 visit (arg);
+        }
+
+        ExpPtr simplify (SyntaxTreeBuilder& stb) override
+        {
+            for (auto& arg : arguments)
+                arg = arg->simplify (stb);
+
+            return this;
         }
 
         String functionName;
@@ -1910,26 +2353,39 @@ private:
     {
         ArraySubscript (const CodeLocation& l, BlockPtr parent) noexcept  : Expression (l, parent) {}
 
-        void emit (CodeGenerator&, Type /*requiredType*/, int /*stackDepth*/) const override
+        void emit (CodeGenerator& cg, Type /*requiredType*/, int stackDepth) const override
         {
-            location.throwError ("Arrays are not implemented yet!");
+            cg.emitArrayElementIndex (this, parentBlock, stackDepth, location);
+            cg.emit (OpCode::getHeapInt);
         }
 
-        void visitSubStatements (std::function<void(StatementPtr)> visit) const override
+        void visitSubStatements (Statement::Visitor& visit) const override
         {
             visit (object); visit (index);
         }
 
-        Statement* simplify (SyntaxTreeBuilder& stb) override
+        ExpPtr simplify (SyntaxTreeBuilder& stb) override
         {
-            object = dynamic_cast<ExpPtr> (object->simplify (stb));
-            index = dynamic_cast<ExpPtr> (index->simplify (stb));
+            object = object->simplify (stb);
+            index = index->simplify (stb);
             return this;
         }
 
         Type getType (CodeGenerator& cg) const override
         {
             return object->getType (cg);
+        }
+
+        String getIdentifier() const override
+        {
+            if (auto i = dynamic_cast<Identifier*> (object))
+                return i->name;
+
+            if (auto s = dynamic_cast<ArraySubscript*> (object))
+                return s->getIdentifier();
+
+            location.throwError ("This operator requires an assignable variable");
+            return {};
         }
 
         ExpPtr object, index;
@@ -1982,6 +2438,12 @@ private:
         if (v.isBool())                 return Type::bool_;
         return Type::void_;
     }
+
+   #endif // ! DOXYGEN
 };
 
 }
+
+#if JUCE_MSVC
+ #pragma warning (pop)
+#endif

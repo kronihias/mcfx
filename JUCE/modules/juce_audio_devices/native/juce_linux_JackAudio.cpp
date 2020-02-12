@@ -2,27 +2,27 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
-//==============================================================================
+namespace juce
+{
+
 static void* juce_libjackHandle = nullptr;
 
 static void* juce_loadJackFunction (const char* const name)
@@ -69,6 +69,7 @@ JUCE_DECL_JACK_FUNCTION (void*, jack_set_port_connect_callback, (jack_client_t* 
 JUCE_DECL_JACK_FUNCTION (jack_port_t* , jack_port_by_id, (jack_client_t* client, jack_port_id_t port_id), (client, port_id));
 JUCE_DECL_JACK_FUNCTION (int, jack_port_connected, (const jack_port_t* port), (port));
 JUCE_DECL_JACK_FUNCTION (int, jack_port_connected_to, (const jack_port_t* port, const char* port_name), (port, port_name));
+JUCE_DECL_JACK_FUNCTION (int, jack_set_xrun_callback, (jack_client_t* client, JackXRunCallback xrun_callback, void* arg), (client, xrun_callback, arg));
 
 #if JUCE_DEBUG
  #define JACK_LOGGING_ENABLED 1
@@ -104,7 +105,11 @@ namespace
 
 //==============================================================================
 #ifndef JUCE_JACK_CLIENT_NAME
- #define JUCE_JACK_CLIENT_NAME "JUCEJack"
+ #ifdef JucePlugin_Name
+  #define JUCE_JACK_CLIENT_NAME JucePlugin_Name
+ #else
+  #define JUCE_JACK_CLIENT_NAME "JUCEJack"
+ #endif
 #endif
 
 struct JackPortIterator
@@ -259,9 +264,11 @@ public:
             inChans.calloc (totalNumberOfInputChannels + 2);
             outChans.calloc (totalNumberOfOutputChannels + 2);
 
+        xruns = 0;
         juce::jack_set_process_callback (client, processCallback, this);
         juce::jack_set_port_connect_callback (client, portConnectCallback, this);
         juce::jack_on_shutdown (client, shutdownCallback, this);
+        juce::jack_set_xrun_callback (client, xrunCallback, this);
         juce::jack_activate (client);
         deviceIsOpen = true;
 
@@ -306,6 +313,8 @@ public:
         if (client != nullptr)
         {
             juce::jack_deactivate (client);
+
+            juce::jack_set_xrun_callback (client, xrunCallback, nullptr);
             juce::jack_set_process_callback (client, processCallback, nullptr);
             juce::jack_set_port_connect_callback (client, portConnectCallback, nullptr);
             juce::jack_on_shutdown (client, shutdownCallback, nullptr);
@@ -342,6 +351,7 @@ public:
     bool isPlaying() override                        { return callback != nullptr; }
     int getCurrentBitDepth() override                { return 32; }
     String getLastError() override                   { return lastError; }
+    int getXRunCount() const noexcept override       { return xruns; }
 
     BigInteger getActiveOutputChannels() const override  { return activeOutputChannels; }
     BigInteger getActiveInputChannels()  const override  { return activeInputChannels;  }
@@ -412,33 +422,26 @@ private:
         return 0;
     }
 
+    static int xrunCallback (void* callbackArgument)
+    {
+        if (callbackArgument != nullptr)
+            ((JackAudioIODevice*) callbackArgument)->xruns++;
+
+        return 0;
+    }
+
     void updateActivePorts()
     {
         BigInteger newOutputChannels, newInputChannels;
 
         for (int i = 0; i < outputPorts.size(); ++i)
-            if (juce::jack_port_connected ((jack_port_t*) outputPorts.getUnchecked(i)))
-                newOutputChannels.setBit (i);
+            newOutputChannels.setBit (i);
 
         for (int i = 0; i < inputPorts.size(); ++i)
-            if (juce::jack_port_connected ((jack_port_t*) inputPorts.getUnchecked(i)))
-                newInputChannels.setBit (i);
+            newInputChannels.setBit (i);
 
-        if (newOutputChannels != activeOutputChannels
-             || newInputChannels != activeInputChannels)
-        {
-            AudioIODeviceCallback* const oldCallback = callback;
-
-            stop();
-
-            activeOutputChannels = newOutputChannels;
-            activeInputChannels  = newInputChannels;
-
-            if (oldCallback != nullptr)
-                start (oldCallback);
-
-            sendDeviceChangedCallback();
-        }
+        activeOutputChannels = newOutputChannels;
+        activeInputChannels  = newInputChannels;
     }
 
     static void portConnectCallback (jack_port_id_t, jack_port_id_t, int, void* arg)
@@ -481,6 +484,8 @@ private:
     int totalNumberOfOutputChannels;
     Array<void*> inputPorts, outputPorts;
     BigInteger activeInputChannels, activeOutputChannels;
+
+    int xruns;
 };
 
 
@@ -608,3 +613,5 @@ AudioIODeviceType* AudioIODeviceType::createAudioIODeviceType_JACK()
 {
     return new JackAudioIODeviceType();
 }
+
+} // namespace juce

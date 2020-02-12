@@ -36,10 +36,10 @@
                                                                     //[/Comments]
 */
 class Mcfx_gain_delayAudioProcessorEditor  : public AudioProcessorEditor,
-                                             public SliderListener,
-                                             public ButtonListener,
+                                             public Slider::Listener,
+                                             public Button::Listener,
                                              public ChangeListener,
-                                             public ComboBoxListener
+                                             public ComboBox::Listener
 {
 public:
     //==============================================================================
@@ -94,17 +94,17 @@ private:
     //[/UserVariables]
 
     //==============================================================================
-    ScopedPointer<Label> lbl_gd;
-    ScopedPointer<Label> label2;
-    ScopedPointer<Label> label3;
-    ScopedPointer<ImageButton> btn_paste_gain;
-    ScopedPointer<ImageButton> btn_paste_gain2;
+    Label lbl_gd;
+    Label label2;
+    Label label3;
+    ImageButton btn_paste_gain;
+    ImageButton btn_paste_gain2;
   
   
-    ScopedPointer<DrawableButton> btn_phase_reset;
-    ScopedPointer<DrawableButton> btn_mute_reset;
-    ScopedPointer<DrawableButton> btn_solo_reset;
-    ScopedPointer<DrawableButton> btn_sig_reset;
+    DrawableButton btn_phase_reset;
+    DrawableButton btn_mute_reset;
+    DrawableButton btn_solo_reset;
+    DrawableButton btn_sig_reset;
     
     OwnedArray<Slider> sld_del;
     OwnedArray<Slider> sld_gain;
@@ -114,17 +114,19 @@ private:
     OwnedArray<DrawableButton> btn_solo;
     OwnedArray<DrawableButton> btn_sig;
     
-    ScopedPointer<Slider> sld_siggain;
-    ScopedPointer<ComboBox> box_signal;
-    ScopedPointer<ComboBox> box_sigtime;
-    ScopedPointer<Slider> sld_sigfreq;
-    ScopedPointer<Slider> sld_sigstepinterval;
-    ScopedPointer<ToggleButton> tgl_sigstep;
-    ScopedPointer<Label> label4;
-    ScopedPointer<Label> label6;
-    ScopedPointer<Label> label7;
+    Slider sld_siggain;
+    ComboBox box_signal;
+    ComboBox box_sigtime;
+    Slider sld_sigfreq;
+    Slider sld_sigstepinterval;
+    ToggleButton tgl_sigstep;
+    Label label4;
+    Label label6;
+    Label label7;
     
     bool isStrgDown;
+
+    LookAndFeel_V3 MyLookAndFeel;
 
     Mcfx_gain_delayAudioProcessor* getProcessor() const
     {

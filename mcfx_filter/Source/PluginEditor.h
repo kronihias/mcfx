@@ -37,8 +37,8 @@
                                                                     //[/Comments]
 */
 class LowhighpassAudioProcessorEditor  : public AudioProcessorEditor,
-                                         public ButtonListener,
-                                         public SliderListener,
+                                         public Button::Listener,
+                                         public Slider::Listener,
                                          public ChangeListener,
                                          public Timer
 {
@@ -92,28 +92,30 @@ private:
     void updateSliders();
     
     //==============================================================================
-    ScopedPointer<Label> lbl_gd;
-    ScopedPointer<ImageButton> btn_lc_on;
-    ScopedPointer<Slider> sld_lc_f;
-    ScopedPointer<ImageButton> btn_lc_order;
-    ScopedPointer<ImageButton> btn_hc_on;
-    ScopedPointer<Slider> sld_hc_f;
-    ScopedPointer<ImageButton> btn_hc_order;
-    ScopedPointer<Slider> sld_hs_f;
-    ScopedPointer<Slider> sld_hs_g;
-    ScopedPointer<Slider> sld_hs_q;
-    ScopedPointer<Slider> sld_p1_f;
-    ScopedPointer<Slider> sld_p1_g;
-    ScopedPointer<Slider> sld_p1_q;
-    ScopedPointer<Slider> sld_p2_f;
-    ScopedPointer<Slider> sld_p2_g;
-    ScopedPointer<Slider> sld_p2_q;
-    ScopedPointer<Slider> sld_ls_f;
-    ScopedPointer<Slider> sld_ls_g;
-    ScopedPointer<Slider> sld_ls_q;
-    ScopedPointer<FilterGraph> filtergraph;
-    ScopedPointer<ImageButton> btn_analyzer;
-    
+    Label lbl_gd;
+    ImageButton btn_lc_on;
+    Slider sld_lc_f;
+    ImageButton btn_lc_order;
+    ImageButton btn_hc_on;
+    Slider sld_hc_f;
+    ImageButton btn_hc_order;
+    Slider sld_hs_f;
+    Slider sld_hs_g;
+    Slider sld_hs_q;
+    Slider sld_p1_f;
+    Slider sld_p1_g;
+    Slider sld_p1_q;
+    Slider sld_p2_f;
+    Slider sld_p2_g;
+    Slider sld_p2_q;
+    Slider sld_ls_f;
+    Slider sld_ls_g;
+    Slider sld_ls_q;
+    std::unique_ptr<FilterGraph> filtergraph;
+    ImageButton btn_analyzer;
+
+    LookAndFeel_V3 MyLookAndFeel;
+
     bool changed_;
     
     LowhighpassAudioProcessor* getProcessor() const

@@ -48,6 +48,10 @@
 
 // [END_USER_CODE_SECTION]
 
+#ifndef JUCE_DISPLAY_SPLASH_SCREEN
+    #define JUCE_DISPLAY_SPLASH_SCREEN 0
+#endif
+
 //==============================================================================
 #define JUCE_MODULE_AVAILABLE_juce_audio_basics             1
 #define JUCE_MODULE_AVAILABLE_juce_audio_devices            0

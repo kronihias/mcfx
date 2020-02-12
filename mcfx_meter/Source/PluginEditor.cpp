@@ -30,87 +30,84 @@ extern float iec_scale(float dB);
 //[/MiscUserDefs]
 
 //==============================================================================
-Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAudioProcessor* ownerFilter)
-    : AudioProcessorEditor (ownerFilter),
-    label (nullptr),
-    sld_hold (nullptr),
-    sld_fall (nullptr),
-    label2 (nullptr),
-    label3 (nullptr),
-    tgl_pkhold (nullptr),
-    cachedImage_meter_scale_png (nullptr)
+Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAudioProcessor* ownerFilter) :
+AudioProcessorEditor (ownerFilter),
+_scale_left(163, false),
+_scale_right(163, true)
 {
+    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
+
     tooltipWindow.setMillisecondsBeforeTipAppears (500); // tooltip delay
     
     String label_text = "mcfx_meter";
     label_text << NUM_CHANNELS;
     
-    addAndMakeVisible (label = new Label ("new label",
-                                          label_text));
-    label->setFont (Font (15.0000f, Font::plain));
-    label->setJustificationType (Justification::centredLeft);
-    label->setEditable (false, false, false);
-    label->setColour (Label::textColourId, Colours::aquamarine);
-    label->setColour (TextEditor::textColourId, Colours::black);
-    label->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (label);
+    label.setText(label_text, dontSendNotification);
+    label.setFont (Font (15.0000f, Font::plain));
+    label.setJustificationType (Justification::centredLeft);
+    label.setEditable (false, false, false);
+    label.setColour (Label::textColourId, Colours::aquamarine);
+    label.setColour (TextEditor::textColourId, Colours::black);
+    label.setColour (TextEditor::backgroundColourId, Colour (0x0));
     
-    addAndMakeVisible (sld_hold = new Slider ("new slider"));
-    sld_hold->setTooltip ("peak hold time in [s]");
-    sld_hold->setRange (0, 5, 0.1);
-    sld_hold->setSliderStyle (Slider::Rotary);
-    sld_hold->setTextBoxStyle (Slider::TextBoxLeft, false, 40, 18);
-    sld_hold->setColour (Slider::rotarySliderFillColourId, Colours::white);
-    sld_hold->addListener (this);
-    sld_hold->setSkewFactor(0.7f);
-    sld_hold->setDoubleClickReturnValue(true, 0.5f);
+    addAndMakeVisible (sld_hold);
+    sld_hold.setTooltip ("peak hold time in [s]");
+    sld_hold.setRange (0, 5, 0.1);
+    sld_hold.setSliderStyle (Slider::Rotary);
+    sld_hold.setTextBoxStyle (Slider::TextBoxLeft, false, 40, 18);
+    sld_hold.setColour (Slider::rotarySliderFillColourId, Colours::white);
+    sld_hold.addListener (this);
+    sld_hold.setSkewFactor(0.7f);
+    sld_hold.setDoubleClickReturnValue(true, 0.5f);
     
-    addAndMakeVisible (sld_fall = new Slider ("new slider"));
-    sld_fall->setTooltip ("peak fall [dB/s]");
-    sld_fall->setRange (0, 99, 1);
-    sld_fall->setSliderStyle (Slider::Rotary);
-    sld_fall->setTextBoxStyle (Slider::TextBoxLeft, false, 40, 18);
-    sld_fall->setColour (Slider::rotarySliderFillColourId, Colours::white);
-    sld_fall->addListener (this);
-    sld_fall->setSkewFactor(0.6f);
-    sld_fall->setDoubleClickReturnValue(true, 15.f);
+    addAndMakeVisible (sld_fall);
+    sld_fall.setTooltip ("peak fall [dB/s]");
+    sld_fall.setRange (0, 99, 1);
+    sld_fall.setSliderStyle (Slider::Rotary);
+    sld_fall.setTextBoxStyle (Slider::TextBoxLeft, false, 40, 18);
+    sld_fall.setColour (Slider::rotarySliderFillColourId, Colours::white);
+    sld_fall.addListener (this);
+    sld_fall.setSkewFactor(0.6f);
+    sld_fall.setDoubleClickReturnValue(true, 15.f);
     
-    addAndMakeVisible (label2 = new Label ("new label",
-                                           "hold [s]\n"));
-    label2->setFont (Font (15.0000f, Font::plain));
-    label2->setJustificationType (Justification::centredLeft);
-    label2->setEditable (false, false, false);
-    label2->setColour (Label::textColourId, Colours::white);
-    label2->setColour (TextEditor::textColourId, Colours::black);
-    label2->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (label2);
+    label2.setText("hold [s]\n", dontSendNotification);
+    label2.setFont (Font (15.0000f, Font::plain));
+    label2.setJustificationType (Justification::centredLeft);
+    label2.setEditable (false, false, false);
+    label2.setColour (Label::textColourId, Colours::white);
+    label2.setColour (TextEditor::textColourId, Colours::black);
+    label2.setColour (TextEditor::backgroundColourId, Colour (0x0));
     
-    addAndMakeVisible (label3 = new Label ("new label",
-                                           "fall [dB/s]\n"));
-    label3->setFont (Font (15.0000f, Font::plain));
-    label3->setJustificationType (Justification::centredLeft);
-    label3->setEditable (false, false, false);
-    label3->setColour (Label::textColourId, Colours::white);
-    label3->setColour (TextEditor::textColourId, Colours::black);
-    label3->setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (label3);
+    label3.setText("fall [dB/s]\n", dontSendNotification);
+    label3.setFont (Font (15.0000f, Font::plain));
+    label3.setJustificationType (Justification::centredLeft);
+    label3.setEditable (false, false, false);
+    label3.setColour (Label::textColourId, Colours::white);
+    label3.setColour (TextEditor::textColourId, Colours::black);
+    label3.setColour (TextEditor::backgroundColourId, Colour (0x0));
     
     // not make visible... not needed
-    addAndMakeVisible (tgl_pkhold = new ToggleButton ("new toggle button"));
-    tgl_pkhold->setButtonText ("peak hold");
-    tgl_pkhold->setTooltip("additional stable peak hold indicator");
-    tgl_pkhold->addListener (this);
-    tgl_pkhold->setColour (ToggleButton::textColourId, Colours::white);
-    tgl_pkhold->setColour (TextButton::buttonColourId, Colours::grey);
+    addAndMakeVisible (tgl_pkhold);
+    tgl_pkhold.setButtonText ("peak hold");
+    tgl_pkhold.setTooltip("additional stable peak hold indicator");
+    tgl_pkhold.addListener (this);
+    tgl_pkhold.setColour (ToggleButton::textColourId, Colours::white);
+    tgl_pkhold.setColour (TextButton::buttonColourId, Colours::grey);
   
     cachedImage_meter_scale_png = ImageCache::getFromMemory (meter_scale_png, meter_scale_pngSize);
     
-    addAndMakeVisible (sld_offset = new Slider ("new slider"));
-    sld_offset->setTooltip (TRANS("offset scale"));
-    sld_offset->setRange (-36, 18, 1);
-    sld_offset->setSliderStyle (Slider::LinearVertical);
-    sld_offset->setTextBoxStyle (Slider::NoTextBox, true, 40, 18);
-    sld_offset->setColour (Slider::rotarySliderFillColourId, Colours::white);
-    sld_offset->setColour (Slider::thumbColourId, Colours::grey);
-    sld_offset->addListener (this);
-    sld_offset->setDoubleClickReturnValue(true, 0.f);
+    addAndMakeVisible (sld_offset);
+    sld_offset.setTooltip ("offset scale");
+    sld_offset.setRange (-36, 18, 1);
+    sld_offset.setSliderStyle (Slider::LinearVertical);
+    sld_offset.setTextBoxStyle (Slider::NoTextBox, true, 40, 18);
+    sld_offset.setColour (Slider::rotarySliderFillColourId, Colours::white);
+    sld_offset.setColour (Slider::thumbColourId, Colours::grey);
+    sld_offset.addListener (this);
+    sld_offset.setDoubleClickReturnValue(true, 0.f);
     
     // create meters and labels!
     for (int i=0; i<NUM_CHANNELS; i++)
@@ -133,9 +130,8 @@ Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAud
         }
     }
     
-    
-    addAndMakeVisible(_scale_left = new MeterScaleComponent(163, false));
-    addAndMakeVisible(_scale_right = new MeterScaleComponent(163, true));
+    addAndMakeVisible(_scale_left);
+    addAndMakeVisible(_scale_right);
     
     //[UserPreSize]
     //[/UserPreSize]
@@ -163,16 +159,6 @@ Ambix_meterAudioProcessorEditor::~Ambix_meterAudioProcessorEditor()
     
     // remove me as listener for changes
     ourProcessor->removeChangeListener(this);
-    
-    label = nullptr;
-    sld_hold = nullptr;
-    sld_fall = nullptr;
-    label2 = nullptr;
-    label3 = nullptr;
-    tgl_pkhold = nullptr;
-    _scale_left = nullptr;
-    _scale_right = nullptr;
-    sld_offset = nullptr;
     
     //[Destructor]. You can add your own custom destruction code here..
     //[/Destructor]
@@ -222,14 +208,14 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
 void Ambix_meterAudioProcessorEditor::resized()
 {
     
-    label->setBounds (0, 0, 104, 16);
-    sld_hold->setBounds (166, 0, 70, 24);
-    sld_fall->setBounds (307, 0, 70, 24);
-    label2->setBounds (111, 3, 64, 16);
-    label3->setBounds (239, 3, 77, 16);
-    tgl_pkhold->setBounds (382, 0, 91, 24);
+    label.setBounds (0, 0, 104, 16);
+    sld_hold.setBounds (166, 0, 70, 24);
+    sld_fall.setBounds (307, 0, 70, 24);
+    label2.setBounds (111, 3, 64, 16);
+    label3.setBounds (239, 3, 77, 16);
+    tgl_pkhold.setBounds (382, 0, 91, 24);
     
-    sld_offset->setBounds (4, 23, 18, 167);
+    sld_offset.setBounds (4, 23, 18, 167);
     
     for (int i=0; i<NUM_CHANNELS; i++)
     {
@@ -241,8 +227,8 @@ void Ambix_meterAudioProcessorEditor::resized()
         _labels.getUnchecked(i)->setBounds((int)(x-METER_WIDTH*0.75), 195, (int)(METER_WIDTH*2), 14);
     }
     
-    _scale_left->setBounds(20, 23, 50, 200);
-    _scale_right->setBounds(_width-65, 23, 50, 200);
+    _scale_left.setBounds(20, 23, 50, 200);
+    _scale_right.setBounds(_width-65, 23, 50, 200);
     
     //[UserResized] Add your own custom resize handling here..
     //[/UserResized]
@@ -252,23 +238,23 @@ void Ambix_meterAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasM
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
     
-    if (sliderThatWasMoved == sld_hold)
+    if (sliderThatWasMoved == &sld_hold)
     {
         //[UserSliderCode_sld_hold] -- add your slider handling code here..
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::HoldParam, (float)sld_hold->getValue()/5.f);
+        ourProcessor->setParameter(Ambix_meterAudioProcessor::HoldParam, (float)sld_hold.getValue()/5.f);
         
         //[/UserSliderCode_sld_hold]
     }
-    else if (sliderThatWasMoved == sld_fall)
+    else if (sliderThatWasMoved == &sld_fall)
     {
         //[UserSliderCode_sld_fall] -- add your slider handling code here..
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::FallParam, (float)sld_fall->getValue()/99.f);
+        ourProcessor->setParameter(Ambix_meterAudioProcessor::FallParam, (float)sld_fall.getValue()/99.f);
         
         //[/UserSliderCode_sld_fall]
     }
-    else if (sliderThatWasMoved == sld_offset)
+    else if (sliderThatWasMoved == &sld_offset)
     {
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::OffsetParam, (float)(sld_offset->getValue()+36.f)/54.f);
+        ourProcessor->setParameter(Ambix_meterAudioProcessor::OffsetParam, (float)(sld_offset.getValue()+36.f)/54.f);
     }
     
     //[UsersliderValueChanged_Post]
@@ -279,9 +265,9 @@ void Ambix_meterAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicke
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
     
-    if (buttonThatWasClicked == tgl_pkhold)
+    if (buttonThatWasClicked == &tgl_pkhold)
     {
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::PkHoldParam, (float)tgl_pkhold->getToggleState());
+        ourProcessor->setParameter(Ambix_meterAudioProcessor::PkHoldParam, (float)tgl_pkhold.getToggleState());
         
     }
     
@@ -306,14 +292,14 @@ void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster 
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
     
-    sld_hold->setValue(ourProcessor->_hold,dontSendNotification);
-    sld_fall->setValue(ourProcessor->_fall,dontSendNotification);
-    tgl_pkhold->setToggleState(ourProcessor->_pk_hold, dontSendNotification);
+    sld_hold.setValue(ourProcessor->_hold,dontSendNotification);
+    sld_fall.setValue(ourProcessor->_fall,dontSendNotification);
+    tgl_pkhold.setToggleState(ourProcessor->_pk_hold, dontSendNotification);
     
-    sld_offset->setValue(ourProcessor->_offset, dontSendNotification);
+    sld_offset.setValue(ourProcessor->_offset, dontSendNotification);
     
-    _scale_left->offset(sld_offset->getValue());
-    _scale_right->offset(sld_offset->getValue());
+    _scale_left.offset(sld_offset.getValue());
+    _scale_right.offset(sld_offset.getValue());
     
     for (int i=0; i<NUM_CHANNELS; i++)
     {

@@ -72,18 +72,18 @@ public:
 
         deviceManager = new AudioDeviceManager();
         deviceManager->addAudioCallback (&player);
-        deviceManager->addMidiInputCallback (String::empty, &player);
+        deviceManager->addMidiInputCallback (String(), &player);
 
         player.setProcessor (filter);
 
-        ScopedPointer<XmlElement> savedState;
+        std::unique_ptr<XmlElement> savedState;
 
         if (settings != nullptr)
             savedState = settings->getXmlValue ("audioSetup");
 
         deviceManager->initialise (filter->getTotalNumInputChannels(),
                                    filter->getTotalNumOutputChannels(),
-                                   savedState,
+                                   savedState.get(),
                                    true);
 
         if (commandLine.isNotEmpty())
@@ -163,15 +163,15 @@ public:
 
             if (deviceManager != nullptr)
             {
-                ScopedPointer<XmlElement> xml (deviceManager->createStateXml());
-                settings->setValue ("audioSetup", xml);
+                auto xml = deviceManager->createStateXml();
+                settings->setValue ("audioSetup", xml.get());
             }
 
             if (nativeTitleBarCheck == false)
                 settings->setValue("nativeTitleBar", isUsingNativeTitleBar());
         }
 
-        deviceManager->removeMidiInputCallback (String::empty, &player);
+        deviceManager->removeMidiInputCallback (String(), &player);
         deviceManager->removeAudioCallback (&player);
         deviceManager = nullptr;
 
@@ -323,7 +323,7 @@ public:
     {
         FileChooser fc (TRANS("Save current state"),
                         settings != nullptr ? File (settings->getValue ("lastStateFile"))
-                                            : File::nonexistent);
+                                            : File());
 
         if (fc.browseForFileToSave (true))
         {
@@ -346,7 +346,7 @@ public:
     {
         FileChooser fc (TRANS("Load a saved state"),
                         settings != nullptr ? File (settings->getValue ("lastStateFile"))
-                                            : File::nonexistent);
+                                            : File());
 
         if (fc.browseForFileToOpen())
         {

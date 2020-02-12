@@ -63,8 +63,6 @@ float iec_scale(float dB)
 //==============================================================================
 MeterComponent::MeterComponent ()
 : _peak_hold(false),
-    cachedImage_meter_gradient_png (0),
-    cachedImage_meter_gradient_off_png (0),
     dpk_hold_db(-199.f),
     dpk_db(-199.f),
     rms_db(-199.f),

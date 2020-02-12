@@ -37,8 +37,8 @@
                                                                     //[/Comments]
 */
 class Ambix_meterAudioProcessorEditor  : public AudioProcessorEditor,
-                                        public SliderListener,
-                                        public ButtonListener,
+                                        public Slider::Listener,
+                                        public Button::Listener,
                                         public Timer,
                                         public ChangeListener
 {
@@ -73,13 +73,15 @@ private:
     OwnedArray<MeterComponent> _meters;
     OwnedArray<Label> _labels;
     
-    ScopedPointer<MeterScaleComponent> _scale_left;
-    ScopedPointer<MeterScaleComponent> _scale_right;
+    MeterScaleComponent _scale_left;
+    MeterScaleComponent _scale_right;
     
     int _width;
     
     TooltipWindow tooltipWindow;
-    
+
+    LookAndFeel_V3 MyLookAndFeel;
+
     Ambix_meterAudioProcessor* getProcessor() const
 	{
 		return static_cast <Ambix_meterAudioProcessor*> (getAudioProcessor());
@@ -87,13 +89,13 @@ private:
     //[/UserVariables]
 
     //==============================================================================
-    ScopedPointer<Label> label;
-    ScopedPointer<Slider> sld_hold;
-    ScopedPointer<Slider> sld_fall;
-    ScopedPointer<Label> label2;
-    ScopedPointer<Label> label3;
-    ScopedPointer<ToggleButton> tgl_pkhold;
-    ScopedPointer<Slider> sld_offset;
+    Label label;
+    Slider sld_hold;
+    Slider sld_fall;
+    Label label2;
+    Label label3;
+    ToggleButton tgl_pkhold;
+    Slider sld_offset;
     Image cachedImage_meter_scale_png;
 
 

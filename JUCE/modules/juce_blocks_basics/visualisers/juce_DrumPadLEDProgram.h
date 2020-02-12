@@ -2,31 +2,33 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
-/**
-*/
-struct DrumPadGridProgram  : public LEDGrid::Program
+namespace juce
 {
-    DrumPadGridProgram (LEDGrid&);
+
+/**
+    @tags{Blocks}
+*/
+struct DrumPadGridProgram  : public Block::Program
+{
+    DrumPadGridProgram (Block&);
 
     //==============================================================================
     /** These let the program dim pads which aren't having gestures performed on them. */
@@ -73,7 +75,7 @@ struct DrumPadGridProgram  : public LEDGrid::Program
     };
 
     void setGridFills (int numColumns, int numRows,
-                       const juce::Array<GridFill>&);
+                       const Array<GridFill>&);
 
     /** Set up a new pad layout, with a slide animation from the old to the new. */
     enum SlideDirection : uint8
@@ -87,7 +89,7 @@ struct DrumPadGridProgram  : public LEDGrid::Program
     };
 
     void triggerSlideTransition (int newNumColumns, int newNumRows,
-                                 const juce::Array<GridFill>& newFills, SlideDirection);
+                                 const Array<GridFill>& newFills, SlideDirection);
 
 private:
     //==============================================================================
@@ -108,18 +110,17 @@ private:
     static constexpr uint32 slideDirection_byte   = 156;  // 1 byte
     static constexpr uint32 touchedPads_byte      = 158;  // 1 byte x 4   (Zero means empty slot, so stores padIdx + 1)
     static constexpr uint32 animationTimers_byte  = 162;  // 4 byte x 16  (16:16 bits counter:increment)
-    static constexpr uint32 heatMap_byte          = 226;  // 4 byte x 225
-    static constexpr uint32 heatDecayMap_byte     = 1126; // 1 byte x 225
+    static constexpr uint32 totalHeapSize         = 226;
 
     static constexpr uint32 maxNumPads        = 25;
     static constexpr uint32 colourSizeBytes   = 2;
-    static constexpr uint32 heatMapSize       = 15 * 15 * 4;
-    static constexpr uint32 heatMapDecaySize  = 15 * 15;
-    static constexpr uint32 totalDataSize     = heatDecayMap_byte + heatMapDecaySize;
 
     int getPadIndex (float posX, float posY) const;
-    void setGridFills (int numColumns, int numRows, const juce::Array<GridFill>& fills, uint32 byteOffset);
+    void setGridFills (int numColumns, int numRows, const Array<GridFill>& fills, uint32 byteOffset);
 
-    juce::String getLittleFootProgram() override;
-    uint32 getHeapSize() override;
+    String getLittleFootProgram() override;
+    String getLittleFootProgramPre25() const;
+    String getLittleFootProgramPost25() const;
 };
+
+} // namespace juce

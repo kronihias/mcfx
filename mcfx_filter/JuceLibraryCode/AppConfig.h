@@ -41,6 +41,10 @@
 
 // [END_USER_CODE_SECTION]
 
+#ifndef JUCE_DISPLAY_SPLASH_SCREEN
+    #define JUCE_DISPLAY_SPLASH_SCREEN 0
+#endif
+
 //==============================================================================
 #define JUCE_MODULE_AVAILABLE_juce_audio_basics             1
 #define JUCE_MODULE_AVAILABLE_juce_audio_devices            1
@@ -239,7 +243,7 @@
  #define JucePlugin_SilenceInProducesSilenceOut  0
 #endif
 #ifndef  JucePlugin_EditorRequiresKeyboardFocus
- #define JucePlugin_EditorRequiresKeyboardFocus  0
+ #define JucePlugin_EditorRequiresKeyboardFocus  1
 #endif
 #ifndef  JucePlugin_Version
  #define JucePlugin_Version                1.0.0

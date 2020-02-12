@@ -2,22 +2,24 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
+   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
+   27th April 2017).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-5-licence
+   Privacy Policy: www.juce.com/juce-5-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
@@ -31,6 +33,10 @@
  // (this is a workaround for a build problem in VC9)
  #define _DO_NOT_DECLARE_INTERLOCKED_INTRINSICS_IN_MEMORY
  #include <intrin.h>
+
+ #ifndef JucePlugin_WinBag_path
+  #error "You need to define the JucePlugin_WinBag_path value!"
+ #endif
 #endif
 
 #include "juce_RTAS_DigiCode_Header.h"
@@ -155,6 +161,8 @@ static const int bypassControlIndex = 1;
 
 static int numInstances = 0;
 
+using namespace juce;
+
 //==============================================================================
 class JucePlugInProcess  : public CEffectProcessMIDI,
                            public CEffectProcessRTAS,
@@ -163,15 +171,15 @@ class JucePlugInProcess  : public CEffectProcessMIDI,
 {
 public:
     //==============================================================================
-    JucePlugInProcess()
-        : sampleRate (44100.0)
+    // RTAS builds will be removed from JUCE in the next release
+    JUCE_DEPRECATED_WITH_BODY (JucePlugInProcess(),
     {
-        juceFilter = createPluginFilterOfType (AudioProcessor::wrapperType_RTAS);
+        juceFilter.reset (createPluginFilterOfType (AudioProcessor::wrapperType_RTAS));
 
         AddChunk (juceChunkType, "Juce Audio Plugin Data");
 
         ++numInstances;
-    }
+    })
 
     ~JucePlugInProcess()
     {
@@ -180,13 +188,13 @@ public:
             if (mLoggedIn)
                 MIDILogOut();
 
-            midiBufferNode = nullptr;
-            midiTransport = nullptr;
+            midiBufferNode.reset();
+            midiTransport.reset();
 
             if (juceFilter != nullptr)
             {
                 juceFilter->releaseResources();
-                juceFilter = nullptr;
+                juceFilter.reset();
             }
 
             if (--numInstances == 0)
@@ -224,7 +232,7 @@ public:
         {
             if (editorComp == nullptr)
             {
-                editorComp = filter->createEditorIfNeeded();
+                editorComp.reset (filter->createEditorIfNeeded());
                 jassert (editorComp != nullptr);
             }
 
@@ -266,12 +274,12 @@ public:
                     updateSize();
 
                    #if JUCE_WINDOWS
-                    void* const hostWindow = (void*) ASI_GethWnd ((WindowPtr) port);
+                    auto hostWindow = (void*) ASI_GethWnd ((WindowPtr) port);
                    #else
-                    void* const hostWindow = (void*) GetWindowFromPort (port);
+                    auto hostWindow = (void*) GetWindowFromPort (port);
                    #endif
-                    wrapper = nullptr;
-                    wrapper = new EditorCompWrapper (hostWindow, editorComp, this);
+                    wrapper.reset();
+                    wrapper.reset (new EditorCompWrapper (hostWindow, editorComp.get(), this));
                 }
             }
             else
@@ -284,10 +292,8 @@ public:
         {
            #if JUCE_WINDOWS
             if (wrapper != nullptr)
-            {
-                if (ComponentPeer* const peer = wrapper->getPeer())
+                if (auto peer = wrapper->getPeer())
                     peer->repaint (wrapper->getLocalBounds());  // (seems to be required in PT6.4, but not in 7.x)
-            }
            #endif
         }
 
@@ -297,8 +303,8 @@ public:
     private:
         AudioProcessor* const filter;
         JucePlugInProcess* const process;
-        ScopedPointer<Component> wrapper;
-        ScopedPointer<AudioProcessorEditor> editorComp;
+        std::unique_ptr<Component> wrapper;
+        std::unique_ptr<AudioProcessorEditor> editorComp;
 
         void deleteEditorComp()
         {
@@ -311,10 +317,10 @@ public:
                     if (Component* const modalComponent = Component::getCurrentlyModalComponent())
                         modalComponent->exitModalState (0);
 
-                    filter->editorBeingDeleted (editorComp);
+                    filter->editorBeingDeleted (editorComp.get());
 
-                    editorComp = nullptr;
-                    wrapper = nullptr;
+                    editorComp.reset();
+                    wrapper.reset();
                 }
             }
         }
@@ -328,9 +334,9 @@ public:
                                  #endif
         {
         public:
-            EditorCompWrapper (void* const hostWindow_,
-                               Component* const editorComp,
-                               JuceCustomUIView* const owner_)
+            EditorCompWrapper (void* hostWindow_,
+                               Component* editorComp,
+                               JuceCustomUIView* owner_)
                 : hostWindow (hostWindow_),
                   owner (owner_),
                   titleW (0),
@@ -344,7 +350,7 @@ public:
                 setBroughtToFrontOnMouseClick (true);
                 setBounds (editorComp->getBounds());
                 editorComp->setTopLeftPosition (0, 0);
-                addAndMakeVisible (editorComp);
+                addAndMakeVisible (*editorComp);
 
                #if JUCE_WINDOWS
                 attachSubWindow (hostWindow, titleW, titleH, this);
@@ -441,7 +447,7 @@ public:
 
     CPlugInView* CreateCPlugInView() override
     {
-        return new JuceCustomUIView (juceFilter, this);
+        return new JuceCustomUIView (juceFilter.get(), this);
     }
 
     void SetViewPort (GrafPtr port) override
@@ -502,18 +508,18 @@ public:
                 type->GetProcessTypeName (63, nodeName);
                 nodeName[nodeName[0] + 1] = 0;
 
-                midiBufferNode = new CEffectMIDIOtherBufferedNode (&mMIDIWorld,
-                                                                   8192,
-                                                                   eLocalNode,
-                                                                   nodeName + 1,
-                                                                   midiBuffer);
+                midiBufferNode.reset (new CEffectMIDIOtherBufferedNode (&mMIDIWorld,
+                                                                        8192,
+                                                                        eLocalNode,
+                                                                        nodeName + 1,
+                                                                        midiBuffer));
 
                 midiBufferNode->Initialize (0xffff, true);
             }
            #endif
         }
 
-        midiTransport = new CEffectMIDITransport (&mMIDIWorld);
+        midiTransport.reset (new CEffectMIDITransport (&mMIDIWorld));
         midiEvents.ensureSize (2048);
 
         channels.calloc (jmax (juceFilter->getTotalNumInputChannels(),
@@ -588,7 +594,7 @@ public:
                         channels [i] = inputs [i];
                 }
 
-                AudioSampleBuffer chans (channels, totalChans, numSamples);
+                AudioBuffer<float> chans (channels, totalChans, numSamples);
 
                 if (mBypassed)
                     juceFilter->processBlockBypassed (chans, midiEvents);
@@ -674,9 +680,24 @@ public:
     ComponentResult UpdateControlValue (long controlIndex, long value) override
     {
         if (controlIndex != bypassControlIndex)
-            juceFilter->setParameter (controlIndex - 2, longToFloat (value));
+        {
+            auto paramIndex = controlIndex - 2;
+            auto floatValue = longToFloat (value);
+
+            if (auto* param = juceFilter->getParameters()[paramIndex])
+            {
+                param->setValue (floatValue);
+                param->sendValueChangedMessageToListeners (floatValue);
+            }
+            else
+            {
+                juceFilter->setParameter (paramIndex, floatValue);
+            }
+        }
         else
+        {
             mBypassed = (value > 0);
+        }
 
         return CProcess::UpdateControlValue (controlIndex, value);
     }
@@ -754,11 +775,11 @@ public:
         {
             case ficFrameRate_24Frame:       info.frameRate = AudioPlayHead::fps24;       break;
             case ficFrameRate_25Frame:       info.frameRate = AudioPlayHead::fps25;       framesPerSec = 25.0; break;
-            case ficFrameRate_2997NonDrop:   info.frameRate = AudioPlayHead::fps2997;     framesPerSec = 29.97002997; break;
-            case ficFrameRate_2997DropFrame: info.frameRate = AudioPlayHead::fps2997drop; framesPerSec = 29.97002997; break;
+            case ficFrameRate_2997NonDrop:   info.frameRate = AudioPlayHead::fps2997;     framesPerSec = 30.0 * 1000.0 / 1001.0; break;
+            case ficFrameRate_2997DropFrame: info.frameRate = AudioPlayHead::fps2997drop; framesPerSec = 30.0 * 1000.0 / 1001.0; break;
             case ficFrameRate_30NonDrop:     info.frameRate = AudioPlayHead::fps30;       framesPerSec = 30.0; break;
             case ficFrameRate_30DropFrame:   info.frameRate = AudioPlayHead::fps30drop;   framesPerSec = 30.0; break;
-            case ficFrameRate_23976:         info.frameRate = AudioPlayHead::fps24;       framesPerSec = 23.976; break;
+            case ficFrameRate_23976:         info.frameRate = AudioPlayHead::fps23976;    framesPerSec = 24.0 * 1000.0 / 1001.0; break;
             default:                         info.frameRate = AudioPlayHead::fpsUnknown;  break;
         }
 
@@ -788,15 +809,15 @@ public:
     }
 
 private:
-    ScopedPointer<AudioProcessor> juceFilter;
+    std::unique_ptr<AudioProcessor> juceFilter;
     MidiBuffer midiEvents;
-    ScopedPointer<CEffectMIDIOtherBufferedNode> midiBufferNode;
-    ScopedPointer<CEffectMIDITransport> midiTransport;
+    std::unique_ptr<CEffectMIDIOtherBufferedNode> midiBufferNode;
+    std::unique_ptr<CEffectMIDITransport> midiTransport;
     DirectMidiPacket midiBuffer [midiBufferSize];
 
     juce::MemoryBlock tempFilterData;
     HeapBlock<float*> channels;
-    double sampleRate;
+    double sampleRate = 44100.0;
 
     static float longToFloat (const long n) noexcept
     {
@@ -903,9 +924,38 @@ public:
         shutdownJuce_GUI();
     }
 
+    static AudioChannelSet rtasChannelSet (int numChannels)
+    {
+        if (numChannels == 0) return AudioChannelSet::disabled();
+        if (numChannels == 1) return AudioChannelSet::mono();
+        if (numChannels == 2) return AudioChannelSet::stereo();
+        if (numChannels == 3) return AudioChannelSet::createLCR();
+        if (numChannels == 4) return AudioChannelSet::quadraphonic();
+        if (numChannels == 5) return AudioChannelSet::create5point0();
+        if (numChannels == 6) return AudioChannelSet::create5point1();
+
+        #if PT_VERS_MAJOR >= 9
+        if (numChannels == 7) return AudioChannelSet::create7point0();
+        if (numChannels == 8) return AudioChannelSet::create7point1();
+        #else
+        if (numChannels == 7) return AudioChannelSet::create7point0SDDS();
+        if (numChannels == 8) return AudioChannelSet::create7point1SDDS();
+        #endif
+
+        jassertfalse;
+
+        return AudioChannelSet::discreteChannels (numChannels);
+    }
+
     //==============================================================================
     void CreateEffectTypes()
     {
+        std::unique_ptr<AudioProcessor> plugin (createPluginFilterOfType (AudioProcessor::wrapperType_RTAS));
+
+       #ifndef JucePlugin_PreferredChannelConfigurations
+        #error You need to set the "Plugin Channel Configurations" field in the Projucer to build RTAS plug-ins
+       #endif
+
         const short channelConfigs[][2] = { JucePlugin_PreferredChannelConfigurations };
         const int numConfigs = numElementsInArray (channelConfigs);
 
@@ -917,8 +967,13 @@ public:
         {
             if (channelConfigs[i][0] <= 8 && channelConfigs[i][1] <= 8)
             {
+                const AudioChannelSet inputLayout  (rtasChannelSet (channelConfigs[i][0]));
+                const AudioChannelSet outputLayout (rtasChannelSet (channelConfigs[i][1]));
+
+                const int32 pluginId = plugin->getAAXPluginIDForMainBusConfig (inputLayout, outputLayout, false);
+
                 CEffectType* const type
-                    = new CEffectTypeRTAS ('jcaa' + i,
+                    = new CEffectTypeRTAS (pluginId,
                                            JucePlugin_RTASProductId,
                                            JucePlugin_RTASCategory);
 

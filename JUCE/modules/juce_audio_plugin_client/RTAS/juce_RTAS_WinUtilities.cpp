@@ -2,22 +2,24 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2017 - ROLI Ltd.
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 5 End-User License
+   Agreement and JUCE 5 Privacy Policy (both updated and effective as of the
+   27th April 2017).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-5-licence
+   Privacy Policy: www.juce.com/juce-5-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
@@ -25,10 +27,10 @@
 #include "../../juce_core/system/juce_TargetPlatform.h"
 #include "../utility/juce_CheckSettingMacros.h"
 
+#if JucePlugin_Build_RTAS
+
 // (these functions are in their own file because of problems including windows.h
 // at the same time as the Digi headers)
-
-#if JucePlugin_Build_RTAS
 
 #define _DO_NOT_DECLARE_INTERLOCKED_INTRINSICS_IN_MEMORY // (workaround for a VC build problem)
 
@@ -48,6 +50,8 @@ void JUCE_CALLTYPE attachSubWindow (void* hostWindow,
                                     int& titleW, int& titleH,
                                     Component* comp)
 {
+    using namespace juce;
+
     RECT clientRect;
     GetClientRect ((HWND) hostWindow, &clientRect);
 
@@ -72,6 +76,8 @@ void JUCE_CALLTYPE resizeHostWindow (void* hostWindow,
                                      int& titleW, int& titleH,
                                      Component* comp)
 {
+    using namespace juce;
+
     RECT clientRect, windowRect;
     GetClientRect ((HWND) hostWindow, &clientRect);
     GetWindowRect ((HWND) hostWindow, &windowRect);
@@ -82,6 +88,20 @@ void JUCE_CALLTYPE resizeHostWindow (void* hostWindow,
                   borderW + jmax (titleW, comp->getWidth()),
                   borderH + comp->getHeight() + titleH,
                   SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER);
+}
+
+extern "C" BOOL WINAPI DllMainRTAS (HINSTANCE, DWORD, LPVOID);
+
+extern "C" BOOL WINAPI DllMain (HINSTANCE instance, DWORD reason, LPVOID reserved)
+{
+    if (reason == DLL_PROCESS_ATTACH)
+        juce::Process::setCurrentModuleInstanceHandle (instance);
+
+    if (GetModuleHandleA ("DAE.DLL") != 0)
+        return DllMainRTAS (instance, reason, reserved);
+
+    juce::ignoreUnused (reserved);
+    return TRUE;
 }
 
 #if ! JucePlugin_EditorRequiresKeyboardFocus
@@ -102,7 +122,7 @@ namespace
             TCHAR windowType [32] = { 0 };
             GetClassName (parent, windowType, 31);
 
-            if (String (windowType).equalsIgnoreCase ("MDIClient"))
+            if (juce::String (windowType).equalsIgnoreCase ("MDIClient"))
             {
                 w = parent;
                 break;
@@ -134,4 +154,5 @@ void JUCE_CALLTYPE passFocusToHostWindow (void* hostWindow)
 }
 
 #endif
+
 #endif

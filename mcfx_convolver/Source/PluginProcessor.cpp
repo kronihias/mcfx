@@ -34,22 +34,20 @@
 #define MAX_PART_SIZE 8192
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
+Thread("mtx_convolver_master"),
+_readyToSaveConfiguration(false),
+_storeConfigDataInProject(1),
 _min_in_ch(0),
 _min_out_ch(0),
 _num_conv(0),
 _MaxPartSize(MAX_PART_SIZE),
-_ConvBufferPos(0),
 _isProcessing(false),
 _configLoaded(false),
 _paramReload(false),
-safemode_(false),
 _skippedCycles(0),
+safemode_(false),
 _osc_in_port(7200),
-_osc_in(false),
-_storeConfigDataInProject(1),
-_readyToSaveConfiguration(false),
-Thread("mtx_convolver_master")
-
+_osc_in(false)
 {
     _SampleRate = getSampleRate();
     _BufferSize = getBlockSize();
@@ -69,7 +67,6 @@ Thread("mtx_convolver_master")
     // this is for the open dialog of the gui
     lastDir = lastDir.getSpecialLocation(File::userHomeDirectory);
 
-    oscReceiver = new OSCReceiver;
 
 }
 
@@ -194,7 +191,7 @@ void Mcfx_convolverAudioProcessor::setCurrentProgram (int index)
 
 const String Mcfx_convolverAudioProcessor::getProgramName (int index)
 {
-    return String::empty;
+    return String();
 }
 
 void Mcfx_convolverAudioProcessor::changeProgramName (int index, const String& newName)
@@ -242,19 +239,12 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
         
         for (int i=0; i < jmin(conv_data.getNumInputChannels(), getTotalNumInputChannels()) ; i++)
         {
-            float* indata = zita_conv.inpdata(i)+_ConvBufferPos;
+            float* indata = zita_conv.inpdata(i);
             memcpy(indata, buffer.getReadPointer(i), NumSamples*sizeof(float));
         }
-        
-        //_ConvBufferPos += NumSamples;
-        
-        //if (_ConvBufferPos >= _ConvBufferSize) {
+
             zita_conv.process(THREAD_SYNC_MODE);
-        //    _ConvBufferPos = 0;
-        //}
-        
-        
-        
+
         for (int i=0; i < jmin(conv_data.getNumOutputChannels(), getNumOutputChannels()) ; i++)
         {
             float* outdata = zita_conv.outdata(i)+_ConvBufferPos;
@@ -871,10 +861,10 @@ void Mcfx_convolverAudioProcessor::setOscIn(bool arg)
 {
   if (arg) {
 
-    if (oscReceiver->connect(_osc_in_port))
+    if (oscReceiver.connect(_osc_in_port))
     {
-      oscReceiver->addListener(this, "/reload");
-      oscReceiver->addListener(this, "/load");
+      oscReceiver.addListener(this, "/reload");
+      oscReceiver.addListener(this, "/load");
       _osc_in = true;
     }
     else
@@ -887,9 +877,9 @@ void Mcfx_convolverAudioProcessor::setOscIn(bool arg)
 
     _osc_in = false;
 
-    oscReceiver->removeListener(this);
+    oscReceiver.removeListener(this);
 
-    oscReceiver->disconnect();
+    oscReceiver.disconnect();
 
   }
 }
@@ -1094,7 +1084,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
     
     // probably we should switch to value tree which can include binary data more efficiently and gzip the data...!
 
-    ScopedPointer<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
+    std::unique_ptr<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
     
     if (xmlState != nullptr)
     {
