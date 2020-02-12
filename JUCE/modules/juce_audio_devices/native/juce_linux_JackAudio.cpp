@@ -435,28 +435,13 @@ private:
         BigInteger newOutputChannels, newInputChannels;
 
         for (int i = 0; i < outputPorts.size(); ++i)
-            if (juce::jack_port_connected ((jack_port_t*) outputPorts.getUnchecked(i)))
-                newOutputChannels.setBit (i);
+            newOutputChannels.setBit (i);
 
         for (int i = 0; i < inputPorts.size(); ++i)
-            if (juce::jack_port_connected ((jack_port_t*) inputPorts.getUnchecked(i)))
-                newInputChannels.setBit (i);
+            newInputChannels.setBit (i);
 
-        if (newOutputChannels != activeOutputChannels
-             || newInputChannels != activeInputChannels)
-        {
-            AudioIODeviceCallback* const oldCallback = callback;
-
-            stop();
-
-            activeOutputChannels = newOutputChannels;
-            activeInputChannels  = newInputChannels;
-
-            if (oldCallback != nullptr)
-                start (oldCallback);
-
-            sendDeviceChangedCallback();
-        }
+        activeOutputChannels = newOutputChannels;
+        activeInputChannels  = newInputChannels;
     }
 
     static void portConnectCallback (jack_port_id_t, jack_port_id_t, int, void* arg)
