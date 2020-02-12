@@ -1,6 +1,8 @@
---- /Users/matthias/SDKs/JUCE/modules/juce_audio_devices/native/juce_linux_JackAudio.cpp	2016-11-26 22:37:00.000000000 +0100
-+++ juce_linux_JackAudio.cpp	2016-12-06 19:03:59.000000000 +0100
-@@ -170,30 +170,8 @@
+diff --git a/JUCE/modules/juce_audio_devices/native/juce_linux_JackAudio.cpp b/JUCE/modules/juce_audio_devices/native/juce_linux_JackAudio.cpp
+index b916d7a..5b0a576 100755
+--- a/JUCE/modules/juce_audio_devices/native/juce_linux_JackAudio.cpp
++++ b/JUCE/modules/juce_audio_devices/native/juce_linux_JackAudio.cpp
+@@ -175,30 +175,8 @@ public:
          {
              juce::jack_set_error_function (errorCallback);
  
@@ -14,15 +16,15 @@
 -                inputPorts.add (juce::jack_port_register (client, inputName.toUTF8(),
 -                                                          JACK_DEFAULT_AUDIO_TYPE, JackPortIsInput, 0));
 -            }
-+            // add ports when clear how much we need!
- 
+-
 -            // open output ports
 -            const StringArray outputChannels (getOutputChannelNames());
 -            for (int i = 0; i < outputChannels.size(); ++i)
 -            {
 -                String outputName;
 -                outputName << "out_" << ++totalNumberOfOutputChannels;
--
++            // add ports when clear how much we need!
+ 
 -                outputPorts.add (juce::jack_port_register (client, outputName.toUTF8(),
 -                                                           JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0));
 -            }
@@ -32,7 +34,7 @@
          }
      }
  
-@@ -257,6 +235,29 @@
+@@ -262,6 +240,29 @@ public:
  
          lastError.clear();
          close();
@@ -60,9 +62,9 @@
 +            inChans.calloc (totalNumberOfInputChannels + 2);
 +            outChans.calloc (totalNumberOfOutputChannels + 2);
  
+         xruns = 0;
          juce::jack_set_process_callback (client, processCallback, this);
-         juce::jack_set_port_connect_callback (client, portConnectCallback, this);
-@@ -264,6 +265,8 @@
+@@ -271,6 +272,8 @@ public:
          juce::jack_activate (client);
          deviceIsOpen = true;
  
@@ -71,7 +73,7 @@
          if (! inputChannels.isZero())
          {
              for (JackPortIterator i (client, true); i.next();)
-@@ -289,6 +292,7 @@
+@@ -296,6 +299,7 @@ public:
                  }
              }
          }
@@ -79,3 +81,36 @@
  
          updateActivePorts();
  
+@@ -431,28 +435,13 @@ private:
+         BigInteger newOutputChannels, newInputChannels;
+ 
+         for (int i = 0; i < outputPorts.size(); ++i)
+-            if (juce::jack_port_connected ((jack_port_t*) outputPorts.getUnchecked(i)))
+-                newOutputChannels.setBit (i);
++            newOutputChannels.setBit (i);
+ 
+         for (int i = 0; i < inputPorts.size(); ++i)
+-            if (juce::jack_port_connected ((jack_port_t*) inputPorts.getUnchecked(i)))
+-                newInputChannels.setBit (i);
+-
+-        if (newOutputChannels != activeOutputChannels
+-             || newInputChannels != activeInputChannels)
+-        {
+-            AudioIODeviceCallback* const oldCallback = callback;
++            newInputChannels.setBit (i);
+ 
+-            stop();
+-
+-            activeOutputChannels = newOutputChannels;
+-            activeInputChannels  = newInputChannels;
+-
+-            if (oldCallback != nullptr)
+-                start (oldCallback);
+-
+-            sendDeviceChangedCallback();
+-        }
++        activeOutputChannels = newOutputChannels;
++        activeInputChannels  = newInputChannels;
+     }
+ 
+     static void portConnectCallback (jack_port_id_t, jack_port_id_t, int, void* arg)
