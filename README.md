@@ -96,6 +96,7 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.5.10 (2020-05-19) - mcfx_filter - High-Shelf Q was not stored in the plugin state, this is fixed now
 
 - 0.5.9 (2020-02-05) - mcfx_convolver - fix dropouts/artifacts for hosts that send incomplete block sizes (eg. Adobe, Steinberg), fix reloading of stored presets, add filter length and latency debug messages, fix gui crash in Adobe hosts
 
