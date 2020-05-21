@@ -25,7 +25,8 @@ prerequisites for building
 - libsoxr for the convolver (http://soxr.sourceforge.net)
 
 Install LINUX Libraries (Debian, Ubuntu):
-*$ sudo apt-get install libasound-dev libfreetype6-dev libgl1-mesa-dev libx11-dev libxext-dev libxinerama-dev libxcursor-dev freeglut3-dev libxmu-dev libxi-dev*
+
+*$ sudo apt-get install libasound-dev libfreetype6-dev libgl1-mesa-dev libx11-dev libxext-dev libxinerama-dev libxcursor-dev freeglut3-dev libxmu-dev libxi-dev libfftw3-dev libsoxr-dev*
 
 howto build yourself:
 --------------
