@@ -142,6 +142,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
 
     view.presetManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
+    view.presetManagingBox.pathText.setText(processor.presetDir.getFullPathName(), dontSendNotification);
 }
 
 /// Update the popup menu presets based on a predefined preset folder
