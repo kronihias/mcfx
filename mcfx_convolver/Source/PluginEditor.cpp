@@ -69,7 +69,6 @@ Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
 //==============================================================================
 void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 {
-
 }
 
 void Mcfx_convolverAudioProcessorEditor::resized()

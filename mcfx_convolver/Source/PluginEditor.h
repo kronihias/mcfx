@@ -1,4 +1,9 @@
 /*
+<<<<<<< HEAD
+=======
+ ==============================================================================
+ 
+>>>>>>> 71e302b0336e90e59dc9e41f60ffb3479dd7bf05
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
@@ -45,7 +50,6 @@ public:
     void paint (Graphics& g);
     
     void resized();
-
     void buttonClicked (Button* buttonThatWasClicked);
     
     void changeListenerCallback (ChangeBroadcaster *source);
@@ -83,7 +87,6 @@ private:
     
     LookAndFeel_V3 MyLookAndFeel;
 };
-
 
 
 #endif  // PLUGINEDITOR_H_INCLUDED
