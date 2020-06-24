@@ -120,7 +120,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         if (val == conv_buf)
             sel = i;
     }
-    view.convManagingBox.bufferCombobox.setSelectedItemIndex(sel, dontSendNotification);
+    // view.convManagingBox.bufferCombobox.setSelectedItemIndex(sel, dontSendNotification);
     
 //  ---------------------------------------------------------------------------------------
     view.convManagingBox.maxPartCombobox.clear(dontSendNotification);
