@@ -1,0 +1,63 @@
+mcfx_convolver configuration files HOWTO
+
+
+searches for configuration files (.conf) in following folders by default:
+		* Windows 7,8: C:\Users\username\AppData\Roaming\mcfx\convolver_presets\
+		* MacOS: ~/Library/mcfx/convolver_presets/
+		* Linux: ~/mcfx/convolver_presets/
+
+
+/cd <path>
+
+	Specify the path where the .wav files can be found. This path can be relative to the configuration file or absolute.
+
+
+/impulse/read   <input> <output> <gain> <delay> <offset> <length> <channel> <file>
+
+	Read one impulse response from a file.
+	
+	input...	specifies the input channel for the filter (starting with 1)
+	output...	specifies the output channel for the filter (starting with 1)
+	gain...		scales the impulse response by this value (NOT in dB!)
+	delay...	adds zeros in front of the impulse response (in samples, before resampling!)
+	offset...	skip samples in the beginning of the impulse response (in samples, before resampling!)
+	length...	define the length of the impulse response (in samples, before resampling!, absolute_length = length+delay !)
+	channel...	specifiy the channel read from the .wav file
+	file...		filename of the .wav file
+
+
+
+/impulse/packedmatrix <inchannels> <gain> <delay> <offset> <length> <filename>
+	
+	packed (dense) matrix in one .wav file as used in X-Volver by Angelo Farina
+
+	
+	inchannels...	number of input channels for this configuration (from this number the length of the IRs is derived)
+	gain...			linear gain value for all impulse responses
+	delay...		add zero samples in front of each impulse response (in samples, before resampling!)
+	offset...		skip samples in the beginning of each impulse response (in samples, before resampling!)
+	length...		define the length of the impulse response (in samples, before resampling!, 
+					absolute_length = length + delay; 
+					if length argument=0: absolute_length = length_wav_file/inchannels + delay !)
+	filename...		filename of the .wav file
+	
+	
+	Impulse Response arrangement within the .wav file:
+	
+	        one channel in the .wav file represents one _output_ channel of the convolver matrix
+	        in one channel there are sequentially aligned input IRs
+        
+	        the length of one impulse response is (full length .wav) / #inchannels
+         	
+		
+		
+	        ir_#in_#out
+         
+	        wav ch #1:  ir_1_1  ir_2_1  ir_3_1  ... ir_m_1
+	        wav ch #2:  ir_1_2  ir_2_2  ir_3_2  ... ir_m_2
+	        ...
+	        wav ch #3:  ir_1_n  ir_2_n  ir_3_n  ... ir_m_n
+        
+         
+	        by defining the number of input channels the plugin can recognize the length of each impulse response
+	
