@@ -346,7 +346,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     DebugPrint(debug);
     
     activePresetName = configFile.getFileName(); // store filename only, on restart search preset folder for it!
-    //box_preset_str = configFile.getFileNameWithoutExtension();
+    //presetName = configFile.getFileNameWithoutExtension();
     
     ///to initialize the file for the zip backup process
     Array<File> configFileAndDataFiles;
@@ -717,7 +717,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     DebugPrint(debug);
     
     activeFilterName = filterFile.getFileName(); // store filename only, on restart search preset folder for it!
-    //box_preset_str = configFile.getFileNameWithoutExtension();
+    //presetName = configFile.getFileNameWithoutExtension();
 
     // global settings
     /// temporary audio buffer backward compatible with old 32bit audio buffer
@@ -1187,16 +1187,34 @@ void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
     std::cout << "Found preset files: " << _presetFiles.size() << std::endl;
     
 }
-
+/*
 void Mcfx_convolverAudioProcessor::LoadPreset(unsigned int preset)
 {
     if (preset < (unsigned int)_presetFiles.size())
     {
         DeleteTemporaryFiles();
         LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
-        box_preset_str = _presetFiles.getUnchecked(preset).getFileNameWithoutExtension();
+        presetName = _presetFiles.getUnchecked(preset).getFileName();
     }
 }
+*/
+void Mcfx_convolverAudioProcessor::LoadPresetFromMenu(unsigned int preset)
+{
+    if (preset < (unsigned int)_presetFiles.size())
+    {
+        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
+        presetName = _presetFiles.getUnchecked(preset).getFileName();
+        DeleteTemporaryFiles();
+    }
+}
+
+void Mcfx_convolverAudioProcessor::LoadSetupFromFile(File setup)
+{
+    LoadConfigurationAsync(setup);
+    presetName.clear();
+    presetName << setup.getFileName() << " (picked outside menu)";
+}
+
 
 void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
 {
@@ -1207,7 +1225,7 @@ void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
     {
         DeleteTemporaryFiles();
         LoadConfigurationAsync(files.getUnchecked(0)); // Load first result
-        box_preset_str = files.getUnchecked(0).getFileNameWithoutExtension();
+        presetName = files.getUnchecked(0).getFileName();
     }
     else
     { // preset not found -> post!
@@ -1328,8 +1346,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             if (configfiles.size() == 1)
             {
                 LoadConfigurationAsync(configfiles.getUnchecked(0));
-                box_preset_str = configfiles.getUnchecked(0).getFileNameWithoutExtension();
-                box_preset_str << " (saved within project)";
+                presetName = configfiles.getUnchecked(0).getFileName();
+                presetName << " (saved within project)";
             }
             return;
         }

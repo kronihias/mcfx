@@ -47,7 +47,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     addAndMakeVisible(view);
 
-    setSize (350, 500); //originally 350, 330
+    setSize (400, 500); //originally 350, 330
     
     UpdateText();
     
@@ -95,7 +95,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
     view.ioDetailBox.IRNumber.setText(String(processor._num_conv), dontSendNotification);
     
-    view.presetManagingBox.textEditor.setText(processor.box_preset_str);
+    view.presetManagingBox.textEditor.setText(processor.presetName);
     view.presetManagingBox.textEditor.setCaretPosition(0);
     view.presetManagingBox.textEditor.setTooltip(view.presetManagingBox.textEditor.getText()); //to see all the string
 //    view.presetManagingBox.textEditor.setCaretPosition(view.presetManagingBox.textEditor.getTotalNumChars()-1);
@@ -142,6 +142,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
 
     view.presetManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
+    
     view.presetManagingBox.pathText.setText(processor.presetDir.getFullPathName(), dontSendNotification);
 }
 
@@ -174,9 +175,9 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
         // add item to submenu
         // check if this preset is loaded
         if (processor.configFileLoaded == processor._presetFiles.getUnchecked(i))
-            popup_submenu.getLast()->addItem(i+1, processor._presetFiles.getUnchecked(i).getFileNameWithoutExtension(), true, true);
+            popup_submenu.getLast()->addItem(i+1, processor._presetFiles.getUnchecked(i).getFileName(), true, true);
         else
-            popup_submenu.getLast()->addItem(i+1, processor._presetFiles.getUnchecked(i).getFileNameWithoutExtension());
+            popup_submenu.getLast()->addItem(i+1, processor._presetFiles.getUnchecked(i).getFileName());
     }
     
     // add all subdirs to main menu
@@ -220,9 +221,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             processor.SearchPresets(mooseFile);
             
             processor.presetLastDirectory = mooseFile.getParentDirectory();
-            UpdatePresets();
-            
-            view.presetManagingBox.pathText.setText(mooseFile.getFullPathName(), dontSendNotification);
+            processor.sendChangeMessage();
         }
     }
     else if (buttonThatWasClicked == &view.oscManagingBox.activeReceiveToggle)
@@ -249,7 +248,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
-        if (getInputChannelFromDialog() > 0 && getInputChannelFromDialog() < NUM_CHANNELS)
+        if (getInputChannelFromDialog() > 0 && getInputChannelFromDialog() <= NUM_CHANNELS)
         {
             processor._min_in_ch = getInputChannelFromDialog();
             processor.inputChannelRequired = false;
@@ -282,7 +281,8 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
         if (myChooser.browseForFileToOpen())
         {
             File mooseFile (myChooser.getResult());
-            demoComponent->processor.LoadConfigurationAsync(mooseFile);
+//            demoComponent->processor.LoadConfigurationAsync(mooseFile);
+            demoComponent->processor.LoadSetupFromFile(mooseFile);
             demoComponent->processor.presetLastDirectory = mooseFile.getParentDirectory();
         }
     }
@@ -300,7 +300,9 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
     }
     else // load preset
     {
-        demoComponent->processor.LoadPreset(result - 1);
+//        demoComponent->processor.LoadPreset(result - 1);
+        File empty;
+        demoComponent->processor.LoadPresetFromMenu(result - 1);
     }
 }
 

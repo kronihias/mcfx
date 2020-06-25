@@ -107,7 +107,9 @@ public:
     bool    SaveConfiguration(File zipFile);
     String  getDebugString();
     void    SearchPresets(File SearchFolder);
-    void    LoadPreset(unsigned int preset);
+//    void    LoadPreset(unsigned int preset);
+    void LoadPresetFromMenu(unsigned int preset);
+    void LoadSetupFromFile(File settings);
     void    LoadPresetByName(String presetName);
     
     //returning parameter for gui
@@ -143,7 +145,7 @@ public:
     File configFileLoaded;
     
     String activePresetName; // store filename
-    String box_preset_str; // string for gui  (is it real necessary?)
+    String presetName; // string for gui  (is it real necessary?)
     
     //----------------------------------------------------------------------------
     File IRlastDirectory;

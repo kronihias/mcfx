@@ -163,6 +163,7 @@ View::PresetManagingBox::PresetManagingBox()
     pathLabel.setText("Path:", dontSendNotification);
     addAndMakeVisible (pathLabel);
     
+    pathText.setFont (Font (12.0000f, Font::plain));
     pathText.setReadOnly(true);
     pathText.setPopupMenuEnabled(false);
     addAndMakeVisible (pathText);
