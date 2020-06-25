@@ -65,6 +65,7 @@ View::View()
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
         
+    statusLed.setYellowStatus();
     addAndMakeVisible(statusLed);
     
     String version_string;
@@ -157,7 +158,7 @@ void View::resized()
     
     std::cout << "global area: " << bottomArea.toString() << std::endl;
     
-    auto sectionArea = bottomArea.removeFromBottom(20);
+    auto sectionArea = bottomArea.removeFromBottom(50);
     statusLed.setBounds(sectionArea.removeFromLeft(50));
 }
 
@@ -541,13 +542,75 @@ void View::ConvManagingBox::resized()
 //==============================================================================
 View::StatusLed::StatusLed()
 {
-    
-//    shape.addStar ({25,25}, 5, 10.0f, 25.0f, -0.2f);
-    std::cout << getLocalBounds().toString() << std::endl;
-    drawable.setFill (Colours::yellow);
     drawable.setStrokeFill (Colours::black);
-    drawable.setStrokeThickness (4.0f);
+    drawable.setStrokeThickness (1.0f);
     addAndMakeVisible(drawable);
+}
+
+void View::StatusLed::paint (Graphics& g)
+{
+//    g.setColour (Colours::white);
+//    g.drawRect (0, 0, getWidth(), getHeight(), 1);
+    ColourGradient ledColor;
+    
+    switch (state) {
+        case 0:
+            ledColor = ColourGradient(Colours::limegreen,
+                                      proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
+                                      Colours::green,
+                                      proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
+                                      true);
+            break;
+            
+        case 1:
+//            ledColor = ColourGradient(Colours::lightyellow,
+//                                      proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
+//                                      Colours::yellow,
+//                                      proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
+//                                            true);
+            ledColor = ColourGradient(Colours::yellow,
+                                      proportionOfWidth (0.60f),  proportionOfHeight (0.60f),
+                                      Colours::lightyellow,
+                                      proportionOfWidth (0.05f),  proportionOfHeight (0.05f),
+                                            true);
+            break;
+            
+        case 2:
+            ledColor = ColourGradient(Colours::lightsalmon,
+                                      proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
+                                      Colours::red,
+                                      proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
+                                      true);
+            break;
+        default:
+            break;
+    };
+    
+    drawable.setFill(ledColor);
+}
+
+void View::StatusLed::resized()
+{
+    shape.clear();
+    shape.addEllipse(getLocalBounds().toFloat());
+    
+    drawable.setPath (shape);
+}
+
+void View::StatusLed::setGreenStatus()
+{
+    state = 0;
+    repaint();
+}
+void View::StatusLed::setYellowStatus()
+{
+    state = 1;
+    repaint();
+}
+void View::StatusLed::setRedStatus()
+{
+    state = 2;
+    repaint();
 }
 
 //==============================================================================

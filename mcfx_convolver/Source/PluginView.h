@@ -125,31 +125,19 @@ public:
     class StatusLed : public Component
     {
     public:
-        DrawablePath drawable;
-        Path shape;
+        void setGreenStatus();
+        void setYellowStatus();
+        void setRedStatus();
         
         StatusLed();
+        
     private:
-        void paint (Graphics& g)
-        {
-            g.setColour (Colours::white);
-            g.drawRect (0, 0, getWidth(), getHeight(), 1);
-        }
-        void resized()
-        {
-            float shapeRay;
-            Point<float> center (getWidth()/2,getHeight()/2);
-            if (getWidth() >= getHeight())
-                shapeRay = getHeight()/2;
-            else
-                shapeRay = getWidth()/2;
-            
-            shape.clear();
-            shape.addStar (center, 5, shapeRay*0.5, shapeRay, -0.2f);
-            
-            drawable.setPath (shape);
-            std::cout << center.toString() << std::endl;
-        }
+        DrawablePath drawable;
+        Path shape;
+        int state ;
+        
+        void paint (Graphics& g);
+        void resized();
     };
 
     //Instanciation
@@ -168,6 +156,9 @@ public:
     Label skippedCyclesLabel;
     
     StatusLed statusLed;
+    
+    DrawablePath convolverStatus;
+    Path circle;
 
     
     Label versionLabel;
