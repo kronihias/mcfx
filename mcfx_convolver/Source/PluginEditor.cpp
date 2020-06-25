@@ -47,7 +47,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     addAndMakeVisible(view);
 
-    setSize (400, 500); //originally 350, 330
+    setSize (400, 600); //originally 350, 330
     
     UpdateText();
     

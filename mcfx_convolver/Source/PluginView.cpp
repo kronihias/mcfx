@@ -64,9 +64,8 @@ View::View()
     addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
-    
-    addAndMakeVisible(inputChannelDialog);
-    inputChannelDialog.setVisible(false);
+        
+    addAndMakeVisible(statusLed);
     
     String version_string;
     version_string << "v" << QUOTE(VERSION);
@@ -75,6 +74,9 @@ View::View()
     versionLabel.setJustificationType(Justification::right);
     versionLabel.setText(version_string, dontSendNotification);
     addAndMakeVisible(versionLabel);
+    
+    addAndMakeVisible(inputChannelDialog);
+    inputChannelDialog.setVisible(false);
 }
 
 void View::paint(Graphics& g)
@@ -117,7 +119,8 @@ void View::resized()
     int convBoxHeight = 40;
     
     int debugWinHeight = 100;
-    
+
+    int shapesize = 25;
     int smallLabelHeight = 16;
     
     inputChannelDialog.setBounds(getBounds());
@@ -149,7 +152,13 @@ void View::resized()
     debugText.setBounds(area.removeFromTop(debugWinHeight));
     skippedCyclesLabel.setBounds(area.removeFromTop(smallLabelHeight));
     
-    versionLabel.setBounds(getLocalBounds().removeFromBottom(smallLabelHeight));
+    auto bottomArea = getLocalBounds();
+    versionLabel.setBounds(bottomArea.removeFromBottom(smallLabelHeight));
+    
+    std::cout << "global area: " << bottomArea.toString() << std::endl;
+    
+    auto sectionArea = bottomArea.removeFromBottom(20);
+    statusLed.setBounds(sectionArea.removeFromLeft(50));
 }
 
 //==============================================================================
@@ -480,7 +489,6 @@ void View::IODetailBox::resized()
 }
 
 //==============================================================================
-
 View::ConvManagingBox::ConvManagingBox()
 {
     bufferCombobox.setTooltip("set higher buffer size to optimize CPU performance but increased latency");
@@ -530,6 +538,19 @@ void View::ConvManagingBox::resized()
     flexBox.performLayout(getLocalBounds().toFloat());
 }
 
+//==============================================================================
+View::StatusLed::StatusLed()
+{
+    
+//    shape.addStar ({25,25}, 5, 10.0f, 25.0f, -0.2f);
+    std::cout << getLocalBounds().toString() << std::endl;
+    drawable.setFill (Colours::yellow);
+    drawable.setStrokeFill (Colours::black);
+    drawable.setStrokeThickness (4.0f);
+    addAndMakeVisible(drawable);
+}
+
+//==============================================================================
 View::InputChannelDialog::InputChannelDialog() :
 rectSize (250,150)
 {

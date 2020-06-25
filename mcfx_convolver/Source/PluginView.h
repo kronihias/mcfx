@@ -21,96 +21,6 @@
 #define PLUGINVIEW_H_INCLUDED
 
 #include "../JuceLibraryCode/JuceHeader.h"
-//#include "PluginEditor.h"
-
-//=========================== VIEW COMPONENTS ==================================
-
-
-/*
-class SceneComponent    : public Component
-{
-public:
-    SceneComponent(){
-        setPaintingIsUnclipped(true);
-
-        inputChannelLabel.setText("input channels: ", dontSendNotification);
-        inputChannelLabel.setFont (Font (15.0000f, Font::plain));
-        inputChannelLabel.setJustificationType (Justification::right);
-        inputChannelLabel.setEditable (false, false, false);
-        inputChannelLabel.setColour (Label::textColourId, Colours::white);
-        inputChannelLabel.setColour (TextEditor::textColourId, Colours::black);
-        inputChannelLabel.setColour (TextEditor::backgroundColourId, Colour (0x0));
-        addAndMakeVisible(inputChannelLabel);
-
-        inputChannelNumber.setText("0", dontSendNotification);
-        inputChannelNumber.setFont (Font (15.0000f, Font::plain));
-        inputChannelNumber.setJustificationType (Justification::centred);
-        inputChannelNumber.setEditable (false, false, false);
-        inputChannelNumber.setColour (Label::textColourId, Colours::white);
-        inputChannelNumber.setColour (TextEditor::textColourId, Colours::black);
-        inputChannelNumber.setColour (TextEditor::backgroundColourId, Colour (0x0));
-        addAndMakeVisible(inputChannelNumber);
-
-        addAndMakeVisible(outputChannelLabel);
-        addAndMakeVisible(outputChannelNumber);
-
-        addAndMakeVisible(impulseResposeLabel);
-        addAndMakeVisible(impulseResposneNumber);
-    }
-
-    void resized() override
-    {
-        // auto area = getLocalBounds();
-        // area.reduce(getHeight()*0.05,getWidth()*0.05);
-
-        // auto LabelHeight = 24;
-        // inputChannelLabel.setBounds(area.removeFromTop(LabelHeight));
-
-        Grid grid;
- 
-        using Track = Grid::TrackInfo;
-    
-        grid.templateRows    = { Track (1_fr), Track (1_fr), Track (1_fr) };
-        grid.templateColumns = { Track (3_fr), Track (1_fr)};
-    
-        grid.items = {  GridItem (inputChannelLabel),   GridItem (inputChannelNumber), 
-                        GridItem (outputChannelLabel),   GridItem (outputChannelNumber),
-                        GridItem (impulseResposeLabel),   GridItem (impulseResposneNumber) 
-                    };
-    
-        grid.performLayout (getLocalBounds());
-    }
-
-    void inputNumberValue(int newValue)
-    {
-        inputChannelNumber.setText(String(newValue), dontSendNotification);
-        //resized();
-    }
-
-    void paint (Graphics& g) override
-    {
-        g.setColour (Colour (0x410000ff));
-        g.fillRoundedRectangle (getLocalBounds().toFloat(), 15.0000f); 
-    }
-private:
-    Label inputChannelLabel;
-    Label outputChannelLabel;
-    Label impulseResposeLabel;
-
-    Label inputChannelNumber;
-    Label outputChannelNumber;
-    Label impulseResposneNumber;
-
-    
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SceneComponent)
-    
-};
-*/
-
-//==============================================================================
-//========================== MAIN VIEW =========================================
-
-
 
 class View  : public Component
 {
@@ -211,6 +121,36 @@ public:
         void paint (Graphics& g);
         void resized();
     };
+    
+    class StatusLed : public Component
+    {
+    public:
+        DrawablePath drawable;
+        Path shape;
+        
+        StatusLed();
+    private:
+        void paint (Graphics& g)
+        {
+            g.setColour (Colours::white);
+            g.drawRect (0, 0, getWidth(), getHeight(), 1);
+        }
+        void resized()
+        {
+            float shapeRay;
+            Point<float> center (getWidth()/2,getHeight()/2);
+            if (getWidth() >= getHeight())
+                shapeRay = getHeight()/2;
+            else
+                shapeRay = getWidth()/2;
+            
+            shape.clear();
+            shape.addStar (center, 5, shapeRay*0.5, shapeRay, -0.2f);
+            
+            drawable.setPath (shape);
+            std::cout << center.toString() << std::endl;
+        }
+    };
 
     //Instanciation
     Label title;
@@ -226,6 +166,9 @@ public:
     Label debugWinLabel;
     TextEditor debugText;
     Label skippedCyclesLabel;
+    
+    StatusLed statusLed;
+
     
     Label versionLabel;
 

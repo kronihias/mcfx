@@ -142,7 +142,7 @@ public:
         system will try to create a special transparent window for it, which will generally take
         a lot more CPU to operate (and might not even be possible on some platforms).
 
-        If the component is inside a parent component at the time this method is called, it
+     & If the component is inside a parent component at the time this method is called, it
         will first be removed from that parent. Likewise if a component is on the desktop
         and is subsequently added to another component, it'll be removed from the desktop.
 
