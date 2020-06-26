@@ -106,6 +106,9 @@ public:
     
 
     // for gui --------------------------------------------------------------------
+    enum PresetMode {conf, wav};
+    PresetMode presetMode;
+    
     bool    SaveConfiguration(File zipFile);
     String  getDebugString();
     void    SearchPresets(File SearchFolder);
@@ -114,7 +117,7 @@ public:
     void LoadSetupFromFile(File settings);
     void    LoadPresetByName(String presetName);
     
-    void changePresetType();
+    void changePresetType(PresetMode mode);
     
     //returning parameter for gui
     unsigned int getBufferSize();
@@ -145,7 +148,6 @@ public:
     
     bool inputChannelRequired;
     
-
     
     //----------------------------------------------------------------------------
     File presetDir; // where to search for presets
@@ -210,7 +212,7 @@ private:
     bool safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
     
     // IR Filter Matrix -----------------------------------------------------------
-    bool filterFileMode;
+
     File filterFileToLoad;
     
 //    bool filterLoaded;

@@ -54,6 +54,9 @@ public:
         TextButton confModeButton;
         TextButton wavModeButton;
         
+        enum  modeState {conf, wav};
+        modeState lastState = conf;
+        
         IRMatrixBox();
     private:
         void paint(Graphics& g);

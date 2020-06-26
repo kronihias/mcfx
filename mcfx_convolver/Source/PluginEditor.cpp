@@ -249,13 +249,21 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         if (view.irMatrixBox.confModeButton.getToggleState())
         {
-            processor.changePresetType();
+            if (view.irMatrixBox.lastState != View::IRMatrixBox::conf)
+            {
+                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetMode::conf);
+                view.irMatrixBox.lastState = View::IRMatrixBox::conf;
 //            std::cout << "conf was clicked" << std::endl;
+            }
         }
         else
         {
-            processor.changePresetType();
-//            std::cout << "wav was clicked" << std::endl;
+            if (view.irMatrixBox.lastState != View::IRMatrixBox::wav)
+            {
+                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetMode::wav);
+                view.irMatrixBox.lastState = View::IRMatrixBox::wav;
+//            std::cout << "conf was clicked" << std::endl;
+            }
         }
     }
     else if (buttonThatWasClicked == &(view.irMatrixBox.loadUnloadButton))
