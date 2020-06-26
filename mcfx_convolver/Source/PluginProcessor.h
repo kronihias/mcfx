@@ -93,15 +93,17 @@ public:
     // do the loading in a background thread
     void LoadConfigurationAsync(File configFile);
     void LoadConfiguration(File configFile); // do the loading
-    void ReloadConfiguration();
-
+    
+    void ReloadConfiguration(); //just reload convolver?
+    
+    void unloadConfigurationAsync();
     
     void LoadIRMatrixFilter(File filterFile);
     void LoadIRMatrixFilterAsync(File filterFile);
     
+    void loadConvolver();
     void unloadConvolver();
     
-    void initConvolver();
 
     // for gui --------------------------------------------------------------------
     bool    SaveConfiguration(File zipFile);
@@ -112,6 +114,8 @@ public:
     void LoadSetupFromFile(File settings);
     void    LoadPresetByName(String presetName);
     
+    void changePresetType();
+    
     //returning parameter for gui
     unsigned int getBufferSize();
     unsigned int getConvBufferSize();
@@ -121,6 +125,10 @@ public:
     void    setMaxPartitionSize(unsigned int maxsize);
     
     int     getSkippedCyclesCount();
+    
+    //return the status of the convolver configuration
+    //0: not loaded, 1: loading, 2: loaded
+    int getConvolverStatus();
     
     // OSC functions --------------------------------------------------------------
     void    setOscIn(bool arg); // activate osc in
@@ -136,6 +144,8 @@ public:
     int _num_conv;
     
     bool inputChannelRequired;
+    
+
     
     //----------------------------------------------------------------------------
     File presetDir; // where to search for presets
@@ -176,7 +186,7 @@ private:
     Array<int> _conv_in;    // list with input routing
     Array<int> _conv_out;   // list with output routing
     
-    File _desConfigFile;    //processor copy of config file?
+    File targetFileToLoad;    //config file copy for thread
     File _tempConfigZipFile;
     Array<File> _cleanUpFilesOnExit;
     
@@ -185,7 +195,11 @@ private:
     unsigned int    _ConvBufferSize;    // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
     unsigned int    _MaxPartSize;       // maximum size of the partition
     
+    bool unloading;
     bool convolverReady; //substitute for _configLoaded ande filterLoaded
+    int convolverStatus;
+    CriticalSection convStatusMutex;
+    void setConvolverStatus(int status);
     
 //    bool _configLoaded; // is a configuration successfully loaded?
 	bool _paramReload; // vst parameter to allow triggering reload of configuration

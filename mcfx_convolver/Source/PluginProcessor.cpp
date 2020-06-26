@@ -45,7 +45,11 @@ _num_conv(0),
 _MaxPartSize(MAX_PART_SIZE),
 
 _isProcessing(false),
+
+unloading(false),
+
 convolverReady(false),
+convolverStatus(0),
 
 inputChannelRequired(false),
 
@@ -174,7 +178,9 @@ double Mcfx_convolverAudioProcessor::getTailLengthSeconds() const
     {
         // TODO: return length...
         return 0.0;
-    } else {
+    }
+    else
+    {
         return 0.0;
     }
 }
@@ -205,7 +211,7 @@ void Mcfx_convolverAudioProcessor::changeProgramName (int index, const String& n
 //==============================================================================
 void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    
+    //line-up in case host samplerate/buffer changes
     if (_SampleRate != sampleRate || _BufferSize != samplesPerBlock)
     {
         _SampleRate = sampleRate;
@@ -266,21 +272,47 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 void Mcfx_convolverAudioProcessor::run()
 {
-    if (filterFileMode)
+    setConvolverStatus(1);
+    
+    //unload first....
+    if (convolverReady) {
+        unloadConvolver();
+    }
+    
+    if (!unloading)
     {
-        LoadIRMatrixFilter(filterFileToLoad);
+        if (filterFileMode)
+            LoadIRMatrixFilter(filterFileToLoad);
+        else
+            LoadConfiguration(targetFileToLoad);
     }
     else
-    {
-        LoadConfiguration(_desConfigFile);
-    }
+        unloading = false;
+        
+    if (!convolverReady)
+        setConvolverStatus(0);
+    else
+        convolverStatus = 2;
+    
+    sendChangeMessage();
 }
 
 
 void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile)
 {
     DebugPrint("Loading preset...\n\n");
-    _desConfigFile = configFile;
+    
+    //store for the thread
+    targetFileToLoad = configFile;
+    startThread(6); // medium priority
+}
+
+void Mcfx_convolverAudioProcessor::unloadConfigurationAsync()
+{
+    DebugPrint("Unloading preset...\n\n");
+    
+    //store for the thread
+    unloading = true;
     startThread(6); // medium priority
 }
 
@@ -322,12 +354,12 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         return;
     }
     
-    // unload first....
-    if (convolverReady) {
-        unloadConvolver();
-    }
+////     unload first....
+//    if (convolverReady) {
+//        unloadConvolver();
+//    }
     
-    // buffer size line-up
+    // buffer size line-up between host and restored configuration
     if (_ConvBufferSize < _BufferSize)
         _ConvBufferSize = _BufferSize;
     
@@ -353,13 +385,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     configFileAndDataFiles.add(configFile);
 
     StringArray myLines;
-    
     configFile.readLines(myLines);
     
     // global settings
     
-    String directory(""); // string for the IR file path
-    
+    String IRFileDirectory(""); // string for the IR file path
     AudioSampleBuffer TempAudioBuffer(1,256);
     
     conv_data.setSampleRate(_SampleRate);
@@ -372,17 +402,18 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         
         if (line.startsWith("#"))
         {
-            
             // ignore these lines
-            
-        } else if (line.contains("/cd")) {
-            
+        }
+        else if (line.contains("/cd"))
+        {
             line = line.trimCharactersAtStart("/cd").trim();
-            directory = line;
+            IRFileDirectory = line;
             
-            std::cout << "Dir: " << directory << std::endl;
-        
-        } else if (line.contains("/convolver/new")) {
+            std::cout << "IR path read from .conf : " << IRFileDirectory << std::endl;
+        }
+        else if (line.contains("/convolver/new"))
+        {
+            //never used variables !!
             int t_in_ch = 0;
             int t_out_ch = 0;
             
@@ -390,21 +421,20 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
             getIntFromLine(t_in_ch, line);
             getIntFromLine(t_out_ch, line);
-            
-        } else if (line.contains("/impulse/read"))
+        }
+        else if (line.contains("/impulse/read"))
         {
-
             if (threadShouldExit())
                 return;
 
-            int in_ch = 0;
-            int out_ch = 0;
-            float gain = 1.f;
-            int delay = 0;
-            int offset = 0;
-            int length = 0;
-            int channel = 0;
-            String filename;
+            int     in_ch = 0;
+            int     out_ch = 0;
+            float   gain = 1.f;
+            int     delay = 0;
+            int     offset = 0;
+            int     length = 0;
+            int     channel = 0;
+            String  waveFileName;
             
             line = line.trimCharactersAtStart("/impulse/read").trim();
 
@@ -416,47 +446,46 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             getIntFromLine(length, line);
             getIntFromLine(channel, line);
 
-            if (line.length() > 0) // the rest is filename
+            if (line.length() > 0) // the rest is filename of the .wav
             {
-                filename = line;
+                waveFileName = line;
             }
             // printf("load ir: %i %i %f %i %i %i %i %s \n", in_ch, out_ch, gain, delay, offset, length, channel, filename);
             
-            File IrFilename;
-            
-            
+            File audioIRFile;
             // check if /cd is defined in config
-            if (directory.isEmpty()) {
-                IrFilename = configFile.getParentDirectory().getChildFile(filename);
-                
-            } else { // /cd is defined
-                if (File::isAbsolutePath(directory))
+            if (IRFileDirectory.isEmpty()) {
+                audioIRFile = configFile.getParentDirectory().getChildFile(waveFileName);
+            }
+            else
+            { // /cd is defined
+                if (File::isAbsolutePath(IRFileDirectory))
                 {
                     // absolute path is defined
-                    File path(directory);
-                    
-                    IrFilename = path.getChildFile(filename);
-                } else {
-                    
+                    File path(IRFileDirectory);
+                    audioIRFile = path.getChildFile(waveFileName);
+                }
+                else
+                {
                     // relative path to the config file is defined
-                    IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(filename);
+                    audioIRFile = configFile.getParentDirectory().getChildFile(IRFileDirectory).getChildFile(waveFileName);
                 }
             }
 
-            configFileAndDataFiles.addIfNotAlreadyThere(IrFilename);
+            configFileAndDataFiles.addIfNotAlreadyThere(audioIRFile);
 
             if ( ( in_ch < 1 ) || ( in_ch > NUM_CHANNELS ) || ( out_ch < 1 ) || ( out_ch > NUM_CHANNELS ) )
             {
-                
                 String debug;
-                debug << "ERROR: channel assignment not feasible: In: " << in_ch << " Out: " << out_ch;
+                debug << "ERROR: channel assignment not feasible, needed:" << "\n";
+                debug << in_ch << "input channels and " << out_ch << "output channels.\n";
+                debug << "Current IN/OUT: " << QUOTE(NUM_CHANNELS) << "/" << QUOTE(NUM_CHANNELS);
                 DebugPrint(debug << "\n");
-                
-                
-            } else {
-                
+            }
+            else
+            {
                 double src_samplerate;
-                if (loadIr(&TempAudioBuffer, IrFilename, channel-1, src_samplerate, gain, offset, length))
+                if (loadIr(&TempAudioBuffer, audioIRFile, channel-1, src_samplerate, gain, offset, length))
                 {
                     // std::cout << "Length: " <<  TempAudioBuffer.getNumSamples() << " Channels: " << TempAudioBuffer.getNumChannels() << " MaxLevel: " << TempAudioBuffer.getRMSLevel(0, 0, 2048) << std::endl;
                     
@@ -464,22 +493,20 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     conv_data.addIR(in_ch-1, out_ch-1, 0, delay, 0, &TempAudioBuffer, 0, src_samplerate);
                     
                     String debug;
-                    debug << "conv # " << conv_data.getNumIRs() << " " << IrFilename.getFullPathName() << " (" << TempAudioBuffer.getNumSamples() << " smpls) loaded";
+                    debug << "conv # " << conv_data.getNumIRs() << " " << audioIRFile.getFullPathName() << " (" << TempAudioBuffer.getNumSamples() << " smpls) loaded";
                     if (src_samplerate != _SampleRate)
                       debug << " (resampled to " << conv_data.getLength(conv_data.getNumIRs()-1) <<  " smpls)";
                     DebugPrint(debug << "\n");
-                    
-                } else {
+                }
+                else
+                {
                     String debug;
-                    debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
+                    debug << "ERROR: not loaded: " << audioIRFile.getFullPathName();
                     DebugPrint(debug << "\n");
                     
+                    return; // recently added
                 }
-                
-             
             } // end check channel assignment
-            
-            
         } // end "/impulse/read" line
         
         
@@ -508,7 +535,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             int delay = 0;
             int offset = 0;
             int length = 0;
-            String filename("");
+            String waveFileName("");
             
             line = line.trimCharactersAtStart("/impulse/packedmatrix").trim();
             
@@ -519,31 +546,30 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             getIntFromLine(length, line);
 
             if (line.length() > 0)
-                filename = line;
+                waveFileName = line;
 
-            File IrFilename;
+            File audioIRFile;
             
             // check if /cd is defined in config
-            if (directory.isEmpty()) {
-                IrFilename = configFile.getParentDirectory().getChildFile(filename);
+            if (IRFileDirectory.isEmpty()) {
+                audioIRFile = configFile.getParentDirectory().getChildFile(waveFileName);
             }
             else
             { // /cd is defined
-                if (File::isAbsolutePath(directory))
+                if (File::isAbsolutePath(IRFileDirectory))
                 {
                     // absolute path is defined
-                    File path(directory);
-                    
-                    IrFilename = path.getChildFile(filename);
+                    File path(IRFileDirectory);
+                    audioIRFile = path.getChildFile(waveFileName);
                 }
                 else
                 {
                     // relative path to the config file is defined
-                    IrFilename = configFile.getParentDirectory().getChildFile(directory).getChildFile(filename);
+                    audioIRFile = configFile.getParentDirectory().getChildFile(IRFileDirectory).getChildFile(waveFileName);
                 }
             }
 
-            configFileAndDataFiles.addIfNotAlreadyThere(IrFilename);
+            configFileAndDataFiles.addIfNotAlreadyThere(audioIRFile);
 
             if (inchannels < 1)
             {
@@ -556,7 +582,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             
             
             double src_samplerate;
-            if (loadIr(&TempAudioBuffer, IrFilename, -1, src_samplerate, gain, 0, 0)) // offset/length has to be done while processing individual irs
+            if (loadIr(&TempAudioBuffer, audioIRFile, -1, src_samplerate, gain, 0, 0)) // offset/length has to be done while processing individual irs
             {
                 int numOutChannels = TempAudioBuffer.getNumChannels();
                 int irLength = TempAudioBuffer.getNumSamples()/inchannels;
@@ -564,7 +590,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 if (irLength*inchannels != TempAudioBuffer.getNumSamples())
                 {
                     String debug;
-                    debug << "ERROR: length of wav file is not multiple of irLength*numinchannels!" << IrFilename.getFullPathName();
+                    debug << "ERROR: length of wav file is not multiple of irLength*numinchannels!" << audioIRFile.getFullPathName();
                     DebugPrint(debug << "\n");
                     
                     return;
@@ -573,7 +599,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 if ((inchannels > getTotalNumInputChannels()) || numOutChannels > getTotalNumOutputChannels())
                 {
                     String debug;
-                    debug << "Input/Output channel assignement not feasible. Not enough input/output channels of the plugin. Need Input: " << inchannels << " Output: " << numOutChannels;
+                    debug << "Input/Output channel assignement not feasible. \n";
+                    debug << "Not enough input/output channels available for the plugin.\n";
+                    debug << "Need Input: " << inchannels << ", Output: " << numOutChannels;
                     DebugPrint(debug << "\n");
                     
                     return;
@@ -599,24 +627,24 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 }
                 
                 String debug;
-                debug << "loaded " << conv_data.getNumIRs() << " filters with\nlength " << length << "\ninput channels: " << inchannels << "\noutput channels: " << numOutChannels << "\nfilename: " << IrFilename.getFileName();
+                debug << "loaded " << conv_data.getNumIRs() << " filters with\nlength " << length << "\ninput channels: " << inchannels << "\noutput channels: " << numOutChannels << "\nfilename: " << audioIRFile.getFileName();
                 DebugPrint(debug << "\n\n");
                 
-            } else {
+            }
+            else
+            {
                 String debug;
-                debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
+                debug << "ERROR: not loaded: " << audioIRFile.getFullPathName();
                 DebugPrint(debug << "\n");
                 
                 return;
             }
-            
         } // end "/impulse/packedmatrix" line
-        
-        
     } // iterate over lines
     
     // initiate convolution
-    initConvolver();
+    loadConvolver();
+    presetName = configFile.getFileNameWithoutExtension();
     
     //backup of the config after a valid load
     configFileLoaded = configFile;
@@ -627,15 +655,15 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     debug << "Plugin Latency: " << getLatencySamples() << " [smpls] \n";
     DebugPrint(debug << "\n\n");
 
-    sendChangeMessage(); // notify editor
+    sendChangeMessage(); // notify editor for text update: channels number, preset name, etc
 
-
+    //===============================================================================================================================
     /* save preset files as temporary .zip file, save this zip file later in the chunk if user wants to store preset within project */
 
     _tempConfigZipFile = _tempConfigZipFile.createTempFile(".zip");
 
     _cleanUpFilesOnExit.add(_tempConfigZipFile); // delete the file when we exit the plugin
-
+    
     ZipFile::Builder compressedConfigFileAndDataFiles;
     for (int i = 0; i < configFileAndDataFiles.size(); i++)
     {
@@ -662,8 +690,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
           DebugPrint(debugText);
       */
     }
-
-    sendChangeMessage(); // notify editor again
+    sendChangeMessage(); // notify editor again for updatePresets (add save to zipfile item)
 }
 
 void Mcfx_convolverAudioProcessor::LoadIRMatrixFilterAsync(File filterFile)
@@ -740,7 +767,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     int length = 0;
     
     double src_samplerate;
-    String filename("");
+//    String waveFileName(""); //useless (for path rebuilding)
     
     ///insert the input channel from the controller/editor
     //funtion for the get
@@ -796,7 +823,6 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
                 conv_data.addIR(j, i, individualOffset + offset, delay, length, &TempAudioBuffer, i, src_samplerate);
             }
         }
-        
         debug.clear();
         debug << "Loaded " << conv_data.getNumIRs() << " filters" << "\n";
         debug << "\t\t" << "length " << length << "\n";
@@ -804,8 +830,9 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
         debug << "\t\t" << "output channels: " << numOutChannels << "\n";
         debug << "\t\t" << "filename: " << filterFile.getFileName() << "\n\n";
         DebugPrint( debug );
-        
-    } else {
+    }
+    else
+    {
         debug.clear();
         debug << "ERROR: not loaded: " << filterFile.getFullPathName();
         DebugPrint(debug << "\n");
@@ -814,7 +841,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     }
      
     // initiate convolver with the current found parameters
-    initConvolver();
+    loadConvolver();
     
     filterFileLoaded = filterFile;
 
@@ -825,11 +852,13 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     DebugPrint(debug << "\n\n");
 
     sendChangeMessage(); // notify editor
-
+    
+    //BLOCK save config/wave as zip file
+    
     sendChangeMessage(); // notify editor again CONFIGURATION remnant command
 }
 
-void Mcfx_convolverAudioProcessor::initConvolver()
+void Mcfx_convolverAudioProcessor::loadConvolver()
 {
 #ifdef USE_ZITA_CONVOLVER
     int err=0;
@@ -906,7 +935,6 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
     DebugPrint(debug);
     
     // delete configuration
-    convolverReady = false;
     
     _conv_in.clear();
     _conv_out.clear();
@@ -927,6 +955,8 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
 #endif
     
     conv_data.clear();
+    
+    convolverReady = false;
     
     debug.clear();
     debug << "Convolver settings unloaded" << "\n\n";
@@ -952,7 +982,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     
     if (!reader) {
         String debug;
-        debug << "ERROR: could not read impulse response file!";
+        debug << "ERROR: impulse response file could not be read!";
         DebugPrint(debug << "\n");
         return false;
     }
@@ -1024,8 +1054,75 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     
     return true;
 }
+//=============================================================================
+void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
+{
+    _presetFiles.clear();
+    
+    SearchFolder.findChildFiles(_presetFiles, File::findFiles, true, "*.conf");
+    _presetFiles.sort();
+    std::cout << "Found preset files: " << _presetFiles.size() << std::endl;
+    
+}
 
-// ================= Control/editor return functions =================
+/*
+void Mcfx_convolverAudioProcessor::LoadPreset(unsigned int preset)
+{
+    if (preset < (unsigned int)_presetFiles.size())
+    {
+        DeleteTemporaryFiles();
+        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
+        presetName = _presetFiles.getUnchecked(preset).getFileName();
+    }
+}
+*/
+void Mcfx_convolverAudioProcessor::LoadPresetFromMenu(unsigned int preset)
+{
+    //check if the ID of the preset is coherent with the preset list
+    if (preset < (unsigned int)_presetFiles.size())
+    {
+        DeleteTemporaryFiles();
+        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
+        presetName = _presetFiles.getUnchecked(preset).getFileNameWithoutExtension();
+    }
+}
+
+void Mcfx_convolverAudioProcessor::LoadSetupFromFile(File presetFile)
+{
+    DeleteTemporaryFiles();
+    LoadConfigurationAsync(presetFile);
+    presetName.clear();
+    presetName << presetFile.getFileNameWithoutExtension() << " (picked outside)";
+}
+
+
+void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
+{
+    Array <File> files;
+    presetDir.findChildFiles(files, File::findFiles, true, presetName);
+    
+    if (files.size())
+    {
+        DeleteTemporaryFiles();
+        LoadConfigurationAsync(files.getUnchecked(0)); // Load first result
+        presetName = files.getUnchecked(0).getFileName();
+    }
+    else
+    { // preset not found -> post!
+        String debug_msg;
+        debug_msg << "ERROR loading preset: " << presetName << ", Preset not found in search folder!\n\n";
+        DebugPrint(debug_msg);
+    }
+}
+
+void Mcfx_convolverAudioProcessor::changePresetType()
+{
+    DeleteTemporaryFiles();
+    unloadConfigurationAsync();
+    presetName.clear();
+}
+
+// ================= Editor set/get functions =================
 unsigned int Mcfx_convolverAudioProcessor::getBufferSize()
 {
     return _BufferSize;
@@ -1169,87 +1266,25 @@ String Mcfx_convolverAudioProcessor::getDebugString()
   return _DebugText;
 }
 
-//======================== Save // Restoring functions ========================
+int Mcfx_convolverAudioProcessor::getConvolverStatus()
+{
+    ScopedLock lock(convStatusMutex);
+    return convolverStatus;
+}
+
+void Mcfx_convolverAudioProcessor::setConvolverStatus(int status)
+{
+    ScopedLock lock(convStatusMutex);
+    convolverStatus = status;
+}
+
+//======================== Save to zipfile ========================
 bool Mcfx_convolverAudioProcessor::SaveConfiguration(File zipFile)
 {
     if (_readyToSaveConfiguration.get())
         return _tempConfigZipFile.copyFileTo(zipFile);
     else
         return false;
-}
-
-void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
-{
-    _presetFiles.clear();
-    
-    SearchFolder.findChildFiles(_presetFiles, File::findFiles, true, "*.conf");
-    _presetFiles.sort();
-    std::cout << "Found preset files: " << _presetFiles.size() << std::endl;
-    
-}
-/*
-void Mcfx_convolverAudioProcessor::LoadPreset(unsigned int preset)
-{
-    if (preset < (unsigned int)_presetFiles.size())
-    {
-        DeleteTemporaryFiles();
-        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
-        presetName = _presetFiles.getUnchecked(preset).getFileName();
-    }
-}
-*/
-void Mcfx_convolverAudioProcessor::LoadPresetFromMenu(unsigned int preset)
-{
-    if (preset < (unsigned int)_presetFiles.size())
-    {
-        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
-        presetName = _presetFiles.getUnchecked(preset).getFileName();
-        DeleteTemporaryFiles();
-    }
-}
-
-void Mcfx_convolverAudioProcessor::LoadSetupFromFile(File setup)
-{
-    LoadConfigurationAsync(setup);
-    presetName.clear();
-    presetName << setup.getFileName() << " (picked outside menu)";
-}
-
-
-void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
-{
-    Array <File> files;
-    presetDir.findChildFiles(files, File::findFiles, true, presetName);
-    
-    if (files.size())
-    {
-        DeleteTemporaryFiles();
-        LoadConfigurationAsync(files.getUnchecked(0)); // Load first result
-        presetName = files.getUnchecked(0).getFileName();
-    }
-    else
-    { // preset not found -> post!
-        String debug_msg;
-        debug_msg << "ERROR loading preset: " << presetName << ", Preset not found in search folder!\n\n";
-        DebugPrint(debug_msg);
-    }
-    
-}
-
-//==============================================================================
-bool Mcfx_convolverAudioProcessor::hasEditor() const
-{
-    return true; // (change this to false if you choose to not supply an editor)
-}
-
-AudioProcessorEditor* Mcfx_convolverAudioProcessor::createEditor()
-{
-    //new way Controller-View editor type
-    return new Mcfx_convolverAudioProcessorEditor (*this);
-
-
-    //old way pointer creation
-    // return new Mcfx_convolverAudioProcessorEditor (this);
 }
 
 //==============================================================================
@@ -1316,7 +1351,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             _storeConfigDataInProject.set(xmlState->getIntAttribute("storeConfigDataInProject", 0));
         }
         
-        //restore preset directory (if exists)
+        //restore preset IRFileDirectory (if exists)
         File tempDir(newPresetDir);
         if (tempDir.exists())
         {
@@ -1357,6 +1392,22 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             LoadPresetByName(activePresetName);
         }
     }
+}
+
+//==============================================================================
+bool Mcfx_convolverAudioProcessor::hasEditor() const
+{
+    return true; // (change this to false if you choose to not supply an editor)
+}
+
+AudioProcessorEditor* Mcfx_convolverAudioProcessor::createEditor()
+{
+    //new way Controller-View editor type
+    return new Mcfx_convolverAudioProcessorEditor (*this);
+
+
+    //old way pointer creation
+    // return new Mcfx_convolverAudioProcessorEditor (this);
 }
 
 //==============================================================================

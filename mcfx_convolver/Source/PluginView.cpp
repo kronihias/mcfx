@@ -65,7 +65,7 @@ View::View()
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
         
-    statusLed.setYellowStatus();
+    statusLed.setRedStatus();
     addAndMakeVisible(statusLed);
     
     String version_string;
@@ -158,8 +158,9 @@ void View::resized()
     
     std::cout << "global area: " << bottomArea.toString() << std::endl;
     
-    auto sectionArea = bottomArea.removeFromBottom(50);
-    statusLed.setBounds(sectionArea.removeFromLeft(50));
+    auto sectionArea = bottomArea.removeFromBottom(20);
+    sectionArea.reduce(border, 0);
+    statusLed.setBounds(sectionArea.removeFromLeft(20));
 }
 
 //==============================================================================
@@ -555,32 +556,27 @@ void View::StatusLed::paint (Graphics& g)
     
     switch (state) {
         case 0:
-            ledColor = ColourGradient(Colours::limegreen,
-                                      proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
-                                      Colours::green,
-                                      proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
-                                      true);
+            ledColor = ColourGradient ( Colours::green,
+                                        proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
+                                        Colours::lawngreen,
+                                        proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
+                                        false);
             break;
             
         case 1:
-//            ledColor = ColourGradient(Colours::lightyellow,
-//                                      proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
-//                                      Colours::yellow,
-//                                      proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
-//                                            true);
-            ledColor = ColourGradient(Colours::yellow,
-                                      proportionOfWidth (0.60f),  proportionOfHeight (0.60f),
-                                      Colours::lightyellow,
-                                      proportionOfWidth (0.05f),  proportionOfHeight (0.05f),
-                                            true);
+            ledColor = ColourGradient ( Colours::gold,
+                                        proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
+                                        Colours::lightgoldenrodyellow,
+                                        proportionOfWidth (0.10f),  proportionOfHeight (0.10f),
+                                        false);
             break;
             
         case 2:
-            ledColor = ColourGradient(Colours::lightsalmon,
-                                      proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
-                                      Colours::red,
-                                      proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
-                                      true);
+            ledColor = ColourGradient ( Colours::red,
+                                        proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
+                                        Colours::lightsalmon,
+                                        proportionOfWidth (0.15f),  proportionOfHeight (0.15f),
+                                        false);
             break;
         default:
             break;

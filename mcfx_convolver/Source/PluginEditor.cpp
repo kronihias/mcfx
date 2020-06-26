@@ -36,6 +36,8 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.presetManagingBox.selectFolderButton.addListener(this);
     
     view.irMatrixBox.loadUnloadButton.addListener(this);
+    view.irMatrixBox.confModeButton.addListener(this);
+    view.irMatrixBox.wavModeButton.addListener(this);
     
     view.oscManagingBox.activeReceiveToggle.addListener(this);
     view.oscManagingBox.receivePortText.addListener(this);
@@ -47,7 +49,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     addAndMakeVisible(view);
 
-    setSize (400, 600); //originally 350, 330
+    setSize (400, 500); //originally 350, 330
     
     UpdateText();
     
@@ -100,6 +102,25 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.presetManagingBox.textEditor.setTooltip(view.presetManagingBox.textEditor.getText()); //to see all the string
 //    view.presetManagingBox.textEditor.setCaretPosition(view.presetManagingBox.textEditor.getTotalNumChars()-1);
     //view.presetManagingBox.textEditor.setScrollToShowCursor(true);
+    view.presetManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
+    view.presetManagingBox.pathText.setText(processor.presetDir.getFullPathName(), dontSendNotification);
+    
+    view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
+    view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
+    
+    switch (processor.getConvolverStatus()) {
+        case 0:
+            view.statusLed.setRedStatus();
+            break;
+        case 1:
+            view.statusLed.setYellowStatus();
+            break;
+        case 2:
+            view.statusLed.setGreenStatus();
+            break;
+        default:
+            break;
+    }
     
 //  ---------------------------------------------------------------------------------------
     view.convManagingBox.bufferCombobox.clear(dontSendNotification);
@@ -136,14 +157,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         sel = i;
     }
     view.convManagingBox.maxPartCombobox.setSelectedItemIndex(sel, dontSendNotification);
-    
-//  ---------------------------------------------------------------------------------------
-    view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
-    view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
-
-    view.presetManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
-    
-    view.presetManagingBox.pathText.setText(processor.presetDir.getFullPathName(), dontSendNotification);
 }
 
 /// Update the popup menu presets based on a predefined preset folder
@@ -231,6 +244,19 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     else if (buttonThatWasClicked == &(view.presetManagingBox.saveToggle))
     {
         processor._storeConfigDataInProject = view.presetManagingBox.saveToggle.getToggleState();
+    }
+    else if (buttonThatWasClicked == &(view.irMatrixBox.confModeButton))
+    {
+        if (view.irMatrixBox.confModeButton.getToggleState())
+        {
+            processor.changePresetType();
+//            std::cout << "conf was clicked" << std::endl;
+        }
+        else
+        {
+            processor.changePresetType();
+//            std::cout << "wav was clicked" << std::endl;
+        }
     }
     else if (buttonThatWasClicked == &(view.irMatrixBox.loadUnloadButton))
     {
