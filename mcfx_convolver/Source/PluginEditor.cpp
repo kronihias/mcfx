@@ -103,20 +103,20 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 //    view.presetManagingBox.textEditor.setCaretPosition(view.presetManagingBox.textEditor.getTotalNumChars()-1);
     //view.presetManagingBox.textEditor.setScrollToShowCursor(true);
     view.presetManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
-    view.presetManagingBox.pathText.setText(processor.presetDir.getFullPathName(), dontSendNotification);
+    view.presetManagingBox.pathText.setText(processor.defaultPresetDirectory.getFullPathName(), dontSendNotification);
     
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
     
     switch (processor.getConvolverStatus()) {
-        case 0:
-            view.statusLed.setRedStatus();
+        case Mcfx_convolverAudioProcessor::ConvolverStatus::Unloaded :
+            view.statusLed.setStatus(View::StatusLed::State::red);
             break;
-        case 1:
-            view.statusLed.setYellowStatus();
+        case Mcfx_convolverAudioProcessor::ConvolverStatus::Loading:
+            view.statusLed.setStatus(View::StatusLed::State::yellow);
             break;
-        case 2:
-            view.statusLed.setGreenStatus();
+        case Mcfx_convolverAudioProcessor::ConvolverStatus::Loaded:
+            view.statusLed.setStatus(View::StatusLed::State::green);
             break;
         default:
             break;
@@ -162,78 +162,77 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 /// Update the popup menu presets based on a predefined preset folder
 void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
 {
-    popup_submenu.clear(); // contains submenus
+    presetMenu.clear(); // main menu
+    presetSubmenu.clear(); // contains submenus
     
-    popup_presets.clear(); // main menu
-    
-    String lastSubdir;
-    StringArray Subdirs; // hold name of subdirs
-    
+    StringArray subDirectories; // hold name of subdirectories, they will be the just the first parent directory name
+    String lastSubdirectory;
     int j = 1;
     
-    for (int i=0; i < processor._presetFiles.size(); i++)
+    for (int i=0; i < processor.presetFilesList.size(); i++)
     {
         // add separator for new subfolder
-        String subdir = processor._presetFiles.getUnchecked(i).getParentDirectory().getFileNameWithoutExtension();
+        String currentPresetDirectory = processor.presetFilesList.getUnchecked(i).getParentDirectory().getFileNameWithoutExtension();
         
-        if (!lastSubdir.equalsIgnoreCase(subdir))
+        //check if the current preset File has the same parent directory as the precedent one
+        if (!lastSubdirectory.equalsIgnoreCase(currentPresetDirectory))
         {
-            popup_submenu.add(new PopupMenu());
-            Subdirs.add(subdir);
+            presetSubmenu.add(new PopupMenu());
+            subDirectories.add(currentPresetDirectory);
             
             j++;
-            lastSubdir = subdir;
+            lastSubdirectory = currentPresetDirectory;
         }
         
         // add item to submenu
-        // check if this preset is loaded
-        if (processor.configFileLoaded == processor._presetFiles.getUnchecked(i))
-            popup_submenu.getLast()->addItem(i+1, processor._presetFiles.getUnchecked(i).getFileName(), true, true);
+        // check if this preset is loaded !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! meaning of the presence of configFileLoaded !
+        if (processor.configFileLoaded == processor.presetFilesList.getUnchecked(i))
+            presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName(), true, true);
         else
-            popup_submenu.getLast()->addItem(i+1, processor._presetFiles.getUnchecked(i).getFileName());
+            presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName());
     }
     
     // add all subdirs to main menu
-    for (int i=0; i < popup_submenu.size(); i++)
+    for (int i=0; i < presetSubmenu.size(); i++)
     {
-        if (Subdirs.getReference(i) == processor.configFileLoaded.getParentDirectory().getFileName())
-            popup_presets.addSubMenu(Subdirs.getReference(i), *popup_submenu.getUnchecked(i), true, nullptr, true);
+        if (subDirectories.getReference(i) == processor.configFileLoaded.getParentDirectory().getFileName())
+            presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i), true, nullptr, true);
         else
-            popup_presets.addSubMenu(Subdirs.getReference(i), *popup_submenu.getUnchecked(i));
+            presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i));
     }
     
 
     if (processor.activePresetName.isNotEmpty())
     {
-        popup_presets.addSeparator();
-        popup_presets.addItem(-2, String("save preset to .zip file..."), processor._readyToSaveConfiguration.get());
+        presetMenu.addSeparator();
+        presetMenu.addItem(-2, String("save preset to .zip file..."), processor._readyToSaveConfiguration.get());
     }
 
-    popup_presets.addSeparator();
-    popup_presets.addItem(-1, String("open preset from file..."));
+    presetMenu.addSeparator();
+    presetMenu.addItem(-1, String("open preset from file..."));
 }
 
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
     if (buttonThatWasClicked == &(view.presetManagingBox.chooseButton))
     {
-        popup_presets.showMenuAsync(PopupMenu::Options().withTargetComponent (view.presetManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
+        presetMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.presetManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
     }
     else if (buttonThatWasClicked == &(view.presetManagingBox.selectFolderButton))
     {
         FileChooser myChooser ("Please select the new preset folder...",
-                               processor.presetDir,
+                               processor.defaultPresetDirectory,
                                "");
         
         if (myChooser.browseForDirectory())
         {
             
             File mooseFile (myChooser.getResult());
-            processor.presetDir = mooseFile;
+            processor.defaultPresetDirectory = mooseFile;
             
             processor.SearchPresets(mooseFile);
             
-            processor.presetLastDirectory = mooseFile.getParentDirectory();
+            processor.lastSearchDirectory = mooseFile.getParentDirectory();
             processor.sendChangeMessage();
         }
     }
@@ -251,7 +250,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         {
             if (view.irMatrixBox.lastState != View::IRMatrixBox::conf)
             {
-                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetMode::conf);
+                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetType::conf);
                 view.irMatrixBox.lastState = View::IRMatrixBox::conf;
 //            std::cout << "conf was clicked" << std::endl;
             }
@@ -260,7 +259,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         {
             if (view.irMatrixBox.lastState != View::IRMatrixBox::wav)
             {
-                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetMode::wav);
+                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetType::wav);
                 view.irMatrixBox.lastState = View::IRMatrixBox::wav;
 //            std::cout << "conf was clicked" << std::endl;
             }
@@ -275,7 +274,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         if (chooser.browseForFileToOpen())
         {
             File pickedFile (chooser.getResult());
-            processor.LoadIRMatrixFilterAsync(pickedFile);
+//            processor.LoadIRMatrixFilterAsync(pickedFile);
             processor.IRlastDirectory = pickedFile.getParentDirectory();
             view.presetManagingBox.setEnabled(false);
         }
@@ -309,27 +308,31 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
     }
     else if (result == -1)
     {
+        String extension = "*.conf";
+        if (demoComponent->processor.presetType ==  Mcfx_convolverAudioProcessor::PresetType::wav)
+            extension = "*.wav";
+        
         FileChooser myChooser ("Please select the preset file to load...",
-                               demoComponent->processor.presetLastDirectory, //old version: ourProcessor->presetLastDirectory,
-                               "*.conf");
+                               demoComponent->processor.lastSearchDirectory, //old version: ourProcessor->lastSearchDirectory,
+                               extension);
         if (myChooser.browseForFileToOpen())
         {
             File mooseFile (myChooser.getResult());
 //            demoComponent->processor.LoadConfigurationAsync(mooseFile);
             demoComponent->processor.LoadSetupFromFile(mooseFile);
-            demoComponent->processor.presetLastDirectory = mooseFile.getParentDirectory();
+            demoComponent->processor.lastSearchDirectory = mooseFile.getParentDirectory();
         }
     }
     else if (result == -2)
     {
         FileChooser myChooser("Save the loaded preset as .zip file...",
-            demoComponent->processor.presetLastDirectory.getChildFile(demoComponent->processor.activePresetName),"*.zip");
+            demoComponent->processor.lastSearchDirectory.getChildFile(demoComponent->processor.activePresetName),"*.zip");
         if (myChooser.browseForFileToSave(true))
         {
             File mooseFile(myChooser.getResult());
             demoComponent->processor.SaveConfiguration(mooseFile);
 
-            demoComponent->processor.presetLastDirectory = mooseFile.getParentDirectory();
+            demoComponent->processor.lastSearchDirectory = mooseFile.getParentDirectory();
         }
     }
     else // load preset

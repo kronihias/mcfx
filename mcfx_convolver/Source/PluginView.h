@@ -128,16 +128,17 @@ public:
     class StatusLed : public Component
     {
     public:
-        void setGreenStatus();
-        void setYellowStatus();
-        void setRedStatus();
+        enum State {green, yellow, red};
+        
+        void setStatus(State newState);
         
         StatusLed();
         
     private:
         DrawablePath drawable;
         Path shape;
-        int state ;
+        
+        State state;
         
         void paint (Graphics& g);
         void resized();

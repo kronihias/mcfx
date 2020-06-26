@@ -65,7 +65,7 @@ View::View()
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
         
-    statusLed.setRedStatus();
+    statusLed.setStatus(StatusLed::State::red);
     addAndMakeVisible(statusLed);
     
     String version_string;
@@ -298,37 +298,6 @@ View::IRMatrixBox::IRMatrixBox()
     wavModeButton.setToggleState (false, dontSendNotification);
     wavModeButton.setButtonText(".wav");
     addAndMakeVisible(wavModeButton);
-    /*
-    // This little function avoids a bit of code-duplication by adding a component to
-    // our list as well as calling addAndMakeVisible on it..
-    OwnedArray<Component> components;
-    template <typename ComponentType>
-    ComponentType* addToList (ComponentType* newComp)
-    {
-        components.add (newComp);
-        addAndMakeVisible (newComp);
-        return newComp;
-    }
-    
-    for (int i = 0; i < 4; ++i)
-    {
-        auto* tb = addToList (new TextButton ("Button " + String (i + 1)));
-
-        tb->setClickingTogglesState (true);
-        tb->setRadioGroupId (34567);
-        tb->setColour (TextButton::textColourOffId,  Colours::black);
-        tb->setColour (TextButton::textColourOnId,   Colours::black);
-        tb->setColour (TextButton::buttonColourId,   Colours::white);
-        tb->setColour (TextButton::buttonOnColourId, Colours::blueviolet.brighter());
-
-        tb->setBounds (20 + i * 55, 260, 55, 24);
-        tb->setConnectedEdges (((i != 0) ? Button::ConnectedOnLeft : 0)
-                                | ((i != 3) ? Button::ConnectedOnRight : 0));
-
-        if (i == 0)
-            tb->setToggleState (true, dontSendNotification);
-    }
-    */
 }
 
 void View::IRMatrixBox::paint(Graphics& g)
@@ -541,7 +510,8 @@ void View::ConvManagingBox::resized()
 }
 
 //==============================================================================
-View::StatusLed::StatusLed()
+View::StatusLed::StatusLed() :
+state(StatusLed::State::red)
 {
     drawable.setStrokeFill (Colours::black);
     drawable.setStrokeThickness (1.0f);
@@ -555,7 +525,7 @@ void View::StatusLed::paint (Graphics& g)
     ColourGradient ledColor;
     
     switch (state) {
-        case 0:
+        case State::green :
             ledColor = ColourGradient ( Colours::green,
                                         proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
                                         Colours::lawngreen,
@@ -563,15 +533,15 @@ void View::StatusLed::paint (Graphics& g)
                                         false);
             break;
             
-        case 1:
-            ledColor = ColourGradient ( Colours::gold,
+        case State::yellow :
+            ledColor = ColourGradient ( Colours::darkgoldenrod,
                                         proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
-                                        Colours::lightgoldenrodyellow,
+                                        Colours::yellow,
                                         proportionOfWidth (0.10f),  proportionOfHeight (0.10f),
                                         false);
             break;
             
-        case 2:
+        case State::red :
             ledColor = ColourGradient ( Colours::red,
                                         proportionOfWidth (0.70f),  proportionOfHeight (0.70f),
                                         Colours::lightsalmon,
@@ -593,19 +563,9 @@ void View::StatusLed::resized()
     drawable.setPath (shape);
 }
 
-void View::StatusLed::setGreenStatus()
+void View::StatusLed::setStatus(State newState)
 {
-    state = 0;
-    repaint();
-}
-void View::StatusLed::setYellowStatus()
-{
-    state = 1;
-    repaint();
-}
-void View::StatusLed::setRedStatus()
-{
-    state = 2;
+    state = newState;
     repaint();
 }
 

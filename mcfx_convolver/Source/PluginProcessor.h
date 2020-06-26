@@ -91,7 +91,7 @@ public:
     void run();
     
     // do the loading in a background thread
-    void LoadConfigurationAsync(File configFile);
+    void LoadConfigurationAsync(File presetFile);
     void LoadConfiguration(File configFile); // do the loading
     
     void ReloadConfiguration(); //just reload convolver?
@@ -106,8 +106,8 @@ public:
     
 
     // for gui --------------------------------------------------------------------
-    enum PresetMode {conf, wav};
-    PresetMode presetMode;
+    enum PresetType {conf, wav};
+    PresetType presetType;
     
     bool    SaveConfiguration(File zipFile);
     String  getDebugString();
@@ -117,7 +117,7 @@ public:
     void LoadSetupFromFile(File settings);
     void    LoadPresetByName(String presetName);
     
-    void changePresetType(PresetMode mode);
+    void changePresetType(PresetType mode);
     
     //returning parameter for gui
     unsigned int getBufferSize();
@@ -130,7 +130,7 @@ public:
     int     getSkippedCyclesCount();
     
     //return the status of the convolver configuration
-    //0: not loaded, 1: loading, 2: loaded
+    enum ConvolverStatus {Loaded,Loading,Unloaded};
     int getConvolverStatus();
     
     // OSC functions --------------------------------------------------------------
@@ -150,10 +150,10 @@ public:
     
     
     //----------------------------------------------------------------------------
-    File presetDir; // where to search for presets
-    File presetLastDirectory; // for open file dialog...
+    File defaultPresetDirectory; // where to search for presets
+    File lastSearchDirectory; // for open file dialog...
     
-    Array<File> _presetFiles;
+    Array<File> presetFilesList;
     File configFileLoaded;
     
     String activePresetName; // store filename
@@ -188,7 +188,7 @@ private:
     Array<int> _conv_in;    // list with input routing
     Array<int> _conv_out;   // list with output routing
     
-    File targetFileToLoad;    //config file copy for thread
+    File targetPresetForThread;    //config file copy for thread
     File _tempConfigZipFile;
     Array<File> _cleanUpFilesOnExit;
     
@@ -199,9 +199,9 @@ private:
     
     bool unloading;
     bool convolverReady; //substitute for _configLoaded ande filterLoaded
-    int convolverStatus;
+    ConvolverStatus convolverStatus;
     CriticalSection convStatusMutex;
-    void setConvolverStatus(int status);
+    void setConvolverStatus(ConvolverStatus status);
     
 //    bool _configLoaded; // is a configuration successfully loaded?
 	bool _paramReload; // vst parameter to allow triggering reload of configuration

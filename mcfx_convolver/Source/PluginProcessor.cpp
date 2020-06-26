@@ -46,12 +46,12 @@ _MaxPartSize(MAX_PART_SIZE),
 
 _isProcessing(false),
 
-presetMode(PresetMode::conf),
+presetType(PresetType::conf),
 
 unloading(false),
 
 convolverReady(false),
-convolverStatus(0),
+convolverStatus(ConvolverStatus::Unloaded),
 
 inputChannelRequired(false),
 
@@ -66,18 +66,18 @@ _osc_in(false)
     _BufferSize = getBlockSize();
     _ConvBufferSize = getBlockSize();
     
-    presetDir = presetDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
-    std::cout << "Search dir:" << presetDir.getFullPathName() << std::endl;
+    defaultPresetDirectory = defaultPresetDirectory.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
+    std::cout << "Search directory:" << defaultPresetDirectory.getFullPathName() << std::endl;
     
 	String debug;
-    debug << "Search dir: " << presetDir.getFullPathName() << "\n\n";
+    debug << "Search directory: " << defaultPresetDirectory.getFullPathName() << "\n\n";
     
     DebugPrint(debug);
     
-    SearchPresets(presetDir);
+    SearchPresets(defaultPresetDirectory);
     
     // this is for the open dialog of the gui
-    presetLastDirectory = presetLastDirectory.getSpecialLocation(File::userHomeDirectory);
+    lastSearchDirectory = lastSearchDirectory.getSpecialLocation(File::userHomeDirectory);
 }
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
@@ -274,45 +274,46 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 void Mcfx_convolverAudioProcessor::run()
 {
-    setConvolverStatus(1);
+    setConvolverStatus(ConvolverStatus::Loading);
     
     //unload first....
     if (convolverReady)
     {
         unloadConvolver();
+        configFileLoaded = File(); //empty precedent loaded preset file
     }
     
     if (!unloading)
     {
-        if (presetMode == PresetMode::wav)
-            LoadIRMatrixFilter(filterFileToLoad);
+        if (presetType == PresetType::wav)
+            LoadIRMatrixFilter(targetPresetForThread);
         else
-            LoadConfiguration(targetFileToLoad);
+            LoadConfiguration(targetPresetForThread);
     }
     else
         unloading = false;
         
     if (!convolverReady)
-        setConvolverStatus(0);
+        setConvolverStatus(ConvolverStatus::Unloaded);
     else
-        convolverStatus = 2;
+        setConvolverStatus(ConvolverStatus::Loaded);
     
     sendChangeMessage();
 }
 
 
-void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile)
+void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File presetFile)
 {
     DebugPrint("Loading preset...\n\n");
     
     //store for the thread
-    targetFileToLoad = configFile;
+    targetPresetForThread = presetFile;
     startThread(6); // medium priority
 }
 
 void Mcfx_convolverAudioProcessor::unloadConfigurationAsync()
 {
-    DebugPrint("Unloading preset...\n\n");
+    DebugPrint("Changing preset type...\n\n");
     
     //store for the thread
     unloading = true;
@@ -696,13 +697,14 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     sendChangeMessage(); // notify editor again for updatePresets (add save to zipfile item)
 }
 
+/* DEPRECATED
 void Mcfx_convolverAudioProcessor::LoadIRMatrixFilterAsync(File filterFile)
 {
     DebugPrint("Loading IR matrix filter...\n\n");
     filterFileToLoad = filterFile;
-    presetMode = PresetMode::wav;   //need to be disablie in somewhere (config preset conflict)
+    presetType = PresetType::wav;   //need to be disablie in somewhere (config preset conflict)
     startThread(6); // medium priority
-}
+}*/
 
 void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
 {
@@ -1058,35 +1060,42 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     return true;
 }
 //=============================================================================
+///Search recursively all the preset file in the searchFolder directory and subdirectories
 void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
 {
-    _presetFiles.clear();
+    presetFilesList.clear();
     
-    SearchFolder.findChildFiles(_presetFiles, File::findFiles, true, "*.conf");
-    _presetFiles.sort();
-    std::cout << "Found preset files: " << _presetFiles.size() << std::endl;
+    String extension;
+    if (presetType == PresetType::conf)
+        extension = "*.conf";
+    else
+        extension = "*.wav";
+    
+    SearchFolder.findChildFiles(presetFilesList, File::findFiles, true, extension);
+    presetFilesList.sort();
+    std::cout << "Found: " << presetFilesList.size() << " preset files with extension " << extension << std::endl;
     
 }
 
 /*
 void Mcfx_convolverAudioProcessor::LoadPreset(unsigned int preset)
 {
-    if (preset < (unsigned int)_presetFiles.size())
+    if (preset < (unsigned int)presetFilesList.size())
     {
         DeleteTemporaryFiles();
-        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
-        presetName = _presetFiles.getUnchecked(preset).getFileName();
+        LoadConfigurationAsync(presetFilesList.getUnchecked(preset));
+        presetName = presetFilesList.getUnchecked(preset).getFileName();
     }
 }
 */
 void Mcfx_convolverAudioProcessor::LoadPresetFromMenu(unsigned int preset)
 {
     //check if the ID of the preset is coherent with the preset list
-    if (preset < (unsigned int)_presetFiles.size())
+    if (preset < (unsigned int)presetFilesList.size())
     {
         DeleteTemporaryFiles();
-        LoadConfigurationAsync(_presetFiles.getUnchecked(preset));
-        presetName = _presetFiles.getUnchecked(preset).getFileNameWithoutExtension();
+        LoadConfigurationAsync(presetFilesList.getUnchecked(preset));
+        presetName = presetFilesList.getUnchecked(preset).getFileNameWithoutExtension();
     }
 }
 
@@ -1102,7 +1111,7 @@ void Mcfx_convolverAudioProcessor::LoadSetupFromFile(File presetFile)
 void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
 {
     Array <File> files;
-    presetDir.findChildFiles(files, File::findFiles, true, presetName);
+    defaultPresetDirectory.findChildFiles(files, File::findFiles, true, presetName);
     
     if (files.size())
     {
@@ -1118,9 +1127,11 @@ void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
     }
 }
 
-void Mcfx_convolverAudioProcessor::changePresetType(PresetMode mode)
+void Mcfx_convolverAudioProcessor::changePresetType(PresetType newType)
 {
     DeleteTemporaryFiles();
+    presetType = newType;
+    SearchPresets(defaultPresetDirectory);
     unloadConfigurationAsync();
     presetName.clear();
 }
@@ -1275,7 +1286,7 @@ int Mcfx_convolverAudioProcessor::getConvolverStatus()
     return convolverStatus;
 }
 
-void Mcfx_convolverAudioProcessor::setConvolverStatus(int status)
+void Mcfx_convolverAudioProcessor::setConvolverStatus(ConvolverStatus status)
 {
     ScopedLock lock(convStatusMutex);
     convolverStatus = status;
@@ -1303,7 +1314,7 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     
     // add some attributes to it..
     xml.setAttribute ("activePresetName", activePresetName);
-    xml.setAttribute ("presetDir", presetDir.getFullPathName());
+    xml.setAttribute ("defaultPresetDirectory", defaultPresetDirectory.getFullPathName());
     
 //    xml.setAttribute("wavePresetMode", wavePresetMode);
     
@@ -1343,7 +1354,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
         {
             // ok, now pull out our parameters..
             activePresetName    = xmlState->getStringAttribute("activePresetName", "");
-            newPresetDir        = xmlState->getStringAttribute("presetDir", presetDir.getFullPathName());
+            newPresetDir        = xmlState->getStringAttribute("defaultPresetDirectory", defaultPresetDirectory.getFullPathName());
             _ConvBufferSize     = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
             _MaxPartSize        = xmlState->getIntAttribute("MaxPartSize", _MaxPartSize);
             _osc_in_port        = xmlState->getIntAttribute("oscInPort", _osc_in_port);
@@ -1358,8 +1369,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
         File tempDir(newPresetDir);
         if (tempDir.exists())
         {
-            presetDir = tempDir;
-            SearchPresets(presetDir);
+            defaultPresetDirectory = tempDir;
+            SearchPresets(defaultPresetDirectory);
         }
 
         // load config from chunk data

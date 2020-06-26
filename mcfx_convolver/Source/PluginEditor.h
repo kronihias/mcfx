@@ -82,8 +82,8 @@ private:
 
     TooltipWindow tooltipWindow;
 
-    PopupMenu popup_presets;
-    OwnedArray<PopupMenu> popup_submenu;
+    PopupMenu presetMenu;
+    OwnedArray<PopupMenu> presetSubmenu;
     
     LookAndFeel_V3 MyLookAndFeel;
 };
