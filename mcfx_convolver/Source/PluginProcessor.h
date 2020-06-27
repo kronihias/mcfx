@@ -96,7 +96,7 @@ public:
     
     void ReloadConfiguration(); //just reload convolver?
     
-    void unloadConfigurationAsync();
+    void changePresetTypeAsync();
     
     void LoadIRMatrixFilter(File filterFile);
     void LoadIRMatrixFilterAsync(File filterFile);
@@ -113,8 +113,8 @@ public:
     String  getDebugString();
     void    SearchPresets(File SearchFolder);
 //    void    LoadPreset(unsigned int preset);
-    void LoadPresetFromMenu(unsigned int preset);
-    void LoadSetupFromFile(File settings);
+    void    LoadPresetFromMenu(unsigned int preset);
+    void    LoadSetupFromFile(File settings);
     void    LoadPresetByName(String presetName);
     
     void changePresetType(PresetType mode);
@@ -141,7 +141,6 @@ public:
     void    oscMessageReceived(const OSCMessage& message);
     
     // VARIABLES ==================================================================
-
     int _min_in_ch;
     int _min_out_ch;
     int _num_conv;
@@ -150,11 +149,12 @@ public:
     
     
     //----------------------------------------------------------------------------
-    File defaultPresetDirectory; // where to search for presets
-    File lastSearchDirectory; // for open file dialog...
+    File defaultPresetDir; // where to search for presets
+    File lastSearchDir; // for open file dialog...
     
     Array<File> presetFilesList;
-    File configFileLoaded;
+//    File configFileLoaded;
+    File getTargetPreset();
     
     String activePresetName; // store filename
     String presetName; // string for gui  (is it real necessary?)
@@ -188,7 +188,10 @@ private:
     Array<int> _conv_in;    // list with input routing
     Array<int> _conv_out;   // list with output routing
     
-    File targetPresetForThread;    //config file copy for thread
+    File targetPreset;    //config file copy for thread
+    CriticalSection targetPresetMutex;
+    void setTargetPreset(File newTargetPreset);
+    
     File _tempConfigZipFile;
     Array<File> _cleanUpFilesOnExit;
     
@@ -197,13 +200,12 @@ private:
     unsigned int    _ConvBufferSize;    // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
     unsigned int    _MaxPartSize;       // maximum size of the partition
     
-    bool unloading;
+    bool changingPresetType;
     bool convolverReady; //substitute for _configLoaded ande filterLoaded
     ConvolverStatus convolverStatus;
     CriticalSection convStatusMutex;
     void setConvolverStatus(ConvolverStatus status);
     
-//    bool _configLoaded; // is a configuration successfully loaded?
 	bool _paramReload; // vst parameter to allow triggering reload of configuration
     Atomic<int> _skippedCycles; // the number of skipped cycles do to unfinished partitions
     
