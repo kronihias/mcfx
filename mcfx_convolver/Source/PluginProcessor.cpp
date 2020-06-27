@@ -1290,7 +1290,7 @@ void Mcfx_convolverAudioProcessor::timerCallback()
     {
         newStatusText = true;
         sendChangeMessage();
-        startTimer(250);
+        startTimer(100);
     }
     else
     {
@@ -1300,22 +1300,25 @@ void Mcfx_convolverAudioProcessor::timerCallback()
 
 String Mcfx_convolverAudioProcessor::getStatusText()
 {
-    return statusTextList.getFirst();
+    ScopedLock lock(statusTextMutex);
+    String toReturn;
+    toReturn = statusTextList.getFirst();
+    statusTextList.remove(0);
+    return toReturn;
 }
 
 void Mcfx_convolverAudioProcessor::addNewStatus(String newStatus)
 {
+    ScopedLock lock(statusTextMutex);
+    statusTextList.add(newStatus);
+    
     if (!Timer::isTimerRunning())
     {
-        statusTextList.add(newStatus);
         newStatusText = true;
         sendChangeMessage();
-        startTimer(250);
+        startTimer(100);
     }
-    else
-    {
-        statusTextList.add(newStatus);
-    }
+    std::cout << "status list size: " << statusTextList.size() << std::endl;
 }
 //-----------------------------------------------------------------
 File Mcfx_convolverAudioProcessor::getTargetPreset()
