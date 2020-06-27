@@ -68,6 +68,13 @@ View::View()
     statusLed.setStatus(StatusLed::State::red);
     addAndMakeVisible(statusLed);
     
+    statusText.setFont(Font(12,1));
+    statusText.setReadOnly (true);
+    statusText.setCaretVisible (false);
+    statusText.setPopupMenuEnabled(false);
+    statusText.setColour(TextEditor::backgroundColourId, Colours::lightgrey);
+    addAndMakeVisible(statusText);
+    
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     versionLabel.setFont(Font (10.00f, Font::plain));
@@ -161,6 +168,7 @@ void View::resized()
     auto sectionArea = bottomArea.removeFromBottom(20);
     sectionArea.reduce(border, 0);
     statusLed.setBounds(sectionArea.removeFromLeft(20));
+    statusText.setBounds(sectionArea);
 }
 
 //==============================================================================

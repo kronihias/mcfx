@@ -35,10 +35,11 @@
 //==============================================================================
 /**
 */
-class Mcfx_convolverAudioProcessor  : public AudioProcessor,
-                                      public ChangeBroadcaster,
-                                      public Thread,
-                                      private OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>
+class Mcfx_convolverAudioProcessor  :   public AudioProcessor,
+                                        public ChangeBroadcaster,
+                                        public Thread,
+                                        public Timer,
+                                        private OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>
 {
 public:
     //==============================================================================
@@ -93,8 +94,7 @@ public:
     // do the loading in a background thread
     void LoadConfigurationAsync(File presetFile);
     void LoadConfiguration(File configFile); // do the loading
-    
-    void ReloadConfiguration(); //just reload convolver?
+    void ReloadConfiguration(); //just reload convolver? nope
     
     void changePresetTypeAsync();
     
@@ -109,25 +109,30 @@ public:
     enum PresetType {conf, wav};
     PresetType presetType;
     
-    bool    SaveConfiguration(File zipFile);
     String  getDebugString();
+    
+    bool newStatusText;
+    void timerCallback();
+    String  getStatusText();
+    
+    bool    SaveConfiguration(File zipFile);
     void    SearchPresets(File SearchFolder);
 //    void    LoadPreset(unsigned int preset);
     void    LoadPresetFromMenu(unsigned int preset);
     void    LoadSetupFromFile(File settings);
     void    LoadPresetByName(String presetName);
     
-    void changePresetType(PresetType mode);
+    void    changePresetType(PresetType mode);
     
     //returning parameter for gui
-    unsigned int getBufferSize();
-    unsigned int getConvBufferSize();
-    unsigned int getMaxPartitionSize();
+    unsigned int    getBufferSize();
+    unsigned int    getConvBufferSize();
+    unsigned int    getMaxPartitionSize();
+    int             getSkippedCyclesCount();
 
     void    setConvBufferSize(unsigned int bufsize);
     void    setMaxPartitionSize(unsigned int maxsize);
-    
-    int     getSkippedCyclesCount();
+
     
     //return the status of the convolver configuration
     enum ConvolverStatus {Loaded,Loading,Unloaded};
@@ -161,9 +166,7 @@ public:
     
     //----------------------------------------------------------------------------
     File IRlastDirectory;
-    
     File filterFileLoaded;
-    
     String activeFilterName;
     
     //----------------------------------------------------------------------------
@@ -174,6 +177,10 @@ private:
     String _DebugText;
     CriticalSection _DebugTextMutex;
     void DebugPrint(String debugText, bool reset=false);
+    
+    CriticalSection statusTextMutex;
+    Array<String> statusTextList;
+    void addNewStatus(String newStatus);
     
     void DeleteTemporaryFiles();
     

@@ -60,7 +60,9 @@ _skippedCycles(0),
 safemode_(false),
 
 _osc_in_port(7200),
-_osc_in(false)
+_osc_in(false),
+
+newStatusText(false)
 {
     _SampleRate = getSampleRate();
     _BufferSize = getBlockSize();
@@ -405,6 +407,10 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     {
         // get the line and remove spaces from start and end
         String line (myLines[currentLine].trim());
+        
+        String test;
+        test << "prova numero " << currentLine;
+        addNewStatus(test);
         
         if (line.startsWith("#"))
         {
@@ -1277,6 +1283,40 @@ String Mcfx_convolverAudioProcessor::getDebugString()
   return _DebugText;
 }
 
+//-----------------------------------------------------------------
+void Mcfx_convolverAudioProcessor::timerCallback()
+{
+    if (!statusTextList.isEmpty())
+    {
+        newStatusText = true;
+        sendChangeMessage();
+        startTimer(250);
+    }
+    else
+    {
+        Timer::stopTimer();
+    }
+}
+
+String Mcfx_convolverAudioProcessor::getStatusText()
+{
+    return statusTextList.getFirst();
+}
+
+void Mcfx_convolverAudioProcessor::addNewStatus(String newStatus)
+{
+    if (!Timer::isTimerRunning())
+    {
+        statusTextList.add(newStatus);
+        newStatusText = true;
+        sendChangeMessage();
+        startTimer(250);
+    }
+    else
+    {
+        statusTextList.add(newStatus);
+    }
+}
 //-----------------------------------------------------------------
 File Mcfx_convolverAudioProcessor::getTargetPreset()
 {

@@ -160,10 +160,7 @@ public:
     Label skippedCyclesLabel;
     
     StatusLed statusLed;
-    
-    DrawablePath convolverStatus;
-    Path circle;
-
+    TextEditor statusText;
     
     Label versionLabel;
 
