@@ -1,5 +1,11 @@
-ADD_SUBDIRECTORY ( mcfx_convolver )
+SET ( SPECIFIC_SOURCE_DIR ${SRC_DIR}/mcfx_convolver )
+SET ( WITH_LIBSOXR TRUE )
 
-IF (BUILD_STANDALONE)
-	ADD_SUBDIRECTORY ( mcfx_convolver_standalone )
-ENDIF (BUILD_STANDALONE)
+SET(OSX_COPY_LIB libsoxr.0.1.0.dylib)
+
+# IF(NOT APPLE)
+# 	SET(OSX_COPY_LIB libfftw3f.3.dylib)
+# 	SET ( WITH_FFTW3 TRUE )
+# ENDIF(NOT APPLE)
+
+INCLUDE(${SRC_DIR}/CMakeLists_subprojects.txt.inc)

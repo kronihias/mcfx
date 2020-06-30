@@ -49,7 +49,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     addAndMakeVisible(view);
 
-    setSize (400, 500); //originally 350, 330
+    setSize (400, 530); //originally 350, 330
     
     UpdateText();
     
@@ -75,8 +75,8 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
 void Mcfx_convolverAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds();
-    view.setBounds(getBounds());
+    auto test = getLocalBounds();
+    view.setBounds(test);
 }
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()

@@ -20,6 +20,9 @@
 
 #include "PluginView.h"
 
+#define VAL(str) #str
+#define TOSTRING(str) VAL(str)
+
 //==============================================================================
 //=============================== Main View ====================================
 
@@ -69,6 +72,7 @@ View::View()
     addAndMakeVisible(statusLed);
     
     statusText.setFont(Font(12,1));
+    statusText.setJustification(Justification::centredLeft);
     statusText.setReadOnly (true);
     statusText.setCaretVisible (false);
     statusText.setPopupMenuEnabled(false);
@@ -76,7 +80,7 @@ View::View()
     addAndMakeVisible(statusText);
     
     String version_string;
-    version_string << "v" << QUOTE(VERSION);
+    version_string << "v" << TOSTRING(VERSION);
     versionLabel.setFont(Font (10.00f, Font::plain));
     versionLabel.setColour(Label::textColourId, Colours::white);
     versionLabel.setJustificationType(Justification::right);
@@ -132,10 +136,10 @@ void View::resized()
     int smallLabelHeight = 16;
     
     inputChannelDialog.setBounds(getBounds());
-
+    versionLabel.setBounds(area.removeFromBottom(smallLabelHeight));
     area.removeFromLeft(border);
     area.removeFromRight(border);
-    area.reduce(1,1); //white border
+//    area.reduce(1,1); //white border
     
     title.setBounds(area.removeFromTop(titleHeight)); //title
     subtitle.setBounds(area.removeFromTop(titleHeight)); //subtitle
@@ -160,13 +164,9 @@ void View::resized()
     debugText.setBounds(area.removeFromTop(debugWinHeight));
     skippedCyclesLabel.setBounds(area.removeFromTop(smallLabelHeight));
     
-    auto bottomArea = getLocalBounds();
-    versionLabel.setBounds(bottomArea.removeFromBottom(smallLabelHeight));
+    std::cout << "global area: " << area.toString() << std::endl;
     
-    std::cout << "global area: " << bottomArea.toString() << std::endl;
-    
-    auto sectionArea = bottomArea.removeFromBottom(20);
-    sectionArea.reduce(border, 0);
+    auto sectionArea = area.removeFromBottom(20);
     statusLed.setBounds(sectionArea.removeFromLeft(20));
     statusText.setBounds(sectionArea);
 }
@@ -182,7 +182,8 @@ View::PresetManagingBox::PresetManagingBox()
     pathLabel.setText("Path:", dontSendNotification);
     addAndMakeVisible (pathLabel);
     
-    pathText.setFont (Font (12.0000f, Font::plain));
+    pathText.setFont (Font (10.0f, Font::plain));
+    pathText.setJustification(Justification::bottomLeft);
     pathText.setReadOnly(true);
     pathText.setPopupMenuEnabled(false);
     addAndMakeVisible (pathText);

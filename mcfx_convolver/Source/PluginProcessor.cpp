@@ -69,11 +69,10 @@ newStatusText(false)
     _ConvBufferSize = getBlockSize();
     
     defaultPresetDir = defaultPresetDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
-    std::cout << "Search directory:" << defaultPresetDir.getFullPathName() << std::endl;
     
 	String debug;
-    debug << "Search directory: " << defaultPresetDir.getFullPathName() << "\n\n";
-    DebugPrint(debug);
+    debug << "Preset directory: " << defaultPresetDir.getFullPathName();
+    DebugPrint(debug << "\n\n");
     
     SearchPresets(defaultPresetDir);
     
@@ -401,16 +400,13 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     AudioSampleBuffer TempAudioBuffer(1,256);
     
     conv_data.setSampleRate(_SampleRate);
-    
+    std::cout << "current status bar list size: " <<  statusTextList.size() << std::endl;
+    std::cout << "total lines: " <<  myLines.size() << std::endl;
     // iterate over all lines
     for (int currentLine = 0; currentLine < myLines.size(); currentLine++)
     {
         // get the line and remove spaces from start and end
         String line (myLines[currentLine].trim());
-        
-        String test;
-        test << "prova numero " << currentLine;
-        addNewStatus(test);
         
         if (line.startsWith("#"))
         {
@@ -1077,8 +1073,10 @@ void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
     
     SearchFolder.findChildFiles(presetFilesList, File::findFiles, true, extension);
     presetFilesList.sort();
-    std::cout << "Found: " << presetFilesList.size() << " preset files with extension " << extension << std::endl;
-    
+    String debug;
+    debug << "Found " << presetFilesList.size() << " " << extension << " presets in the selected directory \n";
+    std::cout << debug;
+    addNewStatus(debug);
 }
 
 /*
@@ -1290,12 +1288,10 @@ void Mcfx_convolverAudioProcessor::timerCallback()
     {
         newStatusText = true;
         sendChangeMessage();
-        startTimer(100);
+        startTimer(250);
     }
     else
-    {
         Timer::stopTimer();
-    }
 }
 
 String Mcfx_convolverAudioProcessor::getStatusText()
@@ -1316,9 +1312,8 @@ void Mcfx_convolverAudioProcessor::addNewStatus(String newStatus)
     {
         newStatusText = true;
         sendChangeMessage();
-        startTimer(100);
+        startTimer(250);
     }
-    std::cout << "status list size: " << statusTextList.size() << std::endl;
 }
 //-----------------------------------------------------------------
 File Mcfx_convolverAudioProcessor::getTargetPreset()

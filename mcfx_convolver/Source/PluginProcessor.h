@@ -20,7 +20,9 @@
 #ifndef PLUGINPROCESSOR_H_INCLUDED
 #define PLUGINPROCESSOR_H_INCLUDED
 
-#include "../JuceLibraryCode/JuceHeader.h"
+// #include "../JuceLibraryCode/JuceHeader.h"
+#include "JuceHeader.h"
+
 
 #include "ConvolverData.h"
 
@@ -176,7 +178,7 @@ public:
 private:
     String _DebugText;
     CriticalSection _DebugTextMutex;
-    void DebugPrint(String debugText, bool reset=false);
+    void DebugPrint(String debugText, bool reset = false);
     
     CriticalSection statusTextMutex;
     Array<String> statusTextList;
