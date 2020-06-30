@@ -17,30 +17,31 @@ cmake_minimum_required(VERSION 3.15)
 ################################################
 #version
 file(READ VERSION VERSION)
-add_definitions(-DVERSION=${VERSION}) #??
+
 
 project(MCFX_PLUGIN_SUITE VERSION ${VERSION})
 
 ################################################
-SET(CMAKE_BUILD_TYPE Release)
-ADD_DEFINITIONS(-DNDEBUG=1)
-ADD_DEFINITIONS(-D_NDEBUG=1)
+set(CMAKE_BUILD_TYPE Release)
+# ADD_DEFINITIONS(-DNDEBUG=1)
+# ADD_DEFINITIONS(-D_NDEBUG=1)
 
 #save path for later
-SET (SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-SET (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
+set (SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 ################################################
 #choices at compile time
-SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
-SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
-SET(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
+set(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
+set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
+set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
 
-ADD_DEFINITIONS(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
+add_definitions(-DVERSION=${VERSION}) #?? FOR THE DELAY
+add_definitions(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
 
 ################################################
 # additional cmake find packages
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${SRC_DIR}/cmake)
 
 find_package(libsoxr REQUIRED)
 
@@ -53,6 +54,12 @@ IF(UNIX AND NOT APPLE AND NOT ANDROID)
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
 include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS} ${VSTSDK_PATH})
+
+################################################
+# Different convolver library under Linux systems
+IF(UNIX AND NOT APPLE AND NOT ANDROID)
+	SET(WITH_ZITA_CONVOLVER FALSE CACHE BOOL "build with zita-convolver (better performance under linux)")
+ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
 # If you've installed JUCE somehow (via a package manager, or directly using the CMake install
 # target), you'll need to tell this project that it depends on the installed copy of JUCE. If you've
@@ -68,5 +75,6 @@ add_subdirectory(JUCE)                    # If you've put JUCE in a subdirectory
 
 juce_set_vst2_sdk_path("$ENV{HOME}/SDKs/VST3")
 # juce_set_aax_sdk_path(...)
+
 
 add_subdirectory(mcfx_convolver)
