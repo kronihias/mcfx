@@ -3,6 +3,7 @@
     "files.associations": {
         "*.inc": "cmake",
         "*.json": "json",
-        "*.mm": "cpp"
+        "*.mm": "cpp",
+        "memory": "cpp"
     }
 }

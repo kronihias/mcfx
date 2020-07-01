@@ -133,11 +133,11 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
             break;
     }
     
-    if (processor.newStatusText)
-    {
-        view.statusText.setText(processor.getStatusText());
-        processor.newStatusText = false;
-    }
+//    if (processor.newStatusText)
+//    {
+//        view.statusText.setText(processor.getStatusText());
+//        processor.newStatusText = false;
+//    }
     
 //  ---------------------------------------------------------------------------------------
     view.convManagingBox.bufferCombobox.clear(dontSendNotification);

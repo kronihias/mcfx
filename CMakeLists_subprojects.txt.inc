@@ -71,12 +71,13 @@ juce_generate_juce_header(${SUBPROJECT_NAME})
 # although it doesn't really affect executable targets). Finally, we supply a list of source files
 # that will be built into the target. This is a standard CMake command.
 target_sources(${SUBPROJECT_NAME} PRIVATE
+	${SRC_DIR}/JUCE/standalone-filter/Main.cpp
+	${SRC_DIR}/JUCE/standalone-filter/CustomStandaloneFilterWindow.h
 	${SOURCE}
 	${HEADER}
-	${SRC_DIR}/JUCE/standalone-filter/Main.cpp
-	${SRC_DIR}/JUCE/standalone-filter/MainComponent.h
-	${SRC_DIR}/JUCE/standalone-filter/MainComponent.cpp
-	${SRC_DIR}/JUCE/standalone-filter/juce_standaloneFilterWindow.h
+	# ${SRC_DIR}/JUCE/standalone-filter/MainComponent.h
+	# ${SRC_DIR}/JUCE/standalone-filter/MainComponent.cpp
+	
 )
 
 # `target_compile_definitions` adds some preprocessor definitions to our target. In a Projucer
@@ -92,7 +93,7 @@ target_compile_definitions(${SUBPROJECT_NAME} PUBLIC
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_DISPLAY_SPLASH_SCREEN=0
 	JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
-	JUCE_MODULE_AVAILABLE_juce_audio_plugin_client=1
+	# JUCE_MODULE_AVAILABLE_juce_audio_plugin_client=1
 )
 
 # If your target needs extra binary assets, you can add them here. The first argument is the name of
