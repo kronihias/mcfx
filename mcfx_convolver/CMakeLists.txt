@@ -1,11 +1,19 @@
 SET ( SPECIFIC_SOURCE_DIR ${SRC_DIR}/mcfx_convolver )
 SET ( WITH_LIBSOXR TRUE )
 
+# append "c" for "convolver" to the plugin code string
+string(APPEND PLUGIN_CODE "c")
+
+# append specific plugin name
+string(APPEND PLUGIN_LABEL " Convolver")
+
+# library adjustments not yet checked
 SET(OSX_COPY_LIB libsoxr.0.1.0.dylib)
 
-# IF(NOT APPLE)
-# 	SET(OSX_COPY_LIB libfftw3f.3.dylib)
-# 	SET ( WITH_FFTW3 TRUE )
-# ENDIF(NOT APPLE)
+if(NOT APPLE)
+	SET(OSX_COPY_LIB libfftw3f.3.dylib)
+	SET ( WITH_FFTW3 TRUE )
+endif(NOT APPLE)
 
-INCLUDE(${SRC_DIR}/CMakeLists_subprojects.txt.inc)
+include(Subproject)
+# INCLUDE(${SRC_DIR}/CMakeLists_subprojects.txt.inc)

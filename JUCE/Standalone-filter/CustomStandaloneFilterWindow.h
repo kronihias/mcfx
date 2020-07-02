@@ -58,11 +58,14 @@ public:
        #if JUCE_IOS || JUCE_ANDROID
         setTitleBarHeight (0);
        #else
-        setTitleBarButtonsRequired (DocumentWindow::minimiseButton | DocumentWindow::closeButton, false);
-        
         Component::addAndMakeVisible (optionsButton);
         optionsButton.addListener (this);
         optionsButton.setTriggeredOnMouseDown (true);
+       #if JUCE_WINDOWS
+        setTitleBarButtonsRequired (DocumentWindow::minimiseButton | DocumentWindow::closeButton, false);
+        #else
+        setTitleBarButtonsRequired (DocumentWindow::minimiseButton | DocumentWindow::closeButton, true);
+        #endif
        #endif
 //        setTitleBarHeight (0);
 //        clearContentComponent();
@@ -70,7 +73,7 @@ public:
         pluginHolder.reset (new StandalonePluginHolder (settingsToUse, takeOwnershipOfSettings,
                                                         preferredDefaultDeviceName, preferredSetupOptions,
                                                         constrainToConfiguration, autoOpenMidiDevices));
-
+        
         /*modified code*/
         if (auto* props = pluginHolder->settings.get())
         {
@@ -260,8 +263,11 @@ public:
     void resized() override
     {
         DocumentWindow::resized();
-//        if(!titleBarModelChange)
-            // optionsButton.setBounds (8, 6, 60, getTitleBarHeight() - 8);
+        #if JUCE_WINDOWS
+        optionsButton.setBounds (8, 6, 60, getTitleBarHeight() - 8);
+        #else
+        optionsButton.setBounds (getWidth()-68, 6, 60, getTitleBarHeight() - 8);
+        #endif
     }
 
     virtual StandalonePluginHolder* getPluginHolder()    { return pluginHolder.get(); }

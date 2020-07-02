@@ -39,7 +39,7 @@ public:
         appProperties.setStorageParameters (options);
 
         // setup window name
-        pluginWindowName << getApplicationName();// << " v" << TOSTRING(VERSION);
+        pluginWindowName << getApplicationName() << " v" << TOSTRING(VERSION);
         #ifdef JUCE_DEBUG
         pluginWindowName << " (DEBUG)";
         #endif
