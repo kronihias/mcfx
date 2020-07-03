@@ -141,6 +141,9 @@ if(WITH_LIBSOXR)
 	target_link_libraries(${SUBPROJECT_NAME} PRIVATE 
 		${LIBSOXR_LIBRARIES}
 	)
+	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/soxr")
+	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_VST "${SRC_DIR}/Bundle-resources/soxr")
+	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_VST3 "${SRC_DIR}/Bundle-resources/soxr")
 endif(WITH_LIBSOXR)
 
 if(WITH_ZITA_CONVOLVER)
@@ -155,6 +158,7 @@ if(WITH_FFTW3)
 		${FFTW3F_LIBRARY}
 		${FFTW3F_THREADS_LIBRARY}
 	)
+	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/fftw3")
 endif(WITH_FFTW3)
 
 # ???????
@@ -167,7 +171,18 @@ endif(WITH_FFTW3)
 # endif(WIN32)
 
 ################################################
-# change to static linking for ms visual c++
+# add resources into an Apple bundle's resource directory
+# IF(DEFINED OSX_COPY_LIB)
+# #copy additional files (eg. dynamic libraries)
+# ADD_CUSTOM_COMMAND(
+# 	TARGET ${SUBPROJECT_NAME} POST_BUILD 
+# 	COMMAND ${CMAKE_COMMAND} 
+# 	ARGS -E copy ${SRC_DIR}/mac-libs/${OSX_COPY_LIB} ${BIN_DIR}/_bin/${SUBPROJECT_NAME}.vst/Contents/Frameworks/${OSX_COPY_LIB}
+# 	)
+# ENDIF(DEFINED OSX_COPY_LIB)
+
+################################################
+# change to static linking libraries for ms visual c++ 
 # IF(WIN32)
 
 # 	set(CompilerFlags
