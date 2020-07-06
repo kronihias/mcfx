@@ -53,30 +53,48 @@ ENDIF(DEFINED SPECIFIC_SOURCE_DIR)
 # up by default. As well as this shared code static library, this function adds targets for each of
 # the formats specified by the FORMATS arguments. This function accepts many optional arguments.
 # Check the readme at `docs/CMake API.md` in the JUCE repo for the full list.
+if(BUILD_STANDALONE)
+	set(STANDALONE "Standalone")
+endif(BUILD_STANDALONE)
+
+if(BUILD_VST)
+	set(VST "VST")
+endif(BUILD_VST)
+
+if(BUILD_VST3)
+	set(VST3 "VST3")
+endif(BUILD_VST3)
+
 string(APPEND PLUGIN_CODE ${NUM_CHANNELS})
 
-juce_add_plugin(${SUBPROJECT_NAME}
+file(READ "${SRC_DIR}/osx_ressources/MacOSXBundleInfo.plist" PLIST)
 
+# message ("plist: ${PLIST}")
+
+juce_add_plugin(${SUBPROJECT_NAME}
 	PRODUCT_NAME 				${PLUGIN_LABEL}  		# The name of the final executable, which can differ from the target name
     VERSION 					${VERSION}          		# Set this if the plugin version is different to the project version
     # ICON_BIG ...                              			# ICON_* arguments specify a path to an image file to use as an icon for the Standalone
 	# ICON_SMALL ...
-	# COMPANY_COPYRIGHT
+	COMPANY_COPYRIGHT			"Matthias Kronlachner"
 	COMPANY_NAME 				"kronlachner"       		# Specify the name of the plugin's author
-	COMPANY_WEBSITE				""
+	COMPANY_WEBSITE				"fasullo@123.com"
 	COMPANY_EMAIL				"support@yourcompany.com"
     # IS_SYNTH TRUE/FALSE                       			# Is this a synth or an effect?
     # NEEDS_MIDI_INPUT TRUE/FALSE               			# Does the plugin need midi input?
     # NEEDS_MIDI_OUTPUT TRUE/FALSE              			# Does the plugin need midi output?
     # IS_MIDI_EFFECT TRUE/FALSE                 			# Is this plugin a MIDI effect?
     # EDITOR_WANTS_KEYBOARD_FOCUS TRUE/FALSE    			# Does the editor need keyboard focus?
-    # COPY_PLUGIN_AFTER_BUILD TRUE/FALSE        			# Should the plugin be installed to a default location after building?
-	FORMATS 					U VST3 VST Standalone   	# The formats to build. Other valid formats are: AAX Unity VST AU AUv3
+	# COPY_PLUGIN_AFTER_BUILD TRUE/FALSE        			# Should the plugin be installed to a default location after building?
+	PLIST_TO_MERGE				${PLIST}
+	FORMATS 					U ${VST3} ${VST} ${STANDALONE}   	# The formats to build. Other valid formats are: AAX Unity VST AU AUv3
 	PLUGIN_MANUFACTURER_CODE 	${PLUGIN_MANUFACTURER_CODE}#'Kron'             			# A four-character manufacturer id with at least one upper-case character
 	PLUGIN_CODE 				${PLUGIN_CODE}#'mc36'                  	# A unique four-character plugin id with at least one upper-case character
 	DESCRIPTION 				"Plugin part of the MCFX Suite"
 	VST2_CATEGORY				kPlugCategEffect
 	VST3_CATEGORIES				tools
+	UNITY_COPY_DIR			    "${SRC_DIR}/WinSetup/ToInstall"
+	VST_COPY_DIR                "${SRC_DIR}/WinSetup/ToInstall"
 )
 
 # `juce_generate_juce_header` will create a JuceHeader.h for a given target, which will be generated
@@ -136,14 +154,36 @@ target_link_libraries(${SUBPROJECT_NAME} PRIVATE
 	juce::juce_osc
 	juce::juce_audio_plugin_client
 )
+function(juce_add_bundle_frameworks_directory target folder)
+    _juce_make_absolute(folder)
+
+    if(NOT EXISTS "${folder}")
+        message(FATAL_ERROR "Could not find resource folder ${folder}")
+    endif()
+
+	get_filename_component(folder_name "${folder}" NAME)
+	file(GLOB_RECURSE resources "${folder}/*")
+
+	foreach(file IN LISTS resources) 
+		get_filename_component(file_name ${file} NAME)
+		message("resources: ${file_name}")
+        target_sources(${target} PRIVATE "${folder}/${file_name}")
+        # get_filename_component(resource_parent_path "${file}" DIRECTORY)
+        set_source_files_properties("${folder}/${file_name}" PROPERTIES
+			# HEADER_FILE_ONLY TRUE
+			MACOSX_BUNDLE TRUE
+			MACOSX_RPATH TRUE
+            MACOSX_PACKAGE_LOCATION "Frameworks/${file_name}")
+    endforeach()
+endfunction()
 
 if(WITH_LIBSOXR)
 	target_link_libraries(${SUBPROJECT_NAME} PRIVATE 
-		${LIBSOXR_LIBRARIES}
+		${LIBSOXR_LIBRARIES} juce::juce_recommended_lto_flags
 	)
-	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/soxr")
-	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_VST "${SRC_DIR}/Bundle-resources/soxr")
-	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_VST3 "${SRC_DIR}/Bundle-resources/soxr")
+	juce_add_bundle_frameworks_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/soxr")
+	juce_add_bundle_frameworks_directory(${SUBPROJECT_NAME}_VST "${SRC_DIR}/Bundle-resources/soxr")
+	juce_add_bundle_frameworks_directory(${SUBPROJECT_NAME}_VST3 "${SRC_DIR}/Bundle-resources/soxr")
 endif(WITH_LIBSOXR)
 
 if(WITH_ZITA_CONVOLVER)
@@ -156,10 +196,23 @@ if(WITH_FFTW3)
 	# MESSAGE( STATUS "LINKING FFTW3F: " ${FFTW3F_LIBRARY} )
 	target_link_libraries( ${SUBPROJECT_NAME} PRIVATE
 		${FFTW3F_LIBRARY}
-		${FFTW3F_THREADS_LIBRARY}
+		#${FFTW3F_THREADS_LIBRARY}
 	)
 	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/fftw3")
 endif(WITH_FFTW3)
+
+
+# if(APPLE AND STANDALONE)
+# 	#prototype Info.plist
+# 	# SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${SRC_DIR}/osx_ressources/MacOSXBundleInfo.plist.in)
+
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES BUNDLE TRUE)
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES BUNDLE_EXTENSION app)
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${VERSION})
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${VERSION})
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING ${VERSION})
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME ${SUBPROJECT_NAME})
+# endif()
 
 # ???????
 # if(WIN32)
@@ -180,21 +233,34 @@ endif(WITH_FFTW3)
 # 	ARGS -E copy ${SRC_DIR}/mac-libs/${OSX_COPY_LIB} ${BIN_DIR}/_bin/${SUBPROJECT_NAME}.vst/Contents/Frameworks/${OSX_COPY_LIB}
 # 	)
 # ENDIF(DEFINED OSX_COPY_LIB)
+#${CMAKE_BINARY_DIR}/${SUBDIRNAME}/${SUBPROJECT_NAME}_artefacts/Release/Standalone/
+set(bundle "${SUBPROJECT_NAME}_Standalone")
+
+add_custom_command(TARGET ${bundle}
+    POST_BUILD COMMAND 
+    ${CMAKE_INSTALL_NAME_TOOL} -add_rpath "@executable_path/../../Frameworks/"
+	$<TARGET_FILE:${bundle}>
+)
 
 ################################################
-# change to static linking libraries for ms visual c++ 
-# IF(WIN32)
+# add resources into an Apple bundle's resource directory
+ #IF(DEFINED OSX_COPY_LIB)
+ #copy additional files (eg. dynamic libraries)
 
-# 	set(CompilerFlags
-# 		CMAKE_CXX_FLAGS
-# 		CMAKE_CXX_FLAGS_DEBUG
-# 		CMAKE_CXX_FLAGS_RELEASE
-# 		CMAKE_C_FLAGS
-# 		CMAKE_C_FLAGS_DEBUG
-# 		CMAKE_C_FLAGS_RELEASE
-# 	)
-# 	foreach(CompilerFlag ${CompilerFlags})
-# 	string(REPLACE "/MD" "/MT" ${CompilerFlag} "${${CompilerFlag}}")
-# 	endforeach()
+	#FILE(GLOB_RECURSE BIN_FILES ${CMAKE_BINARY_DIR}/${SUBPROJECT_NAME}/${PLUGIN_LABEL}_artefacts/VST/*.dll)
+	#FILE(GLOB_RECURSE BIN_FILES ${CMAKE_BINARY_DIR}/${SUBPROJECT_NAME}/${PLUGIN_LABEL}_artefacts/VST3/*.vst3)
+set(BIN_FILES ${CMAKE_BINARY_DIR}/${SUBDIRNAME}/${SUBPROJECT_NAME}_artefacts/Release/Standalone/${PLUGIN_LABEL}.exe)
 
-# ENDIF(WIN32)
+if(EXISTS "${BIN_FILES}")
+	#message("${PLUGIN_LABEL}.exe File exists")
+#	ADD_CUSTOM_COMMAND(
+# 		TARGET ${SUBPROJECT_NAME} POST_BUILD
+#		COMMAND ${CMAKE_COMMAND} 
+#			ARGS -E copy ${CMAKE_BINARY_DIR}/${SUBDIRNAME}/${SUBPROJECT_NAME}_artefacts/Release/Standalone/${PLUGIN_LABEL}.exe ${SRC_DIR}/WinSetup/ToInstall
+#		)
+endif()
+
+#ADD_CUSTOM_COMMAND(
+# 		TARGET ${SUBPROJECT_NAME} POST_BUILD
+#		COMMAND ${CMAKE_COMMAND} ARGS -P "${SRC_DIR}/cmake/Copy_after_build.cmake"
+#		)

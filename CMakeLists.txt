@@ -39,6 +39,8 @@ set (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
 set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
+set(BUILD_VST TRUE CACHE BOOL "build VST format")
+set(BUILD_VST3 TRUE CACHE BOOL "build VST3 format")
 
 add_definitions(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
 
@@ -51,20 +53,52 @@ endif(UNIX AND NOT APPLE AND NOT ANDROID)
 # additional cmake find library packages
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${SRC_DIR}/cmake)
 
-find_package(libsoxr REQUIRED)
+if (WITH_ZITA_CONVOLVER)
+	find_package(FFTW3 REQUIRED COMPONENTS single)
+endif(WITH_ZITA_CONVOLVER)
 
-if (WITH_ZITA_CONVOLVER OR WIN32)
-	find_package(FFTW3 COMPONENTS single)
-endif (WITH_ZITA_CONVOLVER OR WIN32)
+if (WIN32)
+	set(FFTW3_ROOT_DIR "${SRC_DIR}/Libraries/Windows/fftw" CACHE STRING "path to the fftw3 include folder library")
+	set(FFTW3F_LIBRARY "${SRC_DIR}/Libraries/Windows/fftw/lib/libfftw3f-3.lib" CACHE STRING "path to the fftw3 library")
+	find_package(FFTW3 REQUIRED COMPONENTS single)
+
+	set(SOXR_ROOT_DIR "${SRC_DIR}/Libraries/Windows/soxr" CACHE STRING "path to the installed soxr library")
+endif (WIN32)
 
 if(UNIX AND NOT APPLE AND NOT ANDROID)
-	find_package(FFTW3 COMPONENTS single threads)
+	find_package(FFTW3 REQUIRED COMPONENTS single threads)
 endif(UNIX AND NOT APPLE AND NOT ANDROID)
+
+find_package(libsoxr REQUIRED)
 
 include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS})
 
 ################################################
-# Linux specifi directives
+# Windows specific directives
+
+# Static link to external libraries
+#set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
+if(WIN32)
+	if(MSVC)
+    	add_compile_options(
+        	$<$<CONFIG:>:/MD> #---------|
+        	$<$<CONFIG:Debug>:/MDd> #---|-- Dinamically link the runtime libraries
+        	$<$<CONFIG:Release>:/MD> #--|
+    	)
+	endif(MSVC)
+	IF(BUILD_STANDALONE)
+		SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
+	ENDIF(BUILD_STANDALONE)
+
+	IF (JUCE_ASIO)
+		ADD_DEFINITIONS(-DJUCE_ASIO=1)
+  		SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
+  		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
+	ENDIF (JUCE_ASIO)
+endif(WIN32)
+
+################################################
+# Linux specific directives
 		# get freetype includes...
 if(UNIX AND NOT APPLE AND NOT ANDROID)
 
@@ -92,8 +126,22 @@ if(UNIX AND NOT APPLE AND NOT ANDROID)
 	#add sse
 	# set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -msse3")
 	# set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3")
+	
+	IF(BUILD_STANDALONE)	
+		SET(JUCE_JACK TRUE CACHE BOOL "build standalone app with Jack support")
+		SET(JUCE_ALSA TRUE CACHE BOOL "build standalone app with ALSA support")
+	ENDIF(BUILD_STANDALONE)
+	
+	IF (JUCE_JACK)
+		ADD_DEFINITIONS(-DJUCE_JACK=1)
+	ENDIF (JUCE_JACK)
+
+	IF (JUCE_ALSA)
+		ADD_DEFINITIONS(-DJUCE_ALSA=1)
+	ENDIF (JUCE_ALSA)
 
 endif(UNIX AND NOT APPLE AND NOT ANDROID)
+
 
 
 # If you've installed JUCE somehow (via a package manager, or directly using the CMake install
@@ -107,7 +155,9 @@ add_subdirectory(JUCE)                    # If you've put JUCE in a subdirectory
 
 # If you are building a VST2 or AAX plugin, CMake needs to be told where to find these SDKs on your
 # system. This setup should be done before calling `juce_add_plugin`.
-juce_set_vst2_sdk_path("$ENV{HOME}/SDKs/VST3")
+SET(VSTSDK_PATH $ENV{HOME}/SDKs/VST_SDK/VST2_SDK CACHE PATH "specify the path of the VST SDK")
+juce_set_vst2_sdk_path("${VSTSDK_PATH}")
+
 # juce_set_aax_sdk_path(...)
 
 
