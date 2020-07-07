@@ -76,12 +76,11 @@ if(APPLE)
 		NAMES
 			soxr
 		PATHS
-			${SRC_DIR}/Libraries/MacOS/soxr/lib
+			"${SRC_DIR}/Libraries/MacOS/soxr/lib"
 		NO_DEFAULT_PATH
 	)
 	set(LIBSOXR_LIBRARIES ${LIBSOXR_LIBRARY})
 endif(APPLE)
-
 find_package(libsoxr REQUIRED)
 
 include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS})
