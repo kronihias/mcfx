@@ -16,3 +16,4 @@ toDelete
 xcode
 .DS_Store
 _CMakeLists.txt
+JUCE/.DS_Store

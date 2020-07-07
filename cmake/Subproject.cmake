@@ -81,7 +81,7 @@ juce_add_plugin(${SUBPROJECT_NAME}
     # IS_MIDI_EFFECT TRUE/FALSE                 			# Is this plugin a MIDI effect?
     # EDITOR_WANTS_KEYBOARD_FOCUS TRUE/FALSE    			# Does the editor need keyboard focus?
 	# COPY_PLUGIN_AFTER_BUILD TRUE/FALSE        			# Should the plugin be installed to a default location after building?
-	PLIST_TO_MERGE				${PLIST}
+	# PLIST_TO_MERGE				${PLIST}
 	FORMATS 					U ${VST3} ${VST} ${STANDALONE}   	# The formats to build. Other valid formats are: AAX Unity VST AU AUv3
 	PLUGIN_MANUFACTURER_CODE 	${PLUGIN_MANUFACTURER_CODE}#'Kron'             			# A four-character manufacturer id with at least one upper-case character
 	PLUGIN_CODE 				${PLUGIN_CODE}#'mc36'                  	# A unique four-character plugin id with at least one upper-case character

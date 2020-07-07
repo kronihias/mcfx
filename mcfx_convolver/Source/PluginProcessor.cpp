@@ -38,6 +38,8 @@
 
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
+AudioProcessor (BusesProperties()   .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS))
+                                    .withOutput ("Output", juce::AudioChannelSet::discreteChannels(58))),
 Thread("mtx_convolver_master"),
 _readyToSaveConfiguration(false),
 _storeConfigDataInProject(1),
@@ -606,7 +608,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     
                     return;
                 }
-                
+                auto test =  getTotalNumInputChannels();
                 if ((inchannels > getTotalNumInputChannels()) || numOutChannels > getTotalNumOutputChannels())
                 {
                     String debug;
