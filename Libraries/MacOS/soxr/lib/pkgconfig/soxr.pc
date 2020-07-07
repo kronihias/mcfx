@@ -1,0 +1,5 @@
+Name: soxr
+Description: High quality, one-dimensional sample-rate conversion library
+Version: 0.1.3
+Libs: -L/Users/waltersobchak/Desktop/soxr/lib -lsoxr
+Cflags: -I/Users/waltersobchak/Desktop/soxr/include
