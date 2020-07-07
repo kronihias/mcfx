@@ -10,10 +10,10 @@ string(APPEND PLUGIN_LABEL " Delay")
 # soxr library adjustments not yet checked
 # SET(OSX_COPY_LIB libsoxr.0.1.0.dylib)
 
-# if(NOT APPLE)
+if(NOT APPLE)
 # 	SET(OSX_COPY_LIB libfftw3f.3.dylib)
-# 	SET ( WITH_FFTW3 TRUE )
-# endif(NOT APPLE)
+	SET ( WITH_FFTW3 TRUE )
+endif(NOT APPLE)
 
 include(Subproject)
 # INCLUDE(${SRC_DIR}/CMakeLists_subprojects.txt.inc)

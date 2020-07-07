@@ -42,6 +42,7 @@ set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those wi
 set(BUILD_VST TRUE CACHE BOOL "build VST format")
 set(BUILD_VST3 TRUE CACHE BOOL "build VST3 format")
 
+
 add_definitions(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
 
 # Possible different convolver library under Linux systems
@@ -68,6 +69,18 @@ endif (WIN32)
 if(UNIX AND NOT APPLE AND NOT ANDROID)
 	find_package(FFTW3 REQUIRED COMPONENTS single threads)
 endif(UNIX AND NOT APPLE AND NOT ANDROID)
+
+if(APPLE)
+	set(LIBSOXR_INCLUDE_DIRS "${SRC_DIR}/Libraries/MacOS/soxr/include" CACHE STRING "path to the include folder of soxr library")
+	find_library(LIBSOXR_LIBRARY
+		NAMES
+			soxr
+		PATHS
+			${SRC_DIR}/Libraries/MacOS/soxr/lib
+		NO_DEFAULT_PATH
+	)
+	set(LIBSOXR_LIBRARIES ${LIBSOXR_LIBRARY})
+endif(APPLE)
 
 find_package(libsoxr REQUIRED)
 
@@ -96,6 +109,15 @@ if(WIN32)
   		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
 	ENDIF (JUCE_ASIO)
 endif(WIN32)
+
+################################################
+# # MacOS specific directives
+# IF(APPLE)
+# 	# switch to c++11
+# 	ADD_DEFINITIONS(
+# 		-std=c++11
+# 	)
+# ENDIF (APPLE)
 
 ################################################
 # Linux specific directives

@@ -14,7 +14,7 @@ string(APPEND PLUGIN_LABEL " Convolver")
 
 if(NOT APPLE)
 	# SET(OSX_COPY_LIB libfftw3f.3.dylib)
-	SET ( WITH_FFTW3 TRUE )
+	SET (WITH_FFTW3 TRUE)
 endif(NOT APPLE)
 
 include(Subproject)

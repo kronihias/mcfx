@@ -1,8 +1,6 @@
 get_filename_component(SUBDIRNAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 
-add_definitions(-DNUM_CHANNELS=${NUM_CHANNELS}) #? FOR THE DELAY
-
-string(APPEND PLUGIN_LABEL ${NUM_CHANNELS})
+add_definitions(-DNUM_CHANNELS=${NUM_CHANNELS})
 
 IF( DEFINED SPECIFIC_PROJECTNAME )
 	# this is for ambix_decoder (which shares the code of ambix_binaural)
@@ -12,13 +10,6 @@ ELSE( DEFINED SPECIFIC_PROJECTNAME )
 	SET (SUBPROJECT_NAME ${SUBDIRNAME}${NUM_CHANNELS})
 ENDIF(DEFINED SPECIFIC_PROJECTNAME )
 
-# IF(APPLE)
-# 	# switch to c++11
-# 	ADD_DEFINITIONS(
-# 		-std=c++11
-# 	)
-# ENDIF (APPLE)
-
 # add all c, cpp, cc files from the Source directory
 # file ( GLOB_RECURSE SOURCE Source/*.c* )
 # file ( GLOB_RECURSE HEADER Source/*.h* )
@@ -26,6 +17,10 @@ ENDIF(DEFINED SPECIFIC_PROJECTNAME )
 IF(DEFINED SPECIFIC_SOURCE_DIR)
 	FILE ( GLOB_RECURSE SOURCE ${SPECIFIC_SOURCE_DIR}/Source/*.c* )
 	FILE ( GLOB_RECURSE HEADER ${SPECIFIC_SOURCE_DIR}/Source/*.h* )
+	if (BUILD_STANDALONE)
+		list(APPEND SOURCE ${SRC_DIR}/JUCE/standalone-filter/Main.cpp)
+		list(APPEND HEADER ${SRC_DIR}/JUCE/standalone-filter/CustomStandaloneFilterWindow.h)
+	endif(BUILD_STANDALONE)
 ENDIF(DEFINED SPECIFIC_SOURCE_DIR)
 
 # ignore mac hidden files
@@ -35,24 +30,13 @@ ENDIF(DEFINED SPECIFIC_SOURCE_DIR)
 # LIST ( SORT SOURCE )
 # LIST ( SORT HEADER )
 
-# stuff remaining from the old files, maybe useful...
-# if(APPLE)
-# 	IF( DEFINED OSX_COPY_LIB )
-# 	#copy additional files (eg. dynamic libraries)
-# 	ADD_CUSTOM_COMMAND(
-# 		TARGET ${SUBPROJECT_NAME} POST_BUILD 
-# 		COMMAND ${CMAKE_COMMAND} 
-# 		ARGS -E copy ${SRC_DIR}/mac-libs/${OSX_COPY_LIB} ${BIN_DIR}/_bin/${SUBPROJECT_NAME}.vst/Contents/Frameworks/${OSX_COPY_LIB}
-# 		)
-# 	ENDIF( DEFINED OSX_COPY_LIB )
-
-# endif(APPLE)
-
 # `juce_add_plugin` adds a static library target with the name passed as the first argument
 # (AudioPluginExample here). This target is a normal CMake target, but has a lot of extra properties set
 # up by default. As well as this shared code static library, this function adds targets for each of
 # the formats specified by the FORMATS arguments. This function accepts many optional arguments.
 # Check the readme at `docs/CMake API.md` in the JUCE repo for the full list.
+string(APPEND PLUGIN_LABEL ${NUM_CHANNELS})
+
 if(BUILD_STANDALONE)
 	set(STANDALONE "Standalone")
 endif(BUILD_STANDALONE)
@@ -67,8 +51,19 @@ endif(BUILD_VST3)
 
 string(APPEND PLUGIN_CODE ${NUM_CHANNELS})
 
-file(READ "${SRC_DIR}/osx_ressources/MacOSXBundleInfo.plist" PLIST)
+file(READ "${SRC_DIR}/osx_resources/MacOSXBundleInfo.plist" PLIST)
 
+# if(APPLE AND STANDALONE)
+# 	#prototype Info.plist
+# 	# SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${SRC_DIR}/osx_ressources/MacOSXBundleInfo.plist.in)
+
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES BUNDLE TRUE)
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES BUNDLE_EXTENSION app)
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${VERSION})
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${VERSION})
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING ${VERSION})
+# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME ${SUBPROJECT_NAME})
+# endif()
 # message ("plist: ${PLIST}")
 
 juce_add_plugin(${SUBPROJECT_NAME}
@@ -109,13 +104,8 @@ juce_generate_juce_header(${SUBPROJECT_NAME})
 # although it doesn't really affect executable targets). Finally, we supply a list of source files
 # that will be built into the target. This is a standard CMake command.
 target_sources(${SUBPROJECT_NAME} PRIVATE
-	${SRC_DIR}/JUCE/standalone-filter/Main.cpp
-	${SRC_DIR}/JUCE/standalone-filter/CustomStandaloneFilterWindow.h
 	${SOURCE}
 	${HEADER}
-	# ${SRC_DIR}/JUCE/standalone-filter/MainComponent.h
-	# ${SRC_DIR}/JUCE/standalone-filter/MainComponent.cpp
-	
 )
 
 # `target_compile_definitions` adds some preprocessor definitions to our target. In a Projucer
@@ -154,43 +144,37 @@ target_link_libraries(${SUBPROJECT_NAME} PRIVATE
 	juce::juce_osc
 	juce::juce_audio_plugin_client
 )
-function(juce_add_bundle_frameworks_directory target folder)
-    _juce_make_absolute(folder)
 
-    if(NOT EXISTS "${folder}")
-        message(FATAL_ERROR "Could not find resource folder ${folder}")
-    endif()
-
-	get_filename_component(folder_name "${folder}" NAME)
-	file(GLOB_RECURSE resources "${folder}/*")
-
-	foreach(file IN LISTS resources) 
-		get_filename_component(file_name ${file} NAME)
-		message("resources: ${file_name}")
-        target_sources(${target} PRIVATE "${folder}/${file_name}")
-        # get_filename_component(resource_parent_path "${file}" DIRECTORY)
-        set_source_files_properties("${folder}/${file_name}" PROPERTIES
-			# HEADER_FILE_ONLY TRUE
-			MACOSX_BUNDLE TRUE
-			MACOSX_RPATH TRUE
-            MACOSX_PACKAGE_LOCATION "Frameworks/${file_name}")
-    endforeach()
-endfunction()
+include(addToBundle)
 
 if(WITH_LIBSOXR)
 	target_link_libraries(${SUBPROJECT_NAME} PRIVATE 
-		${LIBSOXR_LIBRARIES} juce::juce_recommended_lto_flags
+		${LIBSOXR_LIBRARIES}
 	)
-	juce_add_bundle_frameworks_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/soxr")
-	juce_add_bundle_frameworks_directory(${SUBPROJECT_NAME}_VST "${SRC_DIR}/Bundle-resources/soxr")
-	juce_add_bundle_frameworks_directory(${SUBPROJECT_NAME}_VST3 "${SRC_DIR}/Bundle-resources/soxr")
+	add_library_to_apple_bundle(${SUBPROJECT_NAME}_Standalone "${LIBSOXR_LIBRARIES}")
+	add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST "${LIBSOXR_LIBRARIES}")
+	add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST3 "${LIBSOXR_LIBRARIES}")
 endif(WITH_LIBSOXR)
+
+# old way for copy libraries into bundle
+# if(APPLE)
+# 	IF( DEFINED OSX_COPY_LIB )
+# 	#copy additional files (eg. dynamic libraries)
+# 	ADD_CUSTOM_COMMAND(
+# 		TARGET ${SUBPROJECT_NAME} POST_BUILD 
+# 		COMMAND ${CMAKE_COMMAND} 
+# 		ARGS -E copy ${SRC_DIR}/mac-libs/${OSX_COPY_LIB} ${BIN_DIR}/_bin/${SUBPROJECT_NAME}.vst/Contents/Frameworks/${OSX_COPY_LIB}
+# 		)
+# 	ENDIF( DEFINED OSX_COPY_LIB )
+
+# endif(APPLE)
 
 if(WITH_ZITA_CONVOLVER)
 	target_link_libraries( ${SUBPROJECT_NAME} PRIVATE
 		${LIBZITACONVOLVER_LIBRARIES}
 	)
 endif(WITH_ZITA_CONVOLVER)
+
 
 if(WITH_FFTW3)
 	# MESSAGE( STATUS "LINKING FFTW3F: " ${FFTW3F_LIBRARY} )
@@ -201,19 +185,6 @@ if(WITH_FFTW3)
 	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/fftw3")
 endif(WITH_FFTW3)
 
-
-# if(APPLE AND STANDALONE)
-# 	#prototype Info.plist
-# 	# SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${SRC_DIR}/osx_ressources/MacOSXBundleInfo.plist.in)
-
-# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES BUNDLE TRUE)
-# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES BUNDLE_EXTENSION app)
-# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION ${VERSION})
-# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING ${VERSION})
-# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_LONG_VERSION_STRING ${VERSION})
-# 	SET_TARGET_PROPERTIES(${SUBPROJECT_NAME}_Standalone PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME ${SUBPROJECT_NAME})
-# endif()
-
 # ???????
 # if(WIN32)
 # 	IF (WITH_LIBLO OR WITH_FFTW3)
@@ -222,45 +193,3 @@ endif(WITH_FFTW3)
 # 		)
 # 	ENDIF (WITH_LIBLO OR WITH_FFTW3)
 # endif(WIN32)
-
-################################################
-# add resources into an Apple bundle's resource directory
-# IF(DEFINED OSX_COPY_LIB)
-# #copy additional files (eg. dynamic libraries)
-# ADD_CUSTOM_COMMAND(
-# 	TARGET ${SUBPROJECT_NAME} POST_BUILD 
-# 	COMMAND ${CMAKE_COMMAND} 
-# 	ARGS -E copy ${SRC_DIR}/mac-libs/${OSX_COPY_LIB} ${BIN_DIR}/_bin/${SUBPROJECT_NAME}.vst/Contents/Frameworks/${OSX_COPY_LIB}
-# 	)
-# ENDIF(DEFINED OSX_COPY_LIB)
-#${CMAKE_BINARY_DIR}/${SUBDIRNAME}/${SUBPROJECT_NAME}_artefacts/Release/Standalone/
-set(bundle "${SUBPROJECT_NAME}_Standalone")
-
-add_custom_command(TARGET ${bundle}
-    POST_BUILD COMMAND 
-    ${CMAKE_INSTALL_NAME_TOOL} -add_rpath "@executable_path/../../Frameworks/"
-	$<TARGET_FILE:${bundle}>
-)
-
-################################################
-# add resources into an Apple bundle's resource directory
- #IF(DEFINED OSX_COPY_LIB)
- #copy additional files (eg. dynamic libraries)
-
-	#FILE(GLOB_RECURSE BIN_FILES ${CMAKE_BINARY_DIR}/${SUBPROJECT_NAME}/${PLUGIN_LABEL}_artefacts/VST/*.dll)
-	#FILE(GLOB_RECURSE BIN_FILES ${CMAKE_BINARY_DIR}/${SUBPROJECT_NAME}/${PLUGIN_LABEL}_artefacts/VST3/*.vst3)
-set(BIN_FILES ${CMAKE_BINARY_DIR}/${SUBDIRNAME}/${SUBPROJECT_NAME}_artefacts/Release/Standalone/${PLUGIN_LABEL}.exe)
-
-if(EXISTS "${BIN_FILES}")
-	#message("${PLUGIN_LABEL}.exe File exists")
-#	ADD_CUSTOM_COMMAND(
-# 		TARGET ${SUBPROJECT_NAME} POST_BUILD
-#		COMMAND ${CMAKE_COMMAND} 
-#			ARGS -E copy ${CMAKE_BINARY_DIR}/${SUBDIRNAME}/${SUBPROJECT_NAME}_artefacts/Release/Standalone/${PLUGIN_LABEL}.exe ${SRC_DIR}/WinSetup/ToInstall
-#		)
-endif()
-
-#ADD_CUSTOM_COMMAND(
-# 		TARGET ${SUBPROJECT_NAME} POST_BUILD
-#		COMMAND ${CMAKE_COMMAND} ARGS -P "${SRC_DIR}/cmake/Copy_after_build.cmake"
-#		)
