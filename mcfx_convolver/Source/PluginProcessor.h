@@ -23,7 +23,6 @@
 // #include "../JuceLibraryCode/JuceHeader.h"
 #include <JuceHeader.h>
 
-
 #include "ConvolverData.h"
 
 #ifdef USE_ZITA_CONVOLVER
@@ -89,6 +88,8 @@ public:
     //==============================================================================
     void getStateInformation (MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
+    
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
 
     // use a thread to load a configuration
     void run();

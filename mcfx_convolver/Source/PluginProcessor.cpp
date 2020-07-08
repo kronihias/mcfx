@@ -21,11 +21,12 @@
 #include "PluginEditor.h"
 
 #ifdef _WINDOWS
-#include <windows.h>
+    #include <windows.h>
 #else
-#include <unistd.h>
-#define Sleep(x) usleep((x)*1000)
+    #include <unistd.h>
+    #define Sleep(x) usleep((x)*1000)
 #endif
+
 
 #define CONVPROC_SCHEDULER_PRIORITY 0
 #define CONVPROC_SCHEDULER_CLASS SCHED_FIFO
@@ -38,8 +39,8 @@
 
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
-AudioProcessor (BusesProperties()   .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS))
-                                    .withOutput ("Output", juce::AudioChannelSet::discreteChannels(58))),
+AudioProcessor (BusesProperties()   .withInput  ("MainInput",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )
+                                    .withOutput ("MainOutput", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )),
 Thread("mtx_convolver_master"),
 _readyToSaveConfiguration(false),
 _storeConfigDataInProject(1),
@@ -154,6 +155,15 @@ bool Mcfx_convolverAudioProcessor::isInputChannelStereoPair (int index) const
 bool Mcfx_convolverAudioProcessor::isOutputChannelStereoPair (int index) const
 {
     return true;
+}
+
+bool Mcfx_convolverAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+    if (layouts.getMainInputChannelSet()  == juce::AudioChannelSet::disabled()
+     || layouts.getMainOutputChannelSet() == juce::AudioChannelSet::disabled())
+        return false;
+    
+    return (layouts.getMainInputChannelSet() == layouts.getMainOutputChannelSet());
 }
 
 bool Mcfx_convolverAudioProcessor::acceptsMidi() const
@@ -1484,3 +1494,5 @@ AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new Mcfx_convolverAudioProcessor();
 }
+
+
