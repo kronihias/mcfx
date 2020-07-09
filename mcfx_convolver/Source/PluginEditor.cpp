@@ -98,6 +98,7 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
     if (processor.inputChannelRequired)
     {
         view.inputChannelDialog.setVisible(true);
+        view.inputChannelDialog.textEditor.grabKeyboardFocus();
     }
 }
 
@@ -133,11 +134,11 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
             break;
     }
     
-//    if (processor.newStatusText)
-//    {
-//        view.statusText.setText(processor.getStatusText());
-//        processor.newStatusText = false;
-//    }
+    if (processor.newStatusText)
+    {
+        view.statusText.setText(processor.getStatusText());
+        processor.newStatusText = false;
+    }
     
 //  ---------------------------------------------------------------------------------------
     view.convManagingBox.bufferCombobox.clear(dontSendNotification);
@@ -298,7 +299,17 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
-        if (getInputChannelFromDialog() > 0 && getInputChannelFromDialog() <= NUM_CHANNELS)
+        if (view.inputChannelDialog.diagonalToggle.getToggleState())
+        {
+            processor._min_in_ch = -1;
+            processor.inputChannelRequired = false;
+            processor.notify();
+            
+            view.inputChannelDialog.setVisible(false);
+            view.inputChannelDialog.resetState();
+            view.inputChannelDialog.diagonalToggle.triggerClick();
+        }
+        else if ((getInputChannelFromDialog() > 0 && getInputChannelFromDialog() <= NUM_CHANNELS))
         {
             processor._min_in_ch = getInputChannelFromDialog();
             processor.inputChannelRequired = false;

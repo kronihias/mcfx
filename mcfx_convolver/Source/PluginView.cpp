@@ -72,7 +72,7 @@ View::View()
     addAndMakeVisible(statusLed);
     
     statusText.setFont(Font(12,1));
-    statusText.setJustification(Justification::centredLeft);
+    statusText.setJustification(Justification::left);
     statusText.setReadOnly (true);
     statusText.setCaretVisible (false);
     statusText.setPopupMenuEnabled(false);
@@ -164,7 +164,7 @@ void View::resized()
     debugText.setBounds(area.removeFromTop(debugWinHeight));
     skippedCyclesLabel.setBounds(area.removeFromTop(smallLabelHeight));
     
-    std::cout << "global area: " << area.toString() << std::endl;
+//    std::cout << "global area: " << area.toString() << std::endl;
     
     auto sectionArea = area.removeFromBottom(20);
     statusLed.setBounds(sectionArea.removeFromLeft(20));
@@ -183,7 +183,7 @@ View::PresetManagingBox::PresetManagingBox()
     addAndMakeVisible (pathLabel);
     
     pathText.setFont (Font (10.0f, Font::plain));
-    pathText.setJustification(Justification::bottomLeft);
+    pathText.setJustification(Justification::left);
     pathText.setReadOnly(true);
     pathText.setPopupMenuEnabled(false);
     addAndMakeVisible (pathText);
@@ -580,7 +580,7 @@ void View::StatusLed::setStatus(State newState)
 
 //==============================================================================
 View::InputChannelDialog::InputChannelDialog() :
-rectSize (250,150)
+rectSize (260,175)
 {
     title.setFont(Font (17.2000f, Font::bold));
     title.setColour(Label::textColourId, Colours::white);
@@ -591,7 +591,7 @@ rectSize (250,150)
     message.setFont(Font (12.4000f, Font::plain));
     message.setColour(Label::textColourId, Colours::white);
     message.setJustificationType (Justification::bottomLeft);
-    message.setText("Input channels number is missing in this wavefile, \n"
+    message.setText("Number of input channels is missing, \n"
                     "please enter it manually:", dontSendNotification);
     addAndMakeVisible(message);
     
@@ -610,13 +610,27 @@ rectSize (250,150)
     textEditor.setCaretVisible(true);
     textEditor.setTextToShowWhenEmpty("value", Colours::darkgrey);
     textEditor.setInputRestrictions(3,"1234567890");
+    textEditor.onReturnKey = [&] {OKButton.triggerClick();};
     addAndMakeVisible(textEditor);
+    
+    diagonalToggle.setButtonText(TRANS("Diagonal filter matrix"));
+    diagonalToggle.setTooltip(TRANS("Check if the multipack filter matrix is diagonal"));
+    diagonalToggle.setToggleState(false, dontSendNotification);
+    diagonalToggle.setColour(ToggleButton::textColourId, Colours::white);
+    diagonalToggle.onStateChange = [&]{
+        if ( diagonalToggle.getToggleState() )
+            textEditor.setEnabled(false);
+        else
+            textEditor.setEnabled(true);
+            };
+    addAndMakeVisible(diagonalToggle);
     
     OKButton.setColour (TextButton::buttonColourId, Colours::white);
     OKButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    OKButton.addShortcut(KeyPress(KeyPress::returnKey));
+    
     OKButton.setButtonText ("OK");
     addAndMakeVisible(OKButton);
-    
 }
 
 void View::InputChannelDialog::paint(Graphics& g)
@@ -658,7 +672,7 @@ void View::InputChannelDialog::resized()
     title.setBounds(areaToDraw.removeFromTop(height));
         
     Rectangle<int> messageArea = areaToDraw.removeFromTop(height*2);
-    messageArea.reduce(messageArea.proportionOfWidth(0.08f), 0);
+    messageArea.reduce(messageArea.proportionOfWidth(0.07f), 0);
     message.setBounds(messageArea);
     invalidMessage.setBounds(messageArea);
     areaToDraw.removeFromTop(separator);
@@ -671,8 +685,11 @@ void View::InputChannelDialog::resized()
     textEditor.setBounds(areaToDraw.removeFromTop(editorHeight));
     areaToDraw.removeFromTop(separator);
     
+    diagonalToggle.setBounds(areaToDraw.removeFromTop(editorHeight));
+    
     areaToDraw.reduce(16, 0);
-    OKButton.setBounds(areaToDraw.removeFromTop(height));
+    OKButton.setSize(areaToDraw.getWidth(), height);
+    OKButton.setTopLeftPosition(areaToDraw.getX(), areaToDraw.getY()+areaToDraw.getHeight()/2-height/2);
 }
 
 void View::InputChannelDialog::invalidState()

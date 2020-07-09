@@ -40,7 +40,8 @@
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
 AudioProcessor (BusesProperties()   .withInput  ("MainInput",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )
-                                    .withOutput ("MainOutput", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )),
+                                    .withOutput ("MainOutput", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )
+                                    ),
 Thread("mtx_convolver_master"),
 _readyToSaveConfiguration(false),
 _storeConfigDataInProject(1),
@@ -415,8 +416,6 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     AudioSampleBuffer TempAudioBuffer(1,256);
     
     conv_data.setSampleRate(_SampleRate);
-    std::cout << "current status bar list size: " <<  statusTextList.size() << std::endl;
-    std::cout << "total lines: " <<  myLines.size() << std::endl;
     // iterate over all lines
     for (int currentLine = 0; currentLine < myLines.size(); currentLine++)
     {
@@ -497,7 +496,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
             configFileAndDataFiles.addIfNotAlreadyThere(audioIRFile);
 
-            if ( ( in_ch < 1 ) || ( in_ch > NUM_CHANNELS ) || ( out_ch < 1 ) || ( out_ch > NUM_CHANNELS ) )
+            if ( ( in_ch < 1 ) || ( in_ch > getTotalNumInputChannels() ) || ( out_ch < 1 ) || ( out_ch > getTotalNumOutputChannels() ) )
             {
                 String debug;
                 debug << "ERROR: channel assignment not feasible, needed:" << "\n";
@@ -618,7 +617,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     
                     return;
                 }
-                auto test =  getTotalNumInputChannels();
+
                 if ((inchannels > getTotalNumInputChannels()) || numOutChannels > getTotalNumOutputChannels())
                 {
                     String debug;
@@ -652,7 +651,6 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 String debug;
                 debug << "loaded " << conv_data.getNumIRs() << " filters with\nlength " << length << "\ninput channels: " << inchannels << "\noutput channels: " << numOutChannels << "\nfilename: " << audioIRFile.getFileName();
                 DebugPrint(debug << "\n\n");
-                
             }
             else
             {
@@ -739,12 +737,6 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
         return;
     }
     
-    // unloading first....
-    if (convolverReady)
-    {
-        unloadConvolver();
-    }
-    
     // buffer size line-up ------------------------------------------------------------------------
     if (_ConvBufferSize < _BufferSize)
         _ConvBufferSize = _BufferSize;
@@ -771,8 +763,9 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     AudioSampleBuffer TempAudioBuffer(1,256); //1 channel, 256 samples
     conv_data.setSampleRate(_SampleRate);
     
+    ///insert the input channel from the controller/editor
+    //funtion for the get
     inputChannelRequired = true;
-    
     while ( inputChannelRequired )
     {
         sendChangeMessage();
@@ -789,17 +782,16 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     double src_samplerate;
 //    String waveFileName(""); //useless (for path rebuilding)
     
-    ///insert the input channel from the controller/editor
-    //funtion for the get
-    
-    if (inchannels < 1)
-    {
-       debug.clear();
-       debug << "ERROR: Number of input channels not feasible: " << inchannels;
-       DebugPrint(debug << "\n");
-       
-       return;
-    }
+
+    // Deprecated
+//    if (inchannels < 1)
+//    {
+//       debug.clear();
+//       debug << "ERROR: Number of input channels not feasible: " << inchannels;
+//       DebugPrint(debug << "\n");
+//
+//       return;
+//    }
     
     if (loadIr(&TempAudioBuffer, filterFile, -1, src_samplerate, gain, 0, 0)) // offset/length has to be done while processing individual irs
     {
@@ -1000,7 +992,8 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     
     AudioFormatReader* reader = formatManager.createReaderFor(audioFile);
     
-    if (!reader) {
+    if (!reader)
+    {
         String debug;
         debug << "ERROR: impulse response file could not be read!";
         DebugPrint(debug << "\n");
@@ -1089,8 +1082,8 @@ void Mcfx_convolverAudioProcessor::SearchPresets(File SearchFolder)
     SearchFolder.findChildFiles(presetFilesList, File::findFiles, true, extension);
     presetFilesList.sort();
     String debug;
-    debug << "Found " << presetFilesList.size() << " " << extension << " presets in the selected directory \n";
-    std::cout << debug;
+    debug << "Found " << presetFilesList.size() << " " << extension << " presets in the selected directory";
+    std::cout << debug << "\n";
     addNewStatus(debug);
 }
 
@@ -1312,10 +1305,7 @@ void Mcfx_convolverAudioProcessor::timerCallback()
 String Mcfx_convolverAudioProcessor::getStatusText()
 {
     ScopedLock lock(statusTextMutex);
-    String toReturn;
-    toReturn = statusTextList.getFirst();
-    statusTextList.remove(0);
-    return toReturn;
+    return statusTextList.removeAndReturn(0);
 }
 
 void Mcfx_convolverAudioProcessor::addNewStatus(String newStatus)

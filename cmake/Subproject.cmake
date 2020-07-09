@@ -114,7 +114,6 @@ target_sources(${SUBPROJECT_NAME} PRIVATE
 # need that's not on by default, check the module header for the correct flag to set here. These
 # definitions will be visible both to your code, and also the JUCE module code, so for new
 # definitions, pick unique names that are unlikely to collide! This is a standard CMake command.
-
 target_compile_definitions(${SUBPROJECT_NAME} PUBLIC
     # JUCE_WEB_BROWSER and JUCE_USE_CURL would be on by default, but you might not need them.
     JUCE_WEB_BROWSER=0  # If you remove this, add `NEEDS_WEB_BROWSER TRUE` to the `juce_add_plugin` call
