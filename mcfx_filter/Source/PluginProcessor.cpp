@@ -1061,7 +1061,7 @@ void LowhighpassAudioProcessor::setStateInformation (const void* data, int sizeI
         // make sure that it's actually our type of XML object..
         if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
         {
-            for (int i=0; i < getNumParameters()-1; i++) {
+            for (int i=0; i < getNumParameters(); i++) {
                 setParameter(i, xmlState->getDoubleAttribute(String(i)));
             }
             _freqanalysis = xmlState->getBoolAttribute("freqanalysis");
