@@ -119,8 +119,8 @@ public:
         
         InputChannelDialog();
         
-        void invalidState();
-        void resetState();
+        void invalidState(int maxInput=NUM_CHANNELS);
+        void resetState(bool toggleChecked=false);
     private:
         void paint (Graphics& g);
         void resized();

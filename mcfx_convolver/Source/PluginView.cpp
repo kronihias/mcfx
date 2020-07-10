@@ -280,11 +280,11 @@ View::IRMatrixBox::IRMatrixBox()
     boxLabel.setText("IR Filter Matrix:", dontSendNotification);
     addAndMakeVisible (boxLabel);
 
-    loadUnloadButton.setTooltip ("load directly an Impulse Response filter matrix");
-    loadUnloadButton.setColour (TextButton::buttonColourId, Colours::white);
-    loadUnloadButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    loadUnloadButton.setButtonText ("load");
-    addAndMakeVisible(loadUnloadButton);
+//    loadUnloadButton.setTooltip ("load directly an Impulse Response filter matrix");
+//    loadUnloadButton.setColour (TextButton::buttonColourId, Colours::white);
+//    loadUnloadButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+//    loadUnloadButton.setButtonText ("load");
+//    addAndMakeVisible(loadUnloadButton);
     
     confModeButton.setClickingTogglesState (true);
     confModeButton.setRadioGroupId (34567);
@@ -596,12 +596,8 @@ rectSize (260,175)
     addAndMakeVisible(message);
     
     invalidMessage.setFont(Font (12.4000f, Font::plain));
-    invalidMessage.setColour(Label::textColourId, Colours::magenta);
+    invalidMessage.setColour(Label::textColourId, Colours::lightsalmon);
     invalidMessage.setJustificationType (Justification::bottomLeft);
-    String  text;
-            text << "Input channels number must be a value between 1 and " << NUM_CHANNELS << "\n";
-            text << "please enter it correctely:";
-    invalidMessage.setText(text, dontSendNotification);
     addAndMakeVisible(invalidMessage);
     invalidMessage.setVisible(false);
     
@@ -611,6 +607,7 @@ rectSize (260,175)
     textEditor.setTextToShowWhenEmpty("value", Colours::darkgrey);
     textEditor.setInputRestrictions(3,"1234567890");
     textEditor.onReturnKey = [&] {OKButton.triggerClick();};
+    textEditor.setSelectAllWhenFocused(true);
     addAndMakeVisible(textEditor);
     
     diagonalToggle.setButtonText(TRANS("Diagonal filter matrix"));
@@ -619,7 +616,10 @@ rectSize (260,175)
     diagonalToggle.setColour(ToggleButton::textColourId, Colours::white);
     diagonalToggle.onStateChange = [&]{
         if ( diagonalToggle.getToggleState() )
+        {
             textEditor.setEnabled(false);
+            textEditor.setText("");
+        }
         else
             textEditor.setEnabled(true);
             };
@@ -692,14 +692,23 @@ void View::InputChannelDialog::resized()
     OKButton.setTopLeftPosition(areaToDraw.getX(), areaToDraw.getY()+areaToDraw.getHeight()/2-height/2);
 }
 
-void View::InputChannelDialog::invalidState()
+void View::InputChannelDialog::invalidState(int maxInput)
 {
     message.setVisible(false);
+    String  text;
+            text << "Value must be between 1 and " << maxInput << "\n(based on current max plugin inputs)\n";
+            text << "please enter it again:";
+    invalidMessage.setText(text, dontSendNotification);
+    
     invalidMessage.setVisible(true);
 }
 
-void View::InputChannelDialog::resetState()
+void View::InputChannelDialog::resetState(bool toggleChecked)
 {
     message.setVisible(true);
     invalidMessage.setVisible(false);
+    if(toggleChecked)
+        diagonalToggle.triggerClick();
+    
+    setVisible(false);
 }

@@ -125,6 +125,7 @@ public:
     void    LoadSetupFromFile(File settings);
     void    LoadPresetByName(String presetName);
     
+    int     FindPresetIndex(File activePresetName);
     void    changePresetType(PresetType mode);
     
     //returning parameter for gui
@@ -154,7 +155,7 @@ public:
     int _num_conv;
     
     bool inputChannelRequired;
-    
+    int tempInputChannels;
     
     //----------------------------------------------------------------------------
     File defaultPresetDir; // where to search for presets
@@ -164,13 +165,12 @@ public:
 //    File configFileLoaded;
     File getTargetPreset();
     
-    String activePresetName; // store filename
-    String presetName; // string for gui  (is it real necessary?)
+    String activePresetName; // store filename (is it real necessary?)
+    String presetName; // string for gui
     
     //----------------------------------------------------------------------------
     File IRlastDirectory;
-    File filterFileLoaded;
-    String activeFilterName;
+//    File filterFileLoaded;
     
     //----------------------------------------------------------------------------
     Atomic<int> _readyToSaveConfiguration;

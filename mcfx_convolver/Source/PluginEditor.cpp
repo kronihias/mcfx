@@ -120,6 +120,17 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
     
+    if (processor.presetType == Mcfx_convolverAudioProcessor::PresetType::conf)
+    {
+        view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
+        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
+    }
+    else
+    {
+        view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
+        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
+    }
+    
     switch (processor.getConvolverStatus()) {
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Unloaded :
             view.statusLed.setStatus(View::StatusLed::State::red);
@@ -219,7 +230,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
             presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i));
     }
     
-
+    //need review
     if (processor.activePresetName.isNotEmpty())
     {
         presetMenu.addSeparator();
@@ -301,26 +312,22 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         if (view.inputChannelDialog.diagonalToggle.getToggleState())
         {
-            processor._min_in_ch = -1;
+            processor.tempInputChannels = -1;
+            view.inputChannelDialog.resetState(true);
             processor.inputChannelRequired = false;
             processor.notify();
-            
-            view.inputChannelDialog.setVisible(false);
-            view.inputChannelDialog.resetState();
-            view.inputChannelDialog.diagonalToggle.triggerClick();
         }
-        else if ((getInputChannelFromDialog() > 0 && getInputChannelFromDialog() <= NUM_CHANNELS))
+        if ((getInputChannelFromDialog() > 0)
+            && getInputChannelFromDialog() <= processor.getTotalNumInputChannels())
         {
-            processor._min_in_ch = getInputChannelFromDialog();
+            processor.tempInputChannels = getInputChannelFromDialog();
+            view.inputChannelDialog.resetState();
             processor.inputChannelRequired = false;
             processor.notify();
-            
-            view.inputChannelDialog.setVisible(false);
-            view.inputChannelDialog.resetState();
         }
         else
         {
-            view.inputChannelDialog.invalidState();
+            view.inputChannelDialog.invalidState(processor.getTotalNumInputChannels());
         }
     }
 }
