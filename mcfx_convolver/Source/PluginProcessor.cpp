@@ -61,6 +61,8 @@ convolverReady(false),
 convolverStatus(ConvolverStatus::Unloaded),
 
 inputChannelRequired(false),
+tempInputChannels(0),
+storedInChannels(0),
 
 _paramReload(false),
 _skippedCycles(0),
@@ -89,6 +91,7 @@ newStatusText(false)
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
 {
+    stopThread(10);
 #ifdef USE_ZITA_CONVOLVER
     zita_conv.stop_process();
     zita_conv.cleanup();
@@ -745,8 +748,9 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     
     //---------------------------------------------------------------------------------------------
     debug.clear();
-    debug << "trying to load " << filterFile.getFullPathName() << "\n\n";
-    DebugPrint(debug);
+    debug << "trying to load preset ...";
+    addNewStatus(debug);
+    DebugPrint(debug << filterFile.getFullPathName() << "\n\n");
     
     // debug print samplerate and buffer size
     debug.clear();
@@ -764,36 +768,42 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     AudioSampleBuffer TempAudioBuffer(1,256); //1 channel, 256 samples
     conv_data.setSampleRate(_SampleRate);
     
-    ///insert the input channel from the controller/editor
-    //funtion for the get
-    inputChannelRequired = true;
-    while ( inputChannelRequired )
-    {
-        sendChangeMessage();
-        wait(-1);
-    }
-    int inchannels = tempInputChannels;
-    
-    bool isDiagonal = false;
-    if (tempInputChannels == -1)
-        isDiagonal = true;
-    
     float gain = 1.f;
     int delay = 0;
     int offset = 0;
     int length = 0;
-    
-    double src_samplerate;
+    int inchannels = 0;
 
-    // Deprecated
-//    if (inchannels < 1)
-//    {
-//       debug.clear();
-//       debug << "ERROR: Number of input channels not feasible: " << inchannels;
-//       DebugPrint(debug << "\n");
-//
-//       return;
-//    }
+    double src_samplerate;
+    
+    ///insert the input channel from the controller/editor
+    
+    // here funtion for get input channels from  wavefile tag
+    
+    if (storedInChannels != 0)
+    {
+        inchannels = storedInChannels;
+        storedInChannels = 0;
+    }
+    else
+    {
+        inputChannelRequired = true;
+        while ( inputChannelRequired )
+        {
+            sendChangeMessage();
+            wait(-1);
+            if (threadShouldExit())
+                return;
+        }
+        inchannels = tempInputChannels;
+    }
+    
+    bool isDiagonal;
+    if (inchannels == -1)
+        isDiagonal = true;
+    else
+        isDiagonal = false;
+    
     
     if (loadIr(&TempAudioBuffer, filterFile, -1, src_samplerate, gain, 0, 0)) // offset/length has to be done while processing individual irs
     {
@@ -806,7 +816,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
             {
                 debug.clear();
                 debug << "ERROR: length of wav file is not multiple of irLength*numinchannels!" << filterFile.getFullPathName();
-                addNewStatus("ERROR: length of wavefile not multiple IRLength x numInChannels!");
+                addNewStatus("ERROR: length of wavefile not multiple IRLength * numInChannels!");
                 
                 DebugPrint(debug << "\n\n");
                 return;
@@ -863,7 +873,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
         DebugPrint( debug );
         
         String status;
-        status << conv_data.getNumIRs() << " IR filters set up ";
+        status << "IR matrix filters loaded correctely";
         addNewStatus(status);
     }
     else
@@ -885,7 +895,9 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     debug << "Maximum filter length: " << String(conv_data.getMaxLengthInSeconds(), 2) << "[s], " << conv_data.getMaxLength() << "[smpls] \n";
     debug << "Plugin Latency: " << getLatencySamples() << "[smpls] \n";
     DebugPrint(debug << "\n\n");
-
+    
+    String status = "Convolver ready";
+    addNewStatus(status);
     sendChangeMessage(); // notify editor
     
     //BLOCK save config/wave as zip file
@@ -1448,6 +1460,9 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     {
         xml.setAttribute("wasReady", true);
         
+        if (presetType == PresetType::wav)
+            xml.setAttribute("wavPresetInChannels",(int)tempInputChannels);
+        
         Array <File> files;
         defaultPresetDir.findChildFiles(files, File::findFiles, true, activePresetName);
         if (files.size())
@@ -1524,6 +1539,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                     unsigned int presetIndex = FindPresetIndex(targetPreset);
                     if (presetIndex != -1)
                     {
+                        if(presetType == PresetType::wav)
+                            storedInChannels = xmlState->getIntAttribute("wavPresetInChannels", 0);
                         LoadPresetFromMenu(presetIndex);
                         presetName << " (saved within project)";
                     }
@@ -1541,6 +1558,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 {
                     if(targetPreset.existsAsFile())
                     {
+                        if(presetType == PresetType::wav)
+                            storedInChannels = xmlState->getIntAttribute("wavPresetInChannels", 0);
                         LoadSetupFromFile(targetPreset);
                         presetName << " (saved within project)";
                     }

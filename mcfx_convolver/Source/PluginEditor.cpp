@@ -317,7 +317,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             processor.inputChannelRequired = false;
             processor.notify();
         }
-        if ((getInputChannelFromDialog() > 0)
+        else if ((getInputChannelFromDialog() > 0)
             && getInputChannelFromDialog() <= processor.getTotalNumInputChannels())
         {
             processor.tempInputChannels = getInputChannelFromDialog();

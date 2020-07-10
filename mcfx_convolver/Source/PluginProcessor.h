@@ -210,6 +210,8 @@ private:
     unsigned int    _ConvBufferSize;    // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
     unsigned int    _MaxPartSize;       // maximum size of the partition
     
+    int storedInChannels;
+    
     bool changingPresetType;
     bool convolverReady; //substitute for _configLoaded ande filterLoaded
     ConvolverStatus convolverStatus;
