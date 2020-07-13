@@ -95,14 +95,14 @@ public:
     void run();
     
     // do the loading in a background thread
-    void LoadConfigurationAsync(File presetFile);
+    void LoadConfigurationAsync(File presetFile, bool reload=false);
     void LoadConfiguration(File configFile); // do the loading
     void ReloadConfiguration(); //just reload convolver? nope
     
     void changePresetTypeAsync();
     
     void LoadIRMatrixFilter(File filterFile);
-    void LoadIRMatrixFilterAsync(File filterFile);
+//    void LoadIRMatrixFilterAsync(File filterFile);
     
     void loadConvolver();
     void unloadConvolver();
@@ -154,8 +154,11 @@ public:
     int _min_out_ch;
     int _num_conv;
     
-    bool inputChannelRequired;
-    int tempInputChannels;
+    bool    inputChannelRequired; //going to deprecated
+    enum    InChannelStatus {agreed, missing, unkwnown, notMultiple, notFeasible};
+    InChannelStatus inChannelStatus;
+    int     tempInputChannels;
+    bool    matrixIsDiagonal;
     
     //----------------------------------------------------------------------------
     File defaultPresetDir; // where to search for presets
@@ -185,49 +188,50 @@ private:
     Array<String> statusTextList;
     void addNewStatus(String newStatus);
     
-    void DeleteTemporaryFiles();
-    
 #ifdef USE_ZITA_CONVOLVER
-    Convproc zita_conv; /* zita-convolver engine class instances */
+    Convproc        zita_conv; /* zita-convolver engine class instances */
 #else
-    MtxConvMaster mtxconv_;
+    MtxConvMaster   mtxconv_;
 #endif
     
-    ConvolverData conv_data;
+    ConvolverData   conv_data;
     
-    Array<int> _conv_in;    // list with input routing
-    Array<int> _conv_out;   // list with output routing
+    Array<int>      _conv_in;    // list with input routing
+    Array<int>      _conv_out;   // list with output routing
     
-    File targetPreset;    //config file copy for thread
+    File            targetPreset;    //config file copy for thread
     CriticalSection targetPresetMutex;
-    void setTargetPreset(File newTargetPreset);
+    void            setTargetPreset(File newTargetPreset);
+    bool            isAReload;
     
-    File _tempConfigZipFile;
-    Array<File> _cleanUpFilesOnExit;
+    File            _tempConfigZipFile;
+    Array<File>     _cleanUpFilesOnExit;
+    void            DeleteTemporaryFiles();
     
     double          _SampleRate;
     unsigned int    _BufferSize;        // size of the processing Block
     unsigned int    _ConvBufferSize;    // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
     unsigned int    _MaxPartSize;       // maximum size of the partition
     
-    int storedInChannels;
+    int             storedInChannels;
+    void            getInChannels(int waveFileLength);
     
-    bool changingPresetType;
-    bool convolverReady; //substitute for _configLoaded ande filterLoaded
+    bool            changingPresetType;
+    bool            convolverReady; //substitute for _configLoaded ande filterLoaded
     ConvolverStatus convolverStatus;
     CriticalSection convStatusMutex;
-    void setConvolverStatus(ConvolverStatus status);
+    void            setConvolverStatus(ConvolverStatus status);
     
-	bool _paramReload; // vst parameter to allow triggering reload of configuration
-    Atomic<int> _skippedCycles; // the number of skipped cycles do to unfinished partitions
+	bool            _paramReload; // vst parameter to allow triggering reload of configuration
+    Atomic<int>     _skippedCycles; // the number of skipped cycles do to unfinished partitions
     
-    bool _isProcessing;
+    bool            _isProcessing;
     
-    bool safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
+    bool            safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
     
     // IR Filter Matrix -----------------------------------------------------------
 
-    File filterFileToLoad;
+    File            filterFileToLoad;
     
 //    bool filterLoaded;
     
@@ -236,9 +240,9 @@ private:
     bool loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain=1.f, int offset=0, int length=0);
     
     // OSC ------------------------------------------------------------------------
-    OSCReceiver oscReceiver;
-    int _osc_in_port;
-    bool _osc_in;
+    OSCReceiver     oscReceiver;
+    int             _osc_in_port;
+    bool            _osc_in;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_convolverAudioProcessor)

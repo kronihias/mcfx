@@ -95,11 +95,27 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
     UpdateText();
     UpdatePresets();
     repaint();
-    if (processor.inputChannelRequired)
-    {
-        view.inputChannelDialog.setVisible(true);
-        view.inputChannelDialog.textEditor.grabKeyboardFocus();
+    
+    switch (processor.inChannelStatus) {
+        case Mcfx_convolverAudioProcessor::InChannelStatus::missing:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::notFeasible:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.invalidState(processor.getTotalNumInputChannels()) ;
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        
+        default:
+            break;
     }
+    
+//    if (processor.inChannelStatus == Mcfx_convolverAudioProcessor::InChannelStatus::missing)
+//    {
+//        view.inputChannelDialog.setVisible(true);
+//        view.inputChannelDialog.textEditor.grabKeyboardFocus();
+//    }
 }
 
 /// update the overall plugin text based on the processor data and the stored one
@@ -310,25 +326,36 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
+//        if (view.inputChannelDialog.diagonalToggle.getToggleState())
+//        {
+//            processor.tempInputChannels = -1;
+//            view.inputChannelDialog.resetState(true);
+//            processor.inputChannelRequired = false;
+//            processor.notify();
+//        }
+//        else if ((getInputChannelFromDialog() > 0)
+//            && getInputChannelFromDialog() <= processor.getTotalNumInputChannels())
+//        {
+//            processor.tempInputChannels = getInputChannelFromDialog();
+//            view.inputChannelDialog.resetState();
+//            processor.inputChannelRequired = false;
+//            processor.notify();
+//        }
+//        else
+//        {
+//            view.inputChannelDialog.invalidState(processor.getTotalNumInputChannels());
+//        }
         if (view.inputChannelDialog.diagonalToggle.getToggleState())
         {
             processor.tempInputChannels = -1;
-            view.inputChannelDialog.resetState(true);
-            processor.inputChannelRequired = false;
-            processor.notify();
-        }
-        else if ((getInputChannelFromDialog() > 0)
-            && getInputChannelFromDialog() <= processor.getTotalNumInputChannels())
-        {
-            processor.tempInputChannels = getInputChannelFromDialog();
-            view.inputChannelDialog.resetState();
-            processor.inputChannelRequired = false;
-            processor.notify();
+//            processor.inputChannelRequired = false;
         }
         else
         {
-            view.inputChannelDialog.invalidState(processor.getTotalNumInputChannels());
+            processor.tempInputChannels = getInputChannelFromDialog();
         }
+        view.inputChannelDialog.resetState(true);
+        processor.notify();
     }
 }
 
