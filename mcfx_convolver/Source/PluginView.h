@@ -49,7 +49,7 @@ public:
     {
     public:
         Label boxLabel;
-        TextButton loadUnloadButton;
+        TextButton newInChannelsButton;
         
         TextButton confModeButton;
         TextButton wavModeButton;

@@ -280,11 +280,12 @@ View::IRMatrixBox::IRMatrixBox()
     boxLabel.setText("IR Filter Matrix:", dontSendNotification);
     addAndMakeVisible (boxLabel);
 
-//    loadUnloadButton.setTooltip ("load directly an Impulse Response filter matrix");
-//    loadUnloadButton.setColour (TextButton::buttonColourId, Colours::white);
-//    loadUnloadButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-//    loadUnloadButton.setButtonText ("load");
-//    addAndMakeVisible(loadUnloadButton);
+    newInChannelsButton.setTooltip ("change and resave input channels number for the current filter matrix");
+    newInChannelsButton.setColour (TextButton::buttonColourId, Colours::white);
+    newInChannelsButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    newInChannelsButton.setButtonText ("change inputs");
+    newInChannelsButton.setEnabled(false);
+    addAndMakeVisible(newInChannelsButton);
     
     confModeButton.setClickingTogglesState (true);
     confModeButton.setRadioGroupId (34567);
@@ -319,6 +320,7 @@ void View::IRMatrixBox::resized()
 {
     int editorWidth = proportionOfWidth(0.5f);
     int buttonWidth = 50;
+    int changeButtonWidth = 100;
     int labelWidth = 100;
     
     int height = 24;
@@ -347,7 +349,7 @@ void View::IRMatrixBox::resized()
     FlexItem editor (editorWidth, height, toggleButtons);
     editor.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    FlexItem button (buttonWidth, height, loadUnloadButton);
+    FlexItem button (changeButtonWidth, height, newInChannelsButton);
     button.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     mainFlex.items.addArray({ label, editor, button });

@@ -35,7 +35,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.presetManagingBox.saveToggle.addListener(this);
     view.presetManagingBox.selectFolderButton.addListener(this);
     
-    view.irMatrixBox.loadUnloadButton.addListener(this);
+    view.irMatrixBox.newInChannelsButton.addListener(this);
     view.irMatrixBox.confModeButton.addListener(this);
     view.irMatrixBox.wavModeButton.addListener(this);
     
@@ -95,32 +95,6 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
     UpdateText();
     UpdatePresets();
     repaint();
-    
-    switch (processor.inChannelStatus) {
-        case Mcfx_convolverAudioProcessor::InChannelStatus::missing:
-            view.inputChannelDialog.setVisible(true);
-            view.inputChannelDialog.textEditor.grabKeyboardFocus();
-            break;
-        case Mcfx_convolverAudioProcessor::InChannelStatus::notFeasible:
-            view.inputChannelDialog.setVisible(true);
-            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible, processor.getTotalNumInputChannels()) ;
-            view.inputChannelDialog.textEditor.grabKeyboardFocus();
-            break;
-        case Mcfx_convolverAudioProcessor::InChannelStatus::notMultiple:
-            view.inputChannelDialog.setVisible(true);
-            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple) ;
-            view.inputChannelDialog.textEditor.grabKeyboardFocus();
-            break;
-        
-        default:
-            break;
-    }
-    
-//    if (processor.inChannelStatus == Mcfx_convolverAudioProcessor::InChannelStatus::missing)
-//    {
-//        view.inputChannelDialog.setVisible(true);
-//        view.inputChannelDialog.textEditor.grabKeyboardFocus();
-//    }
 }
 
 /// update the overall plugin text based on the processor data and the stored one
@@ -170,6 +144,26 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     {
         view.statusText.setText(processor.getStatusText());
         processor.newStatusText = false;
+    }
+    
+    switch (processor.inChannelStatus) {
+        case Mcfx_convolverAudioProcessor::InChannelStatus::missing:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::notFeasible:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible, processor.getTotalNumInputChannels()) ;
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::notMultiple:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple) ;
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        
+        default:
+            break;
     }
     
 //  ---------------------------------------------------------------------------------------
@@ -302,6 +296,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             {
                 processor.changePresetType(Mcfx_convolverAudioProcessor::PresetType::conf);
                 view.irMatrixBox.lastState = View::IRMatrixBox::conf;
+                view.irMatrixBox.newInChannelsButton.setEnabled(false);
 //            std::cout << "conf was clicked" << std::endl;
             }
         }
@@ -311,23 +306,15 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             {
                 processor.changePresetType(Mcfx_convolverAudioProcessor::PresetType::wav);
                 view.irMatrixBox.lastState = View::IRMatrixBox::wav;
+                view.irMatrixBox.newInChannelsButton.setEnabled(true);
 //            std::cout << "conf was clicked" << std::endl;
             }
         }
     }
-    else if (buttonThatWasClicked == &(view.irMatrixBox.loadUnloadButton))
+    else if (buttonThatWasClicked == &(view.irMatrixBox.newInChannelsButton))
     {
-        FileChooser chooser (   "Please select the IR filter matrix file to load...",
-                                processor.IRlastDirectory,
-                                "*.wav"
-                            );
-        if (chooser.browseForFileToOpen())
-        {
-            File pickedFile (chooser.getResult());
-//            processor.LoadIRMatrixFilterAsync(pickedFile);
-            processor.IRlastDirectory = pickedFile.getParentDirectory();
-            view.presetManagingBox.setEnabled(false);
-        }
+        processor.inChannelStatus = Mcfx_convolverAudioProcessor::InChannelStatus::requested;
+        processor.ReloadConfiguration();
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {

@@ -155,7 +155,7 @@ public:
     int _num_conv;
     
     bool    inputChannelRequired; //going to deprecated
-    enum    InChannelStatus {agreed, missing, unkwnown, notMultiple, notFeasible};
+    enum    InChannelStatus {agreed, missing, unkwnown, notMultiple, notFeasible, requested};
     InChannelStatus inChannelStatus;
     int     tempInputChannels;
     bool    matrixIsDiagonal;

@@ -368,7 +368,10 @@ void Mcfx_convolverAudioProcessor::ReloadConfiguration()
     {
         String debug = "reloading for host new samplerate or buffer size \n";
         DebugPrint(debug);
-        LoadConfigurationAsync(getTargetPreset(),true);
+        if (inChannelStatus == InChannelStatus::requested)
+            LoadConfigurationAsync(getTargetPreset());
+        else
+            LoadConfigurationAsync(getTargetPreset(),true);
     }
 }
 
@@ -1184,8 +1187,6 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
         return false;
     }
     
-
-    
     AudioSampleBuffer ReadBuffer(reader->numChannels, length); // create buffer
     
     reader->read(&ReadBuffer, 0, length, offset, true, true);
@@ -1221,13 +1222,37 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     {
         auto metadata = reader->metadataValues;
         //if tag was empty, put 0 for inChannels
-        String inChannelsTag =  metadata.getValue(WavAudioFormat::riffInfoComment2, "0");
+        
+        String inChannelsTag =  metadata.getValue(WavAudioFormat::riffInfoKeywords, "0");
         int inChannels = inChannelsTag.getIntValue();
-
-        if (inChannels == 0)
+        
+        if (inChannels == 0 || inChannelStatus == InChannelStatus::requested)
+        {
             getInChannels(IRBuffer->getNumSamples());
+            /// write the new value in metadata tag
+            reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempInputChannels);
+            FileOutputStream* outStream = new FileOutputStream(audioFile);
+            if (outStream->openedOk())
+            {
+                outStream->setPosition (0);
+                outStream->truncate();
+
+            }
+            WavAudioFormat* wave = new WavAudioFormat();
+            AudioFormatWriter* writer = wave->createWriterFor(outStream,
+                                                              reader->sampleRate,
+                                                              reader->getChannelLayout(),
+                                                              reader->bitsPerSample,
+                                                              reader->metadataValues,
+                                                              0
+                                                              );
+            writer->writeFromAudioSampleBuffer(ReadBuffer, 0, ReadBuffer.getNumSamples());
+            delete writer;
+        }
         else
+        {
             tempInputChannels = inChannels;
+        }
     }
     
     delete reader;
