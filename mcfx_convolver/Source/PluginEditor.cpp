@@ -103,7 +103,12 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
             break;
         case Mcfx_convolverAudioProcessor::InChannelStatus::notFeasible:
             view.inputChannelDialog.setVisible(true);
-            view.inputChannelDialog.invalidState(processor.getTotalNumInputChannels()) ;
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible, processor.getTotalNumInputChannels()) ;
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::notMultiple:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple) ;
             view.inputChannelDialog.textEditor.grabKeyboardFocus();
             break;
         
@@ -348,13 +353,15 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         if (view.inputChannelDialog.diagonalToggle.getToggleState())
         {
             processor.tempInputChannels = -1;
+            ///reset input dialog with toggle uncheck
+            view.inputChannelDialog.resetState(true);
 //            processor.inputChannelRequired = false;
         }
         else
         {
             processor.tempInputChannels = getInputChannelFromDialog();
+            view.inputChannelDialog.resetState();
         }
-        view.inputChannelDialog.resetState(true);
         processor.notify();
     }
 }
@@ -436,16 +443,15 @@ void Mcfx_convolverAudioProcessorEditor::textEditorReturnKeyPressed(TextEditor &
   
 int Mcfx_convolverAudioProcessorEditor::getInputChannelFromDialog()
 {
-    int value;
-    
     if (!view.inputChannelDialog.textEditor.isEmpty())
     {
         String temp =  view.inputChannelDialog.textEditor.getText();
-        value = temp.getIntValue();
+        int value = temp.getIntValue();
+        return value;
     }
     else
     {
-        return -1;
+        return -2;
     }
-    return value;
+    
 }

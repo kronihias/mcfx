@@ -692,14 +692,25 @@ void View::InputChannelDialog::resized()
     OKButton.setTopLeftPosition(areaToDraw.getX(), areaToDraw.getY()+areaToDraw.getHeight()/2-height/2);
 }
 
-void View::InputChannelDialog::invalidState(int maxInput)
+void View::InputChannelDialog::invalidState(InvalidType type, int maxInput)
 {
-    message.setVisible(false);
     String  text;
+    switch (type) {
+        case InvalidType::notFeasible:
             text << "Value must be between 1 and " << maxInput << "\n(based on current max plugin inputs)\n";
             text << "please enter it again:";
+            break;
+        
+        case InvalidType::notMultiple:
+            text << "Value must be a valid divider for the given wavefile length \n";
+            text << "please enter it again:";
+            break;
+            
+        default:
+            break;
+    }
     invalidMessage.setText(text, dontSendNotification);
-    
+    message.setVisible(false);
     invalidMessage.setVisible(true);
 }
 
