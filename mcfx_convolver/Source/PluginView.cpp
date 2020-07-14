@@ -694,12 +694,12 @@ void View::InputChannelDialog::resized()
     OKButton.setTopLeftPosition(areaToDraw.getX(), areaToDraw.getY()+areaToDraw.getHeight()/2-height/2);
 }
 
-void View::InputChannelDialog::invalidState(InvalidType type, int maxInput)
+void View::InputChannelDialog::invalidState(InvalidType type)
 {
     String  text;
     switch (type) {
         case InvalidType::notFeasible:
-            text << "Value must be between 1 and " << maxInput << "\n(based on current max plugin inputs)\n";
+            text << "Value must not be 0! \n";
             text << "please enter it again:";
             break;
         

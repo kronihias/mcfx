@@ -120,7 +120,7 @@ public:
         InputChannelDialog();
         
         enum InvalidType {notFeasible, notMultiple};
-        void invalidState(InvalidType type, int maxInput=NUM_CHANNELS);
+        void invalidState(InvalidType type);
         void resetState(bool toggleChecked=false);
     private:
         void paint (Graphics& g);
