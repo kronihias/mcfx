@@ -216,6 +216,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
     StringArray subDirectories; // hold name of subdirectories, they will be the just the first parent directory name
     String lastSubdirectory;
     int j = 1;
+    int indexOfTicked;
     
     for (int i=0; i < processor.presetFilesList.size(); i++)
     {
@@ -235,7 +236,10 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
         // add item to submenu
         // check if this preset is the target of the loading configuration stage (even if it fails to load)
         if (processor.getTargetPreset() == processor.presetFilesList.getUnchecked(i))
+        {
             presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName(), true, true);
+            indexOfTicked = subDirectories.size()-1;
+        }
         else
             presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName());
     }
@@ -243,13 +247,13 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
     // add all subdirs to main menu
     for (int i=0; i < presetSubmenu.size(); i++)
     {
-        if (subDirectories.getReference(i) == processor.getTargetPreset().getParentDirectory().getFileName())
+//        if (subDirectories.getReference(i) == processor.getTargetPreset().getParentDirectory().getFileName())
+        if (i == indexOfTicked)
             presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i), true, nullptr, true);
         else
             presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i));
     }
     
-    //need review
     if (processor.activePresetName.isNotEmpty())
     {
         presetMenu.addSeparator();

@@ -429,7 +429,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     debug << "Internal Buffer Size: "   << (int)_ConvBufferSize << "\n\n";
     DebugPrint(debug);
     
-    activePresetName = configFile.getFileName(); // store filename only, on restart search preset folder for it! USELESS
+    activePresetName = configFile.getFileName(); // store filename only, on restart search preset folder for it!
     //presetName = configFile.getFileNameWithoutExtension();
     
     ///to initialize the file for the zip backup process
@@ -751,9 +751,11 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     //existance check (in case configuration loading starts from a state saving)
     if (!filterFile.existsAsFile())
     {
-        debug << "Filter file does not exist in:\n" << filterFile.getFullPathName() << "\n\n";
-        //std::cout << debug << std::endl;
-        DebugPrint(debug);
+        debug.clear();
+        debug << "Filter file does not exist";
+        addNewStatus(debug);
+        
+        DebugPrint(debug << " in: " << filterFile.getFullPathName() << "\n\n");
         return;
     }
     
@@ -1325,8 +1327,6 @@ int Mcfx_convolverAudioProcessor::FindPresetIndex(File fileToFind)
 {
     DefaultElementComparator<File> comparator;
     return presetFilesList.indexOfSorted(comparator, fileToFind);
-    
-    //findChildFiles(files, File::findFiles, true, presetName);
 }
 
 void Mcfx_convolverAudioProcessor::changePresetType(PresetType newType)
@@ -1559,6 +1559,8 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     XmlElement xml ("MYPLUGINSETTINGS");
     
     // add some attributes to it..
+    xml.setAttribute("SampleRate", (int)_SampleRate);
+    xml.setAttribute("BufferSize", (int)_BufferSize);
     xml.setAttribute("ConvBufferSize", (int)_ConvBufferSize);
     xml.setAttribute("MaxPartSize", (int)_MaxPartSize);
     xml.setAttribute("oscIn", _osc_in);
@@ -1585,14 +1587,12 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     {
         if (_tempConfigZipFile.existsAsFile())
         {
-           MemoryBlock tempFileBlock;
-           if (_tempConfigZipFile.loadFileAsData(tempFileBlock))
-               xml.setAttribute("configData", tempFileBlock.toBase64Encoding());
+            MemoryBlock tempFileBlock;
+            if (_tempConfigZipFile.loadFileAsData(tempFileBlock))
+                xml.setAttribute("configData", tempFileBlock.toBase64Encoding());
         }
+        xml.setAttribute("presetFileName", activePresetName);
         
-//        xml.setAttribute("wasReady", true);
-        
-        //no more used
         if (presetType == PresetType::wav)
             xml.setAttribute("wavPresetInChannels",(int)tempInputChannels);
         
@@ -1602,7 +1602,7 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
         if (files.size())
             xml.setAttribute ("presetWasInMenu", (bool)true);
         
-        xml.setAttribute("activePreset", targetPreset.getFullPathName());
+        xml.setAttribute("FullPathPreset", targetPreset.getFullPathName());
     }
     
 
@@ -1637,25 +1637,19 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
         if (xmlState->hasTagName ("MYPLUGINSETTINGS"))
         {
             // ok, now pull out our parameters..
+            _SampleRate         = xmlState->getIntAttribute("SampleRate", 44100);
+            _BufferSize         = xmlState->getIntAttribute("BufferSize", 512);
             _ConvBufferSize     = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
             _MaxPartSize        = xmlState->getIntAttribute("MaxPartSize", _MaxPartSize);
             _osc_in_port        = xmlState->getIntAttribute("oscInPort", _osc_in_port);
             setOscIn(xmlState->getBoolAttribute("oscIn", false));
             
             newPresetDir        = xmlState->getStringAttribute("defaultPresetDir", defaultPresetDir.getFullPathName());
-            switch (xmlState->getIntAttribute("presetType",0))
-            {
-                case 0:
-                    presetType = PresetType::conf;
-                    break;
-                    
-                case 1:
-                    presetType = PresetType::wav;
-                    break;
-                    
-                default:
-                    break;
-            }
+            
+            if(xmlState->getIntAttribute("presetType",0) == 0)
+                presetType = PresetType::conf;
+            else
+                presetType = PresetType::wav;
             
             File tempDir(newPresetDir);
             if (tempDir.exists())
@@ -1669,52 +1663,75 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
 
             if (xmlState->hasAttribute("configData") && _storeConfigDataInProject.get())
             {
+                activePresetName = xmlState->getStringAttribute("presetFileName");
                 
+                DebugPrint("Load configuration from saved project data\n");
+                addNewStatus("Loading restored configuration from saved data...");
                 
-                targetPreset = File(xmlState->getStringAttribute("activePreset", "/IDONTEXIST")) ;
+                MemoryBlock tempMem;
+                bool decodingOK = tempMem.fromBase64Encoding(xmlState->getStringAttribute("configData"));
+                
+                MemoryInputStream tempInStream(tempMem, false);
+                ZipFile dataZip(tempInStream);
+                
+                File tempConfigFolder =  File::createTempFile("");
+                Result unzip (dataZip.uncompressTo(tempConfigFolder, true));
+                
+                _cleanUpFilesOnExit.add(tempConfigFolder);
+
+                Array <File> configfiles;
+                tempConfigFolder.findChildFiles(configfiles, File::findFiles, false, activePresetName);
+                
+                // should be exactly one wav o conf file
+                if (decodingOK && unzip.wasOk() && configfiles.size() == 1)
+                {
+//                    DeleteTemporaryFiles();
+                    LoadConfigurationAsync(configfiles.getUnchecked(0));
+                    presetName.clear();
+                    presetName = configfiles.getUnchecked(0).getFileNameWithoutExtension();
+                    presetName << " (saved within project)";
+                    return;
+                }
+                
+                /// if restoring from memory got troubles try to restore from preset folder menu
+                targetPreset = File(xmlState->getStringAttribute("FullPathPreset", "/IDONTEXIST")) ;
                 if(xmlState->getBoolAttribute("presetWasInMenu",false))
                 {
-                    unsigned int presetIndex = FindPresetIndex(targetPreset);
+                    /// find the preset index from the rebuilt list of preset files
+                    DefaultElementComparator<File> comparator;
+                    unsigned int presetIndex = presetFilesList.indexOfSorted(comparator, targetPreset);
                     if (presetIndex != -1)
                     {
                         if(presetType == PresetType::wav)
                             storedInChannels = xmlState->getIntAttribute("wavPresetInChannels", 0);
                         LoadPresetFromMenu(presetIndex);
                         presetName << " (saved within project)";
+                        return;
                     }
-                    else
-                    {
-                        String debug;
-                        debug << "ERROR: preset not found in the preset folder!";
-                        presetName = targetPreset.getFileNameWithoutExtension();
-                        addNewStatus(debug);
-                        
-                        DebugPrint(debug << "\n\n");
-                    }
+                    presetName = targetPreset.getFileNameWithoutExtension();
+                    addNewStatus("ERROR: preset not found in the preset folder!");
+                    
+                    DebugPrint("ERROR: preset not found in the preset folder!\n\n");
+                    return;
                 }
-                else
+                
+                /// or original forlder if preset file was taken outside the menu
+                if(targetPreset.existsAsFile())
                 {
-                    if(targetPreset.existsAsFile())
-                    {
-                        if(presetType == PresetType::wav)
-                            storedInChannels = xmlState->getIntAttribute("wavPresetInChannels", 0);
-                        LoadSetupFromFile(targetPreset);
-                        presetName << " (saved within project)";
-                    }
-                    else
-                    {
-                        String debug;
-                        debug << "ERROR: preset not found in the original folder!";
-                        presetName = targetPreset.getFileNameWithoutExtension();
-                        addNewStatus(debug);
-                        
-                        DebugPrint(debug << "\n\n");
-                    }
-
+                    if(presetType == PresetType::wav)
+                        storedInChannels = xmlState->getIntAttribute("wavPresetInChannels", 0);
+                    LoadSetupFromFile(targetPreset);
+                    presetName << " (saved within project)";
+                    return;
                 }
+
+                String debug;
+                debug << "ERROR: preset not found in the original folder!";
+                presetName = targetPreset.getFileNameWithoutExtension();
+                addNewStatus(debug);
+                
+                DebugPrint(debug << "\n\n");
             }
-            
-            
         }
         
         //restore preset IRFileDirectory (if exists)
