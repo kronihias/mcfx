@@ -128,6 +128,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
         if (processor.presetName.isNotEmpty())
             view.irMatrixBox.newInChannelsButton.setEnabled(true);
+        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
+        
     }
     
     switch (processor.getConvolverStatus()) {
@@ -163,6 +165,18 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         case Mcfx_convolverAudioProcessor::InChannelStatus::notMultiple:
             view.inputChannelDialog.setVisible(true);
             view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple) ;
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::requested:
+            view.inputChannelDialog.setVisible(true);
+            if(processor.tempInputChannels == -1)
+            {
+                view.inputChannelDialog.textEditor.setText("");
+                view.inputChannelDialog.diagonalToggle.setToggleState(true, dontSendNotification);
+            }
+            else
+                view.inputChannelDialog.textEditor.setText((String)processor.tempInputChannels);
+                
             view.inputChannelDialog.textEditor.grabKeyboardFocus();
             break;
         

@@ -730,8 +730,13 @@ void View::InputChannelDialog::resetState(bool toggleChecked)
 {
     message.setVisible(true);
     invalidMessage.setVisible(false);
+    textEditor.setText("");
+    grabKeyboardFocus();
+    
+    
     if(toggleChecked)
-        diagonalToggle.triggerClick();
+//        diagonalToggle.triggerClick();
+        diagonalToggle.setToggleState(false, dontSendNotification);
     
     setVisible(false);
 }

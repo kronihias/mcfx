@@ -348,7 +348,6 @@ void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File presetFile, bool 
         isAReload=true;
     
     //store for the thread
-//    targetPreset = presetFile;
     setTargetPreset(presetFile);
     startThread(6); // medium priority
 }
@@ -1220,6 +1219,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
         {
             /// request new input channels number to the user
             getInChannels(IRBuffer->getNumSamples());
+
             
             /// write the new value in metadata tag
             if (storeInChannelIntoWav.get())
@@ -1322,12 +1322,6 @@ void Mcfx_convolverAudioProcessor::LoadSetupFromFile(File presetFile)
 //        DebugPrint(debug_msg);
 //    }
 //}
-
-int Mcfx_convolverAudioProcessor::FindPresetIndex(File fileToFind)
-{
-    DefaultElementComparator<File> comparator;
-    return presetFilesList.indexOfSorted(comparator, fileToFind);
-}
 
 void Mcfx_convolverAudioProcessor::changePresetType(PresetType newType)
 {
@@ -1685,7 +1679,8 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 // should be exactly one wav o conf file
                 if (decodingOK && unzip.wasOk() && configfiles.size() == 1)
                 {
-//                    DeleteTemporaryFiles();
+                    if(presetType == PresetType::wav)
+                        storedInChannels = xmlState->getIntAttribute("wavPresetInChannels", 0);
                     LoadConfigurationAsync(configfiles.getUnchecked(0));
                     presetName.clear();
                     presetName = configfiles.getUnchecked(0).getFileNameWithoutExtension();
