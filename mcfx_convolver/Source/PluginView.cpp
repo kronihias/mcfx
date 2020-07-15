@@ -582,7 +582,7 @@ void View::StatusLed::setStatus(State newState)
 
 //==============================================================================
 View::InputChannelDialog::InputChannelDialog() :
-rectSize (260,175)
+rectSize (260,200)
 {
     title.setFont(Font (17.2000f, Font::bold));
     title.setColour(Label::textColourId, Colours::white);
@@ -626,6 +626,12 @@ rectSize (260,175)
             textEditor.setEnabled(true);
             };
     addAndMakeVisible(diagonalToggle);
+    
+    saveIntoMetaToggle.setButtonText(TRANS("Save value into wavefile metadata"));
+    saveIntoMetaToggle.setTooltip(TRANS("The value will be stored within the wavefile"));
+    saveIntoMetaToggle.setToggleState(false, dontSendNotification);
+    saveIntoMetaToggle.setColour(ToggleButton::textColourId, Colours::white);
+    addAndMakeVisible(saveIntoMetaToggle);
     
     OKButton.setColour (TextButton::buttonColourId, Colours::white);
     OKButton.setColour (TextButton::buttonOnColourId, Colours::blue);
@@ -680,16 +686,20 @@ void View::InputChannelDialog::resized()
     areaToDraw.removeFromTop(separator);
     
     int shrinkValue = areaToDraw.proportionOfWidth(0.20f);
+    auto editorArea = areaToDraw.reduced(shrinkValue, 0);
+    
+    textEditor.setBounds(editorArea.removeFromTop(editorHeight));
+    editorArea.removeFromTop(separator);
+    
+    diagonalToggle.setBounds(editorArea.removeFromTop(editorHeight));
+    areaToDraw.removeFromTop(editorHeight*2+separator*3);
+    
+    shrinkValue = areaToDraw.proportionOfWidth(0.12f);
     areaToDraw.reduce(shrinkValue, 0);
-//    areaToDraw.removeFromLeft(areaToDraw.proportionOfWidth(0.20f));
-//    areaToDraw.removeFromRight(areaToDraw.proportionOfWidth(0.20f));
     
-    textEditor.setBounds(areaToDraw.removeFromTop(editorHeight));
-    areaToDraw.removeFromTop(separator);
+    saveIntoMetaToggle.setBounds(areaToDraw.removeFromTop(editorHeight));
     
-    diagonalToggle.setBounds(areaToDraw.removeFromTop(editorHeight));
-    
-    areaToDraw.reduce(16, 0);
+    areaToDraw.reduce(40, 0);
     OKButton.setSize(areaToDraw.getWidth(), height);
     OKButton.setTopLeftPosition(areaToDraw.getX(), areaToDraw.getY()+areaToDraw.getHeight()/2-height/2);
 }
@@ -699,7 +709,7 @@ void View::InputChannelDialog::invalidState(InvalidType type)
     String  text;
     switch (type) {
         case InvalidType::notFeasible:
-            text << "Value must not be 0! \n";
+            text << "Value must not be 0 or null! \n";
             text << "please enter it again:";
             break;
         

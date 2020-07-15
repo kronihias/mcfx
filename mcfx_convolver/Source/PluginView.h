@@ -115,6 +115,7 @@ public:
         Label invalidMessage;
         TextEditor textEditor;
         ToggleButton diagonalToggle;
+        ToggleButton saveIntoMetaToggle;
         TextButton OKButton;
         
         InputChannelDialog();

@@ -62,9 +62,9 @@ convolverStatus(ConvolverStatus::Unloaded),
 isAReload(false),
 
 inputChannelRequired(false),
-inChannelStatus(InChannelStatus::unkwnown),
-matrixIsDiagonal(false),
+inChannelStatus(InChannelStatus::agreed),
 tempInputChannels(0),
+storeInChannelIntoWav(false),
 storedInChannels(0),
 
 _paramReload(false),
@@ -719,7 +719,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         // i=0 is config file
         compressedConfigFileAndDataFiles.addFile(configFileAndDataFiles.getUnchecked(i), 5, storedPath);
     }
-
+    std::cout << "temp file path: " << _tempConfigZipFile.getFullPathName() << std::endl;
     FileOutputStream outputStream(_tempConfigZipFile);
     if (outputStream.openedOk())
     {
@@ -728,7 +728,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
       double progress = 0.;
       compressedConfigFileAndDataFiles.writeToStream(outputStream, &progress);
-
+        
       _readyToSaveConfiguration.set(true);
       /*
           String debugText = "Configuration File and Data Stored to: ";
@@ -826,22 +826,31 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     {
         ///kill the thread
         if (tempInputChannels == -2)
+        {
+            ///on restoring, a value will be still needed
+            tempInputChannels = 0;
             return;
+        }
+        bool isDiagonal;
+        if(tempInputChannels == -1)
+            isDiagonal = true;
+        else
+            isDiagonal = false;
         
         int outChannels = TempAudioBuffer.getNumChannels();
         int irLength;
         
-        if (matrixIsDiagonal)
+        if (isDiagonal)
         {
             irLength = TempAudioBuffer.getNumSamples();
-            tempInputChannels = outChannels;
+            inChannels = outChannels;
         }
         else
         {
             irLength = TempAudioBuffer.getNumSamples()/tempInputChannels;
+            inChannels = tempInputChannels;
         }
-        
-        inChannels = tempInputChannels;
+         
         
         if ((inChannels > getTotalNumInputChannels()) || outChannels > getTotalNumOutputChannels())
         {
@@ -865,7 +874,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
             for (int j=0; j < inChannels; j++)
             {
                 // add IR to my convolution data - offset and length are already done while reading file
-                if (matrixIsDiagonal)//(!isDiagonal)
+                if (isDiagonal)
                 {
                     if (i==j)
                         conv_data.addIR(j, i, offset, delay, length, &TempAudioBuffer, i, src_samplerate);
@@ -920,11 +929,13 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     _cleanUpFilesOnExit.add(_tempConfigZipFile);
     
     ZipFile::Builder compressedFileToStore;
-    auto test = filterFile.getParentDirectory().getFileName();
+//    auto test = filterFile.getParentDirectory().getFileName();
     
     compressedFileToStore.addFile(filterFile, 5);
     
     FileOutputStream outputStream(_tempConfigZipFile);
+//    std::cout << "temp file path: " << _tempConfigZipFile.getFullPathName() << std::endl;
+    
     if (outputStream.openedOk())
     {
         outputStream.setPosition(0); // overwrite file if already exists
@@ -1046,50 +1057,40 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
 
 void Mcfx_convolverAudioProcessor::getInChannels(int waveFileLength)
 {
-    int newInChannels;
-    if (isAReload)
+    inChannelStatus = InChannelStatus::missing;
+    while (inChannelStatus != InChannelStatus::agreed)
     {
-        return;
-    }
-    else
-    {
-        inChannelStatus = InChannelStatus::missing;
-        while (inChannelStatus != InChannelStatus::agreed)
+        sendChangeMessage();
+        wait(-1);
+        /// thread kill
+        if (threadShouldExit())
         {
-            sendChangeMessage();
-            wait(-1);
-            /// thread kill
-            if (threadShouldExit())
+            tempInputChannels = -2;
+            return;
+        }
+        ///value returned check
+        if (tempInputChannels == -1)
+        {
+            inChannelStatus = InChannelStatus::agreed;
+            return;
+        }
+        if (tempInputChannels > 0 )
+        {
+            int irLength = waveFileLength/tempInputChannels;
+            if (irLength*tempInputChannels != waveFileLength)
             {
-                tempInputChannels = -2;
-                return;
-            }
-            ///value returned check
-            if (tempInputChannels == -1)
-            {
-                inChannelStatus = InChannelStatus::agreed;
-                matrixIsDiagonal = true;
-            }
-            else if (tempInputChannels > 0 )
-            {
-                int irLength = waveFileLength/tempInputChannels;
-                if (irLength*tempInputChannels != waveFileLength)
-                {
-                    inChannelStatus = InChannelStatus::notMultiple;
-                }
-                else
-                {
-                    inChannelStatus = InChannelStatus::agreed;
-                    matrixIsDiagonal = false;
-                }
+                inChannelStatus = InChannelStatus::notMultiple;
             }
             else
             {
-                inChannelStatus = InChannelStatus::notFeasible;
+                inChannelStatus = InChannelStatus::agreed;
+                return;
             }
         }
-        inChannelStatus = InChannelStatus::unkwnown;
-        return;
+        else
+        {
+            inChannelStatus = InChannelStatus::notFeasible;
+        }
     }
 }
 
@@ -1190,45 +1191,58 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     // search for the input channels number into the wavefile metadata tags
     if (presetType == PresetType::wav)
     {
-        //if tag was empty, put 0 for inChannels
+        if (storedInChannels != 0)
+        {
+            tempInputChannels = storedInChannels;
+            storedInChannels = 0;
+            delete reader;
+            return true;
+        }
+        if (isAReload)
+        {
+            delete reader;
+            return true;
+        }
         
+        /// try to read input channels in the metadata tag. if tag was empty, put 0 for inChannels
         String metaTagValue =  reader->metadataValues.getValue(WavAudioFormat::riffInfoKeywords, "0");
         int inChannels = metaTagValue.getIntValue();
         
-        if (inChannels == 0 || inChannelStatus == InChannelStatus::requested)
+        if(inChannels != 0 && inChannelStatus != InChannelStatus::requested)
         {
-            ///request new input channels number to the user
-            getInChannels(IRBuffer->getNumSamples());
-            
-            /// write the new value in metadata tag
-            reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempInputChannels);
-            FileOutputStream* outStream = new FileOutputStream(audioFile);
-            if (outStream->openedOk())
-            {
-                outStream->setPosition (0);
-                outStream->truncate();
-
-            }
-            WavAudioFormat* wave = new WavAudioFormat();
-            AudioFormatWriter* writer = wave->createWriterFor(outStream,
-                                                              reader->sampleRate,
-                                                              reader->getChannelLayout(),
-                                                              reader->bitsPerSample,
-                                                              reader->metadataValues,
-                                                              0
-                                                              );
-            delete wave;
-            
-            writer->writeFromAudioSampleBuffer(ReadBuffer, 0, ReadBuffer.getNumSamples());
-            delete writer;
+            tempInputChannels = inChannels;
+            delete reader;
+            return true;
         }
         else
         {
-            if(inChannels == -1)
-                matrixIsDiagonal = true;
-            else
-                matrixIsDiagonal = false;
-            tempInputChannels = inChannels;
+            /// request new input channels number to the user
+            getInChannels(IRBuffer->getNumSamples());
+            
+            /// write the new value in metadata tag
+            if (storeInChannelIntoWav.get())
+            {
+                reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempInputChannels);
+                FileOutputStream* outStream = new FileOutputStream(audioFile);
+                if (outStream->openedOk())
+                {
+                    outStream->setPosition (0);
+                    outStream->truncate();
+
+                }
+                WavAudioFormat* wave = new WavAudioFormat();
+                AudioFormatWriter* writer = wave->createWriterFor(outStream,
+                                                                  reader->sampleRate,
+                                                                  reader->getChannelLayout(),
+                                                                  reader->bitsPerSample,
+                                                                  reader->metadataValues,
+                                                                  0
+                                                                  );
+                delete wave;
+                
+                writer->writeFromAudioSampleBuffer(ReadBuffer, 0, ReadBuffer.getNumSamples());
+                delete writer;
+            }
         }
     }
     
@@ -1551,6 +1565,7 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute("oscInPort", _osc_in_port);
     
     xml.setAttribute ("defaultPresetDir", defaultPresetDir.getFullPathName());
+    
     switch (presetType) {
         case PresetType::conf:
             xml.setAttribute("presetType",(int)0);
@@ -1563,35 +1578,43 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
             break;
     }
     
+    xml.setAttribute("storeConfigDataInProject", _storeConfigDataInProject.get());
+    
     // if preset has been loaded...
-    if(convolverReady)
+    if(convolverReady && _storeConfigDataInProject.get())
     {
-        xml.setAttribute("wasReady", true);
+        if (_tempConfigZipFile.existsAsFile())
+        {
+           MemoryBlock tempFileBlock;
+           if (_tempConfigZipFile.loadFileAsData(tempFileBlock))
+               xml.setAttribute("configData", tempFileBlock.toBase64Encoding());
+        }
+        
+//        xml.setAttribute("wasReady", true);
         
         //no more used
         if (presetType == PresetType::wav)
             xml.setAttribute("wavPresetInChannels",(int)tempInputChannels);
         
+        /// save also fullpath of the config files, in case it is not possible to restored from saved data
         Array <File> files;
         defaultPresetDir.findChildFiles(files, File::findFiles, true, activePresetName);
         if (files.size())
             xml.setAttribute ("presetWasInMenu", (bool)true);
-        else
-            xml.setAttribute ("presetWasInMenu", (bool)false);
+        
         xml.setAttribute("activePreset", targetPreset.getFullPathName());
     }
     
-    /*
-    xml.setAttribute("storeConfigDataInProject", _storeConfigDataInProject.get());
 
     // add .zip configuration as base64 dump
+    /*
     if (_tempConfigZipFile.existsAsFile() && _storeConfigDataInProject.get())
     {
         MemoryBlock tempFileBlock;
         if (_tempConfigZipFile.loadFileAsData(tempFileBlock))
             xml.setAttribute("configData", tempFileBlock.toBase64Encoding());
-    }
-     */
+    } */
+     
     
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -1640,9 +1663,14 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 defaultPresetDir = tempDir;
                 SearchPresets(defaultPresetDir);
             }
+            
+            // -> default: don't store convolver data for existing projects --->> ??????
+            _storeConfigDataInProject.set(xmlState->getIntAttribute("storeConfigDataInProject", 0));
 
-            if(xmlState->getBoolAttribute("wasReady", false))
+            if (xmlState->hasAttribute("configData") && _storeConfigDataInProject.get())
             {
+                
+                
                 targetPreset = File(xmlState->getStringAttribute("activePreset", "/IDONTEXIST")) ;
                 if(xmlState->getBoolAttribute("presetWasInMenu",false))
                 {
@@ -1686,8 +1714,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 }
             }
             
-            // -> default: don't store convolver data for existing projects
-            //_storeConfigDataInProject.set(xmlState->getIntAttribute("storeConfigDataInProject", 0));
+            
         }
         
         //restore preset IRFileDirectory (if exists)

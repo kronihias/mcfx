@@ -154,11 +154,11 @@ public:
     int _min_out_ch;
     int _num_conv;
     
-    bool    inputChannelRequired; //going to deprecated
-    enum    InChannelStatus {agreed, missing, unkwnown, notMultiple, notFeasible, requested};
+    bool            inputChannelRequired; //going to deprecated
+    enum            InChannelStatus {agreed, missing, notMultiple, notFeasible, requested};
     InChannelStatus inChannelStatus;
-    int     tempInputChannels;
-    bool    matrixIsDiagonal;
+    int             tempInputChannels;
+    Atomic<bool>    storeInChannelIntoWav;
     
     //----------------------------------------------------------------------------
     File defaultPresetDir; // where to search for presets

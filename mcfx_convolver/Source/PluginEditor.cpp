@@ -46,6 +46,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.convManagingBox.maxPartCombobox.addListener(this);
     
     view.inputChannelDialog.OKButton.addListener(this);
+    view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
     addAndMakeVisible(view);
 
@@ -331,6 +332,13 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             view.inputChannelDialog.resetState();
         }
         processor.notify();
+    }
+    else if (buttonThatWasClicked == &(view.inputChannelDialog.saveIntoMetaToggle))
+    {
+        if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
+            processor.storeInChannelIntoWav.set(true);
+        else
+            processor.storeInChannelIntoWav.set(false);
     }
 }
 
