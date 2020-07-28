@@ -35,7 +35,7 @@ public:
         TextButton pathButton;
         
         Label filterLabel;
-        TextEditor textEditor;
+        ComboBox filterMenu;
         
         TextButton selectFolderButton;
         TextButton reloadButton;
@@ -48,6 +48,7 @@ public:
         void resized();
     };
     //IR Matrix Box
+    /*
     class IRMatrixBox : public Component
     {
     public:
@@ -64,7 +65,7 @@ public:
     private:
         void paint(Graphics& g);
         void resized();
-    };
+    }; */
     //OSC managing box
     class OSCManagingBox : public Component
     {
@@ -154,7 +155,7 @@ public:
     Label title;
     Label subtitle;
     PresetManagingBox presetManagingBox;
-    IRMatrixBox irMatrixBox;
+//    IRMatrixBox irMatrixBox;
     OSCManagingBox oscManagingBox;
     IODetailBox ioDetailBox;
     ConvManagingBox convManagingBox;

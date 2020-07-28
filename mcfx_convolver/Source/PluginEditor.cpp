@@ -34,10 +34,11 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.presetManagingBox.pathButton.addListener(this);
     view.presetManagingBox.saveToggle.addListener(this);
     view.presetManagingBox.selectFolderButton.addListener(this);
+    view.presetManagingBox.filterMenu.addListener(this);
     view.presetManagingBox.reloadButton.addListener(this);
     
-    view.irMatrixBox.confModeButton.addListener(this);
-    view.irMatrixBox.wavModeButton.addListener(this);
+//    view.irMatrixBox.confModeButton.addListener(this);
+//    view.irMatrixBox.wavModeButton.addListener(this);
     
     view.oscManagingBox.activeReceiveToggle.addListener(this);
     view.oscManagingBox.receivePortText.addListener(this);
@@ -105,11 +106,9 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
     view.ioDetailBox.IRNumber.setText(String(processor._num_conv), dontSendNotification);
     
-    view.presetManagingBox.textEditor.setText(processor.presetName);
-    view.presetManagingBox.textEditor.setCaretPosition(0);
-    view.presetManagingBox.textEditor.setTooltip(view.presetManagingBox.textEditor.getText()); //to see all the string
-//    view.presetManagingBox.textEditor.setCaretPosition(view.presetManagingBox.textEditor.getTotalNumChars()-1);
-    //view.presetManagingBox.textEditor.setScrollToShowCursor(true);
+    view.presetManagingBox.filterMenu.setText(processor.presetName,dontSendNotification);
+    view.presetManagingBox.filterMenu.setTooltip(view.presetManagingBox.filterMenu.getText()); //to see all the string
+    
     view.presetManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
     view.presetManagingBox.pathText.setText(processor.defaultPresetDir.getFullPathName(), dontSendNotification);
     
@@ -118,14 +117,14 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     
     if (processor.presetType == Mcfx_convolverAudioProcessor::PresetType::conf)
     {
-        view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
-        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
+//        view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
+//        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
 //        view.irMatrixBox.newInChannelsButton.setEnabled(false);
     }
     else
     {
-        view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
-        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
+//        view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
+//        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
         if (processor.presetName.isNotEmpty())
 //            view.irMatrixBox.newInChannelsButton.setEnabled(true);
         view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
@@ -219,9 +218,11 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         sel = i;
     }
     view.convManagingBox.maxPartCombobox.setSelectedItemIndex(sel, dontSendNotification);
+     
 }
 
 /// Update the popup menu presets based on a predefined preset folder
+/*
 void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
 {
     presetMenu.clear(); // main menu
@@ -277,9 +278,71 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
     presetMenu.addSeparator();
     presetMenu.addItem(-1, String("open preset from file..."));
 }
+*/
+void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
+{
+    view.presetManagingBox.filterMenu.getRootMenu()->clear(); // main menu
+    presetSubmenu.clear(); // contains submenus
+    
+    StringArray subDirectories; // hold name of subdirectories, they will be the just the first parent directory name
+    String lastSubdirectory;
+    int j = 1;
+    int indexOfTicked;
+    
+    for (int i=0; i < processor.presetFilesList.size(); i++)
+    {
+        // add separator for new subfolder
+        String currentPresetDirectory = processor.presetFilesList.getUnchecked(i).getParentDirectory().getFileNameWithoutExtension();
+        
+        //check if the current preset File has the same parent directory as the precedent one
+        if (!lastSubdirectory.equalsIgnoreCase(currentPresetDirectory))
+        {
+            presetSubmenu.add(new PopupMenu());
+            subDirectories.add(currentPresetDirectory);
+            
+            j++;
+            lastSubdirectory = currentPresetDirectory;
+        }
+        
+        // add item to submenu
+        // check if this preset is the target of the loading configuration stage (even if it fails to load)
+        if (processor.getTargetPreset() == processor.presetFilesList.getUnchecked(i))
+        {
+//            presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName(), true, true);
+                presetSubmenu.getLast()->addColouredItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName(), Colours::yellow, true, true);
+            indexOfTicked = subDirectories.size()-1;
+        }
+        else
+            presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName());
+    }
+    
+    // add all subdirs to main menu
+    for (int i=0; i < presetSubmenu.size(); i++)
+    {
+//        if (subDirectories.getReference(i) == processor.getTargetPreset().getParentDirectory().getFileName())
+        if (i == indexOfTicked)
+            view.presetManagingBox.filterMenu.getRootMenu()->addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i), true, nullptr, true);
+        else
+            view.presetManagingBox.filterMenu.getRootMenu()->addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i));
+    }
+    
+    if (processor.activePresetName.isNotEmpty())
+    {
+        view.presetManagingBox.filterMenu.addSeparator();
+        view.presetManagingBox.filterMenu.getRootMenu()->addItem(-2, String("save preset to .zip file..."), processor._readyToSaveConfiguration.get());
+    }
+
+    view.presetManagingBox.filterMenu.addSeparator();
+    view.presetManagingBox.filterMenu.getRootMenu()->addItem(-1, String("open preset from file..."));
+}
 
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
+    /*
+    if (buttonThatWasClicked == &(view.presetManagingBox.pathButton))
+    {
+        presetMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.presetManagingBox.pathButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
+    }*/
     if (buttonThatWasClicked == &(view.presetManagingBox.pathButton))
     {
         presetMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.presetManagingBox.pathButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
@@ -310,6 +373,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         processor._storeConfigDataInProject = view.presetManagingBox.saveToggle.getToggleState();
     }
+    /*
     else if (buttonThatWasClicked == &(view.irMatrixBox.confModeButton))
     {
         if (view.irMatrixBox.confModeButton.getToggleState())
@@ -330,7 +394,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
 //            std::cout << "conf was clicked" << std::endl;
             }
         }
-    }
+    }*/
     else if (buttonThatWasClicked == &(view.presetManagingBox.reloadButton))
     {
         processor.inChannelStatus = Mcfx_convolverAudioProcessor::InChannelStatus::requested;
@@ -408,7 +472,14 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
 
 void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
-    if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
+    if (comboBoxThatHasChanged == &view.presetManagingBox.filterMenu)
+    {
+//        MessageManager::callAsync([&] () {
+//            menuItemChosenCallback(view.presetManagingBox.filterMenu.getSelectedId(), this);
+//        });
+        menuItemChosenCallback(view.presetManagingBox.filterMenu.getSelectedId(), this);
+    }
+    else if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
     {
         int val = view.convManagingBox.bufferCombobox.getText().getIntValue();
         
