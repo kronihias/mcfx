@@ -24,6 +24,14 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
+// GUI
+#define METER_WIDTH 16
+#define GROUP_CHANNELS 4
+#define METER_GROUP_SPACE 10;
+
+#define VAL(str) #str
+#define TOSTRING(str) VAL(str)
+
 extern float iec_scale(float dB);
 
 //[MiscUserDefs] You can add your own user definitions and misc code here...
@@ -183,7 +191,7 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
     g.setColour (Colours::white);
     g.setFont (Font (10.00f, Font::plain));
     String version_string;
-    version_string << "v" << QUOTE(VERSION);
+    version_string << "v" << TOSTRING(VERSION);
     g.drawText (version_string,
                 getWidth()-51, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);

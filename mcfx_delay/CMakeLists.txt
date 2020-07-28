@@ -1,5 +1,19 @@
-ADD_SUBDIRECTORY ( mcfx_delay )
+SET ( SPECIFIC_SOURCE_DIR ${SRC_DIR}/mcfx_delay )
+# SET ( WITH_LIBSOXR TRUE )
 
-IF (BUILD_STANDALONE)
-	ADD_SUBDIRECTORY ( mcfx_delay_standalone )
-ENDIF (BUILD_STANDALONE)
+# append "c" for "convolver" to the plugin code string
+string(APPEND PLUGIN_CODE "d")
+
+# append specific plugin name
+string(APPEND PLUGIN_LABEL " Delay")
+
+# soxr library adjustments not yet checked
+# SET(OSX_COPY_LIB libsoxr.0.1.0.dylib)
+
+if(NOT APPLE)
+# 	SET(OSX_COPY_LIB libfftw3f.3.dylib)
+	SET ( WITH_FFTW3 TRUE )
+endif(NOT APPLE)
+
+include(Subproject)
+# INCLUDE(${SRC_DIR}/CMakeLists_subprojects.txt.inc)

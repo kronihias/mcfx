@@ -20,6 +20,9 @@
 
 #include "PluginView.h"
 
+#define VAL(str) #str
+#define TOSTRING(str) VAL(str)
+
 //==============================================================================
 //=============================== Main View ====================================
 
@@ -69,6 +72,7 @@ View::View()
     addAndMakeVisible(statusLed);
     
     statusText.setFont(Font(12,1));
+    statusText.setJustification(Justification::left);
     statusText.setReadOnly (true);
     statusText.setCaretVisible (false);
     statusText.setPopupMenuEnabled(false);
@@ -76,7 +80,7 @@ View::View()
     addAndMakeVisible(statusText);
     
     String version_string;
-    version_string << "v" << QUOTE(VERSION);
+    version_string << "v" << TOSTRING(VERSION);
     versionLabel.setFont(Font (10.00f, Font::plain));
     versionLabel.setColour(Label::textColourId, Colours::white);
     versionLabel.setJustificationType(Justification::right);
@@ -132,10 +136,10 @@ void View::resized()
     int smallLabelHeight = 16;
     
     inputChannelDialog.setBounds(getBounds());
-
+    versionLabel.setBounds(area.removeFromBottom(smallLabelHeight));
     area.removeFromLeft(border);
     area.removeFromRight(border);
-    area.reduce(1,1); //white border
+//    area.reduce(1,1); //white border
     
     title.setBounds(area.removeFromTop(titleHeight)); //title
     subtitle.setBounds(area.removeFromTop(titleHeight)); //subtitle
@@ -160,13 +164,9 @@ void View::resized()
     debugText.setBounds(area.removeFromTop(debugWinHeight));
     skippedCyclesLabel.setBounds(area.removeFromTop(smallLabelHeight));
     
-    auto bottomArea = getLocalBounds();
-    versionLabel.setBounds(bottomArea.removeFromBottom(smallLabelHeight));
+//    std::cout << "global area: " << area.toString() << std::endl;
     
-    std::cout << "global area: " << bottomArea.toString() << std::endl;
-    
-    auto sectionArea = bottomArea.removeFromBottom(20);
-    sectionArea.reduce(border, 0);
+    auto sectionArea = area.removeFromBottom(20);
     statusLed.setBounds(sectionArea.removeFromLeft(20));
     statusText.setBounds(sectionArea);
 }
@@ -182,7 +182,8 @@ View::PresetManagingBox::PresetManagingBox()
     pathLabel.setText("Path:", dontSendNotification);
     addAndMakeVisible (pathLabel);
     
-    pathText.setFont (Font (12.0000f, Font::plain));
+    pathText.setFont (Font (10.0f, Font::plain));
+    pathText.setJustification(Justification::left);
     pathText.setReadOnly(true);
     pathText.setPopupMenuEnabled(false);
     addAndMakeVisible (pathText);
@@ -279,11 +280,12 @@ View::IRMatrixBox::IRMatrixBox()
     boxLabel.setText("IR Filter Matrix:", dontSendNotification);
     addAndMakeVisible (boxLabel);
 
-    loadUnloadButton.setTooltip ("load directly an Impulse Response filter matrix");
-    loadUnloadButton.setColour (TextButton::buttonColourId, Colours::white);
-    loadUnloadButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    loadUnloadButton.setButtonText ("load");
-    addAndMakeVisible(loadUnloadButton);
+    newInChannelsButton.setTooltip ("change and resave input channels number for the current filter matrix");
+    newInChannelsButton.setColour (TextButton::buttonColourId, Colours::white);
+    newInChannelsButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    newInChannelsButton.setButtonText ("change inputs");
+    newInChannelsButton.setEnabled(false);
+    addAndMakeVisible(newInChannelsButton);
     
     confModeButton.setClickingTogglesState (true);
     confModeButton.setRadioGroupId (34567);
@@ -318,6 +320,7 @@ void View::IRMatrixBox::resized()
 {
     int editorWidth = proportionOfWidth(0.5f);
     int buttonWidth = 50;
+    int changeButtonWidth = 100;
     int labelWidth = 100;
     
     int height = 24;
@@ -346,7 +349,7 @@ void View::IRMatrixBox::resized()
     FlexItem editor (editorWidth, height, toggleButtons);
     editor.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    FlexItem button (buttonWidth, height, loadUnloadButton);
+    FlexItem button (changeButtonWidth, height, newInChannelsButton);
     button.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     mainFlex.items.addArray({ label, editor, button });
@@ -579,7 +582,7 @@ void View::StatusLed::setStatus(State newState)
 
 //==============================================================================
 View::InputChannelDialog::InputChannelDialog() :
-rectSize (250,150)
+rectSize (260,200)
 {
     title.setFont(Font (17.2000f, Font::bold));
     title.setColour(Label::textColourId, Colours::white);
@@ -590,17 +593,13 @@ rectSize (250,150)
     message.setFont(Font (12.4000f, Font::plain));
     message.setColour(Label::textColourId, Colours::white);
     message.setJustificationType (Justification::bottomLeft);
-    message.setText("Input channels number is missing in this wavefile, \n"
+    message.setText("Number of input channels is missing, \n"
                     "please enter it manually:", dontSendNotification);
     addAndMakeVisible(message);
     
     invalidMessage.setFont(Font (12.4000f, Font::plain));
-    invalidMessage.setColour(Label::textColourId, Colours::magenta);
+    invalidMessage.setColour(Label::textColourId, Colours::lightsalmon);
     invalidMessage.setJustificationType (Justification::bottomLeft);
-    String  text;
-            text << "Input channels number must be a value between 1 and " << NUM_CHANNELS << "\n";
-            text << "please enter it correctely:";
-    invalidMessage.setText(text, dontSendNotification);
     addAndMakeVisible(invalidMessage);
     invalidMessage.setVisible(false);
     
@@ -609,13 +608,37 @@ rectSize (250,150)
     textEditor.setCaretVisible(true);
     textEditor.setTextToShowWhenEmpty("value", Colours::darkgrey);
     textEditor.setInputRestrictions(3,"1234567890");
+    textEditor.onReturnKey = [&] {OKButton.triggerClick();};
+    textEditor.setSelectAllWhenFocused(true);
     addAndMakeVisible(textEditor);
+    
+    diagonalToggle.setButtonText(TRANS("Diagonal filter matrix"));
+    diagonalToggle.setTooltip(TRANS("Check if the multipack filter matrix is diagonal"));
+    diagonalToggle.setToggleState(false, dontSendNotification);
+    diagonalToggle.setColour(ToggleButton::textColourId, Colours::white);
+    diagonalToggle.onStateChange = [&]{
+        if ( diagonalToggle.getToggleState() )
+        {
+            textEditor.setEnabled(false);
+            textEditor.setText("");
+        }
+        else
+            textEditor.setEnabled(true);
+            };
+    addAndMakeVisible(diagonalToggle);
+    
+    saveIntoMetaToggle.setButtonText(TRANS("Save value into wavefile metadata"));
+    saveIntoMetaToggle.setTooltip(TRANS("The value will be stored within the wavefile"));
+    saveIntoMetaToggle.setToggleState(false, dontSendNotification);
+    saveIntoMetaToggle.setColour(ToggleButton::textColourId, Colours::white);
+    addAndMakeVisible(saveIntoMetaToggle);
     
     OKButton.setColour (TextButton::buttonColourId, Colours::white);
     OKButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    OKButton.addShortcut(KeyPress(KeyPress::returnKey));
+    
     OKButton.setButtonText ("OK");
     addAndMakeVisible(OKButton);
-    
 }
 
 void View::InputChannelDialog::paint(Graphics& g)
@@ -657,31 +680,63 @@ void View::InputChannelDialog::resized()
     title.setBounds(areaToDraw.removeFromTop(height));
         
     Rectangle<int> messageArea = areaToDraw.removeFromTop(height*2);
-    messageArea.reduce(messageArea.proportionOfWidth(0.08f), 0);
+    messageArea.reduce(messageArea.proportionOfWidth(0.07f), 0);
     message.setBounds(messageArea);
     invalidMessage.setBounds(messageArea);
     areaToDraw.removeFromTop(separator);
     
     int shrinkValue = areaToDraw.proportionOfWidth(0.20f);
+    auto editorArea = areaToDraw.reduced(shrinkValue, 0);
+    
+    textEditor.setBounds(editorArea.removeFromTop(editorHeight));
+    editorArea.removeFromTop(separator);
+    
+    diagonalToggle.setBounds(editorArea.removeFromTop(editorHeight));
+    areaToDraw.removeFromTop(editorHeight*2+separator*3);
+    
+    shrinkValue = areaToDraw.proportionOfWidth(0.12f);
     areaToDraw.reduce(shrinkValue, 0);
-//    areaToDraw.removeFromLeft(areaToDraw.proportionOfWidth(0.20f));
-//    areaToDraw.removeFromRight(areaToDraw.proportionOfWidth(0.20f));
     
-    textEditor.setBounds(areaToDraw.removeFromTop(editorHeight));
-    areaToDraw.removeFromTop(separator);
+    saveIntoMetaToggle.setBounds(areaToDraw.removeFromTop(editorHeight));
     
-    areaToDraw.reduce(16, 0);
-    OKButton.setBounds(areaToDraw.removeFromTop(height));
+    areaToDraw.reduce(40, 0);
+    OKButton.setSize(areaToDraw.getWidth(), height);
+    OKButton.setTopLeftPosition(areaToDraw.getX(), areaToDraw.getY()+areaToDraw.getHeight()/2-height/2);
 }
 
-void View::InputChannelDialog::invalidState()
+void View::InputChannelDialog::invalidState(InvalidType type)
 {
+    String  text;
+    switch (type) {
+        case InvalidType::notFeasible:
+            text << "Value must not be 0 or null! \n";
+            text << "please enter it again:";
+            break;
+        
+        case InvalidType::notMultiple:
+            text << "Value must be a valid divider for the given wavefile length \n";
+            text << "please enter it again:";
+            break;
+            
+        default:
+            break;
+    }
+    invalidMessage.setText(text, dontSendNotification);
     message.setVisible(false);
     invalidMessage.setVisible(true);
 }
 
-void View::InputChannelDialog::resetState()
+void View::InputChannelDialog::resetState(bool toggleChecked)
 {
     message.setVisible(true);
     invalidMessage.setVisible(false);
+    textEditor.setText("");
+    grabKeyboardFocus();
+    
+    
+    if(toggleChecked)
+//        diagonalToggle.triggerClick();
+        diagonalToggle.setToggleState(false, dontSendNotification);
+    
+    setVisible(false);
 }

@@ -22,6 +22,9 @@
 
 #include "PluginEditor.h"
 
+#define VAL(str) #str
+#define TOSTRING(str) VAL(str)
+
 
 //[MiscUserDefs] You can add your own user definitions and misc code here...
 //[/MiscUserDefs]
@@ -133,7 +136,7 @@ void Mcfx_delayAudioProcessorEditor::paint (Graphics& g)
     g.setColour (Colours::white);
     g.setFont (Font (10.00f, Font::plain));
     String version_string;
-    version_string << "v" << QUOTE(VERSION);
+    version_string << "v" << TOSTRING(VERSION);
     g.drawText (version_string,
                 getWidth()-51, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);

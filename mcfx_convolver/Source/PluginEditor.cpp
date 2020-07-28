@@ -35,7 +35,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.presetManagingBox.saveToggle.addListener(this);
     view.presetManagingBox.selectFolderButton.addListener(this);
     
-    view.irMatrixBox.loadUnloadButton.addListener(this);
+    view.irMatrixBox.newInChannelsButton.addListener(this);
     view.irMatrixBox.confModeButton.addListener(this);
     view.irMatrixBox.wavModeButton.addListener(this);
     
@@ -46,10 +46,11 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.convManagingBox.maxPartCombobox.addListener(this);
     
     view.inputChannelDialog.OKButton.addListener(this);
+    view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
     addAndMakeVisible(view);
 
-    setSize (400, 500); //originally 350, 330
+    setSize (400, 530); //originally 350, 330
     
     UpdateText();
     
@@ -75,8 +76,8 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
 void Mcfx_convolverAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds();
-    view.setBounds(getBounds());
+    auto test = getLocalBounds();
+    view.setBounds(test);
 }
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()
@@ -95,10 +96,6 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
     UpdateText();
     UpdatePresets();
     repaint();
-    if (processor.inputChannelRequired)
-    {
-        view.inputChannelDialog.setVisible(true);
-    }
 }
 
 /// update the overall plugin text based on the processor data and the stored one
@@ -119,6 +116,22 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
     
+    if (processor.presetType == Mcfx_convolverAudioProcessor::PresetType::conf)
+    {
+        view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
+        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
+        view.irMatrixBox.newInChannelsButton.setEnabled(false);
+    }
+    else
+    {
+        view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
+        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
+        if (processor.presetName.isNotEmpty())
+            view.irMatrixBox.newInChannelsButton.setEnabled(true);
+        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
+        
+    }
+    
     switch (processor.getConvolverStatus()) {
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Unloaded :
             view.statusLed.setStatus(View::StatusLed::State::red);
@@ -137,6 +150,38 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     {
         view.statusText.setText(processor.getStatusText());
         processor.newStatusText = false;
+    }
+    
+    switch (processor.inChannelStatus) {
+        case Mcfx_convolverAudioProcessor::InChannelStatus::missing:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::notFeasible:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible) ;
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::notMultiple:
+            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple) ;
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        case Mcfx_convolverAudioProcessor::InChannelStatus::requested:
+            view.inputChannelDialog.setVisible(true);
+            if(processor.tempInputChannels == -1)
+            {
+                view.inputChannelDialog.textEditor.setText("");
+                view.inputChannelDialog.diagonalToggle.setToggleState(true, dontSendNotification);
+            }
+            else
+                view.inputChannelDialog.textEditor.setText((String)processor.tempInputChannels);
+                
+            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            break;
+        
+        default:
+            break;
     }
     
 //  ---------------------------------------------------------------------------------------
@@ -185,6 +230,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
     StringArray subDirectories; // hold name of subdirectories, they will be the just the first parent directory name
     String lastSubdirectory;
     int j = 1;
+    int indexOfTicked;
     
     for (int i=0; i < processor.presetFilesList.size(); i++)
     {
@@ -204,7 +250,10 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
         // add item to submenu
         // check if this preset is the target of the loading configuration stage (even if it fails to load)
         if (processor.getTargetPreset() == processor.presetFilesList.getUnchecked(i))
+        {
             presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName(), true, true);
+            indexOfTicked = subDirectories.size()-1;
+        }
         else
             presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName());
     }
@@ -212,13 +261,13 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
     // add all subdirs to main menu
     for (int i=0; i < presetSubmenu.size(); i++)
     {
-        if (subDirectories.getReference(i) == processor.getTargetPreset().getParentDirectory().getFileName())
+//        if (subDirectories.getReference(i) == processor.getTargetPreset().getParentDirectory().getFileName())
+        if (i == indexOfTicked)
             presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i), true, nullptr, true);
         else
             presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i));
     }
     
-
     if (processor.activePresetName.isNotEmpty())
     {
         presetMenu.addSeparator();
@@ -282,35 +331,32 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             }
         }
     }
-    else if (buttonThatWasClicked == &(view.irMatrixBox.loadUnloadButton))
+    else if (buttonThatWasClicked == &(view.irMatrixBox.newInChannelsButton))
     {
-        FileChooser chooser (   "Please select the IR filter matrix file to load...",
-                                processor.IRlastDirectory,
-                                "*.wav"
-                            );
-        if (chooser.browseForFileToOpen())
-        {
-            File pickedFile (chooser.getResult());
-//            processor.LoadIRMatrixFilterAsync(pickedFile);
-            processor.IRlastDirectory = pickedFile.getParentDirectory();
-            view.presetManagingBox.setEnabled(false);
-        }
+        processor.inChannelStatus = Mcfx_convolverAudioProcessor::InChannelStatus::requested;
+        processor.ReloadConfiguration();
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
-        if (getInputChannelFromDialog() > 0 && getInputChannelFromDialog() <= NUM_CHANNELS)
+        if (view.inputChannelDialog.diagonalToggle.getToggleState())
         {
-            processor._min_in_ch = getInputChannelFromDialog();
-            processor.inputChannelRequired = false;
-            processor.notify();
-            
-            view.inputChannelDialog.setVisible(false);
-            view.inputChannelDialog.resetState();
+            processor.tempInputChannels = -1;
+            ///reset input dialog with toggle uncheck
+            view.inputChannelDialog.resetState(true);
         }
         else
         {
-            view.inputChannelDialog.invalidState();
+            processor.tempInputChannels = getInputChannelFromDialog();
+            view.inputChannelDialog.resetState();
         }
+        processor.notify();
+    }
+    else if (buttonThatWasClicked == &(view.inputChannelDialog.saveIntoMetaToggle))
+    {
+        if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
+            processor.storeInChannelIntoWav.set(true);
+        else
+            processor.storeInChannelIntoWav.set(false);
     }
 }
 
@@ -391,16 +437,15 @@ void Mcfx_convolverAudioProcessorEditor::textEditorReturnKeyPressed(TextEditor &
   
 int Mcfx_convolverAudioProcessorEditor::getInputChannelFromDialog()
 {
-    int value;
-    
     if (!view.inputChannelDialog.textEditor.isEmpty())
     {
         String temp =  view.inputChannelDialog.textEditor.getText();
-        value = temp.getIntValue();
+        int value = temp.getIntValue();
+        return value;
     }
     else
     {
-        return -1;
+        return -2;
     }
-    return value;
+    
 }

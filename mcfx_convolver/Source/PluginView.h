@@ -49,7 +49,7 @@ public:
     {
     public:
         Label boxLabel;
-        TextButton loadUnloadButton;
+        TextButton newInChannelsButton;
         
         TextButton confModeButton;
         TextButton wavModeButton;
@@ -114,12 +114,15 @@ public:
         Label message;
         Label invalidMessage;
         TextEditor textEditor;
+        ToggleButton diagonalToggle;
+        ToggleButton saveIntoMetaToggle;
         TextButton OKButton;
         
         InputChannelDialog();
         
-        void invalidState();
-        void resetState();
+        enum InvalidType {notFeasible, notMultiple};
+        void invalidState(InvalidType type);
+        void resetState(bool toggleChecked=false);
     private:
         void paint (Graphics& g);
         void resized();
