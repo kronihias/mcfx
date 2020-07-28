@@ -32,11 +32,14 @@ public:
     public:
         Label pathLabel;
         TextEditor pathText;
+        TextButton pathButton;
         
-        Label textLabel;
+        Label filterLabel;
         TextEditor textEditor;
-        TextButton chooseButton;
+        
         TextButton selectFolderButton;
+        TextButton reloadButton;
+        
         ToggleButton saveToggle;
 
         PresetManagingBox();
@@ -49,7 +52,7 @@ public:
     {
     public:
         Label boxLabel;
-        TextButton newInChannelsButton;
+        
         
         TextButton confModeButton;
         TextButton wavModeButton;

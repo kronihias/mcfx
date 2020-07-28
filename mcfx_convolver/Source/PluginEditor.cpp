@@ -31,11 +31,11 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
-    view.presetManagingBox.chooseButton.addListener(this);
+    view.presetManagingBox.pathButton.addListener(this);
     view.presetManagingBox.saveToggle.addListener(this);
     view.presetManagingBox.selectFolderButton.addListener(this);
+    view.presetManagingBox.reloadButton.addListener(this);
     
-    view.irMatrixBox.newInChannelsButton.addListener(this);
     view.irMatrixBox.confModeButton.addListener(this);
     view.irMatrixBox.wavModeButton.addListener(this);
     
@@ -120,14 +120,14 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     {
         view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
         view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
-        view.irMatrixBox.newInChannelsButton.setEnabled(false);
+//        view.irMatrixBox.newInChannelsButton.setEnabled(false);
     }
     else
     {
         view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
         view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
         if (processor.presetName.isNotEmpty())
-            view.irMatrixBox.newInChannelsButton.setEnabled(true);
+//            view.irMatrixBox.newInChannelsButton.setEnabled(true);
         view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
         
     }
@@ -280,9 +280,9 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
 
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
-    if (buttonThatWasClicked == &(view.presetManagingBox.chooseButton))
+    if (buttonThatWasClicked == &(view.presetManagingBox.pathButton))
     {
-        presetMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.presetManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
+        presetMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.presetManagingBox.pathButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
     }
     else if (buttonThatWasClicked == &(view.presetManagingBox.selectFolderButton))
     {
@@ -331,7 +331,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             }
         }
     }
-    else if (buttonThatWasClicked == &(view.irMatrixBox.newInChannelsButton))
+    else if (buttonThatWasClicked == &(view.presetManagingBox.reloadButton))
     {
         processor.inChannelStatus = Mcfx_convolverAudioProcessor::InChannelStatus::requested;
         processor.ReloadConfiguration();
