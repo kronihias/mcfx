@@ -62,7 +62,7 @@ View::View()
     skippedCyclesLabel.setText ("skipped cycles: ", dontSendNotification);
     addAndMakeVisible(skippedCyclesLabel);
     
-    addAndMakeVisible(presetManagingBox);
+    addAndMakeVisible(FilterManagingBox);
 //    addAndMakeVisible(irMatrixBox);
     addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
@@ -144,7 +144,7 @@ void View::resized()
     title.setBounds(area.removeFromTop(titleHeight)); //title
     subtitle.setBounds(area.removeFromTop(titleHeight)); //subtitle
     
-    presetManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
+    FilterManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
     area.removeFromTop(separator);
     
 //    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
@@ -175,11 +175,11 @@ void View::resized()
 //==============================================================================
 //   Nested GUI classes
 
-View::PresetManagingBox::PresetManagingBox()
+View::FilterManagingBox::FilterManagingBox()
 {
     pathLabel.setFont (Font (15.0f, Font::plain));
     pathLabel.setColour (Label::textColourId, Colours::white);
-    pathLabel.setText("Path:", dontSendNotification);
+    pathLabel.setText("Path", dontSendNotification);
     addAndMakeVisible (pathLabel);
     
     pathText.setFont (Font (11.0f, Font::plain));
@@ -188,24 +188,24 @@ View::PresetManagingBox::PresetManagingBox()
     pathText.setPopupMenuEnabled(false);
     addAndMakeVisible (pathText);
     
-    selectFolderButton.setTooltip ("choose another filter folder");
-    selectFolderButton.setButtonText ("...");
-    selectFolderButton.setColour (TextButton::buttonColourId, Colours::white);
-    selectFolderButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    addAndMakeVisible(selectFolderButton);
+    pathButton.setTooltip ("choose another filter folder");
+    pathButton.setButtonText ("...");
+    pathButton.setColour (TextButton::buttonColourId, Colours::white);
+    pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    addAndMakeVisible(pathButton);
     
     filterLabel.setFont (Font (15.0f, Font::plain));
     filterLabel.setColour (Label::textColourId, Colours::white);
-    filterLabel.setText("Filter:", dontSendNotification);
+    filterLabel.setText("Filter", dontSendNotification);
     addAndMakeVisible (filterLabel);
     
     addAndMakeVisible (filterSelector);
 
-    pathButton.setTooltip ("browse filters or open from file");
-    pathButton.setColour (TextButton::buttonColourId, Colours::white);
-    pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    pathButton.setButtonText ("choose");
-    addAndMakeVisible(pathButton);
+//    chooseButton.setTooltip ("browse filters or open from file");
+//    chooseButton.setColour (TextButton::buttonColourId, Colours::white);
+//    chooseButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+//    chooseButton.setButtonText ("choose");
+//    addAndMakeVisible(chooseButton);
     
     reloadButton.setTooltip ("reload the current matrix specifying a new input channels number");
     reloadButton.setColour (TextButton::buttonColourId, Colours::white);
@@ -213,12 +213,19 @@ View::PresetManagingBox::PresetManagingBox()
     reloadButton.setEnabled(false);
     reloadButton.setButtonText ("reload");
     addAndMakeVisible(reloadButton);
+    
+    infoLabel.setFont (Font (11.0f, Font::plain));
+    infoLabel.setJustificationType(Justification::left);
+    infoLabel.setColour (Label::textColourId, Colours::white);
+    infoLabel.setText("(saved within the project)", dontSendNotification);
+    addAndMakeVisible (infoLabel);
+    infoLabel.setVisible(false);
 }
 
-void View::PresetManagingBox::paint(Graphics& g)
+void View::FilterManagingBox::paint(Graphics& g)
 {}
 
-void View::PresetManagingBox::resized()
+void View::FilterManagingBox::resized()
 {
     int rowHeight = 24;
     
@@ -234,16 +241,16 @@ void View::PresetManagingBox::resized()
     grid.justifyItems = Grid::JustifyItems::center;
     
 
-    grid.templateRows    = { Track (1_fr), Track (1_fr) };
+    grid.templateRows    = { Track (3_fr), Track (3_fr), Track (1_fr) };
     grid.templateColumns = {Track (45_px), Track (8_fr), Track (2_fr)};
     
     GridItem TextPath (pathText);
     TextPath = TextPath.withHeight(rowHeight);
     
-    GridItem pathButton (selectFolderButton);
-    pathButton = pathButton.withSize(labelWidth, rowHeight);
-    pathButton = pathButton.withJustifySelf(GridItem::JustifySelf::start);
-    pathButton = pathButton.withMargin(GridItem::Margin(0,0,0,10));
+    GridItem pathSelection (pathButton);
+    pathSelection = pathSelection.withSize(labelWidth, rowHeight);
+    pathSelection = pathSelection.withJustifySelf(GridItem::JustifySelf::start);
+    pathSelection = pathSelection.withMargin(GridItem::Margin(0,0,0,10));
     
     GridItem TextEditor (filterSelector);
     TextEditor = TextEditor.withHeight(rowHeight);
@@ -252,9 +259,13 @@ void View::PresetManagingBox::resized()
     ReloadButton = ReloadButton.withSize(buttonWitdh, rowHeight);
     ReloadButton = ReloadButton.withJustifySelf(GridItem::JustifySelf::start);
     ReloadButton = ReloadButton.withMargin(GridItem::Margin(0,0,0,10));
-
-    grid.items = {  GridItem (pathLabel) ,  TextPath,   pathButton,
-                    GridItem (filterLabel), TextEditor, ReloadButton
+    
+    GridItem infoText (infoLabel);
+    infoText = infoText.withAlignSelf(GridItem::AlignSelf::start);
+    
+    grid.items = {  GridItem (pathLabel) ,  TextPath,    pathSelection,
+                    GridItem (filterLabel), TextEditor,  ReloadButton,
+                    GridItem(),             infoText,    GridItem()
                 };
 
     grid.performLayout (getLocalBounds());
@@ -266,7 +277,7 @@ void View::PresetManagingBox::resized()
 
     FlexItem labelPath      (labelWidth,                rowHeight, pathLabel);
     FlexItem editorPath     (proportionOfWidth(0.70f),  rowHeight, pathText);
-    FlexItem folderButton   (labelWidth,                rowHeight, selectFolderButton);
+    FlexItem folderButton   (labelWidth,                rowHeight, pathButton);
 
     pathBox.items.addArray ( { labelPath, editorPath, folderButton } );
 
