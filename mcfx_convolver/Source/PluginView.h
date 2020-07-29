@@ -35,7 +35,7 @@ public:
         TextButton pathButton;
         
         Label filterLabel;
-        ComboBox filterMenu;
+        ComboBox filterSelector;
         
         TextButton selectFolderButton;
         TextButton reloadButton;

@@ -199,7 +199,7 @@ View::PresetManagingBox::PresetManagingBox()
     filterLabel.setText("Filter:", dontSendNotification);
     addAndMakeVisible (filterLabel);
     
-    addAndMakeVisible (filterMenu);
+    addAndMakeVisible (filterSelector);
 
     pathButton.setTooltip ("browse filters or open from file");
     pathButton.setColour (TextButton::buttonColourId, Colours::white);
@@ -245,7 +245,7 @@ void View::PresetManagingBox::resized()
     pathButton = pathButton.withJustifySelf(GridItem::JustifySelf::start);
     pathButton = pathButton.withMargin(GridItem::Margin(0,0,0,10));
     
-    GridItem TextEditor (filterMenu);
+    GridItem TextEditor (filterSelector);
     TextEditor = TextEditor.withHeight(rowHeight);
     
     GridItem ReloadButton (reloadButton);

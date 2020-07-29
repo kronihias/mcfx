@@ -95,22 +95,21 @@ public:
     void run();
     
     // do the loading in a background thread
-    void LoadConfigurationAsync(File presetFile, bool reload=false);
+    void LoadConfigurationAsync(File fileToLoad, bool reload=false);
     void LoadConfiguration(File configFile); // do the loading
     void ReloadConfiguration(); //just reload convolver? nope
     
     void changePresetTypeAsync();
     
     void LoadIRMatrixFilter(File filterFile);
-//    void LoadIRMatrixFilterAsync(File filterFile);
     
     void loadConvolver();
     void unloadConvolver();
     
 
     // for gui --------------------------------------------------------------------
-    enum PresetType {conf, wav};
-    PresetType presetType;
+//    enum PresetType {conf, wav};
+//    PresetType presetType;
     
     String  getDebugString();
     
@@ -119,14 +118,14 @@ public:
     String  getStatusText();
     
     bool    SaveConfiguration(File zipFile);
-    void    SearchPresets(File SearchFolder);
+    void    SearchFilters(File SearchFolder);
 //    void    LoadPreset(unsigned int preset);
-    void    LoadPresetFromMenu(unsigned int preset);
-    void    LoadSetupFromFile(File settings);
-    void    LoadPresetByName(String presetName);
+    void    LoadFilterFromMenu(unsigned int filterIndex);
+    void    LoadFilterFromFile(File filterToLoad);
+//    void    LoadPresetByName(String presetName);
     
-    int     FindPresetIndex(File activePresetName);
-    void    changePresetType(PresetType mode);
+//    int     FindPresetIndex(File activePresetName);
+//    void    changePresetType(PresetType mode);
     
     //returning parameter for gui
     unsigned int    getBufferSize();
@@ -161,7 +160,7 @@ public:
     Atomic<bool>    storeInChannelIntoWav;
     
     //----------------------------------------------------------------------------
-    File defaultPresetDir; // where to search for presets
+    File defaultFilterDir; // where to search for presets
     File lastSearchDir; // for open file dialog...
     
     Array<File> presetFilesList;
@@ -201,7 +200,7 @@ private:
     
     File            targetPreset;    //config file copy for thread
     CriticalSection targetPresetMutex;
-    void            setTargetPreset(File newTargetPreset);
+    void            setTargetFile(File newTargetFile);
     bool            isAReload;
     
     File            _tempConfigZipFile;

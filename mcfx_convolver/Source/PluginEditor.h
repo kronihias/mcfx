@@ -62,7 +62,7 @@ public:
 
     static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
     
-    void UpdatePresets();
+    void UpdateFiltersMenu();
     
     void UpdateText();
     
@@ -82,8 +82,8 @@ private:
 
     TooltipWindow tooltipWindow;
 
-    PopupMenu presetMenu;
-    OwnedArray<PopupMenu> presetSubmenu;
+    PopupMenu filterMenu;
+    OwnedArray<PopupMenu> filterSubmenus;
     
     LookAndFeel_V3 MyLookAndFeel;
 };
