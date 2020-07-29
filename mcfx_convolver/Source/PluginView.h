@@ -30,17 +30,18 @@ public:
     class FilterManagingBox : public Component
     {
     public:
-        Label pathLabel;
-        TextEditor pathText;
-        TextButton pathButton;
+        Label       pathLabel;
+        TextEditor  pathText;
+        TextButton  pathButton;
         
-        Label filterLabel;
-        ComboBox filterSelector;
+        Label       filterLabel;
+        ComboBox    filterSelector;
         
-        TextButton selectFolderButton;
-        TextButton reloadButton;
+        TextButton  chooseButton;
+        TextButton  reloadButton;
+        Label       infoLabel;
         
-        ToggleButton saveToggle;
+//        ToggleButton saveToggle;
 
         FilterManagingBox();
     private:

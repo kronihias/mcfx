@@ -108,19 +108,16 @@ public:
     
 
     // for gui --------------------------------------------------------------------
-//    enum PresetType {conf, wav};
-//    PresetType presetType;
-    
     String  getDebugString();
     
     bool newStatusText;
     void timerCallback();
     String  getStatusText();
     
-    bool    SaveConfiguration(File zipFile);
-    void    SearchFilters(File SearchFolder);
-    void    LoadFilterFromMenu(unsigned int filterIndex);
-    void    LoadFilterFromFile(File filterToLoad);
+//    bool    SaveConfiguration(File zipFile);
+    void            SearchFilters(File SearchFolder);
+    void            LoadFilterFromMenu(unsigned int filterIndex, bool restored = false);
+    void            LoadFilterFromFile(File filterToLoad, bool restored = false);
     
     //returning parameter for gui
     unsigned int    getBufferSize();
@@ -128,25 +125,25 @@ public:
     unsigned int    getMaxPartitionSize();
     int             getSkippedCyclesCount();
 
-    void    setConvBufferSize(unsigned int bufsize);
-    void    setMaxPartitionSize(unsigned int maxsize);
+    void            setConvBufferSize(unsigned int bufsize);
+    void            setMaxPartitionSize(unsigned int maxsize);
 
     
     //return the status of the convolver configuration
-    enum ConvolverStatus {Loaded,Loading,Unloaded};
-    int getConvolverStatus();
+    enum            ConvolverStatus {Loaded,Loading,Unloaded};
+    int             getConvolverStatus();
     
     // OSC functions --------------------------------------------------------------
-    void    setOscIn(bool arg); // activate osc in
-    bool    getOscIn();
-    void    setOscInPort(int port);
-    int     getOscInPort();
-    void    oscMessageReceived(const OSCMessage& message);
+    void            setOscIn(bool arg); // activate osc in
+    bool            getOscIn();
+    void            setOscInPort(int port);
+    int             getOscInPort();
+    void            oscMessageReceived(const OSCMessage& message);
     
     // VARIABLES ==================================================================
-    int _min_in_ch;
-    int _min_out_ch;
-    int _num_conv;
+    int             _min_in_ch;
+    int             _min_out_ch;
+    int             _num_conv;
     
     bool            inputChannelRequired; //going to deprecated
     enum            InChannelStatus {agreed, missing, notMultiple, notFeasible, requested};
@@ -155,23 +152,19 @@ public:
     Atomic<bool>    storeInChannelIntoWav;
     
     //----------------------------------------------------------------------------
-    File defaultFilterDir; // where to search for presets
-    File lastSearchDir; // for open file dialog...
+    File            defaultFilterDir; // where to search for presets
+    File            lastSearchDir; // for open file dialog...
     
-    Array<File> filterFilesList;
-//    File configFileLoaded;
-    File getTargetFilter();
+    Array<File>     filterFilesList;
+    File            getTargetFilter();
     
-    String filterNameForStoring; // store filename (is it real necessary?)
-    String filterNameToShow; // string for gui
-    
-    //----------------------------------------------------------------------------
-    File IRlastDirectory;
-//    File filterFileLoaded;
+    String          filterNameForStoring; // store filename
+    String          filterNameToShow; // string for gui
+    Atomic<bool>    restoredConfiguration;
     
     //----------------------------------------------------------------------------
-    Atomic<int> _readyToSaveConfiguration;
-    Atomic<int> _storeConfigDataInProject;
+    Atomic<int>     _readyToSaveConfiguration;
+    Atomic<int>     _storeConfigDataInProject;
 
 private:
     String _DebugText;

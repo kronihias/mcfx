@@ -44,7 +44,8 @@ AudioProcessor (BusesProperties()   .withInput  ("MainInput",  juce::AudioChanne
                                     ),
 Thread("mtx_convolver_master"),
 _readyToSaveConfiguration(false),
-//_storeConfigDataInProject(1),
+_storeConfigDataInProject(1),
+restoredConfiguration(false),
 
 _min_in_ch(0),
 _min_out_ch(0),
@@ -865,7 +866,7 @@ void Mcfx_convolverAudioProcessor::SearchFilters(File SearchFolder)
     addNewStatus(debug);
 }
 
-void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex)
+void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex, bool restored)
 {
     //check if the ID of the loading filter is coherent with the filter list
     if (filterIndex < (unsigned int)filterFilesList.size())
@@ -874,14 +875,23 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex)
         LoadConfigurationAsync(filterFilesList.getUnchecked(filterIndex));
         filterNameToShow = filterFilesList.getUnchecked(filterIndex).getFileNameWithoutExtension();
     }
+    if (restored)
+        restoredConfiguration.set(true);
+    else
+        restoredConfiguration.set(false);
 }
 
-void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad)
+void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool restored)
 {
     DeleteTemporaryFiles();
     LoadConfigurationAsync(filterToLoad);
     filterNameToShow.clear();
-    filterNameToShow << filterToLoad.getFileNameWithoutExtension() << " (picked outside)";
+    filterNameToShow << filterToLoad.getFileNameWithoutExtension() << " (outside library)";
+    
+    if (restored)
+        restoredConfiguration.set(true);
+    else
+        restoredConfiguration.set(false);
 }
 
 ///DEPRECATED
@@ -1105,13 +1115,13 @@ void Mcfx_convolverAudioProcessor::setConvolverStatus(ConvolverStatus status)
 }
 
 //======================== Save to zipfile ========================
-bool Mcfx_convolverAudioProcessor::SaveConfiguration(File zipFile)
-{
-    if (_readyToSaveConfiguration.get())
-        return _tempConfigZipFile.copyFileTo(zipFile);
-    else
-        return false;
-}
+//bool Mcfx_convolverAudioProcessor::SaveConfiguration(File zipFile)
+//{
+//    if (_readyToSaveConfiguration.get())
+//        return _tempConfigZipFile.copyFileTo(zipFile);
+//    else
+//        return false;
+//}
 
 //==============================================================================
 void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
@@ -1224,10 +1234,12 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                     LoadConfigurationAsync(configfiles.getUnchecked(0));
                     filterNameToShow.clear();
                     filterNameToShow = configfiles.getUnchecked(0).getFileNameWithoutExtension();
-                    filterNameToShow << " (saved within project)";
+                    restoredConfiguration.set(true);
                     return;
                 }
-                
+            }
+            else if (_storeConfigDataInProject.get())
+            {
                 /// if restoring from memory got troubles try to restore from filter menu
                 targetFilter = File(xmlState->getStringAttribute("filterFullPathName", "/IDONTEXIST")) ;
                 if(xmlState->getBoolAttribute("targetWasInMenu",false))
@@ -1238,11 +1250,12 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                     if (filterIndex != -1)
                     {
                         storedInChannels = xmlState->getIntAttribute("inputChannelsNumber", 0);
-                        LoadFilterFromMenu(filterIndex);
-                        filterNameToShow << " (saved within project)";
+                        LoadFilterFromMenu(filterIndex, true);
                         return;
                     }
                     filterNameToShow = targetFilter.getFileNameWithoutExtension();
+                    restoredConfiguration.set(true);
+                    
                     addNewStatus("ERROR: filter not found in the library folder!");
                     
                     DebugPrint("ERROR: filter not found in the library folder!\n\n");
@@ -1253,14 +1266,15 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 if(targetFilter.existsAsFile())
                 {
                     storedInChannels = xmlState->getIntAttribute("inputChannelsNumber", 0);
-                    LoadFilterFromFile(targetFilter);
-                    filterNameToShow << " (saved within project)";
+                    LoadFilterFromFile(targetFilter, true);
                     return;
                 }
 
                 String debug;
                 debug << "ERROR: filter not found in the original folder!";
                 filterNameToShow = targetFilter.getFileNameWithoutExtension();
+                filterNameToShow << " (outside library)";
+                restoredConfiguration.set(true);
                 addNewStatus(debug);
                 
                 DebugPrint(debug << "\n\n");

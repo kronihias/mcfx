@@ -31,9 +31,9 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
+//    view.FilterManagingBox.chooseButton.addListener(this);
+//    view.FilterManagingBox.saveToggle.addListener(this);
     view.FilterManagingBox.pathButton.addListener(this);
-    view.FilterManagingBox.saveToggle.addListener(this);
-    view.FilterManagingBox.selectFolderButton.addListener(this);
     view.FilterManagingBox.filterSelector.addListener(this);
     view.FilterManagingBox.reloadButton.addListener(this);
     
@@ -110,7 +110,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.FilterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     view.FilterManagingBox.filterSelector.setTooltip(view.FilterManagingBox.filterSelector.getText()); //to see all the string
     
-    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
+//    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
     view.FilterManagingBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
     
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
@@ -131,8 +131,17 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 //        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
 //    }
     
-    if (processor.filterNameToShow.isNotEmpty())
-        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
+    if (processor.getConvolverStatus() == Mcfx_convolverAudioProcessor::ConvolverStatus::Loaded)
+        view.FilterManagingBox.reloadButton.setEnabled(true);
+    else
+        view.FilterManagingBox.reloadButton.setEnabled(false);
+    
+    view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
+    
+    if(processor.restoredConfiguration.get())
+        view.FilterManagingBox.infoLabel.setVisible(true);
+    else
+        view.FilterManagingBox.infoLabel.setVisible(false);
     
     switch (processor.getConvolverStatus()) {
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Unloaded :
@@ -289,11 +298,11 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
     /*
-    if (buttonThatWasClicked == &(view.FilterManagingBox.pathButton))
+    if (buttonThatWasClicked == &(view.FilterManagingBox.chooseButton))
     {
-        filterMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.FilterManagingBox.pathButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
+        filterMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.FilterManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
     }
-    else*/ if (buttonThatWasClicked == &(view.FilterManagingBox.selectFolderButton))
+    else*/ if (buttonThatWasClicked == &(view.FilterManagingBox.pathButton))
     {
         FileChooser myChooser ("Please select the new filter folder...",
                                processor.defaultFilterDir,
@@ -315,10 +324,10 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         processor.setOscIn(view.oscManagingBox.activeReceiveToggle.getToggleState());
     }
-    else if (buttonThatWasClicked == &(view.FilterManagingBox.saveToggle))
-    {
-        processor._storeConfigDataInProject = view.FilterManagingBox.saveToggle.getToggleState();
-    }
+//    else if (buttonThatWasClicked == &(view.FilterManagingBox.saveToggle))
+//    {
+//        processor._storeConfigDataInProject = view.FilterManagingBox.saveToggle.getToggleState();
+//    }
     /*
     else if (buttonThatWasClicked == &(view.irMatrixBox.confModeButton))
     {
@@ -372,8 +381,6 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
 
 void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
 {
-    // std::cout << "result: " << result << std::endl;
-    
     // file chooser....
     if (result == 0)
     {
@@ -381,9 +388,7 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
     }
     else if (result == -1)
     {
-//        String extension = "*.conf";
-//        if (demoComponent->processor.presetType ==  Mcfx_convolverAudioProcessor::PresetType::wav)
-        String    extension = "*.wav";
+        String extension = "*.wav";
         
         FileChooser myChooser ("Please select the filter file to load...",
                                demoComponent->processor.lastSearchDir, //old version: ourProcessor->lastSearchDir,
@@ -391,26 +396,24 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
         if (myChooser.browseForFileToOpen())
         {
             File mooseFile (myChooser.getResult());
-//            demoComponent->processor.LoadConfigurationAsync(mooseFile);
             demoComponent->processor.LoadFilterFromFile(mooseFile);
             demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
         }
     }
     else if (result == -2)
     {
-        FileChooser myChooser("Save the loaded filter as .zip file...",
-            demoComponent->processor.lastSearchDir.getChildFile(demoComponent->processor.filterNameForStoring),"*.zip");
-        if (myChooser.browseForFileToSave(true))
-        {
-            File mooseFile(myChooser.getResult());
-            demoComponent->processor.SaveConfiguration(mooseFile);
-
-            demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
-        }
+//        FileChooser myChooser("Save the loaded filter as .zip file...",
+//            demoComponent->processor.lastSearchDir.getChildFile(demoComponent->processor.filterNameForStoring),"*.zip");
+//        if (myChooser.browseForFileToSave(true))
+//        {
+//            File mooseFile(myChooser.getResult());
+//            demoComponent->processor.SaveConfiguration(mooseFile);
+//
+//            demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
+//        }
     }
     else // load filter from menu based on chosen index
     {
-//        demoComponent->processor.LoadPreset(result - 1);
         File empty;
         demoComponent->processor.LoadFilterFromMenu(result - 1);
     }
