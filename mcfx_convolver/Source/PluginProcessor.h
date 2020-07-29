@@ -95,22 +95,21 @@ public:
     void run();
     
     // do the loading in a background thread
-    void LoadConfigurationAsync(File presetFile, bool reload=false);
+    void LoadConfigurationAsync(File fileToLoad, bool reload=false);
     void LoadConfiguration(File configFile); // do the loading
     void ReloadConfiguration(); //just reload convolver? nope
     
     void changePresetTypeAsync();
     
     void LoadIRMatrixFilter(File filterFile);
-//    void LoadIRMatrixFilterAsync(File filterFile);
     
     void loadConvolver();
     void unloadConvolver();
     
 
     // for gui --------------------------------------------------------------------
-    enum PresetType {conf, wav};
-    PresetType presetType;
+//    enum PresetType {conf, wav};
+//    PresetType presetType;
     
     String  getDebugString();
     
@@ -119,14 +118,9 @@ public:
     String  getStatusText();
     
     bool    SaveConfiguration(File zipFile);
-    void    SearchPresets(File SearchFolder);
-//    void    LoadPreset(unsigned int preset);
-    void    LoadPresetFromMenu(unsigned int preset);
-    void    LoadSetupFromFile(File settings);
-    void    LoadPresetByName(String presetName);
-    
-    int     FindPresetIndex(File activePresetName);
-    void    changePresetType(PresetType mode);
+    void    SearchFilters(File SearchFolder);
+    void    LoadFilterFromMenu(unsigned int filterIndex);
+    void    LoadFilterFromFile(File filterToLoad);
     
     //returning parameter for gui
     unsigned int    getBufferSize();
@@ -161,15 +155,15 @@ public:
     Atomic<bool>    storeInChannelIntoWav;
     
     //----------------------------------------------------------------------------
-    File defaultPresetDir; // where to search for presets
+    File defaultFilterDir; // where to search for presets
     File lastSearchDir; // for open file dialog...
     
-    Array<File> presetFilesList;
+    Array<File> filterFilesList;
 //    File configFileLoaded;
-    File getTargetPreset();
+    File getTargetFilter();
     
-    String activePresetName; // store filename (is it real necessary?)
-    String presetName; // string for gui
+    String filterNameForStoring; // store filename (is it real necessary?)
+    String filterNameToShow; // string for gui
     
     //----------------------------------------------------------------------------
     File IRlastDirectory;
@@ -199,9 +193,9 @@ private:
     Array<int>      _conv_in;    // list with input routing
     Array<int>      _conv_out;   // list with output routing
     
-    File            targetPreset;    //config file copy for thread
-    CriticalSection targetPresetMutex;
-    void            setTargetPreset(File newTargetPreset);
+    File            targetFilter;    //config file copy for thread
+    CriticalSection targetFilterMutex;
+    void            setTargetFilter(File newTargetFile);
     bool            isAReload;
     
     File            _tempConfigZipFile;

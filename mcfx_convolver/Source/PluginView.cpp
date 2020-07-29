@@ -62,8 +62,8 @@ View::View()
     skippedCyclesLabel.setText ("skipped cycles: ", dontSendNotification);
     addAndMakeVisible(skippedCyclesLabel);
     
-    addAndMakeVisible(presetManagingBox);
-    addAndMakeVisible(irMatrixBox);
+    addAndMakeVisible(FilterManagingBox);
+//    addAndMakeVisible(irMatrixBox);
     addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
@@ -71,7 +71,7 @@ View::View()
     statusLed.setStatus(StatusLed::State::red);
     addAndMakeVisible(statusLed);
     
-    statusText.setFont(Font(12,1));
+    statusText.setFont(Font(12, 1));
     statusText.setJustification(Justification::left);
     statusText.setReadOnly (true);
     statusText.setCaretVisible (false);
@@ -144,11 +144,11 @@ void View::resized()
     title.setBounds(area.removeFromTop(titleHeight)); //title
     subtitle.setBounds(area.removeFromTop(titleHeight)); //subtitle
     
-    presetManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
+    FilterManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
     area.removeFromTop(separator);
     
-    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
-    area.removeFromTop(separator);
+//    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
+//    area.removeFromTop(separator);
     
     oscManagingBox.setBounds(area.removeFromTop(OSCheight));
     area.removeFromTop(separator);
@@ -175,103 +175,126 @@ void View::resized()
 //==============================================================================
 //   Nested GUI classes
 
-View::PresetManagingBox::PresetManagingBox()
+View::FilterManagingBox::FilterManagingBox()
 {
-    pathLabel.setFont (Font (15.0000f, Font::plain));
+    pathLabel.setFont (Font (15.0f, Font::plain));
     pathLabel.setColour (Label::textColourId, Colours::white);
     pathLabel.setText("Path:", dontSendNotification);
     addAndMakeVisible (pathLabel);
     
-    pathText.setFont (Font (10.0f, Font::plain));
-    pathText.setJustification(Justification::left);
+    pathText.setFont (Font (11.0f, Font::plain));
+    pathText.setColour(TextEditor::backgroundColourId, Colour (Colours::lightgrey));
     pathText.setReadOnly(true);
     pathText.setPopupMenuEnabled(false);
     addAndMakeVisible (pathText);
     
-    textEditor.setReadOnly(true);
-    textEditor.setPopupMenuEnabled(false);
-    addAndMakeVisible (textEditor);
-
-    textLabel.setFont (Font (15.0000f, Font::plain));
-    textLabel.setColour (Label::textColourId, Colours::white);
-    textLabel.setText("Preset:",dontSendNotification);
-    addAndMakeVisible (textLabel);
-
-    chooseButton.setTooltip ("browse presets or open from file");
-    chooseButton.setColour (TextButton::buttonColourId, Colours::white);
-    chooseButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    chooseButton.setButtonText ("choose");
-    addAndMakeVisible(chooseButton);
-
-    saveToggle.setButtonText(TRANS("Save preset within project"));
-    saveToggle.setTooltip(TRANS(  "this will save the preset and data within the project and reload it from there; CAUTION: may slow down saving/opening your project and increases project file size!"));
-    saveToggle.setToggleState(true, dontSendNotification);
-    saveToggle.setColour(ToggleButton::textColourId, Colours::white);
-    addAndMakeVisible(saveToggle);
-
-    selectFolderButton.setTooltip ("choose another preset folder");
-    selectFolderButton.setButtonText ("preset folder");
+    selectFolderButton.setTooltip ("choose another filter folder");
+    selectFolderButton.setButtonText ("...");
     selectFolderButton.setColour (TextButton::buttonColourId, Colours::white);
     selectFolderButton.setColour (TextButton::buttonOnColourId, Colours::blue);
     addAndMakeVisible(selectFolderButton);
+    
+    filterLabel.setFont (Font (15.0f, Font::plain));
+    filterLabel.setColour (Label::textColourId, Colours::white);
+    filterLabel.setText("Filter:", dontSendNotification);
+    addAndMakeVisible (filterLabel);
+    
+    addAndMakeVisible (filterSelector);
+
+    pathButton.setTooltip ("browse filters or open from file");
+    pathButton.setColour (TextButton::buttonColourId, Colours::white);
+    pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    pathButton.setButtonText ("choose");
+    addAndMakeVisible(pathButton);
+    
+    reloadButton.setTooltip ("reload the current matrix specifying a new input channels number");
+    reloadButton.setColour (TextButton::buttonColourId, Colours::white);
+    reloadButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    reloadButton.setEnabled(false);
+    reloadButton.setButtonText ("reload");
+    addAndMakeVisible(reloadButton);
 }
 
-void View::PresetManagingBox::paint(Graphics& g)
+void View::FilterManagingBox::paint(Graphics& g)
 {}
 
-void View::PresetManagingBox::resized()
+void View::FilterManagingBox::resized()
 {
-    auto labelButtonWidth = 46;
-    auto rowHeight = 24;
-    auto buttonWidth = 94;
-    auto separatorHeight = 6;
+    int rowHeight = 24;
     
-    //width based on font size and specific string
-    int pathLabelWidth = pathLabel.getFont().getStringWidth(pathLabel.getText());
-    pathLabelWidth = pathLabelWidth + 4*2; //add internal borders
+    int labelWidth = 40;
+    int buttonWitdh = 50;
     
-    //flex row 0 ------------------------------------------------------
-    FlexBox pathBox;
-    pathBox.justifyContent = FlexBox::JustifyContent::flexStart;
+    Grid grid;
+    using Track = Grid::TrackInfo;
+//    grid.justifyItems = Grid::JustifyItems::center;
+    grid.alignContent = Grid::AlignContent::spaceBetween;
+    grid.justifyContent = Grid::JustifyContent::spaceBetween;
+    grid.alignItems = Grid::AlignItems::center;
+    grid.justifyItems = Grid::JustifyItems::center;
+    
 
-    FlexItem labelElement   (pathLabelWidth,          rowHeight, pathLabel);
-    FlexItem editorElement  (proportionOfWidth(0.80f),  rowHeight, pathText);
+    grid.templateRows    = { Track (1_fr), Track (1_fr) };
+    grid.templateColumns = {Track (45_px), Track (8_fr), Track (2_fr)};
+    
+    GridItem TextPath (pathText);
+    TextPath = TextPath.withHeight(rowHeight);
+    
+    GridItem pathButton (selectFolderButton);
+    pathButton = pathButton.withSize(labelWidth, rowHeight);
+    pathButton = pathButton.withJustifySelf(GridItem::JustifySelf::start);
+    pathButton = pathButton.withMargin(GridItem::Margin(0,0,0,10));
+    
+    GridItem TextEditor (filterSelector);
+    TextEditor = TextEditor.withHeight(rowHeight);
+    
+    GridItem ReloadButton (reloadButton);
+    ReloadButton = ReloadButton.withSize(buttonWitdh, rowHeight);
+    ReloadButton = ReloadButton.withJustifySelf(GridItem::JustifySelf::start);
+    ReloadButton = ReloadButton.withMargin(GridItem::Margin(0,0,0,10));
 
-    pathBox.items.addArray ( { labelElement, editorElement } );
+    grid.items = {  GridItem (pathLabel) ,  TextPath,   pathButton,
+                    GridItem (filterLabel), TextEditor, ReloadButton
+                };
 
+    grid.performLayout (getLocalBounds());
+    /*
+    
     //flex row 1 ------------------------------------------------------
+    FlexBox pathBox;
+    pathBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
+
+    FlexItem labelPath      (labelWidth,                rowHeight, pathLabel);
+    FlexItem editorPath     (proportionOfWidth(0.70f),  rowHeight, pathText);
+    FlexItem folderButton   (labelWidth,                rowHeight, selectFolderButton);
+
+    pathBox.items.addArray ( { labelPath, editorPath, folderButton } );
+
+    //flex row 2 ------------------------------------------------------
     FlexBox SelectionBox;
     SelectionBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
 
-    FlexItem label      (labelButtonWidth,          rowHeight, textLabel);
-    FlexItem text       (proportionOfWidth(0.65f),  rowHeight, textEditor);
-    FlexItem choiceButton     (labelButtonWidth,    rowHeight, chooseButton);
+    FlexItem labelFilter    (labelWidth,                rowHeight, filterLabel);
+    FlexItem selector       (proportionOfWidth(0.70f),  rowHeight, textEditor);
+    FlexItem reload         (buttonWitdh,               rowHeight, reloadButton);
 
-    SelectionBox.items.addArray ( { label, text, choiceButton } );
-    
-    //flex row 2 ------------------------------------------------------
-    FlexBox ModifierBox;
-    ModifierBox.justifyContent= FlexBox::JustifyContent::spaceBetween;
-
-    FlexItem toggle         (proportionOfWidth(0.55f),  rowHeight, saveToggle);
-    FlexItem folderButton   (buttonWidth,               rowHeight, selectFolderButton);
-
-    ModifierBox.items.addArray ( { toggle, folderButton } );
+    SelectionBox.items.addArray ( { labelFilter, selector, reload } );
 
     //main flex --------------------------------------------------------
     FlexBox MainBox;
     MainBox.flexDirection = FlexBox::Direction::column;
-    MainBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
+    MainBox.justifyContent = FlexBox::JustifyContent::spaceAround;
 
     FlexItem path       (getWidth(), rowHeight, pathBox);
     FlexItem selection  (getWidth(), rowHeight, SelectionBox);
-    FlexItem modifier   (getWidth(),  rowHeight, ModifierBox);
 
-    MainBox.items.addArray( { path, selection, modifier} );
+    MainBox.items.addArray( { path, selection } );
     MainBox.performLayout (getLocalBounds().toFloat());
+     */
 }
 
 //==============================================================================
+/*
 View::IRMatrixBox::IRMatrixBox()
 {
     boxLabel.setFont (Font (15.0000f, Font::plain));
@@ -279,13 +302,6 @@ View::IRMatrixBox::IRMatrixBox()
     boxLabel.setJustificationType(Justification::left);
     boxLabel.setText("IR Filter Matrix:", dontSendNotification);
     addAndMakeVisible (boxLabel);
-
-    newInChannelsButton.setTooltip ("change and resave input channels number for the current filter matrix");
-    newInChannelsButton.setColour (TextButton::buttonColourId, Colours::white);
-    newInChannelsButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    newInChannelsButton.setButtonText ("change inputs");
-    newInChannelsButton.setEnabled(false);
-    addAndMakeVisible(newInChannelsButton);
     
     confModeButton.setClickingTogglesState (true);
     confModeButton.setRadioGroupId (34567);
@@ -355,6 +371,7 @@ void View::IRMatrixBox::resized()
     mainFlex.items.addArray({ label, editor, button });
     mainFlex.performLayout(getLocalBounds().toFloat());
 }
+ */
 
 //==============================================================================
 View::OSCManagingBox::OSCManagingBox()

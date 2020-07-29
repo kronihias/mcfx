@@ -111,12 +111,13 @@ endif(WIN32)
 
 ################################################
 # # MacOS specific directives
-# IF(APPLE)
-# 	# switch to c++11
+IF(APPLE)
+#	# switch to c++11
 # 	ADD_DEFINITIONS(
 # 		-std=c++11
 # 	)
-# ENDIF (APPLE)
+	SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.11)
+ENDIF (APPLE)
 
 ################################################
 # Linux specific directives

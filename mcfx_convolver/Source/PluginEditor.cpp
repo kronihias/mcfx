@@ -31,13 +31,14 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
-    view.presetManagingBox.chooseButton.addListener(this);
-    view.presetManagingBox.saveToggle.addListener(this);
-    view.presetManagingBox.selectFolderButton.addListener(this);
+    view.FilterManagingBox.pathButton.addListener(this);
+    view.FilterManagingBox.saveToggle.addListener(this);
+    view.FilterManagingBox.selectFolderButton.addListener(this);
+    view.FilterManagingBox.filterSelector.addListener(this);
+    view.FilterManagingBox.reloadButton.addListener(this);
     
-    view.irMatrixBox.newInChannelsButton.addListener(this);
-    view.irMatrixBox.confModeButton.addListener(this);
-    view.irMatrixBox.wavModeButton.addListener(this);
+//    view.irMatrixBox.confModeButton.addListener(this);
+//    view.irMatrixBox.wavModeButton.addListener(this);
     
     view.oscManagingBox.activeReceiveToggle.addListener(this);
     view.oscManagingBox.receivePortText.addListener(this);
@@ -54,7 +55,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     UpdateText();
     
-    UpdatePresets();
+    UpdateFiltersMenu();
     
 //    ownerFilter->addChangeListener(this); // listen to changes of processor
     processor.addChangeListener(this);
@@ -93,8 +94,8 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
 
 void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
+    UpdateFiltersMenu();
     UpdateText();
-    UpdatePresets();
     repaint();
 }
 
@@ -105,32 +106,33 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
     view.ioDetailBox.IRNumber.setText(String(processor._num_conv), dontSendNotification);
     
-    view.presetManagingBox.textEditor.setText(processor.presetName);
-    view.presetManagingBox.textEditor.setCaretPosition(0);
-    view.presetManagingBox.textEditor.setTooltip(view.presetManagingBox.textEditor.getText()); //to see all the string
-//    view.presetManagingBox.textEditor.setCaretPosition(view.presetManagingBox.textEditor.getTotalNumChars()-1);
-    //view.presetManagingBox.textEditor.setScrollToShowCursor(true);
-    view.presetManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
-    view.presetManagingBox.pathText.setText(processor.defaultPresetDir.getFullPathName(), dontSendNotification);
+//    view.FilterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
+    view.FilterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
+    view.FilterManagingBox.filterSelector.setTooltip(view.FilterManagingBox.filterSelector.getText()); //to see all the string
+    
+    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
+    view.FilterManagingBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
     
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
     
-    if (processor.presetType == Mcfx_convolverAudioProcessor::PresetType::conf)
-    {
-        view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
-        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
-        view.irMatrixBox.newInChannelsButton.setEnabled(false);
-    }
-    else
-    {
-        view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
-        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
-        if (processor.presetName.isNotEmpty())
-            view.irMatrixBox.newInChannelsButton.setEnabled(true);
+//    if (processor.presetType == Mcfx_convolverAudioProcessor::PresetType::conf)
+//    {
+//        view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
+//        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
+//        view.irMatrixBox.newInChannelsButton.setEnabled(false);
+//    }
+//    else
+//    {
+//        view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
+//        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
+//        if (processor.filterNameToShow.isNotEmpty())
+//            view.irMatrixBox.newInChannelsButton.setEnabled(true);
+//        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
+//    }
+    
+    if (processor.filterNameToShow.isNotEmpty())
         view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
-        
-    }
     
     switch (processor.getConvolverStatus()) {
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Unloaded :
@@ -219,84 +221,91 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         sel = i;
     }
     view.convManagingBox.maxPartCombobox.setSelectedItemIndex(sel, dontSendNotification);
+     
 }
 
-/// Update the popup menu presets based on a predefined preset folder
-void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
+/// Update the filters  popup menu  based on a predefined folder
+void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
 {
-    presetMenu.clear(); // main menu
-    presetSubmenu.clear(); // contains submenus
+    view.FilterManagingBox.filterSelector.clear(dontSendNotification);
+    filterSubmenus.clear(); // contains submenus
     
     StringArray subDirectories; // hold name of subdirectories, they will be the just the first parent directory name
     String lastSubdirectory;
     int j = 1;
-    int indexOfTicked;
+    int tickedFolder = -1;
+    int tickedItem = -1;
     
-    for (int i=0; i < processor.presetFilesList.size(); i++)
+    for (int i=0; i < processor.filterFilesList.size(); i++)
     {
         // add separator for new subfolder
-        String currentPresetDirectory = processor.presetFilesList.getUnchecked(i).getParentDirectory().getFileNameWithoutExtension();
+        String currentFilterDir = processor.filterFilesList.getUnchecked(i).getParentDirectory().getFileNameWithoutExtension();
         
-        //check if the current preset File has the same parent directory as the precedent one
-        if (!lastSubdirectory.equalsIgnoreCase(currentPresetDirectory))
+        //check if the current filter file has the same parent directory as the precedent one
+        if (!lastSubdirectory.equalsIgnoreCase(currentFilterDir))
         {
-            presetSubmenu.add(new PopupMenu());
-            subDirectories.add(currentPresetDirectory);
+            filterSubmenus.add(new PopupMenu());
+            subDirectories.add(currentFilterDir);
             
             j++;
-            lastSubdirectory = currentPresetDirectory;
+            lastSubdirectory = currentFilterDir;
         }
         
         // add item to submenu
-        // check if this preset is the target of the loading configuration stage (even if it fails to load)
-        if (processor.getTargetPreset() == processor.presetFilesList.getUnchecked(i))
+        filterSubmenus.getLast()->addItem(i+1, processor.filterFilesList.getUnchecked(i).getFileNameWithoutExtension());
+        
+        // save indexes of current item and folder if it's the target one for loading
+        if (processor.getTargetFilter() == processor.filterFilesList.getUnchecked(i))
         {
-            presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName(), true, true);
-            indexOfTicked = subDirectories.size()-1;
+            tickedFolder = subDirectories.size()-1;
+            tickedItem = i;
         }
-        else
-            presetSubmenu.getLast()->addItem(i+1, processor.presetFilesList.getUnchecked(i).getFileName());
+        
     }
     
     // add all subdirs to main menu
-    for (int i=0; i < presetSubmenu.size(); i++)
+    for (int i=0; i < filterSubmenus.size(); i++)
     {
-//        if (subDirectories.getReference(i) == processor.getTargetPreset().getParentDirectory().getFileName())
-        if (i == indexOfTicked)
-            presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i), true, nullptr, true);
+        if (i == tickedFolder)
+            view.FilterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i), true, nullptr, true);
         else
-            presetMenu.addSubMenu(subDirectories.getReference(i), *presetSubmenu.getUnchecked(i));
+            view.FilterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i));
     }
     
-    if (processor.activePresetName.isNotEmpty())
-    {
-        presetMenu.addSeparator();
-        presetMenu.addItem(-2, String("save preset to .zip file..."), processor._readyToSaveConfiguration.get());
-    }
+//    if (processor.filterNameForStoring.isNotEmpty())
+//    {
+//        view.FilterManagingBox.filterSelector.addSeparator();
+//        view.FilterManagingBox.filterSelector.getRootMenu()->addItem(-2, String("save filter to .zip file..."), processor._readyToSaveConfiguration.get());
+//    }
 
-    presetMenu.addSeparator();
-    presetMenu.addItem(-1, String("open preset from file..."));
+    view.FilterManagingBox.filterSelector.addSeparator();
+    view.FilterManagingBox.filterSelector.getRootMenu()->addItem(-1, String("open filter from file..."));
+    
+    //tick the selected item (if present)
+    if (tickedItem != -1)
+        view.FilterManagingBox.filterSelector.setSelectedItemIndex(tickedItem,dontSendNotification);
 }
 
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
-    if (buttonThatWasClicked == &(view.presetManagingBox.chooseButton))
+    /*
+    if (buttonThatWasClicked == &(view.FilterManagingBox.pathButton))
     {
-        presetMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.presetManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
+        filterMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.FilterManagingBox.pathButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
     }
-    else if (buttonThatWasClicked == &(view.presetManagingBox.selectFolderButton))
+    else*/ if (buttonThatWasClicked == &(view.FilterManagingBox.selectFolderButton))
     {
-        FileChooser myChooser ("Please select the new preset folder...",
-                               processor.defaultPresetDir,
+        FileChooser myChooser ("Please select the new filter folder...",
+                               processor.defaultFilterDir,
                                "");
         
         if (myChooser.browseForDirectory())
         {
             
             File mooseFile (myChooser.getResult());
-            processor.defaultPresetDir = mooseFile;
+            processor.defaultFilterDir = mooseFile;
             
-            processor.SearchPresets(mooseFile);
+            processor.SearchFilters(mooseFile);
             
             processor.lastSearchDir = mooseFile.getParentDirectory();
             processor.sendChangeMessage();
@@ -306,10 +315,11 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         processor.setOscIn(view.oscManagingBox.activeReceiveToggle.getToggleState());
     }
-    else if (buttonThatWasClicked == &(view.presetManagingBox.saveToggle))
+    else if (buttonThatWasClicked == &(view.FilterManagingBox.saveToggle))
     {
-        processor._storeConfigDataInProject = view.presetManagingBox.saveToggle.getToggleState();
+        processor._storeConfigDataInProject = view.FilterManagingBox.saveToggle.getToggleState();
     }
+    /*
     else if (buttonThatWasClicked == &(view.irMatrixBox.confModeButton))
     {
         if (view.irMatrixBox.confModeButton.getToggleState())
@@ -330,8 +340,8 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
 //            std::cout << "conf was clicked" << std::endl;
             }
         }
-    }
-    else if (buttonThatWasClicked == &(view.irMatrixBox.newInChannelsButton))
+    }*/
+    else if (buttonThatWasClicked == &(view.FilterManagingBox.reloadButton))
     {
         processor.inChannelStatus = Mcfx_convolverAudioProcessor::InChannelStatus::requested;
         processor.ReloadConfiguration();
@@ -371,25 +381,25 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
     }
     else if (result == -1)
     {
-        String extension = "*.conf";
-        if (demoComponent->processor.presetType ==  Mcfx_convolverAudioProcessor::PresetType::wav)
-            extension = "*.wav";
+//        String extension = "*.conf";
+//        if (demoComponent->processor.presetType ==  Mcfx_convolverAudioProcessor::PresetType::wav)
+        String    extension = "*.wav";
         
-        FileChooser myChooser ("Please select the preset file to load...",
+        FileChooser myChooser ("Please select the filter file to load...",
                                demoComponent->processor.lastSearchDir, //old version: ourProcessor->lastSearchDir,
                                extension);
         if (myChooser.browseForFileToOpen())
         {
             File mooseFile (myChooser.getResult());
 //            demoComponent->processor.LoadConfigurationAsync(mooseFile);
-            demoComponent->processor.LoadSetupFromFile(mooseFile);
+            demoComponent->processor.LoadFilterFromFile(mooseFile);
             demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
         }
     }
     else if (result == -2)
     {
-        FileChooser myChooser("Save the loaded preset as .zip file...",
-            demoComponent->processor.lastSearchDir.getChildFile(demoComponent->processor.activePresetName),"*.zip");
+        FileChooser myChooser("Save the loaded filter as .zip file...",
+            demoComponent->processor.lastSearchDir.getChildFile(demoComponent->processor.filterNameForStoring),"*.zip");
         if (myChooser.browseForFileToSave(true))
         {
             File mooseFile(myChooser.getResult());
@@ -398,17 +408,24 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
             demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
         }
     }
-    else // load preset
+    else // load filter from menu based on chosen index
     {
 //        demoComponent->processor.LoadPreset(result - 1);
         File empty;
-        demoComponent->processor.LoadPresetFromMenu(result - 1);
+        demoComponent->processor.LoadFilterFromMenu(result - 1);
     }
 }
 
 void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
-    if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
+    if (comboBoxThatHasChanged == &view.FilterManagingBox.filterSelector)
+    {
+//        MessageManager::callAsync([&] () {
+//            menuItemChosenCallback(view.FilterManagingBox.filterSelector.getSelectedId(), this);
+//        });
+        menuItemChosenCallback(view.FilterManagingBox.filterSelector.getSelectedId(), this);
+    }
+    else if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
     {
         int val = view.convManagingBox.bufferCombobox.getText().getIntValue();
         
