@@ -85,10 +85,21 @@ public:
     public:
         Label inputLabel;
         Label inputNumber;
+        
         Label outputLabel;
         Label outputNumber;
+        
         Label IRLabel;
         Label IRNumber;
+        
+        Label sampleRateLabel;
+        Label sampleRateNumber;
+        
+        Label hostBufferLabel;
+        Label hostBufferNumber;
+        
+        Label filterLengthLabel;
+        Label filterLengthNumber;
 
         IODetailBox();
     private:

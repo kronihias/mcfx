@@ -150,14 +150,13 @@ void View::resized()
 //    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
 //    area.removeFromTop(separator);
     
-    oscManagingBox.setBounds(area.removeFromTop(OSCheight));
-    area.removeFromTop(separator);
-    
-    auto areabis = area.removeFromTop(IOBoxHeight); //temporary, waiting for fill the space on the right
-    ioDetailBox.setBounds(areabis.removeFromLeft(IOBoxWidtdh));
+    ioDetailBox.setBounds(area.removeFromTop(IOBoxHeight));
     area.removeFromTop(separator);
     
     convManagingBox.setBounds(area.removeFromTop(convBoxHeight));
+    area.removeFromTop(separator);
+    
+    oscManagingBox.setBounds(area.removeFromTop(OSCheight));
     area.removeFromTop(separator);
     
     area.removeFromTop(smallLabelHeight);
@@ -441,7 +440,7 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (inputLabel);
     
     inputNumber.setFont (Font (15.0000f, Font::plain));
-    inputNumber.setJustificationType (Justification::centred);
+    inputNumber.setJustificationType (Justification::right);
     inputNumber.setColour (Label::textColourId, Colours::white);
     inputNumber.setText("0", dontSendNotification);
     addAndMakeVisible (inputNumber);
@@ -453,7 +452,7 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (outputLabel);
     
     outputNumber.setFont (Font (15.0000f, Font::plain));
-    outputNumber.setJustificationType (Justification::centred);
+    outputNumber.setJustificationType (Justification::right);
     outputNumber.setColour (Label::textColourId, Colours::white);
     outputNumber.setText("0", dontSendNotification);
     addAndMakeVisible (outputNumber);
@@ -465,37 +464,93 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (IRLabel);
     
     IRNumber.setFont (Font (15.0000f, Font::plain));
-    IRNumber.setJustificationType (Justification::centred);
+    IRNumber.setJustificationType (Justification::right);
     IRNumber.setColour (Label::textColourId, Colours::white);
     IRNumber.setText("0", dontSendNotification);
     addAndMakeVisible (IRNumber);
+    
+    sampleRateLabel.setFont (Font (15.0000f, Font::plain));
+    sampleRateLabel.setJustificationType (Justification::centredRight);
+    sampleRateLabel.setColour (Label::textColourId, Colours::white);
+    sampleRateLabel.setText("Samplerate:", dontSendNotification);
+    addAndMakeVisible (sampleRateLabel);
+    
+    sampleRateNumber.setFont (Font (15.0000f, Font::plain));
+    sampleRateNumber.setJustificationType (Justification::centred);
+    sampleRateNumber.setColour (Label::textColourId, Colours::white);
+    sampleRateNumber.setText("0", dontSendNotification);
+    addAndMakeVisible (sampleRateNumber);
+    
+    hostBufferLabel.setFont (Font (15.0000f, Font::plain));
+    hostBufferLabel.setJustificationType (Justification::centredRight);
+    hostBufferLabel.setColour (Label::textColourId, Colours::white);
+    hostBufferLabel.setText("Host Buffer Size:", dontSendNotification);
+    addAndMakeVisible (hostBufferLabel);
+    
+    hostBufferNumber.setFont (Font (15.0000f, Font::plain));
+    hostBufferNumber.setJustificationType (Justification::centred);
+    hostBufferNumber.setColour (Label::textColourId, Colours::white);
+    hostBufferNumber.setText("0", dontSendNotification);
+    addAndMakeVisible (hostBufferNumber);
+    
+    filterLengthLabel.setFont (Font (15.0000f, Font::plain));
+    filterLengthLabel.setJustificationType (Justification::centredRight);
+    filterLengthLabel.setColour (Label::textColourId, Colours::white);
+    filterLengthLabel.setText("Filter Length:", dontSendNotification);
+    addAndMakeVisible (filterLengthLabel);
+    
+    filterLengthNumber.setFont (Font (15.0000f, Font::plain));
+    filterLengthNumber.setJustificationType (Justification::centred);
+    filterLengthNumber.setColour (Label::textColourId, Colours::white);
+    filterLengthNumber.setText("0", dontSendNotification);
+    addAndMakeVisible (filterLengthNumber);
 }
 
 void View::IODetailBox::paint(Graphics& g)
 {
-//    g.setColour (Colour (0x410000ff));
-    
+    float chafmer = 10.0f;
     auto boxColor = Colours::blue;
     g.setColour(boxColor.withAlpha(0.26f)); //transparency 26%
+
     
-    g.fillRoundedRectangle(getLocalBounds().toFloat(), 10.0f);
+    g.fillRoundedRectangle(getLocalBounds().toFloat(), chafmer);
+    
+    g.setColour (Colours::white);
+    g.drawLine(getWidth()/2, chafmer/2, getWidth()/2, getHeight()-chafmer/2, 0.75f);
 }
 
 void View::IODetailBox::resized()
 {
-   Grid grid;
+    auto localArea = getLocalBounds();
+    localArea.reduce(0, 10.0f);
+    
+    Grid gridLeft;
+    using TrackL = Grid::TrackInfo;
 
-   using Track = Grid::TrackInfo;
+    gridLeft.templateRows    = { TrackL (1_fr), TrackL (1_fr), TrackL (1_fr) };
+    gridLeft.templateColumns = { TrackL (3_fr), TrackL (1_fr)};
 
-   grid.templateRows    = { Track (1_fr), Track (1_fr), Track (1_fr) };
-   grid.templateColumns = { Track (3_fr), Track (1_fr)};
-
-   grid.items = {  GridItem (inputLabel),   GridItem (inputNumber),
-                   GridItem (outputLabel),  GridItem (outputNumber),
-                   GridItem (IRLabel),      GridItem (IRNumber)
+    gridLeft.items = {  GridItem (inputLabel),   GridItem (inputNumber),
+                        GridItem (outputLabel),  GridItem (outputNumber),
+                        GridItem (IRLabel),      GridItem (IRNumber)
                };
 
-   grid.performLayout (getLocalBounds());
+    gridLeft.performLayout (localArea.removeFromLeft(localArea.getWidth()/2));
+    
+    //--------------------------------------------------------------------------
+    
+    Grid gridRight;
+    using TrackR = Grid::TrackInfo;
+
+    gridRight.templateRows    = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr) };
+    gridRight.templateColumns = { TrackR (3_fr), TrackR (1_fr)};
+
+    gridRight.items = { GridItem (sampleRateLabel),     GridItem (sampleRateNumber),
+                        GridItem (hostBufferLabel),     GridItem (hostBufferNumber),
+                        GridItem (filterLengthLabel),   GridItem (filterLengthNumber)
+               };
+
+    gridRight.performLayout (localArea);
 }
 
 //==============================================================================
