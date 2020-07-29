@@ -63,7 +63,7 @@ View::View()
     addAndMakeVisible(skippedCyclesLabel);
     
     addAndMakeVisible(presetManagingBox);
-    addAndMakeVisible(irMatrixBox);
+//    addAndMakeVisible(irMatrixBox);
     addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
@@ -71,7 +71,7 @@ View::View()
     statusLed.setStatus(StatusLed::State::red);
     addAndMakeVisible(statusLed);
     
-    statusText.setFont(Font(12,1));
+    statusText.setFont(Font(12, 1));
     statusText.setJustification(Justification::left);
     statusText.setReadOnly (true);
     statusText.setCaretVisible (false);
@@ -147,8 +147,8 @@ void View::resized()
     presetManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
     area.removeFromTop(separator);
     
-    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
-    area.removeFromTop(separator);
+//    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
+//    area.removeFromTop(separator);
     
     oscManagingBox.setBounds(area.removeFromTop(OSCheight));
     area.removeFromTop(separator);
@@ -177,19 +177,13 @@ void View::resized()
 
 View::PresetManagingBox::PresetManagingBox()
 {
-    pathLabel.setFont (Font (15.0000f, Font::plain));
+    pathLabel.setFont (Font (15.0f, Font::plain));
     pathLabel.setColour (Label::textColourId, Colours::white);
     pathLabel.setText("Path:", dontSendNotification);
     addAndMakeVisible (pathLabel);
     
-    filterLabel.setFont (Font (15.0000f, Font::plain));
-    filterLabel.setColour (Label::textColourId, Colours::white);
-    filterLabel.setText("Filter:", dontSendNotification);
-    addAndMakeVisible (filterLabel);
-    
-    pathText.setFont (Font (10.0f, Font::plain));
+    pathText.setFont (Font (11.0f, Font::plain));
     pathText.setColour(TextEditor::backgroundColourId, Colour (Colours::lightgrey));
-    pathText.setJustification(Justification::left);
     pathText.setReadOnly(true);
     pathText.setPopupMenuEnabled(false);
     addAndMakeVisible (pathText);
@@ -200,9 +194,12 @@ View::PresetManagingBox::PresetManagingBox()
     selectFolderButton.setColour (TextButton::buttonOnColourId, Colours::blue);
     addAndMakeVisible(selectFolderButton);
     
-    textEditor.setReadOnly(true);
-    textEditor.setPopupMenuEnabled(false);
-    addAndMakeVisible (textEditor);
+    filterLabel.setFont (Font (15.0f, Font::plain));
+    filterLabel.setColour (Label::textColourId, Colours::white);
+    filterLabel.setText("Filter:", dontSendNotification);
+    addAndMakeVisible (filterLabel);
+    
+    addAndMakeVisible (filterSelector);
 
     pathButton.setTooltip ("browse filters or open from file");
     pathButton.setColour (TextButton::buttonColourId, Colours::white);
@@ -238,19 +235,23 @@ void View::PresetManagingBox::resized()
     
 
     grid.templateRows    = { Track (1_fr), Track (1_fr) };
-    grid.templateColumns = {Track (1_fr), Track (7_fr), Track (2_fr)};
+    grid.templateColumns = {Track (45_px), Track (8_fr), Track (2_fr)};
     
     GridItem TextPath (pathText);
     TextPath = TextPath.withHeight(rowHeight);
     
     GridItem pathButton (selectFolderButton);
     pathButton = pathButton.withSize(labelWidth, rowHeight);
+    pathButton = pathButton.withJustifySelf(GridItem::JustifySelf::start);
+    pathButton = pathButton.withMargin(GridItem::Margin(0,0,0,10));
     
-    GridItem TextEditor (textEditor);
+    GridItem TextEditor (filterSelector);
     TextEditor = TextEditor.withHeight(rowHeight);
     
     GridItem ReloadButton (reloadButton);
     ReloadButton = ReloadButton.withSize(buttonWitdh, rowHeight);
+    ReloadButton = ReloadButton.withJustifySelf(GridItem::JustifySelf::start);
+    ReloadButton = ReloadButton.withMargin(GridItem::Margin(0,0,0,10));
 
     grid.items = {  GridItem (pathLabel) ,  TextPath,   pathButton,
                     GridItem (filterLabel), TextEditor, ReloadButton
@@ -293,6 +294,7 @@ void View::PresetManagingBox::resized()
 }
 
 //==============================================================================
+/*
 View::IRMatrixBox::IRMatrixBox()
 {
     boxLabel.setFont (Font (15.0000f, Font::plain));
@@ -338,7 +340,7 @@ void View::IRMatrixBox::resized()
     int labelWidth = 100;
     
     int height = 24;
-    /*
+    
     FlexBox toggleButtons;
     toggleButtons.justifyContent = FlexBox::JustifyContent::center;
     toggleButtons.alignItems = FlexBox::AlignItems::center;
@@ -367,8 +369,9 @@ void View::IRMatrixBox::resized()
     button.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     mainFlex.items.addArray({ label, editor, button });
-    mainFlex.performLayout(getLocalBounds().toFloat()); */
+    mainFlex.performLayout(getLocalBounds().toFloat());
 }
+ */
 
 //==============================================================================
 View::OSCManagingBox::OSCManagingBox()
