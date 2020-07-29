@@ -62,7 +62,7 @@ View::View()
     skippedCyclesLabel.setText ("skipped cycles: ", dontSendNotification);
     addAndMakeVisible(skippedCyclesLabel);
     
-    addAndMakeVisible(presetManagingBox);
+    addAndMakeVisible(FilterManagingBox);
 //    addAndMakeVisible(irMatrixBox);
     addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
@@ -144,7 +144,7 @@ void View::resized()
     title.setBounds(area.removeFromTop(titleHeight)); //title
     subtitle.setBounds(area.removeFromTop(titleHeight)); //subtitle
     
-    presetManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
+    FilterManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
     area.removeFromTop(separator);
     
 //    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
@@ -175,7 +175,7 @@ void View::resized()
 //==============================================================================
 //   Nested GUI classes
 
-View::PresetManagingBox::PresetManagingBox()
+View::FilterManagingBox::FilterManagingBox()
 {
     pathLabel.setFont (Font (15.0f, Font::plain));
     pathLabel.setColour (Label::textColourId, Colours::white);
@@ -215,10 +215,10 @@ View::PresetManagingBox::PresetManagingBox()
     addAndMakeVisible(reloadButton);
 }
 
-void View::PresetManagingBox::paint(Graphics& g)
+void View::FilterManagingBox::paint(Graphics& g)
 {}
 
-void View::PresetManagingBox::resized()
+void View::FilterManagingBox::resized()
 {
     int rowHeight = 24;
     

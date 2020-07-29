@@ -119,13 +119,8 @@ public:
     
     bool    SaveConfiguration(File zipFile);
     void    SearchFilters(File SearchFolder);
-//    void    LoadPreset(unsigned int preset);
     void    LoadFilterFromMenu(unsigned int filterIndex);
     void    LoadFilterFromFile(File filterToLoad);
-//    void    LoadPresetByName(String presetName);
-    
-//    int     FindPresetIndex(File activePresetName);
-//    void    changePresetType(PresetType mode);
     
     //returning parameter for gui
     unsigned int    getBufferSize();
@@ -163,12 +158,12 @@ public:
     File defaultFilterDir; // where to search for presets
     File lastSearchDir; // for open file dialog...
     
-    Array<File> presetFilesList;
+    Array<File> filterFilesList;
 //    File configFileLoaded;
-    File getTargetPreset();
+    File getTargetFilter();
     
-    String activePresetName; // store filename (is it real necessary?)
-    String presetName; // string for gui
+    String filterNameForStoring; // store filename (is it real necessary?)
+    String filterNameToShow; // string for gui
     
     //----------------------------------------------------------------------------
     File IRlastDirectory;
@@ -198,9 +193,9 @@ private:
     Array<int>      _conv_in;    // list with input routing
     Array<int>      _conv_out;   // list with output routing
     
-    File            targetPreset;    //config file copy for thread
-    CriticalSection targetPresetMutex;
-    void            setTargetFile(File newTargetFile);
+    File            targetFilter;    //config file copy for thread
+    CriticalSection targetFilterMutex;
+    void            setTargetFilter(File newTargetFile);
     bool            isAReload;
     
     File            _tempConfigZipFile;

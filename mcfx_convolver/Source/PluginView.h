@@ -26,8 +26,8 @@ class View  : public Component
 {
 public:
     // GUI nested classes
-    //preset managing box
-    class PresetManagingBox : public Component
+    //filter managing box
+    class FilterManagingBox : public Component
     {
     public:
         Label pathLabel;
@@ -42,7 +42,7 @@ public:
         
         ToggleButton saveToggle;
 
-        PresetManagingBox();
+        FilterManagingBox();
     private:
         void paint (Graphics& g);
         void resized();
@@ -154,7 +154,7 @@ public:
     //Instanciation
     Label title;
     Label subtitle;
-    PresetManagingBox presetManagingBox;
+    FilterManagingBox FilterManagingBox;
 //    IRMatrixBox irMatrixBox;
     OSCManagingBox oscManagingBox;
     IODetailBox ioDetailBox;
