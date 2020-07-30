@@ -33,7 +33,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
 //    view.FilterManagingBox.chooseButton.addListener(this);
 //    view.FilterManagingBox.saveToggle.addListener(this);
-    view.FilterManagingBox.pathButton.addListener(this);
+    view.changePathBox.pathButton.addListener(this);
     view.FilterManagingBox.filterSelector.addListener(this);
     view.FilterManagingBox.reloadButton.addListener(this);
     
@@ -51,7 +51,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     addAndMakeVisible(view);
 
-    setSize (400, 530); //originally 350, 330
+    setSize (420, 420); //originally 350, 330
     
     UpdateText();
     
@@ -83,10 +83,7 @@ void Mcfx_convolverAudioProcessorEditor::resized()
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()
 {
-    String text("skipped cycles: ");
-    text << processor.getSkippedCyclesCount();
-
-    view.skippedCyclesLabel.setText(text, dontSendNotification);
+    view.convManagingBox.skippedCyclesValue.setText(String(processor.getSkippedCyclesCount()), sendNotification);
     
     view.debugText.setText(processor.getDebugString(), true);   //notify for what purpose?
     view.debugText.moveCaretToEnd();
@@ -102,13 +99,12 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
 /// update the overall plugin text based on the processor data and the stored one
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
 {
-
     
     view.FilterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     view.FilterManagingBox.filterSelector.setTooltip(view.FilterManagingBox.filterSelector.getText()); //to see all the string
     
 //    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
-    view.FilterManagingBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
+    view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
     
     view.ioDetailBox.inputNumber.setText(String(processor._min_in_ch), dontSendNotification);
     view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
@@ -120,6 +116,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.filterLengthInSeconds.setText(String(processor._filter_len_secs, 2), dontSendNotification);
     view.ioDetailBox.filterLengthInSamples.setText(String(processor._filter_len_smpls), dontSendNotification);
     view.ioDetailBox.resampledLabel.setVisible(processor.filterHasBeenResampled.get());
+    
+    view.convManagingBox.latencyValue.setText(String(processor.getLatencySamples()), sendNotification);
     
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
@@ -310,7 +308,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         filterMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.FilterManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
     }
-    else*/ if (buttonThatWasClicked == &(view.FilterManagingBox.pathButton))
+    else*/ if (buttonThatWasClicked == &(view.changePathBox.pathButton))
     {
         FileChooser myChooser ("Please select the new filter folder...",
                                processor.defaultFilterDir,

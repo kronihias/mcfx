@@ -56,17 +56,12 @@ View::View()
     debugWinLabel.setText ("debug window",dontSendNotification);
     addAndMakeVisible(debugWinLabel);
     
-    skippedCyclesLabel.setFont(Font(10.0000f, Font::plain));
-    skippedCyclesLabel.setJustificationType(Justification::right);
-    skippedCyclesLabel.setColour(Label::textColourId, Colours::yellow);
-    skippedCyclesLabel.setText ("skipped cycles: ", dontSendNotification);
-    addAndMakeVisible(skippedCyclesLabel);
-    
     addAndMakeVisible(FilterManagingBox);
 //    addAndMakeVisible(irMatrixBox);
     addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
+    addAndMakeVisible(changePathBox);
         
     statusLed.setStatus(StatusLed::State::red);
     addAndMakeVisible(statusLed);
@@ -115,20 +110,20 @@ void View::resized()
 {
     auto area = getLocalBounds();
     int border = 15;
-    int separator = 6;
+    int separator = 12;
     
     int titleHeight = 25;
     
-    int presetBoxHeight = 84;//24*3 + 6*2
+    int presetBoxHeight = 48;//24 + 6*2
     
     int IRBoxHeight = 36;
     
     int OSCheight = 24;
     
     int IOBoxWidtdh = 190;
-    int IOBoxHeight = 90;
+    int IOBoxHeight = 120;
     
-    int convBoxHeight = 40;
+    int convBoxHeight = 60;
     
     int debugWinHeight = 100;
 
@@ -156,17 +151,19 @@ void View::resized()
     convManagingBox.setBounds(area.removeFromTop(convBoxHeight));
     area.removeFromTop(separator);
     
-    oscManagingBox.setBounds(area.removeFromTop(OSCheight));
+    changePathBox.setBounds(area.removeFromTop(presetBoxHeight));
     area.removeFromTop(separator);
     
-    area.removeFromTop(smallLabelHeight);
-    debugText.setBounds(area.removeFromTop(debugWinHeight));
-    skippedCyclesLabel.setBounds(area.removeFromTop(smallLabelHeight));
-    
-//    std::cout << "global area: " << area.toString() << std::endl;
+//    oscManagingBox.setBounds(area.removeFromTop(OSCheight));
+//    area.removeFromTop(separator);
+//
+//    area.removeFromTop(smallLabelHeight);
+//    debugText.setBounds(area.removeFromTop(debugWinHeight));
+//    skippedCyclesLabel.setBounds(area.removeFromTop(smallLabelHeight));
     
     auto sectionArea = area.removeFromBottom(20);
     statusLed.setBounds(sectionArea.removeFromLeft(20));
+    sectionArea.removeFromLeft(5);
     statusText.setBounds(sectionArea);
 }
 
@@ -176,23 +173,6 @@ void View::resized()
 
 View::FilterManagingBox::FilterManagingBox()
 {
-    pathLabel.setFont (Font (15.0f, Font::plain));
-    pathLabel.setColour (Label::textColourId, Colours::white);
-    pathLabel.setText("Path", dontSendNotification);
-    addAndMakeVisible (pathLabel);
-    
-    pathText.setFont (Font (11.0f, Font::plain));
-    pathText.setColour(TextEditor::backgroundColourId, Colour (Colours::lightgrey));
-    pathText.setReadOnly(true);
-    pathText.setPopupMenuEnabled(false);
-    addAndMakeVisible (pathText);
-    
-    pathButton.setTooltip ("choose another filter folder");
-    pathButton.setButtonText ("...");
-    pathButton.setColour (TextButton::buttonColourId, Colours::white);
-    pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    addAndMakeVisible(pathButton);
-    
     filterLabel.setFont (Font (15.0f, Font::plain));
     filterLabel.setColour (Label::textColourId, Colours::white);
     filterLabel.setText("Filter", dontSendNotification);
@@ -240,16 +220,17 @@ void View::FilterManagingBox::resized()
     grid.justifyItems = Grid::JustifyItems::center;
     
 
-    grid.templateRows    = { Track (3_fr), Track (3_fr), Track (1_fr) };
+    grid.templateRows    = { //Track (3_fr),
+                                Track (3_fr), Track (1_fr) };
     grid.templateColumns = {Track (45_px), Track (8_fr), Track (2_fr)};
     
-    GridItem TextPath (pathText);
-    TextPath = TextPath.withHeight(rowHeight);
-    
-    GridItem pathSelection (pathButton);
-    pathSelection = pathSelection.withSize(labelWidth, rowHeight);
-    pathSelection = pathSelection.withJustifySelf(GridItem::JustifySelf::start);
-    pathSelection = pathSelection.withMargin(GridItem::Margin(0,0,0,10));
+//    GridItem TextPath (pathText);
+//    TextPath = TextPath.withHeight(rowHeight);
+//
+//    GridItem pathSelection (pathButton);
+//    pathSelection = pathSelection.withSize(labelWidth, rowHeight);
+//    pathSelection = pathSelection.withJustifySelf(GridItem::JustifySelf::start);
+//    pathSelection = pathSelection.withMargin(GridItem::Margin(0,0,0,10));
     
     GridItem TextEditor (filterSelector);
     TextEditor = TextEditor.withHeight(rowHeight);
@@ -262,126 +243,71 @@ void View::FilterManagingBox::resized()
     GridItem infoText (infoLabel);
     infoText = infoText.withAlignSelf(GridItem::AlignSelf::start);
     
-    grid.items = {  GridItem (pathLabel) ,  TextPath,    pathSelection,
+    grid.items = {  //GridItem (pathLabel) ,  TextPath,    pathSelection,
                     GridItem (filterLabel), TextEditor,  ReloadButton,
                     GridItem(),             infoText,    GridItem()
                 };
 
     grid.performLayout (getLocalBounds());
-    /*
-    
-    //flex row 1 ------------------------------------------------------
-    FlexBox pathBox;
-    pathBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
-
-    FlexItem labelPath      (labelWidth,                rowHeight, pathLabel);
-    FlexItem editorPath     (proportionOfWidth(0.70f),  rowHeight, pathText);
-    FlexItem folderButton   (labelWidth,                rowHeight, pathButton);
-
-    pathBox.items.addArray ( { labelPath, editorPath, folderButton } );
-
-    //flex row 2 ------------------------------------------------------
-    FlexBox SelectionBox;
-    SelectionBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
-
-    FlexItem labelFilter    (labelWidth,                rowHeight, filterLabel);
-    FlexItem selector       (proportionOfWidth(0.70f),  rowHeight, textEditor);
-    FlexItem reload         (buttonWitdh,               rowHeight, reloadButton);
-
-    SelectionBox.items.addArray ( { labelFilter, selector, reload } );
-
-    //main flex --------------------------------------------------------
-    FlexBox MainBox;
-    MainBox.flexDirection = FlexBox::Direction::column;
-    MainBox.justifyContent = FlexBox::JustifyContent::spaceAround;
-
-    FlexItem path       (getWidth(), rowHeight, pathBox);
-    FlexItem selection  (getWidth(), rowHeight, SelectionBox);
-
-    MainBox.items.addArray( { path, selection } );
-    MainBox.performLayout (getLocalBounds().toFloat());
-     */
 }
 
 //==============================================================================
-/*
-View::IRMatrixBox::IRMatrixBox()
+
+View::ChangePathBox::ChangePathBox()
 {
-    boxLabel.setFont (Font (15.0000f, Font::plain));
-    boxLabel.setColour (Label::textColourId, Colours::white);
-    boxLabel.setJustificationType(Justification::left);
-    boxLabel.setText("IR Filter Matrix:", dontSendNotification);
-    addAndMakeVisible (boxLabel);
+    pathLabel.setFont (Font (15.0f, Font::plain));
+    pathLabel.setColour (Label::textColourId, Colours::white);
+    pathLabel.setJustificationType(Justification::right);
+    pathLabel.setText("Library path", dontSendNotification);
+    addAndMakeVisible (pathLabel);
     
-    confModeButton.setClickingTogglesState (true);
-    confModeButton.setRadioGroupId (34567);
-    confModeButton.setColour (TextButton::textColourOffId,  Colours::black);
-    confModeButton.setColour (TextButton::textColourOnId,   Colours::white);
-    confModeButton.setColour (TextButton::buttonColourId,   Colours::white);
-    confModeButton.setColour (TextButton::buttonOnColourId, Colours::blueviolet.brighter());
-    confModeButton.setConnectedEdges (Button::ConnectedOnRight);
-    confModeButton.setToggleState (true, dontSendNotification);
-    confModeButton.setButtonText(".conf");
-    addAndMakeVisible(confModeButton);
+    pathText.setFont (Font (11.0f, Font::plain));
+    pathText.setColour(TextEditor::backgroundColourId, Colour (Colours::lightgrey));
+    pathText.setReadOnly(true);
+    pathText.setPopupMenuEnabled(false);
+    addAndMakeVisible (pathText);
     
-    wavModeButton.setClickingTogglesState (true);
-    wavModeButton.setRadioGroupId (34567);
-    wavModeButton.setColour (TextButton::textColourOffId,  Colours::black);
-    wavModeButton.setColour (TextButton::textColourOnId,   Colours::white);
-    wavModeButton.setColour (TextButton::buttonColourId,   Colours::white);
-    wavModeButton.setColour (TextButton::buttonOnColourId, Colours::blueviolet.brighter());
-    wavModeButton.setConnectedEdges (Button::ConnectedOnLeft);
-    wavModeButton.setToggleState (false, dontSendNotification);
-    wavModeButton.setButtonText(".wav");
-    addAndMakeVisible(wavModeButton);
+    pathButton.setTooltip ("choose another filter libray folder");
+    pathButton.setButtonText ("...");
+    pathButton.setColour (TextButton::buttonColourId, Colours::white);
+    pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    addAndMakeVisible(pathButton);
 }
 
-void View::IRMatrixBox::paint(Graphics& g)
+void View::ChangePathBox::paint(Graphics& g)
 {
-    g.setColour (Colours::darkgrey);
-    g.drawRect (0, 0, getWidth(), getHeight(), 1);
+//    g.setColour (Colours::darkgrey);
+//    g.drawRect (0, 0, getWidth(), getHeight(), 1);
 }
 
-void View::IRMatrixBox::resized()
+void View::ChangePathBox::resized()
 {
-    int editorWidth = proportionOfWidth(0.5f);
-    int buttonWidth = 50;
-    int changeButtonWidth = 100;
-    int labelWidth = 100;
+    int editorWidth = proportionOfWidth(0.75f);
+    int buttonWidth = 30;
+   
+    int labelWidth = 50;
     
     int height = 24;
+    int labelHeight = 54;
     
-    FlexBox toggleButtons;
-    toggleButtons.justifyContent = FlexBox::JustifyContent::center;
-    toggleButtons.alignItems = FlexBox::AlignItems::center;
-    
-    FlexItem conf (buttonWidth, height, confModeButton);
-    conf.alignSelf = FlexItem::AlignSelf::autoAlign;
-    
-    FlexItem wav (buttonWidth, height, wavModeButton);
-    wav.alignSelf = FlexItem::AlignSelf::autoAlign;
-    
-    toggleButtons.items.addArray({ conf, wav });
-    
-    //--------------------------------------------------------------------
     FlexBox mainFlex;
     mainFlex.justifyContent = FlexBox::JustifyContent::spaceAround;
     mainFlex.alignItems = FlexBox::AlignItems::center;
     
-    FlexItem label  (labelWidth,  height, boxLabel);
+    FlexItem label  (labelWidth,  labelHeight, pathLabel);
     label.alignSelf = FlexItem::AlignSelf::autoAlign;
     
 //    FlexItem editor (editorWidth, height, pathText);
-    FlexItem editor (editorWidth, height, toggleButtons);
+    FlexItem editor (editorWidth, height, pathText);
     editor.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    FlexItem button (changeButtonWidth, height, newInChannelsButton);
+    FlexItem button (buttonWidth, height, pathButton);
     button.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     mainFlex.items.addArray({ label, editor, button });
+    
     mainFlex.performLayout(getLocalBounds().toFloat());
 }
- */
 
 //==============================================================================
 View::OSCManagingBox::OSCManagingBox()
@@ -523,10 +449,11 @@ View::IODetailBox::IODetailBox()
     samplesLabel.setText("smpls", dontSendNotification);
     addAndMakeVisible (samplesLabel);
     
-    resampledLabel.setFont (Font (10.0000f, Font::plain));
-    resampledLabel.setJustificationType (Justification::topRight);
-    resampledLabel.setColour (Label::textColourId, Colours::white);
-    resampledLabel.setText("(resampled)", dontSendNotification);
+    resampledLabel.setFont (Font (12.0000f, Font::plain));
+    resampledLabel.setJustificationType (Justification::bottomRight);
+    resampledLabel.setColour (Label::textColourId, Colours::yellow);
+    resampledLabel.setText("[resampled wavefile]", dontSendNotification);
+    resampledLabel.setTooltip(TRANS("wavefile resampled to match host samplerate"));
     addAndMakeVisible (resampledLabel);
     resampledLabel.setVisible(false);
 }
@@ -553,7 +480,7 @@ void View::IODetailBox::resized()
     Grid gridLeft;
     using TrackL = Grid::TrackInfo;
 
-    gridLeft.templateRows    = { TrackL (1_fr), TrackL (1_fr),  TrackL (1_fr), TrackL (12_px) };
+    gridLeft.templateRows    = { TrackL (1_fr), TrackL (1_fr),  TrackL (1_fr), TrackL (1_fr) };
     gridLeft.templateColumns = { TrackL (1_fr), TrackL (50_px)};
 
     GridItem inCh (inputNumber);
@@ -568,7 +495,7 @@ void View::IODetailBox::resized()
     gridLeft.items = {  GridItem(inputLabel),   inCh,
                         GridItem(outputLabel),  outCh,
                         GridItem(IRLabel),      irNum,
-                        GridItem(),             GridItem()
+                        GridItem(resampledLabel),             GridItem()
                     };
 
     gridLeft.performLayout (localArea.removeFromLeft(localArea.getWidth()/2));
@@ -596,7 +523,7 @@ void View::IODetailBox::resized()
     gridRight.items = { GridItem (sampleRateLabel),     smprt,      GridItem(),
                         GridItem (hostBufferLabel),     buff,       GridItem(),
                         GridItem (filterLengthLabel),   firlenSecs, GridItem(secondsLabel),
-                        GridItem(resampledLabel),       firlenSmpls,GridItem(samplesLabel)
+                        GridItem(),       firlenSmpls,GridItem(samplesLabel)
                };
 
     gridRight.performLayout (localArea);
@@ -605,30 +532,85 @@ void View::IODetailBox::resized()
 //==============================================================================
 View::ConvManagingBox::ConvManagingBox()
 {
-    bufferCombobox.setTooltip("set higher buffer size to optimize CPU performance but increased latency");
-    bufferCombobox.setEditableText (false);
-    bufferCombobox.setJustificationType (Justification::centredLeft);
-    addAndMakeVisible(bufferCombobox);
-    
-    maxPartCombobox.setTooltip("set maximum partition size for CPU load optimizations, leave it at 8192 if you don't know what you are doing!");
-    maxPartCombobox.setEditableText (false);
-    maxPartCombobox.setJustificationType (Justification::centredLeft);
-    maxPartCombobox.setColour(ComboBox::backgroundColourId, Colour (Colours::grey));
-    addAndMakeVisible(maxPartCombobox);
-    
     maxPartLabel.setFont (Font (12.4000f, Font::plain));
     maxPartLabel.setColour (Label::textColourId, Colours::white);
     maxPartLabel.setJustificationType(Justification::left);
     maxPartLabel.setText("Maximum Partition Size", dontSendNotification);
-    maxPartLabel.attachToComponent(&maxPartCombobox, false);
+    maxPartLabel.attachToComponent(&maxPartCombobox, true);
     addAndMakeVisible (maxPartLabel);
     
     bufferLabel.setFont (Font (12.4000f, Font::plain));
     bufferLabel.setColour (Label::textColourId, Colours::white);
     bufferLabel.setJustificationType(Justification::left);
     bufferLabel.setText("First Partition size", dontSendNotification);
-    bufferLabel.attachToComponent(&bufferCombobox, false);
+    bufferLabel.attachToComponent(&bufferCombobox, true);
     addAndMakeVisible (bufferLabel);
+    
+    bufferCombobox.setTooltip("set higher buffer size to optimize CPU performance but increased latency");
+    bufferCombobox.setEditableText (false);
+    bufferCombobox.setJustificationType (Justification::centredLeft);
+    addAndMakeVisible(bufferCombobox);
+    
+    maxPartCombobox.setTooltip("set maximum partition size for CPU load optimizations");
+    maxPartCombobox.setEditableText (false);
+    maxPartCombobox.setJustificationType (Justification::centredLeft);
+    addAndMakeVisible(maxPartCombobox);
+    
+    latencyLabel.setFont(Font(12.4000f, Font::plain));
+    latencyLabel.setJustificationType(Justification::right);
+    latencyLabel.setColour(Label::textColourId, Colours::white);
+    latencyLabel.setText ("Plugin latency: ", dontSendNotification);
+    addAndMakeVisible(latencyLabel);
+    
+    latencyValue.setFont(Font(12.4000f, Font::plain));
+    latencyValue.setJustificationType(Justification::right);
+    latencyValue.setColour(Label::textColourId, Colours::white);
+    latencyValue.onTextChange = [&] {
+        if (latencyValue.getText().getIntValue()!=0)
+        {
+            latencyLabel.setColour(Label::textColourId, Colours::lightsalmon);
+            latencyValue.setColour(Label::textColourId, Colours::lightsalmon);
+            samplesLabel.setColour (Label::textColourId, Colours::lightsalmon);
+        }
+        else
+        {
+            latencyLabel.setColour(Label::textColourId, Colours::white);
+            latencyValue.setColour(Label::textColourId, Colours::white);
+            samplesLabel.setColour (Label::textColourId, Colours::white);
+        }
+    };
+    latencyValue.setText ("0", dontSendNotification);
+    addAndMakeVisible(latencyValue);
+    
+    skippedCyclesLabel.setFont(Font(12.4000f, Font::plain));
+    skippedCyclesLabel.setJustificationType(Justification::right);
+    skippedCyclesLabel.setColour(Label::textColourId, Colours::white);
+    skippedCyclesLabel.setText ("Skipped cycles: ", dontSendNotification);
+    addAndMakeVisible(skippedCyclesLabel);
+    
+    skippedCyclesValue.setFont(Font(12.4000f, Font::plain));
+    skippedCyclesValue.setJustificationType(Justification::right);
+    skippedCyclesValue.setColour(Label::textColourId, Colours::white);
+    skippedCyclesValue.onTextChange = [&] {
+        if (skippedCyclesValue.getText().getIntValue()!=0)
+        {
+            skippedCyclesLabel.setColour(Label::textColourId, Colours::yellow);
+            skippedCyclesValue.setColour(Label::textColourId, Colours::yellow);
+        }
+        else
+        {
+            skippedCyclesLabel.setColour(Label::textColourId, Colours::white);
+            skippedCyclesValue.setColour(Label::textColourId, Colours::white);
+        }
+    };
+    skippedCyclesValue.setText ("1000", dontSendNotification);
+    addAndMakeVisible(skippedCyclesValue);
+    
+    samplesLabel.setFont (Font (12.4000f, Font::plain));
+    samplesLabel.setJustificationType (Justification::left);
+    samplesLabel.setColour (Label::textColourId, Colours::white);
+    samplesLabel.setText("smpls", dontSendNotification);
+    addAndMakeVisible (samplesLabel);
 }
 
 void View::ConvManagingBox::paint(Graphics& g)
@@ -636,9 +618,42 @@ void View::ConvManagingBox::paint(Graphics& g)
 
 void View::ConvManagingBox::resized()
 {
+    auto localArea = getLocalBounds();
+    localArea.removeFromLeft(130);
+    
+    int height = 20;
+    int width = 70;
+    
+    Grid grid;
+    using Track = Grid::TrackInfo;
+
+    grid.templateRows    = { Track (1_fr), Track (1_fr) };
+    grid.templateColumns = { Track (1_fr), Track (80_px), Track (35_px), Track (35_px) };
+    
+    GridItem bufferCombo (bufferCombobox);
+    bufferCombo = bufferCombo.withSize(width, height);
+    bufferCombo = bufferCombo.withAlignSelf(GridItem::AlignSelf::center);
+//    bufferCombo = bufferCombo.withMargin(GridItem::Margin(0,0,0,10));
+    
+    GridItem bufferPart (maxPartCombobox);
+    bufferPart = bufferPart.withSize(width, height);
+    bufferPart = bufferPart.withAlignSelf(GridItem::AlignSelf::center);
+    
+    GridItem measureUnit (samplesLabel);
+    
+    bufferPart = bufferPart.withAlignSelf(GridItem::AlignSelf::center);
+    
+
+    grid.items = { bufferCombo,  GridItem(latencyLabel),          GridItem(latencyValue),       measureUnit,
+                   bufferPart,   GridItem(skippedCyclesLabel),    GridItem(skippedCyclesValue), GridItem()
+               };
+
+    grid.performLayout (localArea);
+    
+    /*
     int height = 20;
     int width = proportionOfWidth(0.40f);
-    
+     
     FlexBox flexBox;
     flexBox.justifyContent = FlexBox::JustifyContent::spaceAround;
     flexBox.alignItems = FlexBox::AlignItems::flexEnd;
@@ -650,6 +665,7 @@ void View::ConvManagingBox::resized()
     
     flexBox.items.addArray({ bufferCombo, maxPartCombo });
     flexBox.performLayout(getLocalBounds().toFloat());
+     */
 }
 
 //==============================================================================

@@ -30,9 +30,6 @@ public:
     class FilterManagingBox : public Component
     {
     public:
-        Label       pathLabel;
-        TextEditor  pathText;
-        TextButton  pathButton;
         
         Label       filterLabel;
         ComboBox    filterSelector;
@@ -48,25 +45,19 @@ public:
         void paint (Graphics& g);
         void resized();
     };
-    //IR Matrix Box
-    /*
-    class IRMatrixBox : public Component
+    //Path modify box
+    class ChangePathBox : public Component
     {
     public:
-        Label boxLabel;
+        Label       pathLabel;
+        TextEditor  pathText;
+        TextButton  pathButton;
         
-        
-        TextButton confModeButton;
-        TextButton wavModeButton;
-        
-        enum  modeState {conf, wav};
-        modeState lastState = conf;
-        
-        IRMatrixBox();
+        ChangePathBox();
     private:
         void paint(Graphics& g);
         void resized();
-    }; */
+    };
     //OSC managing box
     class OSCManagingBox : public Component
     {
@@ -120,6 +111,14 @@ public:
         Label maxPartLabel;
         ComboBox bufferCombobox;
         ComboBox maxPartCombobox;
+        
+        Label latencyLabel;
+        Label latencyValue;
+        
+        Label skippedCyclesValue;
+        Label skippedCyclesLabel;
+        
+        Label samplesLabel;
 
         ConvManagingBox();
     private:
@@ -178,11 +177,12 @@ public:
     IODetailBox ioDetailBox;
     ConvManagingBox convManagingBox;
     
+    ChangePathBox changePathBox;
+    
     InputChannelDialog inputChannelDialog;
     
     Label debugWinLabel;
     TextEditor debugText;
-    Label skippedCyclesLabel;
     
     StatusLed statusLed;
     TextEditor statusText;
