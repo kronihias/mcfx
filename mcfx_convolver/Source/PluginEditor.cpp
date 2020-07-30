@@ -116,9 +116,10 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     
     view.ioDetailBox.sampleRateNumber.setText(String(processor.getSamplerate()), dontSendNotification);
     view.ioDetailBox.hostBufferNumber.setText(String(processor.getBufferSize()), dontSendNotification);
-    String filterLenght = String(processor._filter_len, 2);
-    filterLenght << " s";
-    view.ioDetailBox.filterLengthNumber.setText(filterLenght, dontSendNotification);
+    
+    view.ioDetailBox.filterLengthInSeconds.setText(String(processor._filter_len_secs, 2), dontSendNotification);
+    view.ioDetailBox.filterLengthInSamples.setText(String(processor._filter_len_smpls), dontSendNotification);
+    view.ioDetailBox.resampledLabel.setVisible(processor.filterHasBeenResampled.get());
     
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);

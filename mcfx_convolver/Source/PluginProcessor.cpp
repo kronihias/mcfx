@@ -51,6 +51,7 @@ _min_in_ch(0),
 _min_out_ch(0),
 _num_conv(0),
 _MaxPartSize(MAX_PART_SIZE),
+filterHasBeenResampled(false),
 
 _isProcessing(false),
 
@@ -489,6 +490,11 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
                 // std::cout << "AddIR: IN: " << j << " OUT: " << i << " individualOffset: " << individualOffset << std::endl;
             }
         }
+        if (src_samplerate != _SampleRate)
+            filterHasBeenResampled.set(true);
+        else
+            filterHasBeenResampled.set(false);
+        
         debug.clear();
         debug  << "Loaded " << conv_data.getNumIRs() << " filters with:" << "\n";
         debug  << "length " << length << "\n";
@@ -612,7 +618,8 @@ void Mcfx_convolverAudioProcessor::loadConvolver()
     _min_in_ch = conv_data.getNumInputChannels();
     _min_out_ch = conv_data.getNumOutputChannels();
     _num_conv = conv_data.getNumIRs();
-    _filter_len = conv_data.getMaxLengthInSeconds();
+    _filter_len_secs = conv_data.getMaxLengthInSeconds();
+    _filter_len_smpls = conv_data.getMaxLength();
     
     convolverReady = true;
 }
@@ -637,7 +644,8 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
     _min_in_ch = 0;
     _min_out_ch = 0;
     _num_conv = 0;
-    _filter_len = 0;
+    _filter_len_secs = 0;
+    _filter_len_smpls = 0;
     
 #ifdef USE_ZITA_CONVOLVER
     

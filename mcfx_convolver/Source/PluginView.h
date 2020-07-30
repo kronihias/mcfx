@@ -99,7 +99,11 @@ public:
         Label hostBufferNumber;
         
         Label filterLengthLabel;
-        Label filterLengthNumber;
+        Label filterLengthInSeconds;
+        Label filterLengthInSamples;
+        
+        Label secondsLabel;
+        Label samplesLabel;
         
         Label resampledLabel;
 

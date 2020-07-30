@@ -499,14 +499,32 @@ View::IODetailBox::IODetailBox()
     filterLengthLabel.setText("Filter Length:", dontSendNotification);
     addAndMakeVisible (filterLengthLabel);
     
-    filterLengthNumber.setFont (Font (15.0000f, Font::plain));
-    filterLengthNumber.setJustificationType (Justification::right);
-    filterLengthNumber.setColour (Label::textColourId, Colours::white);
-    filterLengthNumber.setText("0", dontSendNotification);
-    addAndMakeVisible (filterLengthNumber);
+    filterLengthInSeconds.setFont (Font (15.0000f, Font::plain));
+    filterLengthInSeconds.setJustificationType (Justification::right);
+    filterLengthInSeconds.setColour (Label::textColourId, Colours::white);
+    filterLengthInSeconds.setText("0", dontSendNotification);
+    addAndMakeVisible (filterLengthInSeconds);
+    
+    filterLengthInSamples.setFont (Font (11.0000f, Font::plain));
+    filterLengthInSamples.setJustificationType (Justification::topRight);
+    filterLengthInSamples.setColour (Label::textColourId, Colours::white);
+    filterLengthInSamples.setText("0", dontSendNotification);
+    addAndMakeVisible (filterLengthInSamples);
+    
+    secondsLabel.setFont (Font (15.0000f, Font::plain));
+    secondsLabel.setJustificationType (Justification::left);
+    secondsLabel.setColour (Label::textColourId, Colours::white);
+    secondsLabel.setText("s", dontSendNotification);
+    addAndMakeVisible (secondsLabel);
+    
+    samplesLabel.setFont (Font (11.0000f, Font::plain));
+    samplesLabel.setJustificationType (Justification::topLeft);
+    samplesLabel.setColour (Label::textColourId, Colours::white);
+    samplesLabel.setText("smpls", dontSendNotification);
+    addAndMakeVisible (samplesLabel);
     
     resampledLabel.setFont (Font (10.0000f, Font::plain));
-    resampledLabel.setJustificationType (Justification::right);
+    resampledLabel.setJustificationType (Justification::topRight);
     resampledLabel.setColour (Label::textColourId, Colours::white);
     resampledLabel.setText("(resampled)", dontSendNotification);
     addAndMakeVisible (resampledLabel);
@@ -561,24 +579,24 @@ void View::IODetailBox::resized()
     using TrackR = Grid::TrackInfo;
 
     gridRight.templateRows    = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr) };
-    gridRight.templateColumns = { TrackR (1_fr), TrackR (65_px)};
+    gridRight.templateColumns = { TrackR (1_fr), TrackR (50_px), TrackR (40_px)};
     
     GridItem smprt (sampleRateNumber);
-    smprt = smprt.withMargin(GridItem::Margin(0,10,0,0));
+//    smprt = smprt.withMargin(GridItem::Margin(0,8,0,0));
     
     GridItem buff (hostBufferNumber);
-    buff = buff.withMargin(GridItem::Margin(0,10,0,0));
+//    buff = buff.withMargin(GridItem::Margin(0,8,0,0));
     
-    GridItem firlen (filterLengthNumber);
-    firlen = firlen.withMargin(GridItem::Margin(0,10,0,0));
+    GridItem firlenSecs (filterLengthInSeconds);
+//    firlenSecs = firlenSecs.withMargin(GridItem::Margin(0,8,0,0));
     
-    GridItem infoResampling (resampledLabel);
-    infoResampling = infoResampling.withAlignSelf(GridItem::AlignSelf::start);
+    GridItem firlenSmpls (filterLengthInSamples);
+//    firlenSmpls = firlenSmpls.withMargin(GridItem::Margin(0,8,0,0));
 
-    gridRight.items = { GridItem (sampleRateLabel),     smprt,
-                        GridItem (hostBufferLabel),     buff,
-                        GridItem (filterLengthLabel),   firlen,
-                        infoResampling,                 GridItem()
+    gridRight.items = { GridItem (sampleRateLabel),     smprt,      GridItem(),
+                        GridItem (hostBufferLabel),     buff,       GridItem(),
+                        GridItem (filterLengthLabel),   firlenSecs, GridItem(secondsLabel),
+                        GridItem(resampledLabel),       firlenSmpls,GridItem(samplesLabel)
                };
 
     gridRight.performLayout (localArea);

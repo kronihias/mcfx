@@ -125,6 +125,7 @@ public:
     unsigned int    getConvBufferSize();
     unsigned int    getMaxPartitionSize();
     int             getSkippedCyclesCount();
+    
 
     void            setConvBufferSize(unsigned int bufsize);
     void            setMaxPartitionSize(unsigned int maxsize);
@@ -145,7 +146,9 @@ public:
     int             _min_in_ch;
     int             _min_out_ch;
     int             _num_conv;
-    double          _filter_len;
+    double          _filter_len_secs;
+    int             _filter_len_smpls;
+    Atomic<bool>    filterHasBeenResampled;
     
     bool            inputChannelRequired; //going to deprecated
     enum            InChannelStatus {agreed, missing, notMultiple, notFeasible, requested};
