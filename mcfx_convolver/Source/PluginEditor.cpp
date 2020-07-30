@@ -102,16 +102,23 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
 /// update the overall plugin text based on the processor data and the stored one
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
 {
-    view.ioDetailBox.inputNumber.setText(String(processor._min_in_ch), dontSendNotification);
-    view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
-    view.ioDetailBox.IRNumber.setText(String(processor._num_conv), dontSendNotification);
+
     
-//    view.FilterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     view.FilterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     view.FilterManagingBox.filterSelector.setTooltip(view.FilterManagingBox.filterSelector.getText()); //to see all the string
     
 //    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
     view.FilterManagingBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
+    
+    view.ioDetailBox.inputNumber.setText(String(processor._min_in_ch), dontSendNotification);
+    view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
+    view.ioDetailBox.IRNumber.setText(String(processor._num_conv), dontSendNotification);
+    
+    view.ioDetailBox.sampleRateNumber.setText(String(processor.getSamplerate()), dontSendNotification);
+    view.ioDetailBox.hostBufferNumber.setText(String(processor.getBufferSize()), dontSendNotification);
+    String filterLenght = String(processor._filter_len, 2);
+    filterLenght << " s";
+    view.ioDetailBox.filterLengthNumber.setText(filterLenght, dontSendNotification);
     
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
     view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);

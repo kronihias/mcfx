@@ -120,6 +120,7 @@ public:
     void            LoadFilterFromFile(File filterToLoad, bool restored = false);
     
     //returning parameter for gui
+    double          getSamplerate();
     unsigned int    getBufferSize();
     unsigned int    getConvBufferSize();
     unsigned int    getMaxPartitionSize();
@@ -144,6 +145,7 @@ public:
     int             _min_in_ch;
     int             _min_out_ch;
     int             _num_conv;
+    double          _filter_len;
     
     bool            inputChannelRequired; //going to deprecated
     enum            InChannelStatus {agreed, missing, notMultiple, notFeasible, requested};

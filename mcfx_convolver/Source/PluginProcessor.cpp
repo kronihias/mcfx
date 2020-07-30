@@ -490,11 +490,12 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
             }
         }
         debug.clear();
-        debug << "Loaded " << conv_data.getNumIRs() << " filters" << "\n";
-        debug << "\t\t" << "length " << length << "\n";
-        debug << "\t\t" << "input channels: " << inChannels << "\n";
-        debug << "\t\t" << "output channels: " << outChannels << "\n";
-        debug << "\t\t" << "filename: " << filterFile.getFileName() << "\n\n";
+        debug  << "Loaded " << conv_data.getNumIRs() << " filters with:" << "\n";
+        debug  << "length " << length << "\n";
+        debug  << "samplerate " << src_samplerate << "\n";
+        debug  << "input channels: " << inChannels << "\n";
+        debug  << "output channels: " << outChannels << "\n";
+        debug  << "filename: " << filterFile.getFileName() << "\n\n";
         DebugPrint( debug );
     }
     else
@@ -511,9 +512,10 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     loadConvolver();
     
 //    filterFileLoaded = filterFile;
+    
 
     debug.clear();
-    debug << "IR filter matrix loaded" << "\n";
+    debug << "Filter matrix loaded" << "\n";
     debug << "Maximum filter length: " << String(conv_data.getMaxLengthInSeconds(), 2) << "[s], " << conv_data.getMaxLength() << "[smpls] \n";
     debug << "Plugin Latency: " << getLatencySamples() << "[smpls] \n";
     DebugPrint(debug << "\n\n");
@@ -610,6 +612,7 @@ void Mcfx_convolverAudioProcessor::loadConvolver()
     _min_in_ch = conv_data.getNumInputChannels();
     _min_out_ch = conv_data.getNumOutputChannels();
     _num_conv = conv_data.getNumIRs();
+    _filter_len = conv_data.getMaxLengthInSeconds();
     
     convolverReady = true;
 }
@@ -634,6 +637,7 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
     _min_in_ch = 0;
     _min_out_ch = 0;
     _num_conv = 0;
+    _filter_len = 0;
     
 #ifdef USE_ZITA_CONVOLVER
     
@@ -915,6 +919,11 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool re
 //}
 
 // ================= Editor set/get functions =================
+double Mcfx_convolverAudioProcessor::getSamplerate()
+{
+    return _SampleRate;
+}
+
 unsigned int Mcfx_convolverAudioProcessor::getBufferSize()
 {
     return _BufferSize;

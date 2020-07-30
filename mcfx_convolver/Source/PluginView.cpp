@@ -126,7 +126,7 @@ void View::resized()
     int OSCheight = 24;
     
     int IOBoxWidtdh = 190;
-    int IOBoxHeight = 77;
+    int IOBoxHeight = 90;
     
     int convBoxHeight = 40;
     
@@ -434,7 +434,7 @@ void View::OSCManagingBox::resized()
 View::IODetailBox::IODetailBox()
 {
     inputLabel.setFont (Font (15.0000f, Font::plain));
-    inputLabel.setJustificationType (Justification::centredRight);
+    inputLabel.setJustificationType (Justification::right);
     inputLabel.setColour (Label::textColourId, Colours::white);
     inputLabel.setText("Input channels:", dontSendNotification);
     addAndMakeVisible (inputLabel);
@@ -446,7 +446,7 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (inputNumber);
     
     outputLabel.setFont (Font (15.0000f, Font::plain));
-    outputLabel.setJustificationType (Justification::centredRight);
+    outputLabel.setJustificationType (Justification::right);
     outputLabel.setColour (Label::textColourId, Colours::white);
     outputLabel.setText("Output channels:", dontSendNotification);
     addAndMakeVisible (outputLabel);
@@ -470,40 +470,47 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (IRNumber);
     
     sampleRateLabel.setFont (Font (15.0000f, Font::plain));
-    sampleRateLabel.setJustificationType (Justification::centredRight);
+    sampleRateLabel.setJustificationType (Justification::right);
     sampleRateLabel.setColour (Label::textColourId, Colours::white);
     sampleRateLabel.setText("Samplerate:", dontSendNotification);
     addAndMakeVisible (sampleRateLabel);
     
     sampleRateNumber.setFont (Font (15.0000f, Font::plain));
-    sampleRateNumber.setJustificationType (Justification::centred);
+    sampleRateNumber.setJustificationType (Justification::right);
     sampleRateNumber.setColour (Label::textColourId, Colours::white);
     sampleRateNumber.setText("0", dontSendNotification);
     addAndMakeVisible (sampleRateNumber);
     
     hostBufferLabel.setFont (Font (15.0000f, Font::plain));
-    hostBufferLabel.setJustificationType (Justification::centredRight);
+    hostBufferLabel.setJustificationType (Justification::right);
     hostBufferLabel.setColour (Label::textColourId, Colours::white);
     hostBufferLabel.setText("Host Buffer Size:", dontSendNotification);
     addAndMakeVisible (hostBufferLabel);
     
     hostBufferNumber.setFont (Font (15.0000f, Font::plain));
-    hostBufferNumber.setJustificationType (Justification::centred);
+    hostBufferNumber.setJustificationType (Justification::right);
     hostBufferNumber.setColour (Label::textColourId, Colours::white);
     hostBufferNumber.setText("0", dontSendNotification);
     addAndMakeVisible (hostBufferNumber);
     
     filterLengthLabel.setFont (Font (15.0000f, Font::plain));
-    filterLengthLabel.setJustificationType (Justification::centredRight);
+    filterLengthLabel.setJustificationType (Justification::right);
     filterLengthLabel.setColour (Label::textColourId, Colours::white);
     filterLengthLabel.setText("Filter Length:", dontSendNotification);
     addAndMakeVisible (filterLengthLabel);
     
     filterLengthNumber.setFont (Font (15.0000f, Font::plain));
-    filterLengthNumber.setJustificationType (Justification::centred);
+    filterLengthNumber.setJustificationType (Justification::right);
     filterLengthNumber.setColour (Label::textColourId, Colours::white);
     filterLengthNumber.setText("0", dontSendNotification);
     addAndMakeVisible (filterLengthNumber);
+    
+    resampledLabel.setFont (Font (10.0000f, Font::plain));
+    resampledLabel.setJustificationType (Justification::right);
+    resampledLabel.setColour (Label::textColourId, Colours::white);
+    resampledLabel.setText("(resampled)", dontSendNotification);
+    addAndMakeVisible (resampledLabel);
+    resampledLabel.setVisible(false);
 }
 
 void View::IODetailBox::paint(Graphics& g)
@@ -522,18 +529,29 @@ void View::IODetailBox::paint(Graphics& g)
 void View::IODetailBox::resized()
 {
     auto localArea = getLocalBounds();
-    localArea.reduce(0, 10.0f);
+    localArea.reduce(0, 8.0f);
+//    localArea.removeFromTop(16);
     
     Grid gridLeft;
     using TrackL = Grid::TrackInfo;
 
-    gridLeft.templateRows    = { TrackL (1_fr), TrackL (1_fr), TrackL (1_fr) };
-    gridLeft.templateColumns = { TrackL (3_fr), TrackL (1_fr)};
+    gridLeft.templateRows    = { TrackL (1_fr), TrackL (1_fr),  TrackL (1_fr), TrackL (12_px) };
+    gridLeft.templateColumns = { TrackL (1_fr), TrackL (50_px)};
 
-    gridLeft.items = {  GridItem (inputLabel),   GridItem (inputNumber),
-                        GridItem (outputLabel),  GridItem (outputNumber),
-                        GridItem (IRLabel),      GridItem (IRNumber)
-               };
+    GridItem inCh (inputNumber);
+    inCh = inCh.withMargin(GridItem::Margin(0,14,0,0));
+    
+    GridItem outCh (outputNumber);
+    outCh = outCh.withMargin(GridItem::Margin(0,14,0,0));
+    
+    GridItem irNum (IRNumber);
+    irNum = irNum.withMargin(GridItem::Margin(0,14,0,0));
+    
+    gridLeft.items = {  GridItem(inputLabel),   inCh,
+                        GridItem(outputLabel),  outCh,
+                        GridItem(IRLabel),      irNum,
+                        GridItem(),             GridItem()
+                    };
 
     gridLeft.performLayout (localArea.removeFromLeft(localArea.getWidth()/2));
     
@@ -542,12 +560,25 @@ void View::IODetailBox::resized()
     Grid gridRight;
     using TrackR = Grid::TrackInfo;
 
-    gridRight.templateRows    = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr) };
-    gridRight.templateColumns = { TrackR (3_fr), TrackR (1_fr)};
+    gridRight.templateRows    = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr) };
+    gridRight.templateColumns = { TrackR (1_fr), TrackR (65_px)};
+    
+    GridItem smprt (sampleRateNumber);
+    smprt = smprt.withMargin(GridItem::Margin(0,10,0,0));
+    
+    GridItem buff (hostBufferNumber);
+    buff = buff.withMargin(GridItem::Margin(0,10,0,0));
+    
+    GridItem firlen (filterLengthNumber);
+    firlen = firlen.withMargin(GridItem::Margin(0,10,0,0));
+    
+    GridItem infoResampling (resampledLabel);
+    infoResampling = infoResampling.withAlignSelf(GridItem::AlignSelf::start);
 
-    gridRight.items = { GridItem (sampleRateLabel),     GridItem (sampleRateNumber),
-                        GridItem (hostBufferLabel),     GridItem (hostBufferNumber),
-                        GridItem (filterLengthLabel),   GridItem (filterLengthNumber)
+    gridRight.items = { GridItem (sampleRateLabel),     smprt,
+                        GridItem (hostBufferLabel),     buff,
+                        GridItem (filterLengthLabel),   firlen,
+                        infoResampling,                 GridItem()
                };
 
     gridRight.performLayout (localArea);

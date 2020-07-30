@@ -100,6 +100,8 @@ public:
         
         Label filterLengthLabel;
         Label filterLengthNumber;
+        
+        Label resampledLabel;
 
         IODetailBox();
     private:
