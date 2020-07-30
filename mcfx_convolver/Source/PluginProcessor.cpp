@@ -51,6 +51,8 @@ _min_in_ch(0),
 _min_out_ch(0),
 _num_conv(0),
 _MaxPartSize(MAX_PART_SIZE),
+_filter_len_secs(0),
+_filter_len_smpls(0),
 filterHasBeenResampled(false),
 
 _isProcessing(false),

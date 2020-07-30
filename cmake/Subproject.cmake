@@ -71,9 +71,9 @@ juce_add_plugin(${SUBPROJECT_NAME}
     VERSION 					${VERSION}          		# Set this if the plugin version is different to the project version
     # ICON_BIG ...                              			# ICON_* arguments specify a path to an image file to use as an icon for the Standalone
 	# ICON_SMALL ...
-	COMPANY_COPYRIGHT			"Matthias Kronlachner"
-	COMPANY_NAME 				"kronlachner"       		# Specify the name of the plugin's author
-	COMPANY_WEBSITE				"fasullo@123.com"
+	COMPANY_COPYRIGHT			"unipr"
+	COMPANY_NAME 				"unipr"       		# Specify the name of the plugin's author
+	COMPANY_WEBSITE				"yourcompany.com"
 	COMPANY_EMAIL				"support@yourcompany.com"
     # IS_SYNTH TRUE/FALSE                       			# Is this a synth or an effect?
     # NEEDS_MIDI_INPUT TRUE/FALSE               			# Does the plugin need midi input?

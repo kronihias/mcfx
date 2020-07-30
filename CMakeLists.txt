@@ -21,9 +21,9 @@ add_definitions(-DVERSION=${VERSION}) #?? FOR THE DELAY
 
 project(mcfx_plugin_suite VERSION ${VERSION})
 
-set(MANUFACTURER_CODE "Kron")
+set(MANUFACTURER_CODE "Unpr")
 set(PLUGIN_CODE "M")
-set(PLUGIN_LABEL "McFx")
+set(PLUGIN_LABEL "X-McFx")
 
 ################################################
 # set(CMAKE_BUILD_TYPE Release)
@@ -36,7 +36,7 @@ set (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 ################################################
 #choices at compile time
-set(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
+set(NUM_CHANNELS 64 CACHE STRING "number of channels for each plugin")
 set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
 set(BUILD_VST TRUE CACHE BOOL "build VST format")

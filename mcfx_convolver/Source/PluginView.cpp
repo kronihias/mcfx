@@ -31,7 +31,7 @@ View::View()
     title.setFont(Font (17.2000f, Font::bold));
     title.setColour(Label::textColourId, Colours::white);
     title.setJustificationType (Justification::centred);
-    title.setText("MCFX-CONVOLVER",dontSendNotification);
+    title.setText("X-MCFX-CONVOLVER",dontSendNotification);
     addAndMakeVisible(title);
 
     subtitle.setFont(Font (12.4000f, Font::plain));
