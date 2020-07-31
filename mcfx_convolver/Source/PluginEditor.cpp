@@ -149,7 +149,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     else
         view.FilterManagingBox.infoLabel.setVisible(false);
     
-    switch (processor.getConvolverStatus()) {
+    switch (processor.getConvolverStatus())
+    {
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Unloaded :
             view.statusLed.setStatus(View::StatusLed::State::red);
             break;
@@ -169,7 +170,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         processor.newStatusText = false;
     }
     
-    switch (processor.inChannelStatus) {
+    switch (processor.inChannelStatus)
+    {
         case Mcfx_convolverAudioProcessor::InChannelStatus::missing:
             view.inputChannelDialog.setVisible(true);
             view.inputChannelDialog.textEditor.grabKeyboardFocus();
@@ -187,10 +189,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         case Mcfx_convolverAudioProcessor::InChannelStatus::requested:
             view.inputChannelDialog.setVisible(true);
             if(processor.tempInputChannels == -1)
-            {
-                view.inputChannelDialog.textEditor.setText("");
-                view.inputChannelDialog.diagonalToggle.setToggleState(true, dontSendNotification);
-            }
+                view.inputChannelDialog.diagonalToggle.setToggleState(true, sendNotification);
             else
                 view.inputChannelDialog.textEditor.setText((String)processor.tempInputChannels);
                 

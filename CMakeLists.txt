@@ -23,7 +23,7 @@ project(mcfx_plugin_suite VERSION ${VERSION})
 
 set(MANUFACTURER_CODE "Unpr")
 set(PLUGIN_CODE "M")
-set(PLUGIN_LABEL "X-McFx")
+set(PLUGIN_LABEL "X-MCFX")
 
 ################################################
 # set(CMAKE_BUILD_TYPE Release)

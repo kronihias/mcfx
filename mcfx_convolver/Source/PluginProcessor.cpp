@@ -80,6 +80,8 @@ newStatusText(false)
 //    _SampleRate = getSampleRate();
 //    _BufferSize = getBlockSize();
 //    _ConvBufferSize = getBlockSize();
+    if (_MaxPartSize != 8192)
+        _MaxPartSize = 8192;
     
     defaultFilterDir = defaultFilterDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
     
@@ -353,6 +355,7 @@ void Mcfx_convolverAudioProcessor::ReloadConfiguration()
     {
         String debug = "reloading for host new samplerate or buffer size \n";
         DebugPrint(debug);
+        
         if (inChannelStatus == InChannelStatus::requested)
             LoadConfigurationAsync(getTargetFilter());
         else

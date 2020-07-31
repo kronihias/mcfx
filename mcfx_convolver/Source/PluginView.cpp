@@ -431,7 +431,7 @@ View::IODetailBox::IODetailBox()
     filterLengthInSeconds.setText("0", dontSendNotification);
     addAndMakeVisible (filterLengthInSeconds);
     
-    filterLengthInSamples.setFont (Font (11.0000f, Font::plain));
+    filterLengthInSamples.setFont (Font (15.0000f, Font::plain));
     filterLengthInSamples.setJustificationType (Justification::topRight);
     filterLengthInSamples.setColour (Label::textColourId, Colours::white);
     filterLengthInSamples.setText("0", dontSendNotification);
@@ -443,7 +443,7 @@ View::IODetailBox::IODetailBox()
     secondsLabel.setText("s", dontSendNotification);
     addAndMakeVisible (secondsLabel);
     
-    samplesLabel.setFont (Font (11.0000f, Font::plain));
+    samplesLabel.setFont (Font (15.0000f, Font::plain));
     samplesLabel.setJustificationType (Justification::topLeft);
     samplesLabel.setColour (Label::textColourId, Colours::white);
     samplesLabel.setText("smpls", dontSendNotification);
@@ -468,7 +468,7 @@ void View::IODetailBox::paint(Graphics& g)
     g.fillRoundedRectangle(getLocalBounds().toFloat(), chafmer);
     
     g.setColour (Colours::white);
-    g.drawLine(getWidth()/2, chafmer/2, getWidth()/2, getHeight()-chafmer/2, 0.75f);
+    g.drawLine(proportionOfWidth(0.45f), chafmer/2, proportionOfWidth(0.45f), getHeight()-chafmer/2, 0.75f);
 }
 
 void View::IODetailBox::resized()
@@ -484,13 +484,13 @@ void View::IODetailBox::resized()
     gridLeft.templateColumns = { TrackL (1_fr), TrackL (50_px)};
 
     GridItem inCh (inputNumber);
-    inCh = inCh.withMargin(GridItem::Margin(0,14,0,0));
+    inCh = inCh.withMargin(GridItem::Margin(0,10,0,0));
     
     GridItem outCh (outputNumber);
-    outCh = outCh.withMargin(GridItem::Margin(0,14,0,0));
+    outCh = outCh.withMargin(GridItem::Margin(0,10,0,0));
     
     GridItem irNum (IRNumber);
-    irNum = irNum.withMargin(GridItem::Margin(0,14,0,0));
+    irNum = irNum.withMargin(GridItem::Margin(0,10,0,0));
     
     gridLeft.items = {  GridItem(inputLabel),   inCh,
                         GridItem(outputLabel),  outCh,
@@ -498,7 +498,7 @@ void View::IODetailBox::resized()
                         GridItem(resampledLabel),             GridItem()
                     };
 
-    gridLeft.performLayout (localArea.removeFromLeft(localArea.getWidth()/2));
+    gridLeft.performLayout (localArea.removeFromLeft(localArea.proportionOfWidth(0.45f)));
     
     //--------------------------------------------------------------------------
     
@@ -506,7 +506,7 @@ void View::IODetailBox::resized()
     using TrackR = Grid::TrackInfo;
 
     gridRight.templateRows    = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr) };
-    gridRight.templateColumns = { TrackR (1_fr), TrackR (50_px), TrackR (40_px)};
+    gridRight.templateColumns = { TrackR (1_fr), TrackR (52_px), TrackR (42_px)};
     
     GridItem smprt (sampleRateNumber);
 //    smprt = smprt.withMargin(GridItem::Margin(0,8,0,0));
@@ -879,12 +879,12 @@ void View::InputChannelDialog::resetState(bool toggleChecked)
     message.setVisible(true);
     invalidMessage.setVisible(false);
     textEditor.setText("");
-    grabKeyboardFocus();
-    
     
     if(toggleChecked)
 //        diagonalToggle.triggerClick();
-        diagonalToggle.setToggleState(false, dontSendNotification);
+        diagonalToggle.setToggleState(false, sendNotification);
+    
+    textEditor.grabKeyboardFocus();
     
     setVisible(false);
 }
