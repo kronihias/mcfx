@@ -93,9 +93,9 @@ include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_D
 if(WIN32)
 	if(MSVC)
     	add_compile_options(
-        	$<$<CONFIG:>:/MD> #---------|
-        	$<$<CONFIG:Debug>:/MDd> #---|-- Dinamically link the runtime libraries
-        	$<$<CONFIG:Release>:/MD> #--|
+        	$<$<CONFIG:>:/MT> #---------|
+        	$<$<CONFIG:Debug>:/MTd> #---|-- Dinamically link the runtime libraries
+        	$<$<CONFIG:Release>:/MT> #--|
     	)
 	endif(MSVC)
 	IF(BUILD_STANDALONE)
