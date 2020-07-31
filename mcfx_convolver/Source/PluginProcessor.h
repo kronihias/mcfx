@@ -95,9 +95,9 @@ public:
     void run();
     
     // do the loading in a background thread
-    void LoadConfigurationAsync(File fileToLoad, bool reload=false);
+    void LoadConfigurationAsync(File fileToLoad);
     void LoadConfiguration(File configFile); // do the loading
-    void ReloadConfiguration(); //just reload convolver? nope
+    void ReloadConfiguration(bool newParameters = true); //reload convolver the whole config
     
     void changePresetTypeAsync();
     
@@ -150,7 +150,7 @@ public:
     int             _filter_len_smpls;
     Atomic<bool>    filterHasBeenResampled;
     
-    bool            inputChannelRequired; //going to deprecated
+    bool            newInputChannelRequired; //request from gui a reload with new input channels number
     enum            InChannelStatus {agreed, missing, notMultiple, notFeasible, requested};
     InChannelStatus inChannelStatus;
     int             tempInputChannels;

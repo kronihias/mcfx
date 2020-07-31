@@ -86,6 +86,18 @@ View::View()
     inputChannelDialog.setVisible(false);
 }
 
+void View::LockSensibleElements()
+{
+    FilterManagingBox.LockSensibleElements();
+    convManagingBox.LockSensibleElements();
+}
+
+void View::UnlockSensibleElements()
+{
+    FilterManagingBox.UnlockSensibleElements();
+    convManagingBox.UnlockSensibleElements();
+}
+
 void View::paint(Graphics& g)
 {
     //background
@@ -199,6 +211,15 @@ View::FilterManagingBox::FilterManagingBox()
     infoLabel.setText("(saved within the project)", dontSendNotification);
     addAndMakeVisible (infoLabel);
     infoLabel.setVisible(false);
+}
+
+void View::FilterManagingBox::LockSensibleElements()
+{
+    filterSelector.setEnabled(false);
+}
+void View::FilterManagingBox::UnlockSensibleElements()
+{
+    filterSelector.setEnabled(true);
 }
 
 void View::FilterManagingBox::paint(Graphics& g)
@@ -611,6 +632,17 @@ View::ConvManagingBox::ConvManagingBox()
     samplesLabel.setColour (Label::textColourId, Colours::white);
     samplesLabel.setText("smpls", dontSendNotification);
     addAndMakeVisible (samplesLabel);
+}
+
+void View::ConvManagingBox::LockSensibleElements()
+{
+    bufferCombobox.setEnabled(false);
+    maxPartCombobox.setEnabled(false);
+}
+void View::ConvManagingBox::UnlockSensibleElements()
+{
+    bufferCombobox.setEnabled(true);
+    maxPartCombobox.setEnabled(true);
 }
 
 void View::ConvManagingBox::paint(Graphics& g)

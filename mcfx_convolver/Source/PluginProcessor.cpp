@@ -61,7 +61,7 @@ convolverReady(false),
 convolverStatus(ConvolverStatus::Unloaded),
 isAReload(false),
 
-inputChannelRequired(false),
+newInputChannelRequired(false),
 inChannelStatus(InChannelStatus::agreed),
 tempInputChannels(0),
 storeInChannelIntoWav(false),
@@ -77,9 +77,10 @@ _osc_in(false),
 newStatusText(false)
 {
     // check these values... they are all zeros in this point
-//    _SampleRate = getSampleRate();
-//    _BufferSize = getBlockSize();
-//    _ConvBufferSize = getBlockSize();
+    _SampleRate = getSampleRate();
+    _BufferSize = getBlockSize();
+    _ConvBufferSize = getBlockSize();
+    
     if (_MaxPartSize != 8192)
         _MaxPartSize = 8192;
     
@@ -315,12 +316,17 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 void Mcfx_convolverAudioProcessor::run()
 {
+    DebugPrint("Loading Filter...\n\n");
+    addNewStatus("Loading target filter...");
     setConvolverStatus(ConvolverStatus::Loading);
     sendChangeMessage();
     
     //unload first....
     if (convolverReady)
+    {
+        addNewStatus("Unloading Convolver...");
         unloadConvolver();
+    }
     
     LoadIRMatrixFilter(getTargetFilter());
         
@@ -330,15 +336,12 @@ void Mcfx_convolverAudioProcessor::run()
         setConvolverStatus(ConvolverStatus::Loaded);
     
     isAReload = false;
+    newInputChannelRequired = false;
     sendChangeMessage();
 }
 
-void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad, bool reload)
+void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad)
 {
-    DebugPrint("Loading Filter...\n\n");
-    if(reload)
-        isAReload=true;
-    
     //store for the thread
     setTargetFilter(fileToLoad);
     
@@ -349,17 +352,20 @@ void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad, bool 
 }
 
 
-void Mcfx_convolverAudioProcessor::ReloadConfiguration()
+void Mcfx_convolverAudioProcessor::ReloadConfiguration(bool newParameters)
 {
     if (convolverReady || filterNameForStoring.isNotEmpty())
     {
         String debug = "reloading for host new samplerate or buffer size \n";
         DebugPrint(debug);
         
-        if (inChannelStatus == InChannelStatus::requested)
+        if (newParameters)
+        {
+            isAReload = true;
             LoadConfigurationAsync(getTargetFilter());
+        }
         else
-            LoadConfigurationAsync(getTargetFilter(),true);
+            LoadConfigurationAsync(getTargetFilter());
     }
 }
 
@@ -675,7 +681,11 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
 
 void Mcfx_convolverAudioProcessor::getInChannels(int waveFileLength)
 {
-    inChannelStatus = InChannelStatus::missing;
+    if (newInputChannelRequired)
+        inChannelStatus = InChannelStatus::requested;
+    else
+        inChannelStatus = InChannelStatus::missing;
+    
     while (inChannelStatus != InChannelStatus::agreed)
     {
         sendChangeMessage();
@@ -824,7 +834,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     String metaTagValue =  reader->metadataValues.getValue(WavAudioFormat::riffInfoKeywords, "0");
     int inChannels = metaTagValue.getIntValue();
     
-    if(inChannels != 0 && inChannelStatus != InChannelStatus::requested)
+    if(inChannels != 0 && !newInputChannelRequired)
     {
         tempInputChannels = inChannels;
         delete reader;
@@ -833,12 +843,14 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     else
     {
         /// request new input channels number to the user
+        addNewStatus("Waiting for user input...");
         getInChannels(IRBuffer->getNumSamples());
 
         
         /// write the new value in metadata tag
         if (storeInChannelIntoWav.get())
         {
+            addNewStatus("Storing number of input channel into wavefile metadata...");
             reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempInputChannels);
             FileOutputStream* outStream = new FileOutputStream(audioFile);
             if (outStream->openedOk())

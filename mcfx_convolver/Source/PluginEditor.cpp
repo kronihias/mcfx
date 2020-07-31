@@ -153,12 +153,15 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     {
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Unloaded :
             view.statusLed.setStatus(View::StatusLed::State::red);
+            view.UnlockSensibleElements();
             break;
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Loading:
             view.statusLed.setStatus(View::StatusLed::State::yellow);
+            view.LockSensibleElements();
             break;
         case Mcfx_convolverAudioProcessor::ConvolverStatus::Loaded:
             view.statusLed.setStatus(View::StatusLed::State::green);
+            view.UnlockSensibleElements();
             break;
         default:
             break;
@@ -357,8 +360,8 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     }*/
     else if (buttonThatWasClicked == &(view.FilterManagingBox.reloadButton))
     {
-        processor.inChannelStatus = Mcfx_convolverAudioProcessor::InChannelStatus::requested;
-        processor.ReloadConfiguration();
+        processor.newInputChannelRequired = true;
+        processor.ReloadConfiguration(false);
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {

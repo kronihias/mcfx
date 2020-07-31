@@ -41,6 +41,8 @@ public:
 //        ToggleButton saveToggle;
 
         FilterManagingBox();
+        void LockSensibleElements();
+        void UnlockSensibleElements();
     private:
         void paint (Graphics& g);
         void resized();
@@ -121,6 +123,8 @@ public:
         Label samplesLabel;
 
         ConvManagingBox();
+        void LockSensibleElements();
+        void UnlockSensibleElements();
     private:
         void paint (Graphics& g);
         void resized();
@@ -153,9 +157,7 @@ public:
     {
     public:
         enum State {green, yellow, red};
-        
         void setStatus(State newState);
-        
         StatusLed();
         
     private:
@@ -191,6 +193,9 @@ public:
 
     //constructor
     View();
+    
+    void LockSensibleElements();
+    void UnlockSensibleElements();
 
 private:
     void paint (Graphics& g);

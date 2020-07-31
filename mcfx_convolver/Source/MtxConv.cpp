@@ -482,9 +482,7 @@ void MtxConvSlave::StopProc()
     
     waitnewdata_.signal();
     
-    stopThread(50);
-    
-    // waitForThreadToExit(20);
+    stopThread(2000);
 }
 
 
