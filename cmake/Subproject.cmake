@@ -190,7 +190,7 @@ if(WITH_FFTW3)
 		${FFTW3F_LIBRARY}
 		#${FFTW3F_THREADS_LIBRARY}
 	)
-	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/fftw3")
+	#juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/fftw3")
 endif(WITH_FFTW3)
 
 # ???????
