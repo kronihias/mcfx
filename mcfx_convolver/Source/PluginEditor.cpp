@@ -407,6 +407,16 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
             demoComponent->processor.LoadFilterFromFile(mooseFile);
             demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
         }
+        else
+        {
+            if(demoComponent->processor.filterNameToShow.isEmpty())
+                demoComponent->view.FilterManagingBox.filterSelector.setText("",dontSendNotification);
+            else
+            {
+                String previousName = demoComponent->processor.filterNameToShow;
+                demoComponent->view.FilterManagingBox.filterSelector.setText(previousName, dontSendNotification);
+            }
+        }
     }
     else if (result == -2)
     {

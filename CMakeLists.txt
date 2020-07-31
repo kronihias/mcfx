@@ -60,7 +60,7 @@ endif(WITH_ZITA_CONVOLVER)
 
 if (WIN32)
 	set(FFTW3_ROOT_DIR "${SRC_DIR}/Libraries/Windows/fftw" CACHE STRING "path to the fftw3 include folder library")
-	set(FFTW3F_LIBRARY "${SRC_DIR}/Libraries/Windows/fftw/lib/libfftw3f-3.lib" CACHE STRING "path to the fftw3 library")
+	set(FFTW3F_LIBRARY "${SRC_DIR}/Libraries/Windows/fftw/lib/fftw3f.lib" CACHE STRING "path to the fftw3 library")
 	find_package(FFTW3 REQUIRED COMPONENTS single)
 
 	set(SOXR_ROOT_DIR "${SRC_DIR}/Libraries/Windows/soxr" CACHE STRING "path to the installed soxr library")
