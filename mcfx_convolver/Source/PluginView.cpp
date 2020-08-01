@@ -660,7 +660,7 @@ void View::ConvManagingBox::resized()
     using Track = Grid::TrackInfo;
 
     grid.templateRows    = { Track (1_fr), Track (1_fr) };
-    grid.templateColumns = { Track (1_fr), Track (80_px), Track (35_px), Track (35_px) };
+    grid.templateColumns = { Track (70_px), Track (1_fr), Track (35_px), Track (40_px) };
     
     GridItem bufferCombo (bufferCombobox);
     bufferCombo = bufferCombo.withSize(width, height);

@@ -84,7 +84,8 @@ newStatusText(false)
     if (_MaxPartSize != 8192)
         _MaxPartSize = 8192;
     
-    defaultFilterDir = defaultFilterDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
+//    defaultFilterDir = defaultFilterDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
+    defaultFilterDir = defaultFilterDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx/filter_library");
     
 	String debug;
     debug << "Filter directory: " << defaultFilterDir.getFullPathName();
