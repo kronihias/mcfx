@@ -76,14 +76,14 @@ public:
     class IODetailBox : public Component
     {
     public:
-        Label inputLabel;
-        Label inputNumber;
         
-        Label outputLabel;
-        Label outputNumber;
+        Label matrixConfigLabel;
+        
+        Label inputValue;
+        Label outputValue;
         
         Label IRLabel;
-        Label IRNumber;
+        Label IRValue;
         
         Label sampleRateLabel;
         Label sampleRateNumber;
@@ -101,6 +101,21 @@ public:
         Label resampledLabel;
 
         IODetailBox();
+    private:
+        void paint (Graphics& g);
+        void resized();
+    };
+    //input-output information box
+    class DSPinfo : public Component
+    {
+    public:
+        Label sampleRateLabel;
+        Label sampleRateNumber;
+        
+        Label hostBufferLabel;
+        Label hostBufferNumber;
+
+        DSPinfo();
     private:
         void paint (Graphics& g);
         void resized();

@@ -380,29 +380,36 @@ void View::OSCManagingBox::resized()
 
 View::IODetailBox::IODetailBox()
 {
+    matrixConfigLabel.setFont (Font (15.0000f, Font::plain));
+    matrixConfigLabel.setJustificationType (Justification::right);
+    matrixConfigLabel.setColour (Label::textColourId, Colours::white);
+    matrixConfigLabel.setText("Matrix dimensions:", dontSendNotification);
+    addAndMakeVisible (matrixConfigLabel);
+    
+    /*
     inputLabel.setFont (Font (15.0000f, Font::plain));
     inputLabel.setJustificationType (Justification::right);
     inputLabel.setColour (Label::textColourId, Colours::white);
     inputLabel.setText("Input channels:", dontSendNotification);
-    addAndMakeVisible (inputLabel);
+    addAndMakeVisible (inputLabel);*/
     
-    inputNumber.setFont (Font (15.0000f, Font::plain));
-    inputNumber.setJustificationType (Justification::right);
-    inputNumber.setColour (Label::textColourId, Colours::white);
-    inputNumber.setText("0", dontSendNotification);
-    addAndMakeVisible (inputNumber);
+    inputValue.setFont (Font (15.0000f, Font::plain));
+    inputValue.setJustificationType (Justification::right);
+    inputValue.setColour (Label::textColourId, Colours::white);
+    inputValue.setText("32 ins", dontSendNotification);
+    addAndMakeVisible (inputValue);
     
-    outputLabel.setFont (Font (15.0000f, Font::plain));
-    outputLabel.setJustificationType (Justification::right);
-    outputLabel.setColour (Label::textColourId, Colours::white);
-    outputLabel.setText("Output channels:", dontSendNotification);
-    addAndMakeVisible (outputLabel);
+//    outputLabel.setFont (Font (15.0000f, Font::plain));
+//    outputLabel.setJustificationType (Justification::right);
+//    outputLabel.setColour (Label::textColourId, Colours::white);
+//    outputLabel.setText("Output channels:", dontSendNotification);
+//    addAndMakeVisible (outputLabel);
     
-    outputNumber.setFont (Font (15.0000f, Font::plain));
-    outputNumber.setJustificationType (Justification::right);
-    outputNumber.setColour (Label::textColourId, Colours::white);
-    outputNumber.setText("0", dontSendNotification);
-    addAndMakeVisible (outputNumber);
+    outputValue.setFont (Font (15.0000f, Font::plain));
+    outputValue.setJustificationType (Justification::left);
+    outputValue.setColour (Label::textColourId, Colours::white);
+    outputValue.setText("32 outs", dontSendNotification);
+    addAndMakeVisible (outputValue);
     
     IRLabel.setFont (Font (15.0000f, Font::plain));
     IRLabel.setJustificationType (Justification::centredRight);
@@ -410,11 +417,11 @@ View::IODetailBox::IODetailBox()
     IRLabel.setText("Impulse responses:", dontSendNotification);
     addAndMakeVisible (IRLabel);
     
-    IRNumber.setFont (Font (15.0000f, Font::plain));
-    IRNumber.setJustificationType (Justification::right);
-    IRNumber.setColour (Label::textColourId, Colours::white);
-    IRNumber.setText("0", dontSendNotification);
-    addAndMakeVisible (IRNumber);
+    IRValue.setFont (Font (15.0000f, Font::plain));
+    IRValue.setJustificationType (Justification::right);
+    IRValue.setColour (Label::textColourId, Colours::white);
+    IRValue.setText("0", dontSendNotification);
+    addAndMakeVisible (IRValue);
     
     sampleRateLabel.setFont (Font (15.0000f, Font::plain));
     sampleRateLabel.setJustificationType (Justification::right);
@@ -473,67 +480,46 @@ View::IODetailBox::IODetailBox()
     resampledLabel.setFont (Font (12.0000f, Font::plain));
     resampledLabel.setJustificationType (Justification::bottomRight);
     resampledLabel.setColour (Label::textColourId, Colours::yellow);
-    resampledLabel.setText("[resampled wavefile]", dontSendNotification);
-    resampledLabel.setTooltip(TRANS("wavefile resampled to match host samplerate"));
+    resampledLabel.setText("[wavefile resampled to match host samplerate]", dontSendNotification);
+    resampledLabel.setTooltip(TRANS("wavefile resampled to match host"));
     addAndMakeVisible (resampledLabel);
     resampledLabel.setVisible(false);
 }
 
 void View::IODetailBox::paint(Graphics& g)
 {
+    auto localArea = getLocalBounds();
+    int separator = 6;
     float chafmer = 10.0f;
+
     auto boxColor = Colours::blue;
     g.setColour(boxColor.withAlpha(0.26f)); //transparency 26%
-
+    g.fillRoundedRectangle(localArea.removeFromLeft(proportionOfWidth(0.60f)).toFloat(), chafmer);
+    localArea.removeFromLeft(separator);
     
-    g.fillRoundedRectangle(getLocalBounds().toFloat(), chafmer);
+    boxColor = Colours::violet;
+    g.setColour(boxColor.withAlpha(0.26f)); //transparency 26%
+    g.fillRoundedRectangle(localArea.removeFromTop(proportionOfHeight(0.50f)).toFloat(), chafmer);
     
-    g.setColour (Colours::white);
-    g.drawLine(proportionOfWidth(0.45f), chafmer/2, proportionOfWidth(0.45f), getHeight()-chafmer/2, 0.75f);
+//    g.setColour (Colours::white);
+//    g.drawLine(proportionOfWidth(0.45f), chafmer/2, proportionOfWidth(0.45f), getHeight()-chafmer/2, 0.75f);
 }
 
 void View::IODetailBox::resized()
 {
     auto localArea = getLocalBounds();
     localArea.reduce(0, 8.0f);
-//    localArea.removeFromTop(16);
+    int separator = 6;
     
-    Grid gridLeft;
-    using TrackL = Grid::TrackInfo;
-
-    gridLeft.templateRows    = { TrackL (1_fr), TrackL (1_fr),  TrackL (1_fr), TrackL (1_fr) };
-    gridLeft.templateColumns = { TrackL (1_fr), TrackL (50_px)};
-
-    GridItem inCh (inputNumber);
-    inCh = inCh.withMargin(GridItem::Margin(0,10,0,0));
-    
-    GridItem outCh (outputNumber);
-    outCh = outCh.withMargin(GridItem::Margin(0,10,0,0));
-    
-    GridItem irNum (IRNumber);
-    irNum = irNum.withMargin(GridItem::Margin(0,10,0,0));
-    
-    gridLeft.items = {  GridItem(inputLabel),   inCh,
-                        GridItem(outputLabel),  outCh,
-                        GridItem(IRLabel),      irNum,
-                        GridItem(resampledLabel),             GridItem()
-                    };
-
-    gridLeft.performLayout (localArea.removeFromLeft(localArea.proportionOfWidth(0.45f)));
-    
-    //--------------------------------------------------------------------------
-    
-    Grid gridRight;
+    Grid matrixGrid;
     using TrackR = Grid::TrackInfo;
 
-    gridRight.templateRows    = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr) };
-    gridRight.templateColumns = { TrackR (1_fr), TrackR (52_px), TrackR (42_px)};
+    matrixGrid.templateRows       = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR(10_px) };
+    matrixGrid.templateColumns    = { TrackR (1_fr), TrackR (55_px) , TrackR (55_px)};
+    matrixGrid.columnGap          = {0_px};
     
-    GridItem smprt (sampleRateNumber);
-//    smprt = smprt.withMargin(GridItem::Margin(0,8,0,0));
-    
-    GridItem buff (hostBufferNumber);
-//    buff = buff.withMargin(GridItem::Margin(0,8,0,0));
+    GridItem resample (resampledLabel);
+    resample = resample.withArea(5, 1, 5, 4);
     
     GridItem firlenSecs (filterLengthInSeconds);
 //    firlenSecs = firlenSecs.withMargin(GridItem::Margin(0,8,0,0));
@@ -541,13 +527,39 @@ void View::IODetailBox::resized()
     GridItem firlenSmpls (filterLengthInSamples);
 //    firlenSmpls = firlenSmpls.withMargin(GridItem::Margin(0,8,0,0));
 
-    gridRight.items = { GridItem (sampleRateLabel),     smprt,      GridItem(),
-                        GridItem (hostBufferLabel),     buff,       GridItem(),
-                        GridItem (filterLengthLabel),   firlenSecs, GridItem(secondsLabel),
-                        GridItem(),       firlenSmpls,GridItem(samplesLabel)
+    matrixGrid.items = {  GridItem (matrixConfigLabel),   GridItem(inputValue),    GridItem(outputValue),
+                        GridItem (IRLabel),             GridItem(IRValue),                        GridItem(),
+                        GridItem (filterLengthLabel),   firlenSecs,                     GridItem(secondsLabel),
+                        GridItem(),                     firlenSmpls,                    GridItem(samplesLabel),
+                        resample
                };
 
-    gridRight.performLayout (localArea);
+    matrixGrid.performLayout (localArea.removeFromLeft(proportionOfWidth(0.60f)));
+    localArea.removeFromLeft(separator);
+    //--------------------------------------------------------------------------
+    
+    Grid DSPgrid;
+    using TrackL = Grid::TrackInfo;
+
+    DSPgrid.templateRows    = { TrackL (1_fr), TrackL (1_fr),  TrackL (1_fr), TrackL (1_fr) };
+    DSPgrid.templateColumns = { TrackL (1_fr), TrackL (50_px)};
+
+//    GridItem inCh (inputNumber);
+//    inCh = inCh.withMargin(GridItem::Margin(0,10,0,0));
+//
+//    GridItem outCh (outputNumber);
+//    outCh = outCh.withMargin(GridItem::Margin(0,10,0,0));
+//
+//    GridItem irNum (IRNumber);
+//    irNum = irNum.withMargin(GridItem::Margin(0,10,0,0));
+    
+    DSPgrid.items = {   GridItem(sampleRateLabel),      GridItem(sampleRateNumber),
+                        GridItem(hostBufferLabel),      GridItem(hostBufferNumber),
+                        GridItem(),             GridItem()
+                    };
+
+    DSPgrid.performLayout(localArea.removeFromTop(proportionOfHeight(0.50f)));
+
 }
 
 //==============================================================================

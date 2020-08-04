@@ -106,9 +106,11 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 //    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
     view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
     
+    /*
     view.ioDetailBox.inputNumber.setText(String(processor._min_in_ch), dontSendNotification);
     view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
     view.ioDetailBox.IRNumber.setText(String(processor._num_conv), dontSendNotification);
+    */
     
     view.ioDetailBox.sampleRateNumber.setText(String(processor.getSamplerate()), dontSendNotification);
     view.ioDetailBox.hostBufferNumber.setText(String(processor.getBufferSize()), dontSendNotification);
@@ -228,7 +230,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     sel = 0;
     val = 0;
     unsigned int max_part_size = processor.getMaxPartitionSize();
-    for (int i=0; val < 8192; i++) {
+    for (int i=0; val < 65536; i++)
+    {
       
       val = (unsigned int)floor(conv_buf*pow(2,i));
       

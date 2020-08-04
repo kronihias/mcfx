@@ -465,7 +465,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
             inChannels = tempInputChannels;
         }
          
-        
+        /*
         if ((inChannels > getTotalNumInputChannels()) || outChannels > getTotalNumOutputChannels())
         {
             debug.clear();
@@ -477,7 +477,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
             status << "ERROR: In/Out plugin channels not feasible. " << "Need " << inChannels << " ins, " << outChannels << " outs";
             addNewStatus(status);
             return;
-        }
+        }*/
         
         if (length <= 0)
             length = irLength-offset;
