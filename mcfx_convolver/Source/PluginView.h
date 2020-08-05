@@ -52,7 +52,7 @@ public:
     {
     public:
         Label       pathLabel;
-        TextEditor  pathText;
+        Label       pathText;
         TextButton  pathButton;
         
         ChangePathBox();
@@ -228,6 +228,8 @@ public:
     View();
     
     LookAndFeel_V3 MyLookAndFeel;
+    
+    
     
     void LockSensibleElements();
     void UnlockSensibleElements();

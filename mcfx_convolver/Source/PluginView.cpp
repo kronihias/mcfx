@@ -285,9 +285,8 @@ View::ChangePathBox::ChangePathBox()
     addAndMakeVisible (pathLabel);
     
     pathText.setFont (Font (11.0f, Font::plain));
-    pathText.setColour(TextEditor::backgroundColourId, Colour (Colours::lightgrey));
-    pathText.setReadOnly(true);
-    pathText.setPopupMenuEnabled(false);
+    pathText.setColour(Label::outlineColourId, Colour(0xff8e989b)); //from slider LookAndFeel(_V3?) outline textbox colour
+    pathText.setColour(Label::textColourId, Colours::white);
     addAndMakeVisible (pathText);
     
     pathButton.setTooltip ("choose another filter libray folder");
@@ -508,8 +507,8 @@ View::IODetailBox::IODetailBox()
     gainKnob.setTextBoxStyle (Slider::TextBoxRight, true, 70, 20);
     gainKnob.setNumDecimalPlacesToDisplay(1);
     gainKnob.setTextValueSuffix (" dB");
-    auto test = gainKnob.getMouseDragSensitivity();
     gainKnob.setMouseDragSensitivity(125);
+    auto color = gainKnob.getLookAndFeel().findColour(Slider::textBoxOutlineColourId);
     addAndMakeVisible(gainKnob);
     
     
