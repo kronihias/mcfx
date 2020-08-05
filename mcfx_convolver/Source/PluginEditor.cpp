@@ -106,11 +106,16 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 //    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
     view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
     
-    /*
-    view.ioDetailBox.inputNumber.setText(String(processor._min_in_ch), dontSendNotification);
-    view.ioDetailBox.outputNumber.setText(String(processor._min_out_ch), dontSendNotification);
-    view.ioDetailBox.IRNumber.setText(String(processor._num_conv), dontSendNotification);
-    */
+    String inChannels;
+    inChannels << String(processor._min_in_ch) << " in";
+    view.ioDetailBox.inputValue.setText(inChannels, dontSendNotification);
+    
+    String outChannels;
+    outChannels << String(processor._min_out_ch) << " out";
+    view.ioDetailBox.outputValue.setText(outChannels, dontSendNotification);
+    
+    view.ioDetailBox.IRValue.setText(String(processor._num_conv), dontSendNotification);
+    view.ioDetailBox.diagonalValue.setVisible(processor.tempInputChannels == -1);
     
     view.ioDetailBox.sampleRateNumber.setText(String(processor.getSamplerate()), dontSendNotification);
     view.ioDetailBox.hostBufferNumber.setText(String(processor.getBufferSize()), dontSendNotification);

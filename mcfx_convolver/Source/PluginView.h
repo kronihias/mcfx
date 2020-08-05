@@ -85,6 +85,8 @@ public:
         Label IRLabel;
         Label IRValue;
         
+        Label diagonalValue;
+        
         Label sampleRateLabel;
         Label sampleRateNumber;
         
@@ -99,6 +101,8 @@ public:
         Label samplesLabel;
         
         Label resampledLabel;
+        
+        Slider gainKnob;
 
         IODetailBox();
     private:

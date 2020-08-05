@@ -396,7 +396,7 @@ View::IODetailBox::IODetailBox()
     inputValue.setFont (Font (15.0000f, Font::plain));
     inputValue.setJustificationType (Justification::right);
     inputValue.setColour (Label::textColourId, Colours::white);
-    inputValue.setText("32 ins", dontSendNotification);
+    inputValue.setText("0 ins", dontSendNotification);
     addAndMakeVisible (inputValue);
     
 //    outputLabel.setFont (Font (15.0000f, Font::plain));
@@ -408,7 +408,7 @@ View::IODetailBox::IODetailBox()
     outputValue.setFont (Font (15.0000f, Font::plain));
     outputValue.setJustificationType (Justification::left);
     outputValue.setColour (Label::textColourId, Colours::white);
-    outputValue.setText("32 outs", dontSendNotification);
+    outputValue.setText("0 outs", dontSendNotification);
     addAndMakeVisible (outputValue);
     
     IRLabel.setFont (Font (15.0000f, Font::plain));
@@ -422,6 +422,12 @@ View::IODetailBox::IODetailBox()
     IRValue.setColour (Label::textColourId, Colours::white);
     IRValue.setText("0", dontSendNotification);
     addAndMakeVisible (IRValue);
+    
+    diagonalValue.setFont (Font (13.0000f, Font::plain));
+    diagonalValue.setJustificationType (Justification::centredLeft);
+    diagonalValue.setColour (Label::textColourId, Colours::white);
+    diagonalValue.setText("(diagonal)", dontSendNotification);
+    addAndMakeVisible (diagonalValue);
     
     sampleRateLabel.setFont (Font (15.0000f, Font::plain));
     sampleRateLabel.setJustificationType (Justification::right);
@@ -478,12 +484,23 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (samplesLabel);
     
     resampledLabel.setFont (Font (12.0000f, Font::plain));
-    resampledLabel.setJustificationType (Justification::bottomRight);
+    resampledLabel.setJustificationType (Justification::bottomLeft);
     resampledLabel.setColour (Label::textColourId, Colours::yellow);
-    resampledLabel.setText("[wavefile resampled to match host samplerate]", dontSendNotification);
-    resampledLabel.setTooltip(TRANS("wavefile resampled to match host"));
+    resampledLabel.setText("(resampled wavefile)", dontSendNotification);
+    resampledLabel.setTooltip(TRANS("wavefile resampled to match host samplerate"));
     addAndMakeVisible (resampledLabel);
     resampledLabel.setVisible(false);
+    
+    gainKnob.setSliderStyle (Slider::Rotary);
+//    gainKnob.setRotaryParameters (MathConstants<float>::pi * 1.2f, MathConstants<float>::pi * 2.8f, false);
+    gainKnob.setRange(-60, 12);
+    gainKnob.setValue(0);
+//    gainKnob.setSkewFactorFromMidPoint(0);
+//    gainKnob.setMaxValue(3.9810); //12dB
+    gainKnob.setTextBoxStyle (Slider::TextBoxRight, false, 70, 20);
+    gainKnob.setNumDecimalPlacesToDisplay(1);
+    gainKnob.setTextValueSuffix (" dB");
+    addAndMakeVisible(gainKnob);
 }
 
 void View::IODetailBox::paint(Graphics& g)
@@ -508,7 +525,6 @@ void View::IODetailBox::paint(Graphics& g)
 void View::IODetailBox::resized()
 {
     auto localArea = getLocalBounds();
-    localArea.reduce(0, 8.0f);
     int separator = 6;
     
     Grid matrixGrid;
@@ -527,22 +543,24 @@ void View::IODetailBox::resized()
     GridItem firlenSmpls (filterLengthInSamples);
 //    firlenSmpls = firlenSmpls.withMargin(GridItem::Margin(0,8,0,0));
 
-    matrixGrid.items = {  GridItem (matrixConfigLabel),   GridItem(inputValue),    GridItem(outputValue),
-                        GridItem (IRLabel),             GridItem(IRValue),                        GridItem(),
-                        GridItem (filterLengthLabel),   firlenSecs,                     GridItem(secondsLabel),
-                        GridItem(),                     firlenSmpls,                    GridItem(samplesLabel),
+    matrixGrid.items = {GridItem (matrixConfigLabel),   GridItem(inputValue),    GridItem(outputValue),
+                        GridItem (IRLabel),             GridItem(IRValue),       GridItem(diagonalValue),
+                        GridItem (filterLengthLabel),   firlenSecs,              GridItem(secondsLabel),
+                        GridItem(),                     firlenSmpls,             GridItem(samplesLabel),
                         resample
                };
-
-    matrixGrid.performLayout (localArea.removeFromLeft(proportionOfWidth(0.60f)));
+    
+    auto gridArea = localArea.removeFromLeft(proportionOfWidth(0.60f));
+    gridArea.reduce(0, 8);
+    matrixGrid.performLayout (gridArea);
     localArea.removeFromLeft(separator);
     //--------------------------------------------------------------------------
     
     Grid DSPgrid;
     using TrackL = Grid::TrackInfo;
 
-    DSPgrid.templateRows    = { TrackL (1_fr), TrackL (1_fr),  TrackL (1_fr), TrackL (1_fr) };
-    DSPgrid.templateColumns = { TrackL (1_fr), TrackL (50_px)};
+    DSPgrid.templateRows    = { TrackL (1_fr), TrackL (1_fr) };
+    DSPgrid.templateColumns = { TrackL (1_fr), TrackL (50_px) };
 
 //    GridItem inCh (inputNumber);
 //    inCh = inCh.withMargin(GridItem::Margin(0,10,0,0));
@@ -554,12 +572,15 @@ void View::IODetailBox::resized()
 //    irNum = irNum.withMargin(GridItem::Margin(0,10,0,0));
     
     DSPgrid.items = {   GridItem(sampleRateLabel),      GridItem(sampleRateNumber),
-                        GridItem(hostBufferLabel),      GridItem(hostBufferNumber),
-                        GridItem(),             GridItem()
+                        GridItem(hostBufferLabel),      GridItem(hostBufferNumber)
                     };
-
-    DSPgrid.performLayout(localArea.removeFromTop(proportionOfHeight(0.50f)));
-
+    
+    gridArea = localArea.removeFromTop(proportionOfHeight(0.50f));
+    gridArea.reduce(0, 8);
+    DSPgrid.performLayout(gridArea);
+    
+    localArea.removeFromTop(8);
+    gainKnob.setBounds(localArea);
 }
 
 //==============================================================================
