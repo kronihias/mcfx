@@ -27,7 +27,7 @@
 Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_convolverAudioProcessor& processorToUse)
     : AudioProcessorEditor (&processorToUse), processor(processorToUse)
 {
-    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
+//    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     

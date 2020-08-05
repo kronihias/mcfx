@@ -102,7 +102,21 @@ public:
         
         Label resampledLabel;
         
-        Slider gainKnob;
+        struct SnappingSlider  : public Slider
+        {
+            double snapValue (double attemptedValue, DragMode dragMode)
+            {
+            //   if (dragMode == notDragging)
+            //       return attemptedValue;  // if they're entering the value in the text-box, don't mess with it.
+
+               if (attemptedValue > -1.5 && attemptedValue < 1.5)
+                   return 0.0;
+
+               return attemptedValue;
+            }
+        };
+        SnappingSlider gainKnob;
+        Label gainLabel;
 
         IODetailBox();
     private:
@@ -212,6 +226,8 @@ public:
 
     //constructor
     View();
+    
+    LookAndFeel_V3 MyLookAndFeel;
     
     void LockSensibleElements();
     void UnlockSensibleElements();

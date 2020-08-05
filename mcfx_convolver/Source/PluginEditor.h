@@ -85,7 +85,7 @@ private:
     PopupMenu filterMenu;
     OwnedArray<PopupMenu> filterSubmenus;
     
-    LookAndFeel_V3 MyLookAndFeel;
+//    LookAndFeel_V4 MyLookAndFeel;
 };
 
 

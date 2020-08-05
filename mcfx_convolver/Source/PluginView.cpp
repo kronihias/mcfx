@@ -28,6 +28,8 @@
 
 View::View()
 {
+    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
+    
     title.setFont(Font (17.2000f, Font::bold));
     title.setColour(Label::textColourId, Colours::white);
     title.setJustificationType (Justification::centred);
@@ -133,7 +135,7 @@ void View::resized()
     int OSCheight = 24;
     
     int IOBoxWidtdh = 190;
-    int IOBoxHeight = 120;
+    int IOBoxHeight = 132;
     
     int convBoxHeight = 60;
     
@@ -484,23 +486,34 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (samplesLabel);
     
     resampledLabel.setFont (Font (12.0000f, Font::plain));
-    resampledLabel.setJustificationType (Justification::bottomLeft);
+    resampledLabel.setJustificationType (Justification::bottomRight);
     resampledLabel.setColour (Label::textColourId, Colours::yellow);
     resampledLabel.setText("(resampled wavefile)", dontSendNotification);
     resampledLabel.setTooltip(TRANS("wavefile resampled to match host samplerate"));
     addAndMakeVisible (resampledLabel);
     resampledLabel.setVisible(false);
     
-    gainKnob.setSliderStyle (Slider::Rotary);
+    gainLabel.setFont (Font (15.0000f, Font::plain));
+    gainLabel.setJustificationType (Justification::centred);
+    gainLabel.setColour (Label::textColourId, Colours::white);
+    gainLabel.setText("Master gain", dontSendNotification);
+    addAndMakeVisible (gainLabel);
+    
+    gainKnob.setSliderStyle (Slider::RotaryVerticalDrag);
 //    gainKnob.setRotaryParameters (MathConstants<float>::pi * 1.2f, MathConstants<float>::pi * 2.8f, false);
     gainKnob.setRange(-60, 12);
     gainKnob.setValue(0);
-//    gainKnob.setSkewFactorFromMidPoint(0);
-//    gainKnob.setMaxValue(3.9810); //12dB
-    gainKnob.setTextBoxStyle (Slider::TextBoxRight, false, 70, 20);
+    gainKnob.setDoubleClickReturnValue(true, 0);
+    gainKnob.setColour(Slider::rotarySliderFillColourId, Colours::white);
+    gainKnob.setTextBoxStyle (Slider::TextBoxRight, true, 70, 20);
     gainKnob.setNumDecimalPlacesToDisplay(1);
     gainKnob.setTextValueSuffix (" dB");
+    auto test = gainKnob.getMouseDragSensitivity();
+    gainKnob.setMouseDragSensitivity(125);
     addAndMakeVisible(gainKnob);
+    
+    
+//    getParentComponent()->getLookAndFeel().setColour(Slider::rotarySliderFillColourId, Colours::white);
 }
 
 void View::IODetailBox::paint(Graphics& g)
@@ -516,7 +529,7 @@ void View::IODetailBox::paint(Graphics& g)
     
     boxColor = Colours::violet;
     g.setColour(boxColor.withAlpha(0.26f)); //transparency 26%
-    g.fillRoundedRectangle(localArea.removeFromTop(proportionOfHeight(0.50f)).toFloat(), chafmer);
+    g.fillRoundedRectangle(localArea.removeFromTop(proportionOfHeight(0.40f)).toFloat(), chafmer);
     
 //    g.setColour (Colours::white);
 //    g.drawLine(proportionOfWidth(0.45f), chafmer/2, proportionOfWidth(0.45f), getHeight()-chafmer/2, 0.75f);
@@ -530,7 +543,7 @@ void View::IODetailBox::resized()
     Grid matrixGrid;
     using TrackR = Grid::TrackInfo;
 
-    matrixGrid.templateRows       = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR(10_px) };
+    matrixGrid.templateRows       = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR(15_px) };
     matrixGrid.templateColumns    = { TrackR (1_fr), TrackR (55_px) , TrackR (55_px)};
     matrixGrid.columnGap          = {0_px};
     
@@ -575,11 +588,12 @@ void View::IODetailBox::resized()
                         GridItem(hostBufferLabel),      GridItem(hostBufferNumber)
                     };
     
-    gridArea = localArea.removeFromTop(proportionOfHeight(0.50f));
+    gridArea = localArea.removeFromTop(proportionOfHeight(0.40f));
     gridArea.reduce(0, 8);
     DSPgrid.performLayout(gridArea);
     
     localArea.removeFromTop(8);
+    gainLabel.setBounds(localArea.removeFromBottom(15));
     gainKnob.setBounds(localArea);
 }
 
