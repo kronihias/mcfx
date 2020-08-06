@@ -67,6 +67,8 @@ tempInputChannels(0),
 storeInChannelIntoWav(false),
 storedInChannels(0),
 
+masterGain(1),
+
 _paramReload(false),
 _skippedCycles(0),
 safemode_(false),
@@ -95,6 +97,8 @@ newStatusText(false)
     
     // this is for the open dialog of the gui
     lastSearchDir = lastSearchDir.getSpecialLocation(File::userHomeDirectory);
+    
+    addParameter (gain = new juce::AudioParameterFloat ("gain", "Gain", 0.0f, 12.0f, 1.0f)); //ID, Name, Min, Max, default
 }
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
@@ -304,7 +308,9 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 #else
         //mtxconv_.processBlock(buffer, buffer, isNonRealtime()); // if isNotRealtime always set to true!
         mtxconv_.processBlock(buffer, buffer, NumSamples, true); // try to always wait except - add a special flag to deactivate waiting...
+        buffer.applyGain(masterGain.get());
         _skippedCycles.set(mtxconv_.getSkipCount());
+        
 #endif
         _isProcessing = false;
     }

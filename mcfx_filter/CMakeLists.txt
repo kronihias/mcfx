@@ -1,4 +1,5 @@
-SET ( SPECIFIC_SOURCE_DIR ${SRC_DIR}/mcfx_filter )
+set(CURR_SUBDIR x-mcfx_filter)
+SET(SPECIFIC_SOURCE_DIR ${SRC_DIR}/${CURR_SUBDIR})
 # SET ( WITH_LIBSOXR TRUE )
 
 # append "c" for "convolver" to the plugin code string

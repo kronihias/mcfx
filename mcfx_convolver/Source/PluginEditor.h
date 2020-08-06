@@ -36,6 +36,7 @@ class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public Button::Listener,
                                             public ChangeListener,
                                             public ComboBox::Listener,
+                                            public Slider::Listener,
                                             public Timer,
                                             public TextEditor::Listener
 {
@@ -69,6 +70,8 @@ public:
     void timerCallback();
     
     int getInputChannelFromDialog();
+    
+    void sliderValueChanged(Slider *slider);
 
 private:
 //    Mcfx_convolverAudioProcessor* getProcessor() const

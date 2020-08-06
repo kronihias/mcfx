@@ -49,6 +49,8 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.inputChannelDialog.OKButton.addListener(this);
     view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
+    view.ioDetailBox.gainKnob.addListener(this);
+    
     addAndMakeVisible(view);
 
     setSize (420, 420); //originally 350, 330
@@ -490,8 +492,13 @@ int Mcfx_convolverAudioProcessorEditor::getInputChannelFromDialog()
         return value;
     }
     else
-    {
         return -2;
+}
+
+void Mcfx_convolverAudioProcessorEditor::sliderValueChanged(Slider *slider)
+{
+    if (slider == &view.ioDetailBox.gainKnob)
+    {
+        processor.masterGain.set(juce::Decibels::decibelsToGain(view.ioDetailBox.gainKnob.getValue()));
     }
-    
 }
