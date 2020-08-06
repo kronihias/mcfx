@@ -19,7 +19,7 @@ cmake_minimum_required(VERSION 3.15)
 file(READ VERSION VERSION)
 add_definitions(-DVERSION=${VERSION}) #?? FOR THE DELAY
 
-project(x-mcfx_plugin_suite VERSION ${VERSION})
+project(mcfx_plugin_suite VERSION ${VERSION})
 
 set(MANUFACTURER_CODE "Unpr")
 set(PLUGIN_CODE "M")

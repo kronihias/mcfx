@@ -1,4 +1,4 @@
-set(CURR_SUBDIR x-mcfx_convolver)
+set(CURR_SUBDIR mcfx_convolver)
 
 SET(SPECIFIC_SOURCE_DIR ${SRC_DIR}/${CURR_SUBDIR})
 SET(WITH_LIBSOXR TRUE)
