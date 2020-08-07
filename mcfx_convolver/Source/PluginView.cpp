@@ -70,7 +70,7 @@ View::View()
     version_string << "v" << TOSTRING(VERSION);
     versionLabel.setFont(Font (10.00f, Font::plain));
     versionLabel.setColour(Label::textColourId, Colours::white);
-    versionLabel.setJustificationType(Justification::right);
+    versionLabel.setJustificationType(Justification::bottomRight);
     versionLabel.setText(version_string, dontSendNotification);
     addAndMakeVisible(versionLabel);
     
@@ -126,17 +126,19 @@ void View::resized()
     
     int IOBoxHeight = 132;
     
-    int convBoxHeight = 60;
+    int convBoxHeight = 78;
     
-    int changePathHeight = 48;
+    int changePathHeight = 52;
     
     int debugWinHeight = 100;
 
     int shapesize = 20;
-    int smallLabelHeight = 16;
+    int smallLabelHeight = 24;
     
     inputChannelDialog.setBounds(getBounds());
+    
     versionLabel.setBounds(area.removeFromBottom(smallLabelHeight));
+    
     area.removeFromLeft(border);
     area.removeFromRight(border);
     int mainWidth = area.getWidth();
@@ -170,19 +172,22 @@ void View::resized()
     */
     
     FlexBox statusBox;
-    statusBox.justifyContent = FlexBox::JustifyContent::flexStart;
+    statusBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
     statusBox.alignItems = FlexBox::AlignItems::center;
     
     FlexItem ledItem  (shapesize,  shapesize, statusLed);
     ledItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    ledItem.margin = FlexItem::Margin(0,10,0,0);
     
-    FlexItem textItem  (mainWidth - 2*shapesize,  shapesize, statusText);
+    FlexItem textItem  (statusText);
     textItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    textItem.minHeight = shapesize;
+    textItem.minWidth = 1;
+    textItem.flexGrow = 1;
     
     statusBox.items.addArray({ ledItem, textItem });
     
     //---------------------------------------------------------------------
-    
     FlexBox mainFlex;
     mainFlex.flexDirection = FlexBox::Direction::column;
     mainFlex.justifyContent = FlexBox::JustifyContent::spaceBetween;
@@ -203,7 +208,7 @@ void View::resized()
     FlexItem changePathItem (mainWidth, changePathHeight, changePathBox);
     changePathItem.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    FlexItem statusItem (mainWidth, changePathHeight, statusBox);
+    FlexItem statusItem (mainWidth, shapesize, statusBox);
     statusItem.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     mainFlex.items.addArray({   titleItem,
@@ -253,12 +258,6 @@ View::FilterManagingBox::FilterManagingBox()
     addAndMakeVisible (filterLabel);
     
     addAndMakeVisible (filterSelector);
-
-//    chooseButton.setTooltip ("browse filters or open from file");
-//    chooseButton.setColour (TextButton::buttonColourId, Colours::white);
-//    chooseButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-//    chooseButton.setButtonText ("choose");
-//    addAndMakeVisible(chooseButton);
     
     reloadButton.setTooltip ("reload the current matrix specifying a new input channels number");
     reloadButton.setColour (TextButton::buttonColourId, Colours::white);
@@ -285,7 +284,10 @@ void View::FilterManagingBox::UnlockSensibleElements()
 }
 
 void View::FilterManagingBox::paint(Graphics& g)
-{}
+{
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
+}
 
 void View::FilterManagingBox::resized()
 {
@@ -296,38 +298,25 @@ void View::FilterManagingBox::resized()
     
     Grid grid;
     using Track = Grid::TrackInfo;
-//    grid.justifyItems = Grid::JustifyItems::center;
     grid.alignContent = Grid::AlignContent::spaceBetween;
     grid.justifyContent = Grid::JustifyContent::spaceBetween;
     grid.alignItems = Grid::AlignItems::center;
     grid.justifyItems = Grid::JustifyItems::center;
     
-
-    grid.templateRows    = { //Track (3_fr),
-                                Track (3_fr), Track (1_fr) };
-    grid.templateColumns = {Track (45_px), Track (8_fr), Track (2_fr)};
-    
-//    GridItem TextPath (pathText);
-//    TextPath = TextPath.withHeight(rowHeight);
-//
-//    GridItem pathSelection (pathButton);
-//    pathSelection = pathSelection.withSize(labelWidth, rowHeight);
-//    pathSelection = pathSelection.withJustifySelf(GridItem::JustifySelf::start);
-//    pathSelection = pathSelection.withMargin(GridItem::Margin(0,0,0,10));
+    grid.templateRows    = {Track (3_fr), Track (1_fr) };
+    grid.templateColumns = {Track (45_px), Track (1_fr), Track (60_px)};
     
     GridItem TextEditor (filterSelector);
     TextEditor = TextEditor.withHeight(rowHeight);
     
     GridItem ReloadButton (reloadButton);
     ReloadButton = ReloadButton.withSize(buttonWitdh, rowHeight);
-    ReloadButton = ReloadButton.withJustifySelf(GridItem::JustifySelf::start);
     ReloadButton = ReloadButton.withMargin(GridItem::Margin(0,0,0,10));
     
     GridItem infoText (infoLabel);
     infoText = infoText.withAlignSelf(GridItem::AlignSelf::start);
     
-    grid.items = {  //GridItem (pathLabel) ,  TextPath,    pathSelection,
-                    GridItem (filterLabel), TextEditor,  ReloadButton,
+    grid.items = {  GridItem (filterLabel), TextEditor,  ReloadButton,
                     GridItem(),             infoText,    GridItem()
                 };
 
@@ -358,33 +347,36 @@ View::ChangePathBox::ChangePathBox()
 
 void View::ChangePathBox::paint(Graphics& g)
 {
-//    g.setColour (Colours::darkgrey);
-//    g.drawRect (0, 0, getWidth(), getHeight(), 1);
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
 }
 
 void View::ChangePathBox::resized()
 {
-    int editorWidth = proportionOfWidth(0.75f);
     int buttonWidth = 30;
    
-    int labelWidth = 50;
+    int labelWidth = 55;
     
     int height = 24;
-    int labelHeight = 54;
+    int labelHeight = 48;
     
     FlexBox mainFlex;
-    mainFlex.justifyContent = FlexBox::JustifyContent::spaceBetween;
+    mainFlex.justifyContent = FlexBox::JustifyContent::flexStart;
     mainFlex.alignItems = FlexBox::AlignItems::center;
     
     FlexItem label  (labelWidth,  labelHeight, pathLabel);
     label.alignSelf = FlexItem::AlignSelf::autoAlign;
+    label.margin = FlexItem::Margin(0,10,0,0);
     
-//    FlexItem editor (editorWidth, height, pathText);
-    FlexItem editor (editorWidth, height, pathText);
+    FlexItem editor (pathText);
     editor.alignSelf = FlexItem::AlignSelf::autoAlign;
+    editor.flexGrow = 1;
+    editor.minWidth = labelWidth;
+    editor.minHeight = height;
     
     FlexItem button (buttonWidth, height, pathButton);
     button.alignSelf = FlexItem::AlignSelf::autoAlign;
+    button.margin = FlexItem::Margin(0,0,0,10);
     
     mainFlex.items.addArray({ label, editor, button });
     
@@ -580,7 +572,10 @@ void View::IODetailBox::paint(Graphics& g)
     auto localArea = getLocalBounds();
     int separator = 6;
     float chafmer = 10.0f;
-
+    
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
+    
     auto boxColor = Colours::blue;
     g.setColour(boxColor.withAlpha(0.26f)); //transparency 26%
     g.fillRoundedRectangle(localArea.removeFromLeft(proportionOfWidth(0.59f)).toFloat(), chafmer);
@@ -603,7 +598,7 @@ void View::IODetailBox::resized()
     using TrackR = Grid::TrackInfo;
 
     matrixGrid.templateRows       = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR(15_px) };
-    matrixGrid.templateColumns    = { TrackR (1_fr), TrackR (60_px) , TrackR (55_px)};
+    matrixGrid.templateColumns    = { TrackR (1_fr), TrackR (60_px) , TrackR (60_px)};
     matrixGrid.columnGap          = {0_px};
     
     GridItem resample (resampledLabel);
@@ -626,8 +621,8 @@ void View::IODetailBox::resized()
     gridArea.reduce(0, 8);
     matrixGrid.performLayout (gridArea);
     localArea.removeFromLeft(separator);
-    //--------------------------------------------------------------------------
     
+    //--------------------------------------------------------------------------
     Grid DSPgrid;
     using TrackL = Grid::TrackInfo;
 
@@ -752,12 +747,15 @@ void View::ConvManagingBox::UnlockSensibleElements()
 }
 
 void View::ConvManagingBox::paint(Graphics& g)
-{}
+{
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
+}
 
 void View::ConvManagingBox::resized()
 {
     auto localArea = getLocalBounds();
-    localArea.removeFromLeft(130);
+    localArea.removeFromLeft(140);
     
     int height = 20;
     int width = 70;
@@ -766,7 +764,7 @@ void View::ConvManagingBox::resized()
     using Track = Grid::TrackInfo;
 
     grid.templateRows    = { Track (1_fr), Track (1_fr) };
-    grid.templateColumns = { Track (70_px), Track (1_fr), Track (35_px), Track (40_px) };
+    grid.templateColumns = { Track (70_px), Track (100_px), Track (35_px), Track (1_fr) };
     
     GridItem bufferCombo (bufferCombobox);
     bufferCombo = bufferCombo.withSize(width, height);
@@ -785,7 +783,8 @@ void View::ConvManagingBox::resized()
     grid.items = { bufferCombo,  GridItem(latencyLabel),          GridItem(latencyValue),       measureUnit,
                    bufferPart,   GridItem(skippedCyclesLabel),    GridItem(skippedCyclesValue), GridItem()
                };
-
+    
+    localArea.removeFromTop(8);
     grid.performLayout (localArea);
     
     /*
