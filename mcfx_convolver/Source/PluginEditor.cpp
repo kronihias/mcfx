@@ -34,8 +34,8 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
 //    view.FilterManagingBox.chooseButton.addListener(this);
 //    view.FilterManagingBox.saveToggle.addListener(this);
     view.changePathBox.pathButton.addListener(this);
-    view.FilterManagingBox.filterSelector.addListener(this);
-    view.FilterManagingBox.reloadButton.addListener(this);
+    view.filterManagingBox.filterSelector.addListener(this);
+    view.filterManagingBox.reloadButton.addListener(this);
     
 //    view.irMatrixBox.confModeButton.addListener(this);
 //    view.irMatrixBox.wavModeButton.addListener(this);
@@ -53,7 +53,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     addAndMakeVisible(view);
 
-    setSize (420, 420); //originally 350, 330
+    setSize (460, 420); //originally 350, 330
     
     UpdateText();
     
@@ -102,8 +102,8 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
 {
     
-    view.FilterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
-    view.FilterManagingBox.filterSelector.setTooltip(view.FilterManagingBox.filterSelector.getText()); //to see all the string
+    view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
+    view.filterManagingBox.filterSelector.setTooltip(view.filterManagingBox.filterSelector.getText()); //to see all the string
     
 //    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
     view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
@@ -147,16 +147,16 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 //    }
     
     if (processor.getConvolverStatus() == Mcfx_convolverAudioProcessor::ConvolverStatus::Loaded)
-        view.FilterManagingBox.reloadButton.setEnabled(true);
+        view.filterManagingBox.reloadButton.setEnabled(true);
     else
-        view.FilterManagingBox.reloadButton.setEnabled(false);
+        view.filterManagingBox.reloadButton.setEnabled(false);
     
     view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
     
     if(processor.restoredConfiguration.get())
-        view.FilterManagingBox.infoLabel.setVisible(true);
+        view.filterManagingBox.infoLabel.setVisible(true);
     else
-        view.FilterManagingBox.infoLabel.setVisible(false);
+        view.filterManagingBox.infoLabel.setVisible(false);
     
     switch (processor.getConvolverStatus())
     {
@@ -254,7 +254,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 /// Update the filters  popup menu  based on a predefined folder
 void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
 {
-    view.FilterManagingBox.filterSelector.clear(dontSendNotification);
+    view.filterManagingBox.filterSelector.clear(dontSendNotification);
     filterSubmenus.clear(); // contains submenus
     
     StringArray subDirectories; // hold name of subdirectories, they will be the just the first parent directory name
@@ -294,9 +294,9 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
     for (int i=0; i < filterSubmenus.size(); i++)
     {
         if (i == tickedFolder)
-            view.FilterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i), true, nullptr, true);
+            view.filterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i), true, nullptr, true);
         else
-            view.FilterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i));
+            view.filterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i));
     }
     
 //    if (processor.filterNameForStoring.isNotEmpty())
@@ -305,12 +305,12 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
 //        view.FilterManagingBox.filterSelector.getRootMenu()->addItem(-2, String("save filter to .zip file..."), processor._readyToSaveConfiguration.get());
 //    }
 
-    view.FilterManagingBox.filterSelector.addSeparator();
-    view.FilterManagingBox.filterSelector.getRootMenu()->addItem(-1, String("open filter from file..."));
+    view.filterManagingBox.filterSelector.addSeparator();
+    view.filterManagingBox.filterSelector.getRootMenu()->addItem(-1, String("open filter from file..."));
     
     //tick the selected item (if present)
     if (tickedItem != -1)
-        view.FilterManagingBox.filterSelector.setSelectedItemIndex(tickedItem,dontSendNotification);
+        view.filterManagingBox.filterSelector.setSelectedItemIndex(tickedItem,dontSendNotification);
 }
 
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
@@ -368,7 +368,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             }
         }
     }*/
-    else if (buttonThatWasClicked == &(view.FilterManagingBox.reloadButton))
+    else if (buttonThatWasClicked == &(view.filterManagingBox.reloadButton))
     {
         processor.newInputChannelRequired = true;
         processor.ReloadConfiguration(false);
@@ -420,11 +420,11 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
         else
         {
             if(demoComponent->processor.filterNameToShow.isEmpty())
-                demoComponent->view.FilterManagingBox.filterSelector.setText("",dontSendNotification);
+                demoComponent->view.filterManagingBox.filterSelector.setText("",dontSendNotification);
             else
             {
                 String previousName = demoComponent->processor.filterNameToShow;
-                demoComponent->view.FilterManagingBox.filterSelector.setText(previousName, dontSendNotification);
+                demoComponent->view.filterManagingBox.filterSelector.setText(previousName, dontSendNotification);
             }
         }
     }
@@ -449,12 +449,12 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
 
 void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
-    if (comboBoxThatHasChanged == &view.FilterManagingBox.filterSelector)
+    if (comboBoxThatHasChanged == &view.filterManagingBox.filterSelector)
     {
 //        MessageManager::callAsync([&] () {
 //            menuItemChosenCallback(view.FilterManagingBox.filterSelector.getSelectedId(), this);
 //        });
-        menuItemChosenCallback(view.FilterManagingBox.filterSelector.getSelectedId(), this);
+        menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId(), this);
     }
     else if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
     {
@@ -499,6 +499,9 @@ void Mcfx_convolverAudioProcessorEditor::sliderValueChanged(Slider *slider)
 {
     if (slider == &view.ioDetailBox.gainKnob)
     {
-        processor.masterGain.set(juce::Decibels::decibelsToGain(view.ioDetailBox.gainKnob.getValue()));
+        if(view.ioDetailBox.gainKnob.getValue() != -60)
+            processor.masterGain.set(juce::Decibels::decibelsToGain(view.ioDetailBox.gainKnob.getValue()));
+        else
+            processor.masterGain.set(0);
     }
 }

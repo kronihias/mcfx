@@ -203,13 +203,24 @@ public:
         void resized();
     };
 
+    struct TitleBox : public Component
+    {
+        Label title;
+        Label subtitle;
+        
+        TitleBox();
+        void resized();
+    };
+    
     //Instanciation
-    Label title;
-    Label subtitle;
-    FilterManagingBox FilterManagingBox;
-//    IRMatrixBox irMatrixBox;
+    TitleBox titleBox;
+    
+    FilterManagingBox filterManagingBox;
+    
     OSCManagingBox oscManagingBox;
+    
     IODetailBox ioDetailBox;
+    
     ConvManagingBox convManagingBox;
     
     ChangePathBox changePathBox;
@@ -227,13 +238,10 @@ public:
     //constructor
     View();
     
-    LookAndFeel_V3 MyLookAndFeel;
-    
-    
-    
     void LockSensibleElements();
     void UnlockSensibleElements();
-
+    
+    LookAndFeel_V3 MyLookAndFeel;
 private:
     void paint (Graphics& g);
     void resized();
