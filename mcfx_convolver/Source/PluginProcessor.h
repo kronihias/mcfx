@@ -182,6 +182,8 @@ private:
     Array<String>   statusTextList;
     void            addNewStatus(String newStatus);
     
+    AudioSampleBuffer tempAudioBuffer; //1 channel, 256 samples
+    
 #ifdef USE_ZITA_CONVOLVER
     Convproc        zita_conv; /* zita-convolver engine class instances */
 #else

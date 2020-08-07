@@ -126,6 +126,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.filterLengthInSamples.setText(String(processor._filter_len_smpls), dontSendNotification);
     view.ioDetailBox.resampledLabel.setVisible(processor.filterHasBeenResampled.get());
     
+    view.ioDetailBox.gainKnob.setValue(processor.masterGain.get());
+    
     view.convManagingBox.latencyValue.setText(String(processor.getLatencySamples()), sendNotification);
     
     view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
