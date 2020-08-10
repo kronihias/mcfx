@@ -19,14 +19,14 @@ cmake_minimum_required(VERSION 3.15)
 file(READ VERSION VERSION)
 add_definitions(-DVERSION=${VERSION}) #?? FOR THE DELAY
 
-project(mcfx_plugin_suite VERSION ${VERSION})
+project(x-mcfx_plugin_suite VERSION ${VERSION})
 
 set(MANUFACTURER_CODE "Unpr")
 set(PLUGIN_CODE "M")
 set(PLUGIN_LABEL "X-MCFX")
 
 ################################################
-# set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Release)
 # ADD_DEFINITIONS(-DNDEBUG=1)
 # ADD_DEFINITIONS(-D_NDEBUG=1)
 
@@ -36,11 +36,18 @@ set (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 ################################################
 #choices at compile time
-set(NUM_CHANNELS 64 CACHE STRING "number of channels for each plugin")
+# set(NUM_CHANNELS 64 CACHE STRING "number of channels for each plugin")
+
+set(NUM_IN_CHANNELS 32 CACHE STRING "number of input channels for each plugin")
+set(NUM_OUT_CHANNELS 32 CACHE STRING "number of output channels for each plugin")
+
 set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
+
 set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
 set(BUILD_VST TRUE CACHE BOOL "build VST format")
 set(BUILD_VST3 TRUE CACHE BOOL "build VST3 format")
+
+set(LAST_2CHARS_PLUGINCODE 64 CACHE STRING "to allow more configurations, specify different characters for the same plugin code")
 
 
 add_definitions(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
@@ -183,8 +190,8 @@ juce_set_vst2_sdk_path("${VSTSDK_PATH}")
 # juce_set_aax_sdk_path(...)
 
 
-add_subdirectory(mcfx_convolver)
-add_subdirectory(mcfx_delay)
-add_subdirectory(mcfx_filter)
-add_subdirectory(mcfx_gain_delay)
-add_subdirectory(mcfx_meter)
+add_subdirectory(x-mcfx_convolver)
+add_subdirectory(x-mcfx_delay)
+add_subdirectory(x-mcfx_filter)
+add_subdirectory(x-mcfx_gain_delay)
+add_subdirectory(x-mcfx_meter)

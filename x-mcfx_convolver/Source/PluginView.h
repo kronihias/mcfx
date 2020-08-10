@@ -52,7 +52,7 @@ public:
     {
     public:
         Label       pathLabel;
-        TextEditor  pathText;
+        Label       pathText;
         TextButton  pathButton;
         
         ChangePathBox();
@@ -76,14 +76,16 @@ public:
     class IODetailBox : public Component
     {
     public:
-        Label inputLabel;
-        Label inputNumber;
         
-        Label outputLabel;
-        Label outputNumber;
+        Label matrixConfigLabel;
+        
+        Label inputValue;
+        Label outputValue;
         
         Label IRLabel;
-        Label IRNumber;
+        Label IRValue;
+        
+        Label diagonalValue;
         
         Label sampleRateLabel;
         Label sampleRateNumber;
@@ -99,8 +101,39 @@ public:
         Label samplesLabel;
         
         Label resampledLabel;
+        
+        struct SnappingSlider  : public Slider
+        {
+            double snapValue (double attemptedValue, DragMode dragMode)
+            {
+            //   if (dragMode == notDragging)
+            //       return attemptedValue;  // if they're entering the value in the text-box, don't mess with it.
+
+               if (attemptedValue > -1.5 && attemptedValue < 1.5)
+                   return 0.0;
+
+               return attemptedValue;
+            }
+        };
+        SnappingSlider gainKnob;
+        Label gainLabel;
 
         IODetailBox();
+    private:
+        void paint (Graphics& g);
+        void resized();
+    };
+    //input-output information box
+    class DSPinfo : public Component
+    {
+    public:
+        Label sampleRateLabel;
+        Label sampleRateNumber;
+        
+        Label hostBufferLabel;
+        Label hostBufferNumber;
+
+        DSPinfo();
     private:
         void paint (Graphics& g);
         void resized();
@@ -170,13 +203,24 @@ public:
         void resized();
     };
 
+    struct TitleBox : public Component
+    {
+        Label title;
+        Label subtitle;
+        
+        TitleBox();
+        void resized();
+    };
+    
     //Instanciation
-    Label title;
-    Label subtitle;
-    FilterManagingBox FilterManagingBox;
-//    IRMatrixBox irMatrixBox;
+    TitleBox titleBox;
+    
+    FilterManagingBox filterManagingBox;
+    
     OSCManagingBox oscManagingBox;
+    
     IODetailBox ioDetailBox;
+    
     ConvManagingBox convManagingBox;
     
     ChangePathBox changePathBox;
@@ -196,7 +240,8 @@ public:
     
     void LockSensibleElements();
     void UnlockSensibleElements();
-
+    
+    LookAndFeel_V3 MyLookAndFeel;
 private:
     void paint (Graphics& g);
     void resized();

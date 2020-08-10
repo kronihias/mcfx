@@ -20,7 +20,6 @@
 #ifndef PLUGINPROCESSOR_H_INCLUDED
 #define PLUGINPROCESSOR_H_INCLUDED
 
-// #include "../JuceLibraryCode/JuceHeader.h"
 #include <JuceHeader.h>
 
 #include "ConvolverData.h"
@@ -89,7 +88,7 @@ public:
     void getStateInformation (MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
     
-    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
+//    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
 
     // use a thread to load a configuration
     void run();
@@ -108,11 +107,11 @@ public:
     
 
     // for gui --------------------------------------------------------------------
-    String  getDebugString();
+    String          getDebugString();
     
-    bool newStatusText;
-    void timerCallback();
-    String  getStatusText();
+    bool            newStatusText;
+    void            timerCallback();
+    String          getStatusText();
     
 //    bool    SaveConfiguration(File zipFile);
     void            SearchFilters(File SearchFolder);
@@ -170,15 +169,20 @@ public:
     //----------------------------------------------------------------------------
     Atomic<int>     _readyToSaveConfiguration;
     Atomic<int>     _storeConfigDataInProject;
+    
+    Atomic<float>   masterGain;
+    float*          storedGain;
 
 private:
-    String _DebugText;
+    String          _DebugText;
     CriticalSection _DebugTextMutex;
-    void DebugPrint(String debugText, bool reset = false);
+    void            DebugPrint(String debugText, bool reset = false);
     
     CriticalSection statusTextMutex;
-    Array<String> statusTextList;
-    void addNewStatus(String newStatus);
+    Array<String>   statusTextList;
+    void            addNewStatus(String newStatus);
+    
+    AudioSampleBuffer tempAudioBuffer; //1 channel, 256 samples
     
 #ifdef USE_ZITA_CONVOLVER
     Convproc        zita_conv; /* zita-convolver engine class instances */
@@ -222,14 +226,17 @@ private:
     bool            safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
     
     // IR Filter Matrix -----------------------------------------------------------
-
     File            filterFileToLoad;
     
-//    bool filterLoaded;
-    
     // ----------------------------------------------------------------------------
-    
-    bool loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain=1.f, int offset=0, int length=0);
+    bool            loadIr(AudioSampleBuffer*   IRBuffer,
+                           const File&          audioFile,
+                           int                  channel,
+                           double               &samplerate,
+                           float                gain=1.f,
+                           int                  offset=0,
+                           int                  length=0
+                           );
     
     // OSC ------------------------------------------------------------------------
     OSCReceiver     oscReceiver;

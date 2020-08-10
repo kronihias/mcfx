@@ -28,17 +28,9 @@
 
 View::View()
 {
-    title.setFont(Font (17.2000f, Font::bold));
-    title.setColour(Label::textColourId, Colours::white);
-    title.setJustificationType (Justification::centred);
-    title.setText("X-MCFX-CONVOLVER",dontSendNotification);
-    addAndMakeVisible(title);
-
-    subtitle.setFont(Font (12.4000f, Font::plain));
-    subtitle.setColour(Label::textColourId, Colours::white);
-    subtitle.setJustificationType (Justification::centredTop);
-    subtitle.setText("multichannel non-equal partioned convolution matrix", dontSendNotification);
-    addAndMakeVisible(subtitle);
+    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
+    
+    addAndMakeVisible(titleBox);
     
     debugText.setFont(Font(10,1));
     debugText.setMultiLine (true);
@@ -56,7 +48,7 @@ View::View()
     debugWinLabel.setText ("debug window",dontSendNotification);
     addAndMakeVisible(debugWinLabel);
     
-    addAndMakeVisible(FilterManagingBox);
+    addAndMakeVisible(filterManagingBox);
 //    addAndMakeVisible(irMatrixBox);
     addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
@@ -78,7 +70,7 @@ View::View()
     version_string << "v" << TOSTRING(VERSION);
     versionLabel.setFont(Font (10.00f, Font::plain));
     versionLabel.setColour(Label::textColourId, Colours::white);
-    versionLabel.setJustificationType(Justification::right);
+    versionLabel.setJustificationType(Justification::bottomRight);
     versionLabel.setText(version_string, dontSendNotification);
     addAndMakeVisible(versionLabel);
     
@@ -88,13 +80,13 @@ View::View()
 
 void View::LockSensibleElements()
 {
-    FilterManagingBox.LockSensibleElements();
+    filterManagingBox.LockSensibleElements();
     convManagingBox.LockSensibleElements();
 }
 
 void View::UnlockSensibleElements()
 {
-    FilterManagingBox.UnlockSensibleElements();
+    filterManagingBox.UnlockSensibleElements();
     convManagingBox.UnlockSensibleElements();
 }
 
@@ -120,38 +112,38 @@ void View::paint(Graphics& g)
 
 void View::resized()
 {
-    auto area = getLocalBounds();
+    auto area = getBounds();
     int border = 15;
     int separator = 12;
     
-    int titleHeight = 25;
+    int titleBoxHeight = 50;
     
-    int presetBoxHeight = 48;//24 + 6*2
+    int filterBoxHeight = 48;//24 + 6*2
     
     int IRBoxHeight = 36;
     
     int OSCheight = 24;
     
-    int IOBoxWidtdh = 190;
-    int IOBoxHeight = 120;
+    int IOBoxHeight = 132;
     
-    int convBoxHeight = 60;
+    int convBoxHeight = 78;
+    
+    int changePathHeight = 52;
     
     int debugWinHeight = 100;
 
-    int shapesize = 25;
-    int smallLabelHeight = 16;
+    int shapesize = 20;
+    int smallLabelHeight = 24;
     
     inputChannelDialog.setBounds(getBounds());
+    
     versionLabel.setBounds(area.removeFromBottom(smallLabelHeight));
+    
     area.removeFromLeft(border);
     area.removeFromRight(border);
-//    area.reduce(1,1); //white border
-    
-    title.setBounds(area.removeFromTop(titleHeight)); //title
-    subtitle.setBounds(area.removeFromTop(titleHeight)); //subtitle
-    
-    FilterManagingBox.setBounds(area.removeFromTop(presetBoxHeight));
+    int mainWidth = area.getWidth();
+    /*
+    filterManagingBox.setBounds(area.removeFromTop(filterBoxHeight));
     area.removeFromTop(separator);
     
 //    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
@@ -163,7 +155,7 @@ void View::resized()
     convManagingBox.setBounds(area.removeFromTop(convBoxHeight));
     area.removeFromTop(separator);
     
-    changePathBox.setBounds(area.removeFromTop(presetBoxHeight));
+    changePathBox.setBounds(area.removeFromTop(filterBoxHeight));
     area.removeFromTop(separator);
     
 //    oscManagingBox.setBounds(area.removeFromTop(OSCheight));
@@ -176,13 +168,88 @@ void View::resized()
     auto sectionArea = area.removeFromBottom(20);
     statusLed.setBounds(sectionArea.removeFromLeft(20));
     sectionArea.removeFromLeft(5);
-    statusText.setBounds(sectionArea);
+    statusText.setBounds(sectionArea.removeFromLeft(sectionArea.getWidth()-30));
+    */
+    
+    FlexBox statusBox;
+    statusBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
+    statusBox.alignItems = FlexBox::AlignItems::center;
+    
+    FlexItem ledItem  (shapesize,  shapesize, statusLed);
+    ledItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    ledItem.margin = FlexItem::Margin(0,10,0,0);
+    
+    FlexItem textItem  (statusText);
+    textItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    textItem.minHeight = shapesize;
+    textItem.minWidth = 1;
+    textItem.flexGrow = 1;
+    
+    statusBox.items.addArray({ ledItem, textItem });
+    
+    //---------------------------------------------------------------------
+    FlexBox mainFlex;
+    mainFlex.flexDirection = FlexBox::Direction::column;
+    mainFlex.justifyContent = FlexBox::JustifyContent::spaceBetween;
+    mainFlex.alignItems = FlexBox::AlignItems::center;
+    
+    FlexItem titleItem  (mainWidth,  titleBoxHeight, titleBox);
+    titleItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem filterMangItem (mainWidth, filterBoxHeight, filterManagingBox);
+    filterMangItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem ioBoxItem (mainWidth, IOBoxHeight, ioDetailBox);
+    ioBoxItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem convBoxItem (mainWidth, convBoxHeight, convManagingBox);
+    convBoxItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem changePathItem (mainWidth, changePathHeight, changePathBox);
+    changePathItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem statusItem (mainWidth, shapesize, statusBox);
+    statusItem.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    mainFlex.items.addArray({   titleItem,
+                                filterMangItem,
+                                ioBoxItem,
+                                convBoxItem,
+                                changePathItem,
+                                statusItem
+                            });
+    
+    mainFlex.performLayout(area.toFloat());
 }
 
 //==============================================================================
 //==============================================================================
 //   Nested GUI classes
+View::TitleBox::TitleBox()
+{
+    title.setFont(Font (17.2000f, Font::bold));
+    title.setColour(Label::textColourId, Colours::white);
+    title.setJustificationType (Justification::centred);
+    title.setText("X-MCFX-CONVOLVER",dontSendNotification);
+    addAndMakeVisible(title);
 
+    subtitle.setFont(Font (12.4000f, Font::plain));
+    subtitle.setColour(Label::textColourId, Colours::white);
+    subtitle.setJustificationType (Justification::centredTop);
+    subtitle.setText("multichannel non-equal partioned convolution matrix", dontSendNotification);
+    addAndMakeVisible(subtitle);
+}
+
+void View::TitleBox::resized()
+{
+    auto area = getLocalBounds();
+    int titleHeight = 25;
+    
+    title.setBounds(area.removeFromTop(titleHeight)); //title
+    subtitle.setBounds(area.removeFromTop(titleHeight)); //subtitle
+}
+
+//==============================================================================
 View::FilterManagingBox::FilterManagingBox()
 {
     filterLabel.setFont (Font (15.0f, Font::plain));
@@ -191,12 +258,6 @@ View::FilterManagingBox::FilterManagingBox()
     addAndMakeVisible (filterLabel);
     
     addAndMakeVisible (filterSelector);
-
-//    chooseButton.setTooltip ("browse filters or open from file");
-//    chooseButton.setColour (TextButton::buttonColourId, Colours::white);
-//    chooseButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-//    chooseButton.setButtonText ("choose");
-//    addAndMakeVisible(chooseButton);
     
     reloadButton.setTooltip ("reload the current matrix specifying a new input channels number");
     reloadButton.setColour (TextButton::buttonColourId, Colours::white);
@@ -223,7 +284,10 @@ void View::FilterManagingBox::UnlockSensibleElements()
 }
 
 void View::FilterManagingBox::paint(Graphics& g)
-{}
+{
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
+}
 
 void View::FilterManagingBox::resized()
 {
@@ -234,38 +298,25 @@ void View::FilterManagingBox::resized()
     
     Grid grid;
     using Track = Grid::TrackInfo;
-//    grid.justifyItems = Grid::JustifyItems::center;
     grid.alignContent = Grid::AlignContent::spaceBetween;
     grid.justifyContent = Grid::JustifyContent::spaceBetween;
     grid.alignItems = Grid::AlignItems::center;
     grid.justifyItems = Grid::JustifyItems::center;
     
-
-    grid.templateRows    = { //Track (3_fr),
-                                Track (3_fr), Track (1_fr) };
-    grid.templateColumns = {Track (45_px), Track (8_fr), Track (2_fr)};
-    
-//    GridItem TextPath (pathText);
-//    TextPath = TextPath.withHeight(rowHeight);
-//
-//    GridItem pathSelection (pathButton);
-//    pathSelection = pathSelection.withSize(labelWidth, rowHeight);
-//    pathSelection = pathSelection.withJustifySelf(GridItem::JustifySelf::start);
-//    pathSelection = pathSelection.withMargin(GridItem::Margin(0,0,0,10));
+    grid.templateRows    = {Track (3_fr), Track (1_fr) };
+    grid.templateColumns = {Track (45_px), Track (1_fr), Track (60_px)};
     
     GridItem TextEditor (filterSelector);
     TextEditor = TextEditor.withHeight(rowHeight);
     
     GridItem ReloadButton (reloadButton);
     ReloadButton = ReloadButton.withSize(buttonWitdh, rowHeight);
-    ReloadButton = ReloadButton.withJustifySelf(GridItem::JustifySelf::start);
     ReloadButton = ReloadButton.withMargin(GridItem::Margin(0,0,0,10));
     
     GridItem infoText (infoLabel);
     infoText = infoText.withAlignSelf(GridItem::AlignSelf::start);
     
-    grid.items = {  //GridItem (pathLabel) ,  TextPath,    pathSelection,
-                    GridItem (filterLabel), TextEditor,  ReloadButton,
+    grid.items = {  GridItem (filterLabel), TextEditor,  ReloadButton,
                     GridItem(),             infoText,    GridItem()
                 };
 
@@ -283,9 +334,8 @@ View::ChangePathBox::ChangePathBox()
     addAndMakeVisible (pathLabel);
     
     pathText.setFont (Font (11.0f, Font::plain));
-    pathText.setColour(TextEditor::backgroundColourId, Colour (Colours::lightgrey));
-    pathText.setReadOnly(true);
-    pathText.setPopupMenuEnabled(false);
+    pathText.setColour(Label::outlineColourId, Colour(0xff8e989b)); //from slider LookAndFeel(_V3?) outline textbox colour
+    pathText.setColour(Label::textColourId, Colours::white);
     addAndMakeVisible (pathText);
     
     pathButton.setTooltip ("choose another filter libray folder");
@@ -297,33 +347,36 @@ View::ChangePathBox::ChangePathBox()
 
 void View::ChangePathBox::paint(Graphics& g)
 {
-//    g.setColour (Colours::darkgrey);
-//    g.drawRect (0, 0, getWidth(), getHeight(), 1);
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
 }
 
 void View::ChangePathBox::resized()
 {
-    int editorWidth = proportionOfWidth(0.75f);
     int buttonWidth = 30;
    
-    int labelWidth = 50;
+    int labelWidth = 55;
     
     int height = 24;
-    int labelHeight = 54;
+    int labelHeight = 48;
     
     FlexBox mainFlex;
-    mainFlex.justifyContent = FlexBox::JustifyContent::spaceAround;
+    mainFlex.justifyContent = FlexBox::JustifyContent::flexStart;
     mainFlex.alignItems = FlexBox::AlignItems::center;
     
     FlexItem label  (labelWidth,  labelHeight, pathLabel);
     label.alignSelf = FlexItem::AlignSelf::autoAlign;
+    label.margin = FlexItem::Margin(0,10,0,0);
     
-//    FlexItem editor (editorWidth, height, pathText);
-    FlexItem editor (editorWidth, height, pathText);
+    FlexItem editor (pathText);
     editor.alignSelf = FlexItem::AlignSelf::autoAlign;
+    editor.flexGrow = 1;
+    editor.minWidth = labelWidth;
+    editor.minHeight = height;
     
     FlexItem button (buttonWidth, height, pathButton);
     button.alignSelf = FlexItem::AlignSelf::autoAlign;
+    button.margin = FlexItem::Margin(0,0,0,10);
     
     mainFlex.items.addArray({ label, editor, button });
     
@@ -380,29 +433,36 @@ void View::OSCManagingBox::resized()
 
 View::IODetailBox::IODetailBox()
 {
+    matrixConfigLabel.setFont (Font (15.0000f, Font::plain));
+    matrixConfigLabel.setJustificationType (Justification::right);
+    matrixConfigLabel.setColour (Label::textColourId, Colours::white);
+    matrixConfigLabel.setText("Matrix dimensions:", dontSendNotification);
+    addAndMakeVisible (matrixConfigLabel);
+    
+    /*
     inputLabel.setFont (Font (15.0000f, Font::plain));
     inputLabel.setJustificationType (Justification::right);
     inputLabel.setColour (Label::textColourId, Colours::white);
     inputLabel.setText("Input channels:", dontSendNotification);
-    addAndMakeVisible (inputLabel);
+    addAndMakeVisible (inputLabel);*/
     
-    inputNumber.setFont (Font (15.0000f, Font::plain));
-    inputNumber.setJustificationType (Justification::right);
-    inputNumber.setColour (Label::textColourId, Colours::white);
-    inputNumber.setText("0", dontSendNotification);
-    addAndMakeVisible (inputNumber);
+    inputValue.setFont (Font (15.0000f, Font::plain));
+    inputValue.setJustificationType (Justification::right);
+    inputValue.setColour (Label::textColourId, Colours::white);
+    inputValue.setText("0 ins", dontSendNotification);
+    addAndMakeVisible (inputValue);
     
-    outputLabel.setFont (Font (15.0000f, Font::plain));
-    outputLabel.setJustificationType (Justification::right);
-    outputLabel.setColour (Label::textColourId, Colours::white);
-    outputLabel.setText("Output channels:", dontSendNotification);
-    addAndMakeVisible (outputLabel);
+//    outputLabel.setFont (Font (15.0000f, Font::plain));
+//    outputLabel.setJustificationType (Justification::right);
+//    outputLabel.setColour (Label::textColourId, Colours::white);
+//    outputLabel.setText("Output channels:", dontSendNotification);
+//    addAndMakeVisible (outputLabel);
     
-    outputNumber.setFont (Font (15.0000f, Font::plain));
-    outputNumber.setJustificationType (Justification::right);
-    outputNumber.setColour (Label::textColourId, Colours::white);
-    outputNumber.setText("0", dontSendNotification);
-    addAndMakeVisible (outputNumber);
+    outputValue.setFont (Font (15.0000f, Font::plain));
+    outputValue.setJustificationType (Justification::left);
+    outputValue.setColour (Label::textColourId, Colours::white);
+    outputValue.setText("0 outs", dontSendNotification);
+    addAndMakeVisible (outputValue);
     
     IRLabel.setFont (Font (15.0000f, Font::plain));
     IRLabel.setJustificationType (Justification::centredRight);
@@ -410,11 +470,17 @@ View::IODetailBox::IODetailBox()
     IRLabel.setText("Impulse responses:", dontSendNotification);
     addAndMakeVisible (IRLabel);
     
-    IRNumber.setFont (Font (15.0000f, Font::plain));
-    IRNumber.setJustificationType (Justification::right);
-    IRNumber.setColour (Label::textColourId, Colours::white);
-    IRNumber.setText("0", dontSendNotification);
-    addAndMakeVisible (IRNumber);
+    IRValue.setFont (Font (15.0000f, Font::plain));
+    IRValue.setJustificationType (Justification::right);
+    IRValue.setColour (Label::textColourId, Colours::white);
+    IRValue.setText("0", dontSendNotification);
+    addAndMakeVisible (IRValue);
+    
+    diagonalValue.setFont (Font (13.0000f, Font::plain));
+    diagonalValue.setJustificationType (Justification::centredLeft);
+    diagonalValue.setColour (Label::textColourId, Colours::white);
+    diagonalValue.setText("(diagonal)", dontSendNotification);
+    addAndMakeVisible (diagonalValue);
     
     sampleRateLabel.setFont (Font (15.0000f, Font::plain));
     sampleRateLabel.setJustificationType (Justification::right);
@@ -473,67 +539,70 @@ View::IODetailBox::IODetailBox()
     resampledLabel.setFont (Font (12.0000f, Font::plain));
     resampledLabel.setJustificationType (Justification::bottomRight);
     resampledLabel.setColour (Label::textColourId, Colours::yellow);
-    resampledLabel.setText("[resampled wavefile]", dontSendNotification);
+    resampledLabel.setText("(resampled wavefile)", dontSendNotification);
     resampledLabel.setTooltip(TRANS("wavefile resampled to match host samplerate"));
     addAndMakeVisible (resampledLabel);
     resampledLabel.setVisible(false);
+    
+    gainLabel.setFont (Font (15.0000f, Font::plain));
+    gainLabel.setJustificationType (Justification::centred);
+    gainLabel.setColour (Label::textColourId, Colours::white);
+    gainLabel.setText("Master gain", dontSendNotification);
+    addAndMakeVisible (gainLabel);
+    
+    gainKnob.setSliderStyle (Slider::RotaryVerticalDrag);
+//    gainKnob.setRotaryParameters (MathConstants<float>::pi * 1.2f, MathConstants<float>::pi * 2.8f, false);
+    gainKnob.setRange(-60, 12);
+    gainKnob.setValue(0);
+    gainKnob.setDoubleClickReturnValue(true, 0);
+    gainKnob.setColour(Slider::rotarySliderFillColourId, Colours::white);
+    gainKnob.setTextBoxStyle (Slider::TextBoxRight, true, 70, 20);
+    gainKnob.setNumDecimalPlacesToDisplay(1);
+    gainKnob.setTextValueSuffix (" dB");
+    gainKnob.setMouseDragSensitivity(125);
+//    auto color = gainKnob.getLookAndFeel().findColour(Slider::textBoxOutlineColourId);
+    addAndMakeVisible(gainKnob);
+    
+    
+//    getParentComponent()->getLookAndFeel().setColour(Slider::rotarySliderFillColourId, Colours::white);
 }
 
 void View::IODetailBox::paint(Graphics& g)
 {
+    auto localArea = getLocalBounds();
+    int separator = 6;
     float chafmer = 10.0f;
+    
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
+    
     auto boxColor = Colours::blue;
     g.setColour(boxColor.withAlpha(0.26f)); //transparency 26%
-
+    g.fillRoundedRectangle(localArea.removeFromLeft(proportionOfWidth(0.59f)).toFloat(), chafmer);
+    localArea.removeFromLeft(separator);
     
-    g.fillRoundedRectangle(getLocalBounds().toFloat(), chafmer);
+    boxColor = Colours::violet;
+    g.setColour(boxColor.withAlpha(0.26f)); //transparency 26%
+    g.fillRoundedRectangle(localArea.removeFromTop(proportionOfHeight(0.41f)).toFloat(), chafmer);
     
-    g.setColour (Colours::white);
-    g.drawLine(proportionOfWidth(0.45f), chafmer/2, proportionOfWidth(0.45f), getHeight()-chafmer/2, 0.75f);
+//    g.setColour (Colours::white);
+//    g.drawLine(proportionOfWidth(0.45f), chafmer/2, proportionOfWidth(0.45f), getHeight()-chafmer/2, 0.75f);
 }
 
 void View::IODetailBox::resized()
 {
     auto localArea = getLocalBounds();
-    localArea.reduce(0, 8.0f);
-//    localArea.removeFromTop(16);
+    int separator = 6;
     
-    Grid gridLeft;
-    using TrackL = Grid::TrackInfo;
-
-    gridLeft.templateRows    = { TrackL (1_fr), TrackL (1_fr),  TrackL (1_fr), TrackL (1_fr) };
-    gridLeft.templateColumns = { TrackL (1_fr), TrackL (50_px)};
-
-    GridItem inCh (inputNumber);
-    inCh = inCh.withMargin(GridItem::Margin(0,10,0,0));
-    
-    GridItem outCh (outputNumber);
-    outCh = outCh.withMargin(GridItem::Margin(0,10,0,0));
-    
-    GridItem irNum (IRNumber);
-    irNum = irNum.withMargin(GridItem::Margin(0,10,0,0));
-    
-    gridLeft.items = {  GridItem(inputLabel),   inCh,
-                        GridItem(outputLabel),  outCh,
-                        GridItem(IRLabel),      irNum,
-                        GridItem(resampledLabel),             GridItem()
-                    };
-
-    gridLeft.performLayout (localArea.removeFromLeft(localArea.proportionOfWidth(0.45f)));
-    
-    //--------------------------------------------------------------------------
-    
-    Grid gridRight;
+    Grid matrixGrid;
     using TrackR = Grid::TrackInfo;
 
-    gridRight.templateRows    = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr) };
-    gridRight.templateColumns = { TrackR (1_fr), TrackR (52_px), TrackR (42_px)};
+    matrixGrid.templateRows       = { TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR (1_fr), TrackR(15_px) };
+    matrixGrid.templateColumns    = { TrackR (1_fr), TrackR (60_px) , TrackR (60_px)};
+    matrixGrid.columnGap          = {0_px};
     
-    GridItem smprt (sampleRateNumber);
-//    smprt = smprt.withMargin(GridItem::Margin(0,8,0,0));
-    
-    GridItem buff (hostBufferNumber);
-//    buff = buff.withMargin(GridItem::Margin(0,8,0,0));
+    GridItem resample (resampledLabel);
+    resample = resample.withArea(5, 1, 5, 4);
     
     GridItem firlenSecs (filterLengthInSeconds);
 //    firlenSecs = firlenSecs.withMargin(GridItem::Margin(0,8,0,0));
@@ -541,13 +610,45 @@ void View::IODetailBox::resized()
     GridItem firlenSmpls (filterLengthInSamples);
 //    firlenSmpls = firlenSmpls.withMargin(GridItem::Margin(0,8,0,0));
 
-    gridRight.items = { GridItem (sampleRateLabel),     smprt,      GridItem(),
-                        GridItem (hostBufferLabel),     buff,       GridItem(),
-                        GridItem (filterLengthLabel),   firlenSecs, GridItem(secondsLabel),
-                        GridItem(),       firlenSmpls,GridItem(samplesLabel)
+    matrixGrid.items = {GridItem (matrixConfigLabel),   GridItem(inputValue),    GridItem(outputValue),
+                        GridItem (IRLabel),             GridItem(IRValue),       GridItem(diagonalValue),
+                        GridItem (filterLengthLabel),   firlenSecs,              GridItem(secondsLabel),
+                        GridItem(),                     firlenSmpls,             GridItem(samplesLabel),
+                        resample
                };
+    
+    auto gridArea = localArea.removeFromLeft(proportionOfWidth(0.59f));
+    gridArea.reduce(0, 8);
+    matrixGrid.performLayout (gridArea);
+    localArea.removeFromLeft(separator);
+    
+    //--------------------------------------------------------------------------
+    Grid DSPgrid;
+    using TrackL = Grid::TrackInfo;
 
-    gridRight.performLayout (localArea);
+    DSPgrid.templateRows    = { TrackL (1_fr), TrackL (1_fr) };
+    DSPgrid.templateColumns = { TrackL (1_fr), TrackL (50_px) };
+
+//    GridItem inCh (inputNumber);
+//    inCh = inCh.withMargin(GridItem::Margin(0,10,0,0));
+//
+//    GridItem outCh (outputNumber);
+//    outCh = outCh.withMargin(GridItem::Margin(0,10,0,0));
+//
+//    GridItem irNum (IRNumber);
+//    irNum = irNum.withMargin(GridItem::Margin(0,10,0,0));
+    
+    DSPgrid.items = {   GridItem(sampleRateLabel),      GridItem(sampleRateNumber),
+                        GridItem(hostBufferLabel),      GridItem(hostBufferNumber)
+                    };
+    
+    gridArea = localArea.removeFromTop(proportionOfHeight(0.41f));
+    gridArea.reduce(0, 8);
+    DSPgrid.performLayout(gridArea);
+    
+    localArea.removeFromTop(8);
+    gainLabel.setBounds(localArea.removeFromBottom(15));
+    gainKnob.setBounds(localArea);
 }
 
 //==============================================================================
@@ -646,12 +747,15 @@ void View::ConvManagingBox::UnlockSensibleElements()
 }
 
 void View::ConvManagingBox::paint(Graphics& g)
-{}
+{
+//    g.setColour(Colours::white);
+//    g.drawRect(getLocalBounds());
+}
 
 void View::ConvManagingBox::resized()
 {
     auto localArea = getLocalBounds();
-    localArea.removeFromLeft(130);
+    localArea.removeFromLeft(140);
     
     int height = 20;
     int width = 70;
@@ -660,7 +764,7 @@ void View::ConvManagingBox::resized()
     using Track = Grid::TrackInfo;
 
     grid.templateRows    = { Track (1_fr), Track (1_fr) };
-    grid.templateColumns = { Track (70_px), Track (1_fr), Track (35_px), Track (40_px) };
+    grid.templateColumns = { Track (70_px), Track (100_px), Track (35_px), Track (1_fr) };
     
     GridItem bufferCombo (bufferCombobox);
     bufferCombo = bufferCombo.withSize(width, height);
@@ -679,7 +783,8 @@ void View::ConvManagingBox::resized()
     grid.items = { bufferCombo,  GridItem(latencyLabel),          GridItem(latencyValue),       measureUnit,
                    bufferPart,   GridItem(skippedCyclesLabel),    GridItem(skippedCyclesValue), GridItem()
                };
-
+    
+    localArea.removeFromTop(8);
     grid.performLayout (localArea);
     
     /*
