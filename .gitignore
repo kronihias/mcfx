@@ -19,3 +19,4 @@ _CMakeLists.txt
 JUCE/.DS_Store
 JUCE/modules/.DS_Store
 JUCE/modules/.DS_Store
+x-mcfx_convolver/_JuceLibraryCode

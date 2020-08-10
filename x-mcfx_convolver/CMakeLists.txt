@@ -7,7 +7,7 @@ SET(WITH_LIBSOXR TRUE)
 string(APPEND PLUGIN_CODE "c")
 
 # append specific plugin name
-string(APPEND PLUGIN_LABEL "-convolver")
+string(APPEND PLUGIN_LABEL "_convolver")
 
 # library adjustments not yet checked
 # SET(OSX_COPY_LIB libsoxr.0.1.0.dylib)
