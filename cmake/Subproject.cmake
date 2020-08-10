@@ -1,14 +1,23 @@
 get_filename_component(SUBDIRNAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 
-add_definitions(-DNUM_CHANNELS=${NUM_CHANNELS})
+# add_definitions(-DNUM_CHANNELS=${NUM_CHANNELS})
+add_definitions(-DNUM_OUT_CHANNELS=${NUM_OUT_CHANNELS})
 
-IF( DEFINED SPECIFIC_PROJECTNAME )
-	# this is for ambix_decoder (which shares the code of ambix_binaural)
-	SET (SUBPROJECT_NAME ${SPECIFIC_PROJECTNAME}${NUM_CHANNELS})
-ELSE( DEFINED SPECIFIC_PROJECTNAME )
-	# this is the normal way...
-	SET (SUBPROJECT_NAME ${SUBDIRNAME}${NUM_CHANNELS})
-ENDIF(DEFINED SPECIFIC_PROJECTNAME )
+if ("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
+	set(LABEL_SUFFIX _${NUM_IN_CHANNELS})
+else("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
+	set(LABEL_SUFFIX _${NUM_IN_CHANNELS}x${NUM_OUT_CHANNELS})
+endif("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
+
+# IF( DEFINED SPECIFIC_PROJECTNAME )
+# 	# this is for ambix_decoder (which shares the code of ambix_binaural)
+# 	SET (SUBPROJECT_NAME ${SPECIFIC_PROJECTNAME}${NUM_CHANNELS})
+# ELSE( DEFINED SPECIFIC_PROJECTNAME )
+# 	# this is the normal way...
+# 	SET (SUBPROJECT_NAME ${SUBDIRNAME}${NUM_CHANNELS})
+# ENDIF(DEFINED SPECIFIC_PROJECTNAME )
+
+SET (SUBPROJECT_NAME ${SUBDIRNAME}${LABEL_SUFFIX})
 
 # add all c, cpp, cc files from the Source directory
 # file ( GLOB_RECURSE SOURCE Source/*.c* )
@@ -35,11 +44,7 @@ ENDIF(DEFINED SPECIFIC_SOURCE_DIR)
 # up by default. As well as this shared code static library, this function adds targets for each of
 # the formats specified by the FORMATS arguments. This function accepts many optional arguments.
 # Check the readme at `docs/CMake API.md` in the JUCE repo for the full list.
-if ("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
-	string(APPEND PLUGIN_LABEL -${NUM_IN_CHANNELS})
-else("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
-	string(APPEND PLUGIN_LABEL -${NUM_IN_CHANNELS}x${NUM_OUT_CHANNELS})
-endif("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
+string(APPEND PLUGIN_LABEL ${LABEL_SUFFIX})
 
 if(BUILD_STANDALONE)
 	set(STANDALONE "Standalone")

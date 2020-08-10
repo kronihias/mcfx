@@ -6,7 +6,7 @@ SET(SPECIFIC_SOURCE_DIR ${SRC_DIR}/${CURR_SUBDIR})
 string(APPEND PLUGIN_CODE "g")
 
 # append specific plugin name
-string(APPEND PLUGIN_LABEL " Gain Delay")
+string(APPEND PLUGIN_LABEL "_gain_delay")
 
 # soxr library adjustments not yet checked
 # SET(OSX_COPY_LIB libsoxr.0.1.0.dylib)

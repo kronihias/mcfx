@@ -37,7 +37,7 @@ ChannelStepper::~ChannelStepper()
 void ChannelStepper::start(int interval)
 {
   // set all channels to signal generator off
-  for (int i=0; i<NUM_CHANNELS; i++) {
+  for (int i=0; i<NUM_OUT_CHANNELS; i++) {
     ownerFilter_->setParameter(i*PARAMS_PER_CH+5, 0.f);
     // should i use +notifyhost??
   }
@@ -53,7 +53,7 @@ void ChannelStepper::stop()
   
   // set the actual channel to signal off
   if (channel_ == 0) {
-    ownerFilter_->setParameter((NUM_CHANNELS-1)*PARAMS_PER_CH+5, 0.f);
+    ownerFilter_->setParameter((NUM_OUT_CHANNELS-1)*PARAMS_PER_CH+5, 0.f);
   } else {
     ownerFilter_->setParameter((channel_-1)*PARAMS_PER_CH+5, 0.f);
   }
@@ -69,7 +69,7 @@ void ChannelStepper::timerCallback()
 {
   // first set the previous channel to signal off
   if (channel_ == 0) {
-    ownerFilter_->setParameter((NUM_CHANNELS-1)*PARAMS_PER_CH+5, 0.f);
+    ownerFilter_->setParameter((NUM_OUT_CHANNELS-1)*PARAMS_PER_CH+5, 0.f);
   } else {
     ownerFilter_->setParameter((channel_-1)*PARAMS_PER_CH+5, 0.f);
   }
@@ -77,5 +77,5 @@ void ChannelStepper::timerCallback()
   // then set the actual channel to signal on
   ownerFilter_->setParameter(channel_*PARAMS_PER_CH+5, 1.f);
   
-  channel_ = (channel_+1) % NUM_CHANNELS;
+  channel_ = (channel_+1) % NUM_OUT_CHANNELS;
 }
