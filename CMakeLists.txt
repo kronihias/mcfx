@@ -37,10 +37,17 @@ set (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
 ################################################
 #choices at compile time
 set(NUM_CHANNELS 64 CACHE STRING "number of channels for each plugin")
+
+set(NUM_IN_CHANNELS 32 CACHE STRING "number of input channels for each plugin")
+set(NUM_OUT_CHANNELS 32 CACHE STRING "number of output channels for each plugin")
+
 set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
+
 set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
 set(BUILD_VST TRUE CACHE BOOL "build VST format")
 set(BUILD_VST3 TRUE CACHE BOOL "build VST3 format")
+
+set(LAST_2CHARS_PLUGINCODE 64 CACHE STRING "to allow more configurations, specify different characters for the same plugin code")
 
 
 add_definitions(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})

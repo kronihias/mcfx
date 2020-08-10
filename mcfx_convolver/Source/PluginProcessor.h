@@ -88,7 +88,7 @@ public:
     void getStateInformation (MemoryBlock& destData);
     void setStateInformation (const void* data, int sizeInBytes);
     
-    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
+//    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
 
     // use a thread to load a configuration
     void run();
@@ -170,8 +170,8 @@ public:
     Atomic<int>     _readyToSaveConfiguration;
     Atomic<int>     _storeConfigDataInProject;
     
-    Atomic<float>  masterGain;
-    juce::AudioParameterFloat* gain;
+    Atomic<float>   masterGain;
+    float*          storedGain;
 
 private:
     String          _DebugText;
