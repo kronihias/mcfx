@@ -26,7 +26,7 @@ set(PLUGIN_CODE "M")
 set(PLUGIN_LABEL "X-MCFX")
 
 ################################################
-# set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Release)
 # ADD_DEFINITIONS(-DNDEBUG=1)
 # ADD_DEFINITIONS(-D_NDEBUG=1)
 
