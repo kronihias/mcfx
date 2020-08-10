@@ -1,14 +1,23 @@
 get_filename_component(SUBDIRNAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 
-add_definitions(-DNUM_CHANNELS=${NUM_CHANNELS})
+# add_definitions(-DNUM_CHANNELS=${NUM_CHANNELS})
+add_definitions(-DNUM_OUT_CHANNELS=${NUM_OUT_CHANNELS})
 
-IF( DEFINED SPECIFIC_PROJECTNAME )
-	# this is for ambix_decoder (which shares the code of ambix_binaural)
-	SET (SUBPROJECT_NAME ${SPECIFIC_PROJECTNAME}${NUM_CHANNELS})
-ELSE( DEFINED SPECIFIC_PROJECTNAME )
-	# this is the normal way...
-	SET (SUBPROJECT_NAME ${SUBDIRNAME}${NUM_CHANNELS})
-ENDIF(DEFINED SPECIFIC_PROJECTNAME )
+if ("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
+	set(LABEL_SUFFIX _${NUM_IN_CHANNELS})
+else("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
+	set(LABEL_SUFFIX _${NUM_IN_CHANNELS}x${NUM_OUT_CHANNELS})
+endif("${NUM_IN_CHANNELS}" STREQUAL "${NUM_OUT_CHANNELS}")
+
+# IF( DEFINED SPECIFIC_PROJECTNAME )
+# 	# this is for ambix_decoder (which shares the code of ambix_binaural)
+# 	SET (SUBPROJECT_NAME ${SPECIFIC_PROJECTNAME}${NUM_CHANNELS})
+# ELSE( DEFINED SPECIFIC_PROJECTNAME )
+# 	# this is the normal way...
+# 	SET (SUBPROJECT_NAME ${SUBDIRNAME}${NUM_CHANNELS})
+# ENDIF(DEFINED SPECIFIC_PROJECTNAME )
+
+SET (SUBPROJECT_NAME ${SUBDIRNAME}${LABEL_SUFFIX})
 
 # add all c, cpp, cc files from the Source directory
 # file ( GLOB_RECURSE SOURCE Source/*.c* )
@@ -35,7 +44,7 @@ ENDIF(DEFINED SPECIFIC_SOURCE_DIR)
 # up by default. As well as this shared code static library, this function adds targets for each of
 # the formats specified by the FORMATS arguments. This function accepts many optional arguments.
 # Check the readme at `docs/CMake API.md` in the JUCE repo for the full list.
-string(APPEND PLUGIN_LABEL ${NUM_CHANNELS})
+string(APPEND PLUGIN_LABEL ${LABEL_SUFFIX})
 
 if(BUILD_STANDALONE)
 	set(STANDALONE "Standalone")
@@ -49,7 +58,7 @@ if(BUILD_VST3)
 	set(VST3 "VST3")
 endif(BUILD_VST3)
 
-string(APPEND PLUGIN_CODE ${NUM_CHANNELS})
+string(APPEND PLUGIN_CODE ${LAST_2CHARS_PLUGINCODE})
 
 file(READ "${SRC_DIR}/osx_resources/MacOSXBundleInfo.plist" PLIST)
 
@@ -71,9 +80,9 @@ juce_add_plugin(${SUBPROJECT_NAME}
     VERSION 					${VERSION}          		# Set this if the plugin version is different to the project version
     # ICON_BIG ...                              			# ICON_* arguments specify a path to an image file to use as an icon for the Standalone
 	# ICON_SMALL ...
-	COMPANY_COPYRIGHT			"Matthias Kronlachner"
-	COMPANY_NAME 				"kronlachner"       		# Specify the name of the plugin's author
-	COMPANY_WEBSITE				"fasullo@123.com"
+	COMPANY_COPYRIGHT			"unipr"
+	COMPANY_NAME 				"unipr"       		# Specify the name of the plugin's author
+	COMPANY_WEBSITE				"yourcompany.com"
 	COMPANY_EMAIL				"support@yourcompany.com"
     # IS_SYNTH TRUE/FALSE                       			# Is this a synth or an effect?
     # NEEDS_MIDI_INPUT TRUE/FALSE               			# Does the plugin need midi input?
@@ -118,6 +127,10 @@ target_sources(${SUBPROJECT_NAME} PRIVATE
 # need that's not on by default, check the module header for the correct flag to set here. These
 # definitions will be visible both to your code, and also the JUCE module code, so for new
 # definitions, pick unique names that are unlikely to collide! This is a standard CMake command.
+
+# set(CHANNEL_CONFIG "\{8, 9\}, \{9, 12\}, \{12, 9\}")
+set(CHANNEL_CONFIG "\{${NUM_IN_CHANNELS}, ${NUM_OUT_CHANNELS}\}")
+
 target_compile_definitions(${SUBPROJECT_NAME} PUBLIC
     # JUCE_WEB_BROWSER and JUCE_USE_CURL would be on by default, but you might not need them.
     JUCE_WEB_BROWSER=0  # If you remove this, add `NEEDS_WEB_BROWSER TRUE` to the `juce_add_plugin` call
@@ -125,12 +138,12 @@ target_compile_definitions(${SUBPROJECT_NAME} PUBLIC
 	JUCE_VST3_CAN_REPLACE_VST2=0
 	JUCE_DISPLAY_SPLASH_SCREEN=0
 	JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
-	CMAKE_OSX_DEPLOYMENT_TARGET=10.11
-	# JucePlugin_MaxNumInputChannels=${NUM_CHANNELS}
-	# JucePlugin_MaxNumOutputChannels=${NUM_CHANNELS}
+	# JucePlugin_MaxNumInputChannels=${NUM_IN_CHANNELS}
+	# JucePlugin_MaxNumOutputChannels=${NUM_OUT_CHANNELS}
 	# JUCE_MODULE_AVAILABLE_juce_audio_plugin_client=1
+	JucePlugin_PreferredChannelConfigurations=${CHANNEL_CONFIG}
 )
-
+# message("channel string config: "${CHANNEL_CONFIG})
 # If your target needs extra binary assets, you can add them here. The first argument is the name of
 # a new static library target that will include all the binary resources. There is an optional
 # `NAMESPACE` argument that can specify the namespace of the generated binary data class. Finally,
@@ -190,7 +203,7 @@ if(WITH_FFTW3)
 		${FFTW3F_LIBRARY}
 		#${FFTW3F_THREADS_LIBRARY}
 	)
-	juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/fftw3")
+	#juce_add_bundle_resources_directory(${SUBPROJECT_NAME}_Standalone "${SRC_DIR}/Bundle-resources/fftw3")
 endif(WITH_FFTW3)
 
 # ???????
