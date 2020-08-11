@@ -53,29 +53,29 @@ public:
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages);
 
     //==============================================================================
-    AudioProcessorEditor* createEditor();
-    bool hasEditor() const;
+    AudioProcessorEditor*   createEditor();
+    bool                    hasEditor() const;
 
     //==============================================================================
-    const String getName() const;
+    const String    getName() const;
 
-    int getNumParameters();
+    int             getNumParameters();
 
-    float getParameter (int index);
-    void setParameter (int index, float newValue);
+    float           getParameter (int index);
+    void            setParameter (int index, float newValue);
 
-    const String getParameterName (int index);
-    const String getParameterText (int index);
+    const String    getParameterName (int index);
+    const String    getParameterText (int index);
 
-    const String getInputChannelName (int channelIndex) const;
-    const String getOutputChannelName (int channelIndex) const;
-    bool isInputChannelStereoPair (int index) const;
-    bool isOutputChannelStereoPair (int index) const;
+    const String    getInputChannelName (int channelIndex) const;
+    const String    getOutputChannelName (int channelIndex) const;
+    bool            isInputChannelStereoPair (int index) const;
+    bool            isOutputChannelStereoPair (int index) const;
 
-    bool acceptsMidi() const;
-    bool producesMidi() const;
-    bool silenceInProducesSilenceOut() const;
-    double getTailLengthSeconds() const;
+    bool            acceptsMidi() const;
+    bool            producesMidi() const;
+    bool            silenceInProducesSilenceOut() const;
+    double          getTailLengthSeconds() const;
 
     //==============================================================================
     int     getNumPrograms();
@@ -85,8 +85,8 @@ public:
     void    changeProgramName (int index, const String& newName);
 
     //==============================================================================
-    void getStateInformation (MemoryBlock& destData);
-    void setStateInformation (const void* data, int sizeInBytes);
+    void    getStateInformation (MemoryBlock& destData);
+    void    setStateInformation (const void* data, int sizeInBytes);
     
 //    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
 
@@ -94,16 +94,16 @@ public:
     void run();
     
     // do the loading in a background thread
-    void LoadConfigurationAsync(File fileToLoad);
-    void LoadConfiguration(File configFile); // do the loading
-    void ReloadConfiguration(bool newParameters = true); //reload convolver the whole config
+    void            LoadConfigurationAsync(File fileToLoad);
+//    void            LoadConfiguration(File configFile); // do the loading
+    void            ReloadConfiguration(); //reload convolver the whole config
     
-    void changePresetTypeAsync();
+    void            changePresetTypeAsync();
     
-    void LoadIRMatrixFilter(File filterFile);
+    void            LoadIRMatrixFilter(File filterFile);
     
-    void loadConvolver();
-    void unloadConvolver();
+    void            loadConvolver();
+    void            unloadConvolver();
     
 
     // for gui --------------------------------------------------------------------
@@ -149,7 +149,7 @@ public:
     int             _filter_len_smpls;
     Atomic<bool>    filterHasBeenResampled;
     
-    bool            newInputChannelRequired; //request from gui a reload with new input channels number
+    bool            changeNumInputChannel; //request from gui a reload with new input channels number
     enum            InChannelStatus {agreed, missing, notMultiple, notFeasible, requested};
     InChannelStatus inChannelStatus;
     int             tempInputChannels;
@@ -182,7 +182,7 @@ private:
     Array<String>   statusTextList;
     void            addNewStatus(String newStatus);
     
-    AudioSampleBuffer tempAudioBuffer; //1 channel, 256 samples
+//    AudioSampleBuffer tempAudioBuffer; //1 channel, 256 samples
     
 #ifdef USE_ZITA_CONVOLVER
     Convproc        zita_conv; /* zita-convolver engine class instances */
@@ -198,7 +198,7 @@ private:
     File            targetFilter;    //config file copy for thread
     CriticalSection targetFilterMutex;
     void            setTargetFilter(File newTargetFile);
-    bool            isAReload;
+    bool            holdNumInputChannel;
     
     File            _tempConfigZipFile;
     Array<File>     _cleanUpFilesOnExit;

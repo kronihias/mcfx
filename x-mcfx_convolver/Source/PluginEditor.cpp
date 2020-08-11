@@ -372,8 +372,8 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     }*/
     else if (buttonThatWasClicked == &(view.filterManagingBox.reloadButton))
     {
-        processor.newInputChannelRequired = true;
-        processor.ReloadConfiguration(false);
+        processor.changeNumInputChannel = true;
+        processor.ReloadConfiguration();
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
