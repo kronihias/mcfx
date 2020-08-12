@@ -52,7 +52,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     view.ioDetailBox.gainKnob.addListener(this);
     
-    setNewGeneralPath.addItem(0, "Set new general filter path");
+    setNewGeneralPath.addItem(-1, "Set new generic path");
     
     addAndMakeVisible(view);
 
@@ -329,7 +329,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         if (view.changePathBox.pathButton.rightclick)
         {
-            setNewGeneralPath.showMenuAsync(PopupMenu::Options().withTargetComponent (view.changePathBox.pathButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
+            setNewGeneralPath.showMenuAsync(PopupMenu::Options().withTargetComponent(view.changePathBox.pathButton), ModalCallbackFunction::forComponent (righClickButtonCallback, this));
         }
         else
         {
@@ -404,6 +404,33 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             processor.storeInChannelIntoWav.set(true);
         else
             processor.storeInChannelIntoWav.set(false);
+    }
+}
+
+void Mcfx_convolverAudioProcessorEditor::righClickButtonCallback(int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
+{
+    // file chooser....
+    if (result == 0)
+    {
+        // do nothing
+    }
+    else if (result == -1)
+    {
+        FileChooser myChooser ("Please select the new generic filter folder...",
+                               demoComponent->processor.defaultFilterDir,
+                               "");
+        if (myChooser.browseForDirectory())
+        {
+            File mooseFile (myChooser.getResult());
+            
+            demoComponent->processor.SearchFilters(mooseFile);
+            demoComponent->processor.defaultFilterDir = mooseFile;
+            demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
+            
+            demoComponent->processor.setNewGlobalFilterFolder(mooseFile);
+            demoComponent->processor.sendChangeMessage();
+            
+        }
     }
 }
 

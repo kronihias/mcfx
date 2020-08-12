@@ -115,6 +115,7 @@ public:
     
 //    bool    SaveConfiguration(File zipFile);
     void            SearchFilters(File SearchFolder);
+    void            setNewGlobalFilterFolder(File newGloablFolder);
     void            LoadFilterFromMenu(unsigned int filterIndex, bool restored = false);
     void            LoadFilterFromFile(File filterToLoad, bool restored = false);
     

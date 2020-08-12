@@ -83,8 +83,19 @@ newStatusText(false)
     if (_MaxPartSize != 8192)
         _MaxPartSize = 8192;
     
+    File globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Application Support/x-mcfx/options.ini");
+    StringArray readLines;
+    if (globalPluginOptions.existsAsFile())
+    {
+        globalPluginOptions.readLines(readLines);
+        if (readLines.size() == 1)
+        {
+            defaultFilterDir = File(readLines.getReference(0));
+        }
+    }
+    else
+        defaultFilterDir = defaultFilterDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx/filter_library");
 //    defaultFilterDir = defaultFilterDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("mcfx/convolver_presets");
-    defaultFilterDir = defaultFilterDir.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx/filter_library");
     
 	String debug;
     debug << "Filter directory: " << defaultFilterDir.getFullPathName();
@@ -870,6 +881,21 @@ void Mcfx_convolverAudioProcessor::SearchFilters(File SearchFolder)
     addNewStatus(debug);
 }
 
+void Mcfx_convolverAudioProcessor::setNewGlobalFilterFolder(File newGloablFolder)
+{
+    File globalPluginOptions;
+#if JUCE_MAC
+    globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Application Support/x-mcfx");
+#else
+    globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx");
+#endif
+    globalPluginOptions.createDirectory();
+    globalPluginOptions = globalPluginOptions.getChildFile("options.ini");
+    globalPluginOptions.create();
+    
+    bool executed = globalPluginOptions.replaceWithText(newGloablFolder.getFullPathName());
+}
+
 void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex, bool restored)
 {
     //check if the ID of the loading filter is coherent with the filter list
@@ -1183,28 +1209,6 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
-    
-    File globalPluginOptions;
-    globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx");
-    globalPluginOptions.createDirectory();
-    globalPluginOptions = globalPluginOptions.getChildFile("options.ini");
-    globalPluginOptions.create();
-    
-    bool executed = globalPluginOptions.replaceWithText(defaultFilterDir.getFullPathName());
-    
-    /*
-    FileOutputStream outputStream(globalPluginOptions);
-        
-    if (outputStream.openedOk())
-    {
-        outputStream.setPosition(0); // overwrite file if already exists
-        outputStream.truncate();
-
-        double progress = 0.;
-//        compressedFileToStore.writeToStream(outputStream, &progress);
-
-    }
-     */
 }
 
 void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int sizeInBytes)

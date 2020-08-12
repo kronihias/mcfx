@@ -64,6 +64,8 @@ public:
 
     static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
     
+    static void righClickButtonCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
+    
     void UpdateFiltersMenu();
     
     void UpdateText();
