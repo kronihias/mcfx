@@ -82,8 +82,11 @@ newStatusText(false)
     
     if (_MaxPartSize != 8192)
         _MaxPartSize = 8192;
-    
+#if JUCE_MAC
     File globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Application Support/x-mcfx/options.ini");
+#else
+    File globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx/options.ini");
+#endif
     StringArray readLines;
     if (globalPluginOptions.existsAsFile())
     {
