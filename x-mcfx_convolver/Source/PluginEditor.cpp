@@ -28,6 +28,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     : AudioProcessorEditor (&processorToUse), processor(processorToUse)
 {
 //    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
+    addKeyListener(this);
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
@@ -50,6 +51,8 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
     view.ioDetailBox.gainKnob.addListener(this);
+    
+    setNewGeneralPath.addItem(0, "Set new general filter path");
     
     addAndMakeVisible(view);
 
@@ -322,22 +325,27 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         filterMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.FilterManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
     }
-    else*/ if (buttonThatWasClicked == &(view.changePathBox.pathButton))
+    else*/ if (buttonThatWasClicked == &(view.changePathBox.pathButton) )
     {
-        FileChooser myChooser ("Please select the new filter folder...",
-                               processor.defaultFilterDir,
-                               "");
-        
-        if (myChooser.browseForDirectory())
+        if (view.changePathBox.pathButton.rightclick)
         {
-            
-            File mooseFile (myChooser.getResult());
-            processor.defaultFilterDir = mooseFile;
-            
-            processor.SearchFilters(mooseFile);
-            
-            processor.lastSearchDir = mooseFile.getParentDirectory();
-            processor.sendChangeMessage();
+            setNewGeneralPath.showMenuAsync(PopupMenu::Options().withTargetComponent (view.changePathBox.pathButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
+        }
+        else
+        {
+            FileChooser myChooser ("Please select the new filter folder...",
+                                   processor.defaultFilterDir,
+                                   "");
+            if (myChooser.browseForDirectory())
+            {
+                File mooseFile (myChooser.getResult());
+                processor.defaultFilterDir = mooseFile;
+                
+                processor.SearchFilters(mooseFile);
+                
+                processor.lastSearchDir = mooseFile.getParentDirectory();
+                processor.sendChangeMessage();
+            }
         }
     }
     else if (buttonThatWasClicked == &view.oscManagingBox.activeReceiveToggle)
@@ -506,4 +514,29 @@ void Mcfx_convolverAudioProcessorEditor::sliderValueChanged(Slider *slider)
         else
             processor.masterGain.set(0);
     }
+}
+
+bool  Mcfx_convolverAudioProcessorEditor::keyPressed (const KeyPress& key, Component* originatingComponent)
+{
+    String flags;
+    if (key.getModifiers().isAltDown())
+        flags = "ALT";
+    
+    String pressed;
+    if (key.isCurrentlyDown())
+        pressed = "YES";
+        
+    std::cout << "key pressed now " << pressed  << std::endl;
+    std::cout << "key code: " << key.getKeyCode() << std::endl;
+    std::cout << "key mods: " << flags << std::endl;
+    
+    if (key.getModifiers().isCommandDown() );
+    {
+        view.LockSensibleElements();
+    }
+}
+
+bool Mcfx_convolverAudioProcessorEditor::keyStateChanged (bool isKeyDown, Component* originatingComponent)
+{
+
 }

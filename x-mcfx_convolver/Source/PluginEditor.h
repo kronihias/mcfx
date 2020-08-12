@@ -38,7 +38,8 @@ class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public ComboBox::Listener,
                                             public Slider::Listener,
                                             public Timer,
-                                            public TextEditor::Listener
+                                            public TextEditor::Listener,
+                                            public KeyListener
 {
 public:
     //Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter);
@@ -72,6 +73,11 @@ public:
     int getInputChannelFromDialog();
     
     void sliderValueChanged(Slider *slider);
+    
+    bool keyPressed (const KeyPress& key,
+    Component* originatingComponent);
+    
+    bool keyStateChanged (bool isKeyDown, Component* originatingComponent);
 
 private:
 //    Mcfx_convolverAudioProcessor* getProcessor() const
@@ -87,6 +93,8 @@ private:
 
     PopupMenu filterMenu;
     OwnedArray<PopupMenu> filterSubmenus;
+    
+    PopupMenu setNewGeneralPath;
     
 //    LookAndFeel_V4 MyLookAndFeel;
 };

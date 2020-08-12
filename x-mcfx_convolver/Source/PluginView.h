@@ -26,38 +26,53 @@ class View  : public Component
 {
 public:
     // GUI nested classes
-    //filter managing box
-    class FilterManagingBox : public Component
-    {
-    public:
-        
-        Label       filterLabel;
-        ComboBox    filterSelector;
-        
-        TextButton  chooseButton;
-        TextButton  reloadButton;
-        Label       infoLabel;
-        
-//        ToggleButton saveToggle;
-
-        FilterManagingBox();
-        void LockSensibleElements();
-        void UnlockSensibleElements();
-    private:
-        void paint (Graphics& g);
-        void resized();
-    };
+    
     //Path modify box
     class ChangePathBox : public Component
     {
     public:
         Label       pathLabel;
         Label       pathText;
-        TextButton  pathButton;
+        
+        class LeftRightClickButton : public TextButton
+        {
+        public:
+            bool rightclick = false;
+            void internalClickCallback(const ModifierKeys& mods) override
+            {
+                if(mods.isLeftButtonDown())
+                {
+                    rightclick = false;
+                    Button::internalClickCallback(mods);
+                }
+                if(mods.isRightButtonDown())
+                {
+                    rightclick = true;
+                    Button::internalClickCallback(mods);
+                }
+            }
+        };
+        LeftRightClickButton pathButton;
         
         ChangePathBox();
     private:
         void paint(Graphics& g);
+        void resized();
+    };
+    //filter managing box
+    class FilterManagingBox : public Component
+    {
+    public:
+        Label       filterLabel;
+        ComboBox    filterSelector;
+        TextButton  reloadButton;
+        Label       infoLabel;
+
+        FilterManagingBox();
+        void LockSensibleElements();
+        void UnlockSensibleElements();
+    private:
+        void paint (Graphics& g);
         void resized();
     };
     //OSC managing box
@@ -76,31 +91,39 @@ public:
     class IODetailBox : public Component
     {
     public:
+        struct InfoLabel  : public Label
+        {
+            InfoLabel()
+            {
+                setFont (Font (15.0000f, Font::plain));
+                setColour (Label::textColourId, Colours::white);
+                setJustificationType (Justification::right);
+            }
+        };
+        InfoLabel matrixConfigLabel;
         
-        Label matrixConfigLabel;
+        InfoLabel inputValue;
+        InfoLabel outputValue;
         
-        Label inputValue;
-        Label outputValue;
+        InfoLabel IRLabel;
+        InfoLabel IRValue;
         
-        Label IRLabel;
-        Label IRValue;
+        InfoLabel diagonalValue;
         
-        Label diagonalValue;
+        InfoLabel sampleRateLabel;
+        InfoLabel sampleRateNumber;
         
-        Label sampleRateLabel;
-        Label sampleRateNumber;
+        InfoLabel hostBufferLabel;
+        InfoLabel hostBufferNumber;
         
-        Label hostBufferLabel;
-        Label hostBufferNumber;
+        InfoLabel filterLengthLabel;
+        InfoLabel filterLengthInSeconds;
+        InfoLabel filterLengthInSamples;
         
-        Label filterLengthLabel;
-        Label filterLengthInSeconds;
-        Label filterLengthInSamples;
+        InfoLabel secondsLabel;
+        InfoLabel samplesLabel;
         
-        Label secondsLabel;
-        Label samplesLabel;
-        
-        Label resampledLabel;
+        InfoLabel resampledLabel;
         
         struct SnappingSlider  : public Slider
         {
@@ -116,7 +139,7 @@ public:
             }
         };
         SnappingSlider gainKnob;
-        Label gainLabel;
+        InfoLabel gainLabel;
 
         IODetailBox();
     private:
@@ -243,6 +266,17 @@ public:
     
     LookAndFeel_V3 MyLookAndFeel;
 private:
+    /*
+    void modifierKeysChanged (const ModifierKeys& modifiers)
+    {
+        Colour buttonColour = Colours::blueviolet;
+        changePathBox.pathButton.setColour(TextButton::buttonColourId, Colours::white);
+        if (modifiers == ModifierKeys::altModifier)
+        {
+            changePathBox.pathButton.setColour(TextButton::buttonColourId, buttonColour.brighter().withAlpha(0.90f));
+        }
+    }*/
+    
     void paint (Graphics& g);
     void resized();
 };

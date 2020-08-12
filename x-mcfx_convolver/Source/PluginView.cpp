@@ -128,7 +128,7 @@ void View::resized()
     
     int convBoxHeight = 78;
     
-    int changePathHeight = 52;
+    int changePathHeight = 24;
     
     int debugWinHeight = 100;
 
@@ -212,10 +212,10 @@ void View::resized()
     statusItem.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     mainFlex.items.addArray({   titleItem,
+                                changePathItem,
                                 filterMangItem,
                                 ioBoxItem,
                                 convBoxItem,
-                                changePathItem,
                                 statusItem
                             });
     
@@ -252,8 +252,28 @@ void View::TitleBox::resized()
 //==============================================================================
 View::FilterManagingBox::FilterManagingBox()
 {
+    /*
+    pathLabel.setFont (Font (15.0f, Font::plain));
+    pathLabel.setColour (Label::textColourId, Colours::white);
+    pathLabel.setJustificationType(Justification::right);
+    pathLabel.setText("Path", dontSendNotification);
+    addAndMakeVisible (pathLabel);
+    
+    pathText.setFont (Font (11.0f, Font::plain));
+    pathText.setColour(Label::outlineColourId, Colour(0xff8e989b)); //from slider LookAndFeel(_V3?) outline textbox colour
+    pathText.setColour(Label::textColourId, Colours::white);
+    addAndMakeVisible (pathText);
+    
+    pathButton.setTooltip ("choose another filter libray folder");
+    pathButton.setButtonText ("...");
+    pathButton.setColour (TextButton::buttonColourId, Colours::white);
+    pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
+    addAndMakeVisible(pathButton);
+    */
+    
     filterLabel.setFont (Font (15.0f, Font::plain));
     filterLabel.setColour (Label::textColourId, Colours::white);
+    filterLabel.setJustificationType(Justification::right);
     filterLabel.setText("Filter", dontSendNotification);
     addAndMakeVisible (filterLabel);
     
@@ -267,7 +287,7 @@ View::FilterManagingBox::FilterManagingBox()
     addAndMakeVisible(reloadButton);
     
     infoLabel.setFont (Font (11.0f, Font::plain));
-    infoLabel.setJustificationType(Justification::left);
+    infoLabel.setJustificationType(Justification::topLeft);
     infoLabel.setColour (Label::textColourId, Colours::white);
     infoLabel.setText("(saved within the project)", dontSendNotification);
     addAndMakeVisible (infoLabel);
@@ -293,8 +313,14 @@ void View::FilterManagingBox::resized()
 {
     int rowHeight = 24;
     
-    int labelWidth = 40;
-    int buttonWitdh = 50;
+    int labelHeight = 55;
+    
+    int labelWidth = 45;
+//    int pathLabelWidth = 45;
+    int pathButtonWidth = 30;
+    int reloadButtonWitdh = 50;
+    
+    auto area = getLocalBounds();
     
     Grid grid;
     using Track = Grid::TrackInfo;
@@ -302,6 +328,7 @@ void View::FilterManagingBox::resized()
     grid.justifyContent = Grid::JustifyContent::spaceBetween;
     grid.alignItems = Grid::AlignItems::center;
     grid.justifyItems = Grid::JustifyItems::center;
+//    grid.rowGap = {20_px};
     
     grid.templateRows    = {Track (3_fr), Track (1_fr) };
     grid.templateColumns = {Track (45_px), Track (1_fr), Track (60_px)};
@@ -310,17 +337,17 @@ void View::FilterManagingBox::resized()
     TextEditor = TextEditor.withHeight(rowHeight);
     
     GridItem ReloadButton (reloadButton);
-    ReloadButton = ReloadButton.withSize(buttonWitdh, rowHeight);
+    ReloadButton = ReloadButton.withSize(reloadButtonWitdh, rowHeight);
     ReloadButton = ReloadButton.withMargin(GridItem::Margin(0,0,0,10));
     
     GridItem infoText (infoLabel);
     infoText = infoText.withAlignSelf(GridItem::AlignSelf::start);
     
-    grid.items = {  GridItem (filterLabel), TextEditor,  ReloadButton,
-                    GridItem(),             infoText,    GridItem()
+    grid.items = {  GridItem (filterLabel), TextEditor, ReloadButton,
+                    GridItem(),             infoText,   GridItem()
                 };
 
-    grid.performLayout (getLocalBounds());
+    grid.performLayout (area);
 }
 
 //==============================================================================
@@ -330,7 +357,7 @@ View::ChangePathBox::ChangePathBox()
     pathLabel.setFont (Font (15.0f, Font::plain));
     pathLabel.setColour (Label::textColourId, Colours::white);
     pathLabel.setJustificationType(Justification::right);
-    pathLabel.setText("Library path", dontSendNotification);
+    pathLabel.setText("Path", dontSendNotification);
     addAndMakeVisible (pathLabel);
     
     pathText.setFont (Font (11.0f, Font::plain));
@@ -355,18 +382,18 @@ void View::ChangePathBox::resized()
 {
     int buttonWidth = 30;
    
-    int labelWidth = 55;
+    int labelWidth = 45;
     
     int height = 24;
-    int labelHeight = 48;
+//    int labelHeight = 48;
     
     FlexBox mainFlex;
     mainFlex.justifyContent = FlexBox::JustifyContent::flexStart;
     mainFlex.alignItems = FlexBox::AlignItems::center;
     
-    FlexItem label  (labelWidth,  labelHeight, pathLabel);
+    FlexItem label  (labelWidth,  height, pathLabel);
     label.alignSelf = FlexItem::AlignSelf::autoAlign;
-    label.margin = FlexItem::Margin(0,10,0,0);
+//    label.margin = FlexItem::Margin(0,10,0,0);
     
     FlexItem editor (pathText);
     editor.alignSelf = FlexItem::AlignSelf::autoAlign;
@@ -433,106 +460,55 @@ void View::OSCManagingBox::resized()
 
 View::IODetailBox::IODetailBox()
 {
-    matrixConfigLabel.setFont (Font (15.0000f, Font::plain));
-    matrixConfigLabel.setJustificationType (Justification::right);
-    matrixConfigLabel.setColour (Label::textColourId, Colours::white);
     matrixConfigLabel.setText("Matrix dimensions:", dontSendNotification);
     addAndMakeVisible (matrixConfigLabel);
-    
-    /*
-    inputLabel.setFont (Font (15.0000f, Font::plain));
-    inputLabel.setJustificationType (Justification::right);
-    inputLabel.setColour (Label::textColourId, Colours::white);
-    inputLabel.setText("Input channels:", dontSendNotification);
-    addAndMakeVisible (inputLabel);*/
-    
-    inputValue.setFont (Font (15.0000f, Font::plain));
-    inputValue.setJustificationType (Justification::right);
-    inputValue.setColour (Label::textColourId, Colours::white);
+
     inputValue.setText("0 ins", dontSendNotification);
     addAndMakeVisible (inputValue);
     
-//    outputLabel.setFont (Font (15.0000f, Font::plain));
-//    outputLabel.setJustificationType (Justification::right);
-//    outputLabel.setColour (Label::textColourId, Colours::white);
-//    outputLabel.setText("Output channels:", dontSendNotification);
-//    addAndMakeVisible (outputLabel);
-    
-    outputValue.setFont (Font (15.0000f, Font::plain));
     outputValue.setJustificationType (Justification::left);
-    outputValue.setColour (Label::textColourId, Colours::white);
     outputValue.setText("0 outs", dontSendNotification);
     addAndMakeVisible (outputValue);
     
-    IRLabel.setFont (Font (15.0000f, Font::plain));
     IRLabel.setJustificationType (Justification::centredRight);
-    IRLabel.setColour (Label::textColourId, Colours::white);
     IRLabel.setText("Impulse responses:", dontSendNotification);
     addAndMakeVisible (IRLabel);
     
-    IRValue.setFont (Font (15.0000f, Font::plain));
-    IRValue.setJustificationType (Justification::right);
-    IRValue.setColour (Label::textColourId, Colours::white);
     IRValue.setText("0", dontSendNotification);
     addAndMakeVisible (IRValue);
     
     diagonalValue.setFont (Font (13.0000f, Font::plain));
     diagonalValue.setJustificationType (Justification::centredLeft);
-    diagonalValue.setColour (Label::textColourId, Colours::white);
     diagonalValue.setText("(diagonal)", dontSendNotification);
     addAndMakeVisible (diagonalValue);
     
-    sampleRateLabel.setFont (Font (15.0000f, Font::plain));
-    sampleRateLabel.setJustificationType (Justification::right);
-    sampleRateLabel.setColour (Label::textColourId, Colours::white);
     sampleRateLabel.setText("Samplerate:", dontSendNotification);
     addAndMakeVisible (sampleRateLabel);
     
-    sampleRateNumber.setFont (Font (15.0000f, Font::plain));
-    sampleRateNumber.setJustificationType (Justification::right);
-    sampleRateNumber.setColour (Label::textColourId, Colours::white);
     sampleRateNumber.setText("0", dontSendNotification);
     addAndMakeVisible (sampleRateNumber);
     
-    hostBufferLabel.setFont (Font (15.0000f, Font::plain));
-    hostBufferLabel.setJustificationType (Justification::right);
-    hostBufferLabel.setColour (Label::textColourId, Colours::white);
     hostBufferLabel.setText("Host Buffer Size:", dontSendNotification);
     addAndMakeVisible (hostBufferLabel);
     
-    hostBufferNumber.setFont (Font (15.0000f, Font::plain));
-    hostBufferNumber.setJustificationType (Justification::right);
-    hostBufferNumber.setColour (Label::textColourId, Colours::white);
     hostBufferNumber.setText("0", dontSendNotification);
     addAndMakeVisible (hostBufferNumber);
     
-    filterLengthLabel.setFont (Font (15.0000f, Font::plain));
-    filterLengthLabel.setJustificationType (Justification::right);
-    filterLengthLabel.setColour (Label::textColourId, Colours::white);
     filterLengthLabel.setText("Filter Length:", dontSendNotification);
     addAndMakeVisible (filterLengthLabel);
     
-    filterLengthInSeconds.setFont (Font (15.0000f, Font::plain));
-    filterLengthInSeconds.setJustificationType (Justification::right);
-    filterLengthInSeconds.setColour (Label::textColourId, Colours::white);
     filterLengthInSeconds.setText("0", dontSendNotification);
     addAndMakeVisible (filterLengthInSeconds);
     
-    filterLengthInSamples.setFont (Font (15.0000f, Font::plain));
     filterLengthInSamples.setJustificationType (Justification::topRight);
-    filterLengthInSamples.setColour (Label::textColourId, Colours::white);
     filterLengthInSamples.setText("0", dontSendNotification);
     addAndMakeVisible (filterLengthInSamples);
     
-    secondsLabel.setFont (Font (15.0000f, Font::plain));
     secondsLabel.setJustificationType (Justification::left);
-    secondsLabel.setColour (Label::textColourId, Colours::white);
     secondsLabel.setText("s", dontSendNotification);
     addAndMakeVisible (secondsLabel);
     
-    samplesLabel.setFont (Font (15.0000f, Font::plain));
     samplesLabel.setJustificationType (Justification::topLeft);
-    samplesLabel.setColour (Label::textColourId, Colours::white);
     samplesLabel.setText("smpls", dontSendNotification);
     addAndMakeVisible (samplesLabel);
     
@@ -544,9 +520,7 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (resampledLabel);
     resampledLabel.setVisible(false);
     
-    gainLabel.setFont (Font (15.0000f, Font::plain));
     gainLabel.setJustificationType (Justification::centred);
-    gainLabel.setColour (Label::textColourId, Colours::white);
     gainLabel.setText("Master gain", dontSendNotification);
     addAndMakeVisible (gainLabel);
     
@@ -784,7 +758,6 @@ void View::ConvManagingBox::resized()
                    bufferPart,   GridItem(skippedCyclesLabel),    GridItem(skippedCyclesValue), GridItem()
                };
     
-    localArea.removeFromTop(8);
     grid.performLayout (localArea);
     
     /*

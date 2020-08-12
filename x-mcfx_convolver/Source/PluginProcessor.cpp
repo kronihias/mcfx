@@ -1158,12 +1158,14 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     // if filter has been loaded...
     if(convolverReady && _storeConfigDataInProject.get())
     {
+        ///DEPRECATED
+        /*
         if (_tempConfigZipFile.existsAsFile())
         {
             MemoryBlock tempFileBlock;
             if (_tempConfigZipFile.loadFileAsData(tempFileBlock))
                 xml.setAttribute("configData", tempFileBlock.toBase64Encoding());
-        }
+        }*/
         
         xml.setAttribute("filterFileName", filterNameForStoring);
         xml.setAttribute("inputChannelsNumber",(int)tempInputChannels);
@@ -1181,6 +1183,28 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
+    
+    File globalPluginOptions;
+    globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx");
+    globalPluginOptions.createDirectory();
+    globalPluginOptions = globalPluginOptions.getChildFile("options.ini");
+    globalPluginOptions.create();
+    
+    bool executed = globalPluginOptions.replaceWithText(defaultFilterDir.getFullPathName());
+    
+    /*
+    FileOutputStream outputStream(globalPluginOptions);
+        
+    if (outputStream.openedOk())
+    {
+        outputStream.setPosition(0); // overwrite file if already exists
+        outputStream.truncate();
+
+        double progress = 0.;
+//        compressedFileToStore.writeToStream(outputStream, &progress);
+
+    }
+     */
 }
 
 void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
