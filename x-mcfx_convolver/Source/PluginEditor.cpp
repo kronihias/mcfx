@@ -31,8 +31,6 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
-//    view.FilterManagingBox.chooseButton.addListener(this);
-//    view.FilterManagingBox.saveToggle.addListener(this);
     view.changePathBox.pathButton.addListener(this);
     view.filterManagingBox.filterSelector.addListener(this);
     view.filterManagingBox.reloadButton.addListener(this);
@@ -41,7 +39,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.convManagingBox.maxPartCombobox.addListener(this);
     
     view.inputChannelDialog.OKButton.addListener(this);
-    view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
+//    view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
     view.ioDetailBox.gainKnob.addListener(this);
     
@@ -55,7 +53,6 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     UpdateFiltersMenu();
     
-//    ownerFilter->addChangeListener(this); // listen to changes of processor
     processor.addChangeListener(this);
 
     timerCallback();
@@ -125,7 +122,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     
     view.convManagingBox.latencyValue.setText(String(processor.getLatencySamples()), sendNotification);
     
-    view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
+//    view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
     
     if(processor.restoredSettings.get())
         view.filterManagingBox.restoredSettingsLabel.setVisible(true);
@@ -343,6 +340,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         }
         processor.notify();
     }
+    /*
     else if (buttonThatWasClicked == &(view.inputChannelDialog.saveIntoMetaToggle))
     {
         if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
@@ -350,6 +348,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         else
             processor.storeNumInputsIntoWav.set(false);
     }
+     */
 }
 
 void Mcfx_convolverAudioProcessorEditor::righClickButtonCallback(int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
@@ -477,6 +476,8 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
             processor.exportWavefileAsync(mooseFile);
             processor.lastSearchDir = mooseFile.getParentDirectory();
         }
+        else
+            UpdateText();
     }
     else // load filter from menu based on chosen index
     {

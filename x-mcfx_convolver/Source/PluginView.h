@@ -184,7 +184,7 @@ public:
         Label invalidMessage;
         TextEditor textEditor;
         ToggleButton diagonalToggle;
-        ToggleButton saveIntoMetaToggle;
+//        ToggleButton saveIntoMetaToggle;
         TextButton OKButton;
         
         InputChannelDialog();

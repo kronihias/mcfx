@@ -132,7 +132,7 @@ public:
     enum            NumInputsStatus {agreed, missing, notMultiple, notFeasible, requested};
     NumInputsStatus numInputsStatus;
     int             tempNumInputs;
-    Atomic<bool>    storeNumInputsIntoWav;
+//    Atomic<bool>    storeNumInputsIntoWav;
     
     //----------------------------------------------------------------------------
     File            defaultFilterDir; // where to search for presets

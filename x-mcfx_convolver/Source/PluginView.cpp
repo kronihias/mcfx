@@ -783,17 +783,21 @@ rectSize (260,200)
         {
             textEditor.setEnabled(false);
             textEditor.setText("");
+            diagonalToggle.grabKeyboardFocus();
         }
         else
+        {
             textEditor.setEnabled(true);
+            textEditor.grabKeyboardFocus();
+        }
             };
     addAndMakeVisible(diagonalToggle);
     
-    saveIntoMetaToggle.setButtonText(TRANS("Save value into wavefile metadata"));
-    saveIntoMetaToggle.setTooltip(TRANS("The value will be stored within the wavefile"));
-    saveIntoMetaToggle.setToggleState(false, dontSendNotification);
-    saveIntoMetaToggle.setColour(ToggleButton::textColourId, Colours::white);
-    addAndMakeVisible(saveIntoMetaToggle);
+//    saveIntoMetaToggle.setButtonText(TRANS("Save value into wavefile metadata"));
+//    saveIntoMetaToggle.setTooltip(TRANS("The value will be stored within the wavefile"));
+//    saveIntoMetaToggle.setToggleState(false, dontSendNotification);
+//    saveIntoMetaToggle.setColour(ToggleButton::textColourId, Colours::white);
+//    addAndMakeVisible(saveIntoMetaToggle);
     
     OKButton.setColour (TextButton::buttonColourId, Colours::white);
     OKButton.setColour (TextButton::buttonOnColourId, Colours::blue);
@@ -841,6 +845,24 @@ void View::InputChannelDialog::resized()
     
     title.setBounds(areaToDraw.removeFromTop(height));
         
+    FlexBox flexBox;
+    flexBox.flexDirection = FlexBox::Direction::column;
+    flexBox.justifyContent = FlexBox::JustifyContent::spaceAround;
+    flexBox.alignItems = FlexBox::AlignItems::center;
+    
+    FlexItem text (areaToDraw.proportionOfWidth(0.86f) , height*2, message);
+    text.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem editor (areaToDraw.proportionOfWidth(0.60f), editorHeight, textEditor);
+    editor.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem toggle (areaToDraw.proportionOfWidth(0.60f), editorHeight, diagonalToggle);
+    toggle.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    flexBox.items.addArray({ text, editor, toggle });
+    flexBox.performLayout(areaToDraw.removeFromTop(height*2+editorHeight*2+separator*4).toFloat());
+    
+    /*
     Rectangle<int> messageArea = areaToDraw.removeFromTop(height*2);
     messageArea.reduce(messageArea.proportionOfWidth(0.07f), 0);
     message.setBounds(messageArea);
@@ -855,11 +877,11 @@ void View::InputChannelDialog::resized()
     
     diagonalToggle.setBounds(editorArea.removeFromTop(editorHeight));
     areaToDraw.removeFromTop(editorHeight*2+separator*3);
-    
-    shrinkValue = areaToDraw.proportionOfWidth(0.12f);
+    */
+    int shrinkValue = areaToDraw.proportionOfWidth(0.12f);
     areaToDraw.reduce(shrinkValue, 0);
     
-    saveIntoMetaToggle.setBounds(areaToDraw.removeFromTop(editorHeight));
+//    saveIntoMetaToggle.setBounds(areaToDraw.removeFromTop(editorHeight));
     
     areaToDraw.reduce(40, 0);
     OKButton.setSize(areaToDraw.getWidth(), height);
@@ -898,7 +920,8 @@ void View::InputChannelDialog::resetState(bool toggleChecked)
 //        diagonalToggle.triggerClick();
         diagonalToggle.setToggleState(false, sendNotification);
     
-    textEditor.grabKeyboardFocus();
+//    if(!textEditor.hasKeyboardFocus(true))
+        grabKeyboardFocus();
     
     setVisible(false);
 }
