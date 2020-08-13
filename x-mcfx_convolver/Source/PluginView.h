@@ -66,23 +66,11 @@ public:
         Label       filterLabel;
         ComboBox    filterSelector;
         TextButton  reloadButton;
-        Label       infoLabel;
+        Label       restoredSettingsLabel;
 
         FilterManagingBox();
         void LockSensibleElements();
         void UnlockSensibleElements();
-    private:
-        void paint (Graphics& g);
-        void resized();
-    };
-    //OSC managing box
-    class OSCManagingBox : public Component
-    {
-    public:
-        ToggleButton activeReceiveToggle;
-        TextEditor receivePortText;
-
-        OSCManagingBox();
     private:
         void paint (Graphics& g);
         void resized();
@@ -240,8 +228,6 @@ public:
     
     FilterManagingBox filterManagingBox;
     
-    OSCManagingBox oscManagingBox;
-    
     IODetailBox ioDetailBox;
     
     ConvManagingBox convManagingBox;
@@ -266,16 +252,6 @@ public:
     
     LookAndFeel_V3 MyLookAndFeel;
 private:
-    /*
-    void modifierKeysChanged (const ModifierKeys& modifiers)
-    {
-        Colour buttonColour = Colours::blueviolet;
-        changePathBox.pathButton.setColour(TextButton::buttonColourId, Colours::white);
-        if (modifiers == ModifierKeys::altModifier)
-        {
-            changePathBox.pathButton.setColour(TextButton::buttonColourId, buttonColour.brighter().withAlpha(0.90f));
-        }
-    }*/
     
     void paint (Graphics& g);
     void resized();

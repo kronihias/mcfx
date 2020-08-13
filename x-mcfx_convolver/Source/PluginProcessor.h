@@ -38,8 +38,7 @@
 class Mcfx_convolverAudioProcessor  :   public AudioProcessor,
                                         public ChangeBroadcaster,
                                         public Thread,
-                                        public Timer,
-                                        private OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>
+                                        public Timer
 {
 public:
     //==============================================================================
@@ -47,10 +46,10 @@ public:
     ~Mcfx_convolverAudioProcessor();
 
     //==============================================================================
-    void prepareToPlay (double sampleRate, int samplesPerBlock);
-    void releaseResources();
+    void    prepareToPlay (double sampleRate, int samplesPerBlock);
+    void    releaseResources();
 
-    void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages);
+    void    processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages);
 
     //==============================================================================
     AudioProcessorEditor*   createEditor();
@@ -89,72 +88,50 @@ public:
     void    setStateInformation (const void* data, int sizeInBytes);
     
 //    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
-
-    // use a thread to load a configuration
-    void run();
     
-    // do the loading in a background thread
-    void            LoadConfigurationAsync(File fileToLoad);
-//    void            LoadConfiguration(File configFile); // do the loading
     void            ReloadConfiguration(); //reload convolver the whole config
-    
-    void            changePresetTypeAsync();
-    
-    void            LoadIRMatrixFilter(File filterFile);
-    
-    void            loadConvolver();
-    void            unloadConvolver();
-    
 
-    // for gui --------------------------------------------------------------------
+    // functions for gui control =======================================================
+    // debug status text
     String          getDebugString();
     
     bool            newStatusText;
-    void            timerCallback();
     String          getStatusText();
     
-//    bool    SaveConfiguration(File zipFile);
+    //return the status of the convolver configuration -----------------------------------
+    enum            ConvolverStatus {Loaded,Loading,Unloaded};
+    int             getConvolverStatus();
+    
+    // Filter loading --------------------------------------------------------------------
     void            SearchFilters(File SearchFolder);
     void            setNewGlobalFilterFolder(File newGloablFolder);
     void            LoadFilterFromMenu(unsigned int filterIndex, bool restored = false);
     void            LoadFilterFromFile(File filterToLoad, bool restored = false);
     
-    //returning parameter for gui
+    //returning parameter for gui --------------------------------------------------------
     double          getSamplerate();
     unsigned int    getBufferSize();
     unsigned int    getConvBufferSize();
     unsigned int    getMaxPartitionSize();
     int             getSkippedCyclesCount();
     
-
+    //setting up parameter from gui ------------------------------------------------------
     void            setConvBufferSize(unsigned int bufsize);
     void            setMaxPartitionSize(unsigned int maxsize);
-
     
-    //return the status of the convolver configuration
-    enum            ConvolverStatus {Loaded,Loading,Unloaded};
-    int             getConvolverStatus();
+    // VARIABLES =========================================================================
+    int             activeNumInputs;
+    int             activeNumOutputs;
+    int             activeNumIRs;
+    double          filterLenghtInSecs;
+    int             filterLenghtInSmpls;
+    Atomic<bool>    wavefileHasBeenResampled;
     
-    // OSC functions --------------------------------------------------------------
-    void            setOscIn(bool arg); // activate osc in
-    bool            getOscIn();
-    void            setOscInPort(int port);
-    int             getOscInPort();
-    void            oscMessageReceived(const OSCMessage& message);
-    
-    // VARIABLES ==================================================================
-    int             _min_in_ch;
-    int             _min_out_ch;
-    int             _num_conv;
-    double          _filter_len_secs;
-    int             _filter_len_smpls;
-    Atomic<bool>    filterHasBeenResampled;
-    
-    bool            changeNumInputChannel; //request from gui a reload with new input channels number
-    enum            InChannelStatus {agreed, missing, notMultiple, notFeasible, requested};
-    InChannelStatus inChannelStatus;
-    int             tempInputChannels;
-    Atomic<bool>    storeInChannelIntoWav;
+    bool            changeNumInputChannels; //request from gui a reload with new input channels number
+    enum            NumInputsStatus {agreed, missing, notMultiple, notFeasible, requested};
+    NumInputsStatus numInputsStatus;
+    int             tempNumInputs;
+    Atomic<bool>    storeNumInputsIntoWav;
     
     //----------------------------------------------------------------------------
     File            defaultFilterDir; // where to search for presets
@@ -165,14 +142,13 @@ public:
     
     String          filterNameForStoring; // store filename
     String          filterNameToShow; // string for gui
-    Atomic<bool>    restoredConfiguration;
+    Atomic<bool>    restoredSettings;
     
     //----------------------------------------------------------------------------
     Atomic<int>     _readyToSaveConfiguration;
     Atomic<int>     _storeConfigDataInProject;
     
     Atomic<float>   masterGain;
-    float*          storedGain;
 
 private:
     String          _DebugText;
@@ -181,9 +157,15 @@ private:
     
     CriticalSection statusTextMutex;
     Array<String>   statusTextList;
+    void            timerCallback();
     void            addNewStatus(String newStatus);
     
-//    AudioSampleBuffer tempAudioBuffer; //1 channel, 256 samples
+    void            LoadConfigurationAsync(File fileToLoad);
+    void            run();
+    void            LoadIRMatrixFilter(File filterFile);
+    
+    void            loadConvolver();
+    void            unloadConvolver();
     
 #ifdef USE_ZITA_CONVOLVER
     Convproc        zita_conv; /* zita-convolver engine class instances */
@@ -226,9 +208,6 @@ private:
     
     bool            safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
     
-    // IR Filter Matrix -----------------------------------------------------------
-    File            filterFileToLoad;
-    
     // ----------------------------------------------------------------------------
     bool            loadIr(AudioSampleBuffer*   IRBuffer,
                            const File&          audioFile,
@@ -239,10 +218,7 @@ private:
                            int                  length=0
                            );
     
-    // OSC ------------------------------------------------------------------------
-    OSCReceiver     oscReceiver;
-    int             _osc_in_port;
-    bool            _osc_in;
+    float*          storedGain;
 
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_convolverAudioProcessor)

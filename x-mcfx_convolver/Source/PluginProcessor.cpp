@@ -41,15 +41,15 @@ AudioProcessor (BusesProperties()   .withInput  ("MainInput",  juce::AudioChanne
 Thread("mtx_convolver_master"),
 _readyToSaveConfiguration(false),
 _storeConfigDataInProject(1),
-restoredConfiguration(false),
+restoredSettings(false),
 
-_min_in_ch(0),
-_min_out_ch(0),
-_num_conv(0),
+activeNumInputs(0),
+activeNumOutputs(0),
+activeNumIRs(0),
 _MaxPartSize(MAX_PART_SIZE),
-_filter_len_secs(0),
-_filter_len_smpls(0),
-filterHasBeenResampled(false),
+filterLenghtInSecs(0),
+filterLenghtInSmpls(0),
+wavefileHasBeenResampled(false),
 
 _isProcessing(false),
 
@@ -57,10 +57,10 @@ convolverReady(false),
 convolverStatus(ConvolverStatus::Unloaded),
 holdNumInputChannel(false),
 
-changeNumInputChannel(false),
-inChannelStatus(InChannelStatus::agreed),
-tempInputChannels(0),
-storeInChannelIntoWav(false),
+changeNumInputChannels(false),
+numInputsStatus(NumInputsStatus::agreed),
+tempNumInputs(0),
+storeNumInputsIntoWav(false),
 storedInChannels(0),
 
 masterGain(0),
@@ -69,9 +69,6 @@ storedGain(nullptr),
 _paramReload(false),
 _skippedCycles(0),
 safemode_(false),
-
-_osc_in_port(7200),
-_osc_in(false),
 
 newStatusText(false)
 {
@@ -316,7 +313,7 @@ void Mcfx_convolverAudioProcessor::run()
         setConvolverStatus(ConvolverStatus::Loaded);
     
     holdNumInputChannel = false;
-    changeNumInputChannel = false;
+    changeNumInputChannels = false;
     
     sendChangeMessage();
 }
@@ -341,7 +338,7 @@ void Mcfx_convolverAudioProcessor::ReloadConfiguration()
         String debug = "reloading for host new samplerate or buffer size \n";
         DebugPrint(debug);
         
-        if (!changeNumInputChannel)
+        if (!changeNumInputChannels)
             holdNumInputChannel = true;
         
         LoadConfigurationAsync(getTargetFilter());
@@ -424,15 +421,15 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     }
         
     ///kill the thread if requested
-    if (tempInputChannels == -2)
+    if (tempNumInputs == -2)
     {
         ///on restoring, a value will be still needed
-        tempInputChannels = 0;
+        tempNumInputs = 0;
         return;
     }
     
     bool isDiagonal;
-    if(tempInputChannels == -1)
+    if(tempNumInputs == -1)
         isDiagonal = true;
     else
         isDiagonal = false;
@@ -447,8 +444,8 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     }
     else
     {
-        irLength = tempAudioBuffer.getNumSamples()/tempInputChannels;
-        inChannels = tempInputChannels;
+        irLength = tempAudioBuffer.getNumSamples()/tempNumInputs;
+        inChannels = tempNumInputs;
     }
      
     
@@ -466,9 +463,9 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     }
     
     if (src_samplerate != _SampleRate)
-        filterHasBeenResampled.set(true);
+        wavefileHasBeenResampled.set(true);
     else
-        filterHasBeenResampled.set(false);
+        wavefileHasBeenResampled.set(false);
     
     if (length <= 0)
         length = irLength-offset;
@@ -611,11 +608,11 @@ void Mcfx_convolverAudioProcessor::loadConvolver()
     
     _skippedCycles.set(0);
     
-    _min_in_ch = conv_data.getNumInputChannels();
-    _min_out_ch = conv_data.getNumOutputChannels();
-    _num_conv = conv_data.getNumIRs();
-    _filter_len_secs = conv_data.getMaxLengthInSeconds();
-    _filter_len_smpls = conv_data.getMaxLength();
+    activeNumInputs = conv_data.getNumInputChannels();
+    activeNumOutputs = conv_data.getNumOutputChannels();
+    activeNumIRs = conv_data.getNumIRs();
+    filterLenghtInSecs = conv_data.getMaxLengthInSeconds();
+    filterLenghtInSmpls = conv_data.getMaxLength();
     
     convolverReady = true;
 }
@@ -638,11 +635,11 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
     _conv_in.clear();
     _conv_out.clear();
     
-    _min_in_ch = 0;
-    _min_out_ch = 0;
-    _num_conv = 0;
-    _filter_len_secs = 0;
-    _filter_len_smpls = 0;
+    activeNumInputs = 0;
+    activeNumOutputs = 0;
+    activeNumIRs = 0;
+    filterLenghtInSecs = 0;
+    filterLenghtInSmpls = 0;
     
 #ifdef USE_ZITA_CONVOLVER
     
@@ -669,43 +666,43 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
 
 void Mcfx_convolverAudioProcessor::getInChannels(int waveFileLength)
 {
-    if (changeNumInputChannel)
-        inChannelStatus = InChannelStatus::requested;
+    if (changeNumInputChannels)
+        numInputsStatus = NumInputsStatus::requested;
     else
-        inChannelStatus = InChannelStatus::missing;
+        numInputsStatus = NumInputsStatus::missing;
     
-    while (inChannelStatus != InChannelStatus::agreed)
+    while (numInputsStatus != NumInputsStatus::agreed)
     {
         sendChangeMessage();
         wait(-1);
         /// thread kill
         if (threadShouldExit())
         {
-            tempInputChannels = -2;
+            tempNumInputs = -2;
             return;
         }
         ///value returned check
-        if (tempInputChannels == -1)
+        if (tempNumInputs == -1)
         {
-            inChannelStatus = InChannelStatus::agreed;
+            numInputsStatus = NumInputsStatus::agreed;
             return;
         }
-        if (tempInputChannels > 0 )
+        if (tempNumInputs > 0 )
         {
-            int irLength = waveFileLength/tempInputChannels;
-            if (irLength*tempInputChannels != waveFileLength)
+            int irLength = waveFileLength/tempNumInputs;
+            if (irLength*tempNumInputs != waveFileLength)
             {
-                inChannelStatus = InChannelStatus::notMultiple;
+                numInputsStatus = NumInputsStatus::notMultiple;
             }
             else
             {
-                inChannelStatus = InChannelStatus::agreed;
+                numInputsStatus = NumInputsStatus::agreed;
                 return;
             }
         }
         else
         {
-            inChannelStatus = InChannelStatus::notFeasible;
+            numInputsStatus = NumInputsStatus::notFeasible;
         }
     }
 }
@@ -798,7 +795,6 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
         }
     }
    
-    
     // scale ir with gain
     if (gain != 1.f)
         IRBuffer->applyGain(gain);
@@ -808,7 +804,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     // search for the input channels number into the wavefile metadata tags
     if (storedInChannels != 0)
     {
-        tempInputChannels = storedInChannels;
+        tempNumInputs = storedInChannels;
         storedInChannels = 0;
         delete reader;
         return true;
@@ -823,9 +819,9 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     String metaTagValue =  reader->metadataValues.getValue(WavAudioFormat::riffInfoKeywords, "0");
     int inChannels = metaTagValue.getIntValue();
     
-    if(inChannels != 0 && !changeNumInputChannel)
+    if(inChannels != 0 && !changeNumInputChannels)
     {
-        tempInputChannels = inChannels;
+        tempNumInputs = inChannels;
         delete reader;
         return true;
     }
@@ -834,13 +830,12 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
         /// request new input channels number to the user
         addNewStatus("Waiting for user input...");
         getInChannels(IRBuffer->getNumSamples());
-
         
         /// write the new value in metadata tag
-        if (storeInChannelIntoWav.get())
+        if (storeNumInputsIntoWav.get())
         {
             addNewStatus("Storing number of input channel into wavefile metadata...");
-            reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempInputChannels);
+            reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempNumInputs);
             FileOutputStream* outStream = new FileOutputStream(audioFile);
             if (outStream->openedOk())
             {
@@ -909,9 +904,9 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex, 
         filterNameToShow = filterFilesList.getUnchecked(filterIndex).getFileNameWithoutExtension();
     }
     if (restored)
-        restoredConfiguration.set(true);
+        restoredSettings.set(true);
     else
-        restoredConfiguration.set(false);
+        restoredSettings.set(false);
 }
 
 void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool restored)
@@ -922,9 +917,9 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool re
     filterNameToShow << filterToLoad.getFileNameWithoutExtension() << " (outside library)";
     
     if (restored)
-        restoredConfiguration.set(true);
+        restoredSettings.set(true);
     else
-        restoredConfiguration.set(false);
+        restoredSettings.set(false);
 }
 
 ///DEPRECATED
@@ -992,72 +987,6 @@ void Mcfx_convolverAudioProcessor::setMaxPartitionSize(unsigned int maxsize)
 int Mcfx_convolverAudioProcessor::getSkippedCyclesCount()
 {
     return _skippedCycles.get();
-}
-
-//======================== Open sound control ========================
-void Mcfx_convolverAudioProcessor::setOscIn(bool arg)
-{
-    if (arg)
-    {
-        if (oscReceiver.connect(_osc_in_port))
-        {
-            oscReceiver.addListener(this, "/reload");
-            oscReceiver.addListener(this, "/load");
-            _osc_in = true;
-        }
-        else
-        {
-            DebugPrint("Could not open UDP port, try a different port.\n");
-        }
-    }
-    else
-    {
-        // turn off osc
-        _osc_in = false;
-        oscReceiver.removeListener(this);
-        oscReceiver.disconnect();
-    }
-}
-
-bool Mcfx_convolverAudioProcessor::getOscIn()
-{
-    return _osc_in;
-}
-
-void Mcfx_convolverAudioProcessor::setOscInPort(int port)
-{
-    _osc_in_port = port;
-
-    if (_osc_in)
-    {
-        setOscIn(false);
-        setOscIn(true);
-    }
-}
-
-int Mcfx_convolverAudioProcessor::getOscInPort()
-{
-  return _osc_in_port;
-}
-
-void Mcfx_convolverAudioProcessor::oscMessageReceived(const OSCMessage & message)
-{
-  if (message.getAddressPattern() == "/reload")
-  {
-    DebugPrint("Received Reload via OSC (/reload).\n");
-    ReloadConfiguration();
-  }
-  else if (message.getAddressPattern() == "/load")
-  {
-
-    DebugPrint("Received Load via OSC (/load).\n");
-
-    if (message.size() < 1)
-      return;
-
-//    if (message[0].isString())
-//      LoadPresetByName(message[0].getString());
-  }
 }
 
 //======================== Utility functions ========================
@@ -1177,8 +1106,6 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute("BufferSize", (int)_BufferSize);
     xml.setAttribute("ConvBufferSize", (int)_ConvBufferSize);
     xml.setAttribute("MaxPartSize", (int)_MaxPartSize);
-    xml.setAttribute("oscIn", _osc_in);
-    xml.setAttribute("oscInPort", _osc_in_port);
     
     xml.setAttribute ("defaultFilterDir", defaultFilterDir.getFullPathName());
     
@@ -1197,7 +1124,7 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
         }*/
         
         xml.setAttribute("filterFileName", filterNameForStoring);
-        xml.setAttribute("inputChannelsNumber",(int)tempInputChannels);
+        xml.setAttribute("inputChannelsNumber",(int)tempNumInputs);
         
         /// save also fullpath of the config files, in case it is not possible to restored from saved data
         Array <File> files;
@@ -1233,8 +1160,6 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
             _BufferSize         = xmlState->getIntAttribute("BufferSize", 512);
             _ConvBufferSize     = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
             _MaxPartSize        = xmlState->getIntAttribute("MaxPartSize", _MaxPartSize);
-            _osc_in_port        = xmlState->getIntAttribute("oscInPort", _osc_in_port);
-            setOscIn(xmlState->getBoolAttribute("oscIn", false));
             
             String newFilterDir = xmlState->getStringAttribute("defaultFilterDir", defaultFilterDir.getFullPathName());
             
@@ -1276,7 +1201,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                     LoadConfigurationAsync(configfiles.getUnchecked(0));
                     filterNameToShow.clear();
                     filterNameToShow = configfiles.getUnchecked(0).getFileNameWithoutExtension();
-                    restoredConfiguration.set(true);
+                    restoredSettings.set(true);
                     return;
                 }
             }
@@ -1300,7 +1225,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                         return;
                     }
                     filterNameToShow = targetFilter.getFileNameWithoutExtension();
-                    restoredConfiguration.set(true);
+                    restoredSettings.set(true);
                     
                     addNewStatus("ERROR: filter not found in the library folder!");
                     
@@ -1324,7 +1249,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 debug << "ERROR: filter not found in the original folder!";
                 filterNameToShow = targetFilter.getFileNameWithoutExtension();
                 filterNameToShow << " (outside library)";
-                restoredConfiguration.set(true);
+                restoredSettings.set(true);
                 addNewStatus(debug);
                 
                 DebugPrint(debug << "\n\n");

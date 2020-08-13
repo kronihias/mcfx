@@ -28,7 +28,6 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     : AudioProcessorEditor (&processorToUse), processor(processorToUse)
 {
 //    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
-    addKeyListener(this);
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
@@ -37,12 +36,6 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.changePathBox.pathButton.addListener(this);
     view.filterManagingBox.filterSelector.addListener(this);
     view.filterManagingBox.reloadButton.addListener(this);
-    
-//    view.irMatrixBox.confModeButton.addListener(this);
-//    view.irMatrixBox.wavModeButton.addListener(this);
-    
-    view.oscManagingBox.activeReceiveToggle.addListener(this);
-    view.oscManagingBox.receivePortText.addListener(this);
     
     view.convManagingBox.bufferCombobox.addListener(this);
     view.convManagingBox.maxPartCombobox.addListener(this);
@@ -112,29 +105,26 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
     
     String inChannels;
-    inChannels << String(processor._min_in_ch) << " in";
+    inChannels << String(processor.activeNumInputs) << " in";
     view.ioDetailBox.inputValue.setText(inChannels, dontSendNotification);
     
     String outChannels;
-    outChannels << String(processor._min_out_ch) << " out";
+    outChannels << String(processor.activeNumOutputs) << " out";
     view.ioDetailBox.outputValue.setText(outChannels, dontSendNotification);
     
-    view.ioDetailBox.IRValue.setText(String(processor._num_conv), dontSendNotification);
-    view.ioDetailBox.diagonalValue.setVisible(processor.tempInputChannels == -1);
+    view.ioDetailBox.IRValue.setText(String(processor.activeNumIRs), dontSendNotification);
+    view.ioDetailBox.diagonalValue.setVisible(processor.tempNumInputs == -1);
     
     view.ioDetailBox.sampleRateNumber.setText(String(processor.getSamplerate()), dontSendNotification);
     view.ioDetailBox.hostBufferNumber.setText(String(processor.getBufferSize()), dontSendNotification);
     
-    view.ioDetailBox.filterLengthInSeconds.setText(String(processor._filter_len_secs, 2), dontSendNotification);
-    view.ioDetailBox.filterLengthInSamples.setText(String(processor._filter_len_smpls), dontSendNotification);
-    view.ioDetailBox.resampledLabel.setVisible(processor.filterHasBeenResampled.get());
+    view.ioDetailBox.filterLengthInSeconds.setText(String(processor.filterLenghtInSecs, 2), dontSendNotification);
+    view.ioDetailBox.filterLengthInSamples.setText(String(processor.filterLenghtInSmpls), dontSendNotification);
+    view.ioDetailBox.resampledLabel.setVisible(processor.wavefileHasBeenResampled.get());
     
     view.ioDetailBox.gainKnob.setValue(processor.masterGain.get());
     
     view.convManagingBox.latencyValue.setText(String(processor.getLatencySamples()), sendNotification);
-    
-    view.oscManagingBox.activeReceiveToggle.setToggleState(processor.getOscIn(), dontSendNotification);
-    view.oscManagingBox.receivePortText.setText(String(processor.getOscInPort()), dontSendNotification);
     
 //    if (processor.presetType == Mcfx_convolverAudioProcessor::PresetType::conf)
 //    {
@@ -148,7 +138,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
 //        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
 //        if (processor.filterNameToShow.isNotEmpty())
 //            view.irMatrixBox.newInChannelsButton.setEnabled(true);
-//        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
+//        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
 //    }
     
     if (processor.getConvolverStatus() == Mcfx_convolverAudioProcessor::ConvolverStatus::Loaded)
@@ -156,12 +146,12 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     else
         view.filterManagingBox.reloadButton.setEnabled(false);
     
-    view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeInChannelIntoWav.get(), dontSendNotification);
+    view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
     
-    if(processor.restoredConfiguration.get())
-        view.filterManagingBox.infoLabel.setVisible(true);
+    if(processor.restoredSettings.get())
+        view.filterManagingBox.restoredSettingsLabel.setVisible(true);
     else
-        view.filterManagingBox.infoLabel.setVisible(false);
+        view.filterManagingBox.restoredSettingsLabel.setVisible(false);
     
     switch (processor.getConvolverStatus())
     {
@@ -187,28 +177,28 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         processor.newStatusText = false;
     }
     
-    switch (processor.inChannelStatus)
+    switch (processor.numInputsStatus)
     {
-        case Mcfx_convolverAudioProcessor::InChannelStatus::missing:
+        case Mcfx_convolverAudioProcessor::NumInputsStatus::missing:
             view.inputChannelDialog.setVisible(true);
             view.inputChannelDialog.textEditor.grabKeyboardFocus();
             break;
-        case Mcfx_convolverAudioProcessor::InChannelStatus::notFeasible:
+        case Mcfx_convolverAudioProcessor::NumInputsStatus::notFeasible:
             view.inputChannelDialog.setVisible(true);
             view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible) ;
             view.inputChannelDialog.textEditor.grabKeyboardFocus();
             break;
-        case Mcfx_convolverAudioProcessor::InChannelStatus::notMultiple:
+        case Mcfx_convolverAudioProcessor::NumInputsStatus::notMultiple:
             view.inputChannelDialog.setVisible(true);
             view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple) ;
             view.inputChannelDialog.textEditor.grabKeyboardFocus();
             break;
-        case Mcfx_convolverAudioProcessor::InChannelStatus::requested:
+        case Mcfx_convolverAudioProcessor::NumInputsStatus::requested:
             view.inputChannelDialog.setVisible(true);
-            if(processor.tempInputChannels == -1)
+            if(processor.tempNumInputs == -1)
                 view.inputChannelDialog.diagonalToggle.setToggleState(true, sendNotification);
             else
-                view.inputChannelDialog.textEditor.setText((String)processor.tempInputChannels);
+                view.inputChannelDialog.textEditor.setText((String)processor.tempNumInputs);
                 
             view.inputChannelDialog.textEditor.grabKeyboardFocus();
             break;
@@ -348,10 +338,6 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             }
         }
     }
-    else if (buttonThatWasClicked == &view.oscManagingBox.activeReceiveToggle)
-    {
-        processor.setOscIn(view.oscManagingBox.activeReceiveToggle.getToggleState());
-    }
 //    else if (buttonThatWasClicked == &(view.FilterManagingBox.saveToggle))
 //    {
 //        processor._storeConfigDataInProject = view.FilterManagingBox.saveToggle.getToggleState();
@@ -380,20 +366,20 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     }*/
     else if (buttonThatWasClicked == &(view.filterManagingBox.reloadButton))
     {
-        processor.changeNumInputChannel = true;
+        processor.changeNumInputChannels = true;
         processor.ReloadConfiguration();
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
         if (view.inputChannelDialog.diagonalToggle.getToggleState())
         {
-            processor.tempInputChannels = -1;
+            processor.tempNumInputs = -1;
             ///reset input dialog with toggle uncheck
             view.inputChannelDialog.resetState(true);
         }
         else
         {
-            processor.tempInputChannels = getInputChannelFromDialog();
+            processor.tempNumInputs = getInputChannelFromDialog();
             view.inputChannelDialog.resetState();
         }
         processor.notify();
@@ -401,9 +387,9 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     else if (buttonThatWasClicked == &(view.inputChannelDialog.saveIntoMetaToggle))
     {
         if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
-            processor.storeInChannelIntoWav.set(true);
+            processor.storeNumInputsIntoWav.set(true);
         else
-            processor.storeInChannelIntoWav.set(false);
+            processor.storeNumInputsIntoWav.set(false);
     }
 }
 
@@ -506,19 +492,6 @@ void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThat
         processor.setMaxPartitionSize(val);
     }
 }
-
-void Mcfx_convolverAudioProcessorEditor::textEditorFocusLost(TextEditor & ed)
-{
-    if (&ed == &view.oscManagingBox.receivePortText)
-    {
-        processor.setOscInPort(view.oscManagingBox.receivePortText.getText().getIntValue());
-    }
-}
-
-void Mcfx_convolverAudioProcessorEditor::textEditorReturnKeyPressed(TextEditor & ed)
-{
-    textEditorFocusLost(ed);
-}
   
 int Mcfx_convolverAudioProcessorEditor::getInputChannelFromDialog()
 {
@@ -541,29 +514,4 @@ void Mcfx_convolverAudioProcessorEditor::sliderValueChanged(Slider *slider)
         else
             processor.masterGain.set(0);
     }
-}
-
-bool  Mcfx_convolverAudioProcessorEditor::keyPressed (const KeyPress& key, Component* originatingComponent)
-{
-    String flags;
-    if (key.getModifiers().isAltDown())
-        flags = "ALT";
-    
-    String pressed;
-    if (key.isCurrentlyDown())
-        pressed = "YES";
-        
-    std::cout << "key pressed now " << pressed  << std::endl;
-    std::cout << "key code: " << key.getKeyCode() << std::endl;
-    std::cout << "key mods: " << flags << std::endl;
-    
-    if (key.getModifiers().isCommandDown() );
-    {
-        view.LockSensibleElements();
-    }
-}
-
-bool Mcfx_convolverAudioProcessorEditor::keyStateChanged (bool isKeyDown, Component* originatingComponent)
-{
-
 }

@@ -49,8 +49,6 @@ View::View()
     addAndMakeVisible(debugWinLabel);
     
     addAndMakeVisible(filterManagingBox);
-//    addAndMakeVisible(irMatrixBox);
-    addAndMakeVisible(oscManagingBox);
     addAndMakeVisible(ioDetailBox);
     addAndMakeVisible(convManagingBox);
     addAndMakeVisible(changePathBox);
@@ -122,8 +120,6 @@ void View::resized()
     
     int IRBoxHeight = 36;
     
-    int OSCheight = 24;
-    
     int IOBoxHeight = 132;
     
     int convBoxHeight = 78;
@@ -142,35 +138,8 @@ void View::resized()
     area.removeFromLeft(border);
     area.removeFromRight(border);
     int mainWidth = area.getWidth();
-    /*
-    filterManagingBox.setBounds(area.removeFromTop(filterBoxHeight));
-    area.removeFromTop(separator);
     
-//    irMatrixBox.setBounds(area.removeFromTop(IRBoxHeight));
-//    area.removeFromTop(separator);
-    
-    ioDetailBox.setBounds(area.removeFromTop(IOBoxHeight));
-    area.removeFromTop(separator);
-    
-    convManagingBox.setBounds(area.removeFromTop(convBoxHeight));
-    area.removeFromTop(separator);
-    
-    changePathBox.setBounds(area.removeFromTop(filterBoxHeight));
-    area.removeFromTop(separator);
-    
-//    oscManagingBox.setBounds(area.removeFromTop(OSCheight));
-//    area.removeFromTop(separator);
-//
-//    area.removeFromTop(smallLabelHeight);
-//    debugText.setBounds(area.removeFromTop(debugWinHeight));
-//    skippedCyclesLabel.setBounds(area.removeFromTop(smallLabelHeight));
-    
-    auto sectionArea = area.removeFromBottom(20);
-    statusLed.setBounds(sectionArea.removeFromLeft(20));
-    sectionArea.removeFromLeft(5);
-    statusText.setBounds(sectionArea.removeFromLeft(sectionArea.getWidth()-30));
-    */
-    
+    //---------------------------------------------------------------------
     FlexBox statusBox;
     statusBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
     statusBox.alignItems = FlexBox::AlignItems::center;
@@ -252,25 +221,6 @@ void View::TitleBox::resized()
 //==============================================================================
 View::FilterManagingBox::FilterManagingBox()
 {
-    /*
-    pathLabel.setFont (Font (15.0f, Font::plain));
-    pathLabel.setColour (Label::textColourId, Colours::white);
-    pathLabel.setJustificationType(Justification::right);
-    pathLabel.setText("Path", dontSendNotification);
-    addAndMakeVisible (pathLabel);
-    
-    pathText.setFont (Font (11.0f, Font::plain));
-    pathText.setColour(Label::outlineColourId, Colour(0xff8e989b)); //from slider LookAndFeel(_V3?) outline textbox colour
-    pathText.setColour(Label::textColourId, Colours::white);
-    addAndMakeVisible (pathText);
-    
-    pathButton.setTooltip ("choose another filter libray folder");
-    pathButton.setButtonText ("...");
-    pathButton.setColour (TextButton::buttonColourId, Colours::white);
-    pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
-    addAndMakeVisible(pathButton);
-    */
-    
     filterLabel.setFont (Font (15.0f, Font::plain));
     filterLabel.setColour (Label::textColourId, Colours::white);
     filterLabel.setJustificationType(Justification::right);
@@ -286,12 +236,12 @@ View::FilterManagingBox::FilterManagingBox()
     reloadButton.setButtonText ("reload");
     addAndMakeVisible(reloadButton);
     
-    infoLabel.setFont (Font (11.0f, Font::plain));
-    infoLabel.setJustificationType(Justification::topLeft);
-    infoLabel.setColour (Label::textColourId, Colours::white);
-    infoLabel.setText("(saved within the project)", dontSendNotification);
-    addAndMakeVisible (infoLabel);
-    infoLabel.setVisible(false);
+    restoredSettingsLabel.setFont (Font (11.0f, Font::plain));
+    restoredSettingsLabel.setJustificationType(Justification::topLeft);
+    restoredSettingsLabel.setColour (Label::textColourId, Colours::white);
+    restoredSettingsLabel.setText("(saved within the project)", dontSendNotification);
+    addAndMakeVisible (restoredSettingsLabel);
+    restoredSettingsLabel.setVisible(false);
 }
 
 void View::FilterManagingBox::LockSensibleElements()
@@ -340,7 +290,7 @@ void View::FilterManagingBox::resized()
     ReloadButton = ReloadButton.withSize(reloadButtonWitdh, rowHeight);
     ReloadButton = ReloadButton.withMargin(GridItem::Margin(0,0,0,10));
     
-    GridItem infoText (infoLabel);
+    GridItem infoText (restoredSettingsLabel);
     infoText = infoText.withAlignSelf(GridItem::AlignSelf::start);
     
     grid.items = {  GridItem (filterLabel), TextEditor, ReloadButton,
@@ -351,7 +301,6 @@ void View::FilterManagingBox::resized()
 }
 
 //==============================================================================
-
 View::ChangePathBox::ChangePathBox()
 {
     pathLabel.setFont (Font (15.0f, Font::plain));
@@ -411,53 +360,6 @@ void View::ChangePathBox::resized()
 }
 
 //==============================================================================
-View::OSCManagingBox::OSCManagingBox()
-{
-    activeReceiveToggle.setTooltip(TRANS("enable OSC receive, supported messages: /reload, /load <preset.conf> (preset needs to be within the search path)"));
-    activeReceiveToggle.setToggleState(true, dontSendNotification);
-    activeReceiveToggle.setColour(ToggleButton::textColourId, Colours::white);
-    activeReceiveToggle.setButtonText(TRANS("OSC receive port: "));
-    addAndMakeVisible(activeReceiveToggle);
-    
-    receivePortText.setColour(TextEditor::textColourId, Colours::black);
-    receivePortText.setJustification(Justification::centredLeft);
-    receivePortText.setTooltip(TRANS("OSC receive port"));
-    receivePortText.setCaretVisible(false);
-    receivePortText.setReadOnly(false);
-    receivePortText.setPopupMenuEnabled(true);
-    receivePortText.setText(TRANS("7200"));
-    addAndMakeVisible(receivePortText);
-}
-
-void View::OSCManagingBox::paint(Graphics& g)
-{}
-
-void View::OSCManagingBox::resized()
-{
-    int boxHeight = 24;
-    int editorWidth = 40;
-    int editorHeight = 20;
-    
-    auto area = getLocalBounds();
-    area.removeFromRight(proportionOfWidth(0.45f));
-    auto toggleWidth = (area.getWidth())*0.80;
-    
-    FlexBox flexBox;
-    flexBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
-    flexBox.alignItems = FlexBox::AlignItems::center;
-//    flexBox.alignContent = FlexBox::AlignContent::center;
-
-    FlexItem toggle (toggleWidth, boxHeight,activeReceiveToggle);
-    toggle.alignSelf=FlexItem::AlignSelf::autoAlign;
-    FlexItem editor (editorWidth,editorHeight, receivePortText);
-    editor.alignSelf=FlexItem::AlignSelf::autoAlign;
-
-    flexBox.items.addArray( { toggle, editor} );
-    flexBox.performLayout (area.toFloat());
-}
-
-//==============================================================================
-
 View::IODetailBox::IODetailBox()
 {
     matrixConfigLabel.setText("Matrix dimensions:", dontSendNotification);
