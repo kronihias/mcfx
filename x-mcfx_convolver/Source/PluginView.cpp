@@ -247,10 +247,12 @@ View::FilterManagingBox::FilterManagingBox()
 void View::FilterManagingBox::LockSensibleElements()
 {
     filterSelector.setEnabled(false);
+    reloadButton.setEnabled(false);
 }
 void View::FilterManagingBox::UnlockSensibleElements()
 {
     filterSelector.setEnabled(true);
+    reloadButton.setEnabled(true);
 }
 
 void View::FilterManagingBox::paint(Graphics& g)

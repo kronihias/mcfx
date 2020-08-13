@@ -107,6 +107,7 @@ public:
     void            setNewGlobalFilterFolder(File newGloablFolder);
     void            LoadFilterFromMenu(unsigned int filterIndex, bool restored = false);
     void            LoadFilterFromFile(File filterToLoad, bool restored = false);
+    void            exportWavefileAsync(File newAudioFile);
     
     //returning parameter for gui --------------------------------------------------------
     double          getSamplerate();
@@ -145,8 +146,7 @@ public:
     Atomic<bool>    restoredSettings;
     
     //----------------------------------------------------------------------------
-    Atomic<int>     _readyToSaveConfiguration;
-    Atomic<int>     _storeConfigDataInProject;
+    Atomic<bool>     readyToExportWavefile;
     
     Atomic<float>   masterGain;
 
@@ -160,8 +160,11 @@ private:
     void            timerCallback();
     void            addNewStatus(String newStatus);
     
-    void            LoadConfigurationAsync(File fileToLoad);
+    enum            ThreadTask {loading, exporting};
+    ThreadTask      threadTask;
+    
     void            run();
+    void            LoadConfigurationAsync(File fileToLoad);
     void            LoadIRMatrixFilter(File filterFile);
     
     void            loadConvolver();
@@ -183,9 +186,9 @@ private:
     void            setTargetFilter(File newTargetFile);
     bool            holdNumInputChannel;
     
-    File            _tempConfigZipFile;
-    Array<File>     _cleanUpFilesOnExit;
-    void            DeleteTemporaryFiles();
+//    File            _tempConfigZipFile;
+//    Array<File>     _cleanUpFilesOnExit;
+//    void            DeleteTemporaryFiles();
     
     double          _SampleRate;
     unsigned int    _BufferSize;        // size of the processing Block
@@ -218,6 +221,11 @@ private:
                            int                  length=0
                            );
     
+    AudioSampleBuffer   bufferRead;
+    File                targetExport;
+    void                setTargetExport(File targetAudioFile);
+    void                exportWavefileWithMetadata(File targetAudioFile);
+        
     float*          storedGain;
 
     //==============================================================================

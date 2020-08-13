@@ -63,7 +63,10 @@ public:
     
     static void righClickButtonCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
     
-    static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
+//    static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
+    void menuItemChosenCallback (int result);
+    
+    void chooseExportFile();
     
     void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
     
@@ -82,6 +85,9 @@ private:
 
     PopupMenu filterMenu;
     OwnedArray<PopupMenu> filterSubmenus;
+    
+    File exportFile;
+    CriticalSection exportFileMutex;
 };
 
 

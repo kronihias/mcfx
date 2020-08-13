@@ -39,8 +39,7 @@ AudioProcessor (BusesProperties()   .withInput  ("MainInput",  juce::AudioChanne
                                     .withOutput ("MainOutput", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )
                                     ), */
 Thread("mtx_convolver_master"),
-_readyToSaveConfiguration(false),
-_storeConfigDataInProject(1),
+threadTask(ThreadTask::loading),
 restoredSettings(false),
 
 activeNumInputs(0),
@@ -62,6 +61,8 @@ numInputsStatus(NumInputsStatus::agreed),
 tempNumInputs(0),
 storeNumInputsIntoWav(false),
 storedInChannels(0),
+
+readyToExportWavefile(false),
 
 masterGain(0),
 storedGain(nullptr),
@@ -119,7 +120,7 @@ Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
     mtxconv_.Cleanup();
 #endif
 
-    DeleteTemporaryFiles();
+//    DeleteTemporaryFiles();
 }
 
 //==============================================================================
@@ -295,37 +296,44 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 void Mcfx_convolverAudioProcessor::run()
 {
-    DebugPrint("Loading Filter...\n\n");
-    addNewStatus("Loading target filter...");
+    if (threadTask == ThreadTask::loading)
+    {
+        DebugPrint("Loading Filter...\n\n");
+        addNewStatus("Loading target filter...");
 
-    setConvolverStatus(ConvolverStatus::Loading);
-    sendChangeMessage();
-    
-    //unload first....
-    if (convolverReady)
-        unloadConvolver();
-    
-    LoadIRMatrixFilter(getTargetFilter());
+        setConvolverStatus(ConvolverStatus::Loading);
+        sendChangeMessage();
         
-    if (!convolverReady)
-        setConvolverStatus(ConvolverStatus::Unloaded);
+        //unload first....
+        if (convolverReady)
+            unloadConvolver();
+        
+         LoadIRMatrixFilter(getTargetFilter());
+        
+        if (!convolverReady)
+            setConvolverStatus(ConvolverStatus::Unloaded);
+        else
+            setConvolverStatus(ConvolverStatus::Loaded);
+        
+        holdNumInputChannel = false;
+        changeNumInputChannels = false;
+        
+        sendChangeMessage();
+    }
     else
-        setConvolverStatus(ConvolverStatus::Loaded);
-    
-    holdNumInputChannel = false;
-    changeNumInputChannels = false;
-    
-    sendChangeMessage();
+        exportWavefileWithMetadata(targetExport);
 }
 
 void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad)
 {
     //store for the thread
     setTargetFilter(fileToLoad);
+    readyToExportWavefile.set(false);
     
     if(isThreadRunning())
         stopThread(100);
     
+    threadTask = ThreadTask::loading;
     startThread(6); // medium priority
 }
 
@@ -333,7 +341,7 @@ void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad)
 void Mcfx_convolverAudioProcessor::ReloadConfiguration()
 {
 //    if (convolverReady || filterNameForStoring.isNotEmpty())
-    if ( convolverReady )
+    if (convolverReady || getTargetFilter().existsAsFile())
     {
         String debug = "reloading for host new samplerate or buffer size \n";
         DebugPrint(debug);
@@ -343,30 +351,22 @@ void Mcfx_convolverAudioProcessor::ReloadConfiguration()
         
         LoadConfigurationAsync(getTargetFilter());
     }
+    sendChangeMessage();
 }
 
+void Mcfx_convolverAudioProcessor::exportWavefileAsync(File newAudioFile)
+{
+    targetExport = newAudioFile;
+    
+    threadTask = ThreadTask::exporting;
+    startThread(6); // medium priority
+}
 //-------------------------------------------------------------------------
-
-void getIntFromLine(int &ret, String &line)
-{
-    if (line.isEmpty())
-        return;
-    ret = line.getIntValue();
-    line = line.fromFirstOccurrenceOf(" ", false, true).trim();
-}
-
-void getFloatFromLine(float &ret, String &line)
-{
-    if (line.isEmpty())
-        return;
-    ret = line.getFloatValue();
-    line = line.fromFirstOccurrenceOf(" ", false, true).trim();
-}
 
 void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
 {
-    String debug;
     
+    String debug;
     //existance check (in case configuration loading starts from a state saving)
     if (!filterFile.existsAsFile())
     {
@@ -427,6 +427,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
         tempNumInputs = 0;
         return;
     }
+    readyToExportWavefile.set(true);
     
     bool isDiagonal;
     if(tempNumInputs == -1)
@@ -519,6 +520,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     }
     
     addNewStatus("Convolver ready");
+    
     sendChangeMessage(); // notify editor
     
     //BLOCK save config/wave as zip file
@@ -548,6 +550,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     
     sendChangeMessage(); // notify editor again. Ready to save configuration to zip (wavefile)
     */
+
 }
 
 void Mcfx_convolverAudioProcessor::loadConvolver()
@@ -771,10 +774,12 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
         return false;
     }
     
-    AudioSampleBuffer ReadBuffer(reader->numChannels, length); // create buffer
+//    AudioSampleBuffer ReadBuffer(reader->numChannels, length); // create buffer
+    bufferRead.clear();
+    bufferRead = AudioSampleBuffer(reader->numChannels, length);
     
     addNewStatus("Reading file...");
-    reader->read(&ReadBuffer, 0, length, offset, true, true);
+    reader->read(&bufferRead, 0, length, offset, true, true);
     
     // set the samplerate -> maybe we have to resample later...
     samplerate = reader->sampleRate;
@@ -784,14 +789,14 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     if (channel >= 0) // only one channel wanted...
     {
         IRBuffer->setSize(1, length);
-        IRBuffer->copyFrom(0, 0, ReadBuffer, channel, 0, length);
+        IRBuffer->copyFrom(0, 0, bufferRead, channel, 0, length);
     }
     else // copy all channels from the wav file if channel == -1 -> used for packedmatrix
     {
         IRBuffer->setSize(reader->numChannels, length);
         
         for (unsigned int i=0; i<reader->numChannels; i++) {
-            IRBuffer->copyFrom(i, 0, ReadBuffer, i, 0, length);
+            IRBuffer->copyFrom(i, 0, bufferRead, i, 0, length);
         }
     }
    
@@ -853,7 +858,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
                                                               );
             delete wave;
             
-            writer->writeFromAudioSampleBuffer(ReadBuffer, 0, ReadBuffer.getNumSamples());
+            writer->writeFromAudioSampleBuffer(bufferRead, 0, bufferRead.getNumSamples());
             delete writer;
         }
     }
@@ -899,7 +904,7 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex, 
     //check if the ID of the loading filter is coherent with the filter list
     if (filterIndex < (unsigned int)filterFilesList.size())
     {
-        DeleteTemporaryFiles();
+//        DeleteTemporaryFiles();
         LoadConfigurationAsync(filterFilesList.getUnchecked(filterIndex));
         filterNameToShow = filterFilesList.getUnchecked(filterIndex).getFileNameWithoutExtension();
     }
@@ -911,7 +916,7 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex, 
 
 void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool restored)
 {
-    DeleteTemporaryFiles();
+//    DeleteTemporaryFiles();
     LoadConfigurationAsync(filterToLoad);
     filterNameToShow.clear();
     filterNameToShow << filterToLoad.getFileNameWithoutExtension() << " (outside library)";
@@ -921,26 +926,6 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool re
     else
         restoredSettings.set(false);
 }
-
-///DEPRECATED
-//void Mcfx_convolverAudioProcessor::LoadPresetByName(String filterNameToShow)
-//{
-//    Array <File> files;
-//    defaultPresetDir.findChildFiles(files, File::findFiles, true, filterNameToShow);
-//
-//    if (files.size())
-//    {
-//        DeleteTemporaryFiles();
-//        LoadConfigurationAsync(files.getUnchecked(0)); // Load first result
-//        filterNameToShow = files.getUnchecked(0).getFileName();
-//    }
-//    else
-//    { // preset not found -> post!
-//        String debug_msg;
-//        debug_msg << "ERROR loading preset: " << filterNameToShow << ", Preset not found in search folder!\n\n";
-//        DebugPrint(debug_msg);
-//    }
-//}
 
 // ================= Editor set/get functions =================
 double Mcfx_convolverAudioProcessor::getSamplerate()
@@ -990,6 +975,7 @@ int Mcfx_convolverAudioProcessor::getSkippedCyclesCount()
 }
 
 //======================== Utility functions ========================
+/*
 void Mcfx_convolverAudioProcessor::DeleteTemporaryFiles()
 {
     _readyToSaveConfiguration.set(false);
@@ -999,6 +985,43 @@ void Mcfx_convolverAudioProcessor::DeleteTemporaryFiles()
         _cleanUpFilesOnExit.getUnchecked(i).deleteRecursively();
     }
     _cleanUpFilesOnExit.clear();
+}*/
+
+void Mcfx_convolverAudioProcessor::exportWavefileWithMetadata(File newAudioFile)
+{
+    addNewStatus("Configuring new wavefile for export...");
+    AudioFormatManager formatManager;
+    // this can read .wav and .aiff
+    formatManager.registerBasicFormats();
+    
+    AudioFormatReader* reader = formatManager.createReaderFor(getTargetFilter());
+    
+    reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempNumInputs);
+    FileOutputStream* outStream = new FileOutputStream(newAudioFile);
+    if (outStream->openedOk())
+    {
+        outStream->setPosition (0);
+        outStream->truncate();
+
+    }
+    WavAudioFormat* wave = new WavAudioFormat();
+    AudioFormatWriter* writer = wave->createWriterFor(outStream,
+                                                      reader->sampleRate,
+                                                      reader->getChannelLayout(),
+                                                      reader->bitsPerSample,
+                                                      reader->metadataValues,
+                                                      0
+                                                      );
+    delete reader;
+    delete wave;
+    addNewStatus("Exporting wavefile with metadata info...");
+    bool executed = writer->writeFromAudioSampleBuffer(bufferRead, 0, bufferRead.getNumSamples());
+    if (executed)
+        addNewStatus("Done.");
+    else
+        addNewStatus("An error occurred during the export phase...");
+    
+    delete writer;
 }
 
 void Mcfx_convolverAudioProcessor::DebugPrint(String debugText, bool reset)
@@ -1081,6 +1104,12 @@ void Mcfx_convolverAudioProcessor::setConvolverStatus(ConvolverStatus status)
     convolverStatus = status;
 }
 
+//-----------------------------------------------------------------
+void Mcfx_convolverAudioProcessor::setTargetExport(File targetAudioFile)
+{
+    targetExport = targetAudioFile;
+}
+
 //======================== Save to zipfile ========================
 //bool Mcfx_convolverAudioProcessor::SaveConfiguration(File zipFile)
 //{
@@ -1109,10 +1138,8 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     
     xml.setAttribute ("defaultFilterDir", defaultFilterDir.getFullPathName());
     
-    xml.setAttribute("storeConfigDataInProject", _storeConfigDataInProject.get());
-    
     // if filter has been loaded...
-    if(convolverReady && _storeConfigDataInProject.get())
+    if(convolverReady )
     {
         ///DEPRECATED
         /*
@@ -1170,10 +1197,10 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 SearchFilters(defaultFilterDir);
             }
             
-            // -> default: don't store convolver data for existing projects --->> ??????
-            _storeConfigDataInProject.set(xmlState->getIntAttribute("storeConfigDataInProject", 0));
-
-            if (xmlState->hasAttribute("configData") && _storeConfigDataInProject.get())
+            ///DEPRECATED
+            //Restoring from whole wavefile save into xml
+            /*
+            if (xmlState->hasAttribute("configData"))
             {
                 filterNameForStoring = xmlState->getStringAttribute("filterFileName");
                 
@@ -1205,55 +1232,54 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                     return;
                 }
             }
-            else if (_storeConfigDataInProject.get())
+             */
+            /// if restoring from memory got troubles try to restore from filter menu
+            //Restoring from saved locations
+            targetFilter = File(xmlState->getStringAttribute("filterFullPathName", "/IDONTEXIST")) ;
+            if(xmlState->getBoolAttribute("targetWasInMenu",false))
             {
-                /// if restoring from memory got troubles try to restore from filter menu
-                targetFilter = File(xmlState->getStringAttribute("filterFullPathName", "/IDONTEXIST")) ;
-                if(xmlState->getBoolAttribute("targetWasInMenu",false))
-                {
-                    /// find the filter index from the rebuilt list of filter files
-                    DefaultElementComparator<File> comparator;
-                    unsigned int filterIndex = filterFilesList.indexOfSorted(comparator, targetFilter);
-                    if (filterIndex != -1)
-                    {
-                        storedInChannels = xmlState->getIntAttribute("inputChannelsNumber", 0);
-                        storedGain = new float((float)xmlState->getDoubleAttribute("masterGain",9999));
-                        if (*storedGain == 9999)
-                            storedGain = nullptr;
-                        
-                        LoadFilterFromMenu(filterIndex, true);
-                        return;
-                    }
-                    filterNameToShow = targetFilter.getFileNameWithoutExtension();
-                    restoredSettings.set(true);
-                    
-                    addNewStatus("ERROR: filter not found in the library folder!");
-                    
-                    DebugPrint("ERROR: filter not found in the library folder!\n\n");
-                    return;
-                }
-                
-                /// or original forlder if filter file was taken outside the menu
-                if(targetFilter.existsAsFile())
+                /// find the filter index from the rebuilt list of filter files
+                DefaultElementComparator<File> comparator;
+                unsigned int filterIndex = filterFilesList.indexOfSorted(comparator, targetFilter);
+                if (filterIndex != -1)
                 {
                     storedInChannels = xmlState->getIntAttribute("inputChannelsNumber", 0);
                     storedGain = new float((float)xmlState->getDoubleAttribute("masterGain",9999));
                     if (*storedGain == 9999)
                         storedGain = nullptr;
                     
-                    LoadFilterFromFile(targetFilter, true);
+                    LoadFilterFromMenu(filterIndex, true);
                     return;
                 }
-
-                String debug;
-                debug << "ERROR: filter not found in the original folder!";
                 filterNameToShow = targetFilter.getFileNameWithoutExtension();
-                filterNameToShow << " (outside library)";
                 restoredSettings.set(true);
-                addNewStatus(debug);
                 
-                DebugPrint(debug << "\n\n");
+                addNewStatus("ERROR: filter not found in the library folder!");
+                
+                DebugPrint("ERROR: filter not found in the library folder!\n\n");
+                return;
             }
+            
+            /// or original forlder if filter file was taken outside the menu
+            if(targetFilter.existsAsFile())
+            {
+                storedInChannels = xmlState->getIntAttribute("inputChannelsNumber", 0);
+                storedGain = new float((float)xmlState->getDoubleAttribute("masterGain",9999));
+                if (*storedGain == 9999)
+                    storedGain = nullptr;
+                
+                LoadFilterFromFile(targetFilter, true);
+                return;
+            }
+
+            String debug;
+            debug << "ERROR: filter not found in the original folder!";
+            filterNameToShow = targetFilter.getFileNameWithoutExtension();
+            filterNameToShow << " (outside library)";
+            restoredSettings.set(true);
+            addNewStatus(debug);
+            
+            DebugPrint(debug << "\n\n");
         }
     }
 }

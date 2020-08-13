@@ -101,7 +101,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     view.filterManagingBox.filterSelector.setTooltip(view.filterManagingBox.filterSelector.getText()); //to see all the string
     
-//    view.FilterManagingBox.saveToggle.setToggleState(processor._storeConfigDataInProject.get(), dontSendNotification);
     view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
     
     String inChannels;
@@ -125,26 +124,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.gainKnob.setValue(processor.masterGain.get());
     
     view.convManagingBox.latencyValue.setText(String(processor.getLatencySamples()), sendNotification);
-    
-//    if (processor.presetType == Mcfx_convolverAudioProcessor::PresetType::conf)
-//    {
-//        view.irMatrixBox.confModeButton.setToggleState(true, dontSendNotification);
-//        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::conf;
-//        view.irMatrixBox.newInChannelsButton.setEnabled(false);
-//    }
-//    else
-//    {
-//        view.irMatrixBox.wavModeButton.setToggleState(true, dontSendNotification);
-//        view.irMatrixBox.lastState = View::IRMatrixBox::modeState::wav;
-//        if (processor.filterNameToShow.isNotEmpty())
-//            view.irMatrixBox.newInChannelsButton.setEnabled(true);
-//        view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
-//    }
-    
-    if (processor.getConvolverStatus() == Mcfx_convolverAudioProcessor::ConvolverStatus::Loaded)
-        view.filterManagingBox.reloadButton.setEnabled(true);
-    else
-        view.filterManagingBox.reloadButton.setEnabled(false);
     
     view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
     
@@ -170,6 +149,12 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         default:
             break;
     }
+    
+    if (processor.getTargetFilter().existsAsFile()
+    &&  processor.getConvolverStatus() != Mcfx_convolverAudioProcessor::ConvolverStatus::Loading)
+        view.filterManagingBox.reloadButton.setEnabled(true);
+    else
+        view.filterManagingBox.reloadButton.setEnabled(false);
     
     if (processor.newStatusText)
     {
@@ -294,14 +279,14 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
             view.filterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i));
     }
     
-//    if (processor.filterNameForStoring.isNotEmpty())
-//    {
-//        view.FilterManagingBox.filterSelector.addSeparator();
-//        view.FilterManagingBox.filterSelector.getRootMenu()->addItem(-2, String("save filter to .zip file..."), processor._readyToSaveConfiguration.get());
-//    }
+    if (processor.getTargetFilter().existsAsFile())
+    {
+        view.filterManagingBox.filterSelector.addSeparator();
+        view.filterManagingBox.filterSelector.getRootMenu()->addItem(-2, String("Export filter with metadata info..."), processor.readyToExportWavefile.get());
+    }
 
     view.filterManagingBox.filterSelector.addSeparator();
-    view.filterManagingBox.filterSelector.getRootMenu()->addItem(-1, String("open filter from file..."));
+    view.filterManagingBox.filterSelector.getRootMenu()->addItem(-1, String("Open filter from file..."));
     
     //tick the selected item (if present)
     if (tickedItem != -1)
@@ -338,32 +323,6 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
             }
         }
     }
-//    else if (buttonThatWasClicked == &(view.FilterManagingBox.saveToggle))
-//    {
-//        processor._storeConfigDataInProject = view.FilterManagingBox.saveToggle.getToggleState();
-//    }
-    /*
-    else if (buttonThatWasClicked == &(view.irMatrixBox.confModeButton))
-    {
-        if (view.irMatrixBox.confModeButton.getToggleState())
-        {
-            if (view.irMatrixBox.lastState != View::IRMatrixBox::conf)
-            {
-                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetType::conf);
-                view.irMatrixBox.lastState = View::IRMatrixBox::conf;
-//            std::cout << "conf was clicked" << std::endl;
-            }
-        }
-        else
-        {
-            if (view.irMatrixBox.lastState != View::IRMatrixBox::wav)
-            {
-                processor.changePresetType(Mcfx_convolverAudioProcessor::PresetType::wav);
-                view.irMatrixBox.lastState = View::IRMatrixBox::wav;
-//            std::cout << "conf was clicked" << std::endl;
-            }
-        }
-    }*/
     else if (buttonThatWasClicked == &(view.filterManagingBox.reloadButton))
     {
         processor.changeNumInputChannels = true;
@@ -420,6 +379,7 @@ void Mcfx_convolverAudioProcessorEditor::righClickButtonCallback(int result, Mcf
     }
 }
 
+/*
 void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
 {
     // file chooser....
@@ -453,15 +413,18 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
     }
     else if (result == -2)
     {
-//        FileChooser myChooser("Save the loaded filter as .zip file...",
-//            demoComponent->processor.lastSearchDir.getChildFile(demoComponent->processor.filterNameForStoring),"*.zip");
-//        if (myChooser.browseForFileToSave(true))
-//        {
-//            File mooseFile(myChooser.getResult());
-//            demoComponent->processor.SaveConfiguration(mooseFile);
-//
-//            demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
-//        }
+        demoComponent->chooseExportFile();
+              
+        MessageManager::callAsync([&] () {
+            if (demoComponent->exportFile.getFullPathName().isNotEmpty())
+            {
+                 ScopedLock lock(demoComponent->exportFileMutex);
+                 demoComponent->processor.exportWavefileWithMetadata(File(demoComponent->exportFile));//demoComponent->exportFile);
+                 demoComponent->processor.lastSearchDir = demoComponent->exportFile.getParentDirectory();
+             
+            }
+        });
+        
     }
     else // load filter from menu based on chosen index
     {
@@ -469,15 +432,85 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
         demoComponent->processor.LoadFilterFromMenu(result - 1);
     }
 }
+*/
+
+void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
+{
+    // file chooser....
+    if (result == 0)
+    {
+        // do nothing
+    }
+    else if (result == -1)
+    {
+        String extension = "*.wav";
+        
+        FileChooser myChooser ("Please select the filter file to load...",
+                               processor.lastSearchDir, //old version: ourProcessor->lastSearchDir,
+                               extension);
+        if (myChooser.browseForFileToOpen())
+        {
+            File mooseFile (myChooser.getResult());
+            processor.LoadFilterFromFile(mooseFile);
+            processor.lastSearchDir = mooseFile.getParentDirectory();
+        }
+        else
+        {
+            if(processor.filterNameToShow.isEmpty())
+                view.filterManagingBox.filterSelector.setText("",dontSendNotification);
+            else
+            {
+                String previousName = processor.filterNameToShow;
+                view.filterManagingBox.filterSelector.setText(previousName, dontSendNotification);
+            }
+        }
+    }
+    else if (result == -2)
+    {
+        FileChooser myChooser("Export filter as .wav file...",
+                                  processor.lastSearchDir.getChildFile(processor.filterNameForStoring),
+                                  "*.wav"
+                                  );
+        if (myChooser.browseForFileToSave(true))
+        {
+            File mooseFile =  myChooser.getResult();
+            processor.exportWavefileAsync(mooseFile);
+            processor.lastSearchDir = mooseFile.getParentDirectory();
+        }
+    }
+    else // load filter from menu based on chosen index
+    {
+        File empty;
+        processor.LoadFilterFromMenu(result - 1);
+    }
+}
+
+/*
+void Mcfx_convolverAudioProcessorEditor::chooseExportFile()
+{
+    ScopedLock lock(exportFileMutex);
+    exportFile = File();
+    FileChooser myChooser("Export filter as .wav file...",
+                              processor.lastSearchDir.getChildFile(processor.filterNameForStoring),
+                              "*.wav"
+                              );
+    if (myChooser.browseForFileToSave(true))
+    {
+        exportFile = myChooser.getResult();
+    }
+}
+*/
 
 void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
     if (comboBoxThatHasChanged == &view.filterManagingBox.filterSelector)
     {
 //        MessageManager::callAsync([&] () {
-//            menuItemChosenCallback(view.FilterManagingBox.filterSelector.getSelectedId(), this);
+//            menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId(), this);
+//            menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId());
 //        });
-        menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId(), this);
+//        menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId(), this);
+        menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId());
     }
     else if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
     {
