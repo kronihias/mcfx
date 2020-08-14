@@ -191,7 +191,7 @@ public:
         
         enum InvalidType {notFeasible, notMultiple};
         void invalidState(InvalidType type);
-        void resetState();
+        void resetState(bool editorFocus=true);
     private:
         void paint (Graphics& g);
         void resized();

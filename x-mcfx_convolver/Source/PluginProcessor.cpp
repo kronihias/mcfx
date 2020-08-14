@@ -299,7 +299,6 @@ void Mcfx_convolverAudioProcessor::run()
     if (threadTask == ThreadTask::loading)
     {
         DebugPrint("Loading Filter...\n\n");
-        addNewStatus("Loading target filter...");
 
         setConvolverStatus(ConvolverStatus::Loading);
         sendChangeMessage();
@@ -663,8 +662,6 @@ void Mcfx_convolverAudioProcessor::unloadConvolver()
     debug.clear();
     debug << "Convolver settings unloaded" << "\n\n";
     DebugPrint(debug); // clear debug window
-    
-    addNewStatus("Convolver settings unloaded");
 }
 
 void Mcfx_convolverAudioProcessor::getInChannels(int waveFileLength)
@@ -1051,35 +1048,19 @@ String Mcfx_convolverAudioProcessor::getDebugString()
 }
 
 //-----------------------------------------------------------------
-void Mcfx_convolverAudioProcessor::timerCallback()
-{
-    if (!statusTextList.isEmpty())
-    {
-        newStatusText = true;
-        sendChangeMessage();
-        startTimer(250);
-    }
-    else
-        Timer::stopTimer();
-}
-
 String Mcfx_convolverAudioProcessor::getStatusText()
 {
-    ScopedLock lock(statusTextMutex);
-    return statusTextList.removeAndReturn(0);
+    return statusText;
 }
 
 void Mcfx_convolverAudioProcessor::addNewStatus(String newStatus)
 {
-    ScopedLock lock(statusTextMutex);
-    statusTextList.add(newStatus);
+    statusText.clear();
+    statusText = newStatus;
     
-    if (!Timer::isTimerRunning())
-    {
-        newStatusText = true;
-        sendChangeMessage();
-        startTimer(250);
-    }
+    newStatusText = true;
+    sendChangeMessage();
+    wait(125);
 }
 //-----------------------------------------------------------------
 File Mcfx_convolverAudioProcessor::getTargetFilter()

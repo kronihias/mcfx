@@ -37,8 +37,7 @@
 */
 class Mcfx_convolverAudioProcessor  :   public AudioProcessor,
                                         public ChangeBroadcaster,
-                                        public Thread,
-                                        public Timer
+                                        public Thread
 {
 public:
     //==============================================================================
@@ -155,9 +154,7 @@ private:
     CriticalSection _DebugTextMutex;
     void            DebugPrint(String debugText, bool reset = false);
     
-    CriticalSection statusTextMutex;
-    Array<String>   statusTextList;
-    void            timerCallback();
+    String          statusText;
     void            addNewStatus(String newStatus);
     
     enum            ThreadTask {loading, exporting};

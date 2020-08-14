@@ -80,8 +80,8 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
 {
     view.convManagingBox.skippedCyclesValue.setText(String(processor.getSkippedCyclesCount()), sendNotification);
     
-    view.debugText.setText(processor.getDebugString(), true);   //notify for what purpose?
-    view.debugText.moveCaretToEnd();
+//    view.debugText.setText(processor.getDebugString(), true);   //notify for what purpose?
+//    view.debugText.moveCaretToEnd();
 }
 
 void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
@@ -162,7 +162,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     switch (processor.numInputsStatus)
     {
         case Mcfx_convolverAudioProcessor::NumInputsStatus::missing:
-            
             view.inputChannelDialog.resetState();
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::notFeasible:
@@ -174,15 +173,16 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
             view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple);
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::requested:
-            view.inputChannelDialog.resetState();
+
+            view.inputChannelDialog.resetState(false);
             if(processor.tempNumInputs == -1)
                 view.inputChannelDialog.diagonalToggle.setToggleState(true, sendNotification);
             else
             {
-                view.inputChannelDialog.textEditor.setText((String)processor.tempNumInputs);
-                view.inputChannelDialog.textEditor.grabKeyboardFocus();
+                view.inputChannelDialog.textEditor.setText((String)processor.tempNumInputs,dontSendNotification);
+                view.inputChannelDialog.grabKeyboardFocus();
+                view.inputChannelDialog.textEditor.selectAll();
             }
-            
             break;
         
         default:

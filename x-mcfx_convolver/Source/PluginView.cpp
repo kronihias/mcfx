@@ -316,7 +316,7 @@ View::ChangePathBox::ChangePathBox()
     pathText.setColour(Label::textColourId, Colours::white);
     addAndMakeVisible (pathText);
     
-    pathButton.setTooltip ("choose another filter libray folder");
+    pathButton.setTooltip ("choose another filter libray folder\n(Right click to change generic path)");
     pathButton.setButtonText ("...");
     pathButton.setColour (TextButton::buttonColourId, Colours::white);
     pathButton.setColour (TextButton::buttonOnColourId, Colours::blue);
@@ -772,7 +772,7 @@ rectSize (260,200)
     diagonalToggle.setTooltip(TRANS("Check if the multipack filter matrix is diagonal"));
     diagonalToggle.setToggleState(false, dontSendNotification);
     diagonalToggle.setColour(ToggleButton::textColourId, Colours::white);
-    diagonalToggle.onStateChange = [&]{
+    diagonalToggle.onClick = [&]{
         if ( diagonalToggle.getToggleState() )
         {
             textEditor.setEnabled(false);
@@ -787,16 +787,10 @@ rectSize (260,200)
             };
     addAndMakeVisible(diagonalToggle);
     
-//    saveIntoMetaToggle.setButtonText(TRANS("Save value into wavefile metadata"));
-//    saveIntoMetaToggle.setTooltip(TRANS("The value will be stored within the wavefile"));
-//    saveIntoMetaToggle.setToggleState(false, dontSendNotification);
-//    saveIntoMetaToggle.setColour(ToggleButton::textColourId, Colours::white);
-//    addAndMakeVisible(saveIntoMetaToggle);
-    
     OKButton.setColour (TextButton::buttonColourId, Colours::white);
     OKButton.setColour (TextButton::buttonOnColourId, Colours::blue);
     OKButton.addShortcut(KeyPress(KeyPress::returnKey));
-    
+//    OKButton.onClick = [&] {OKButton.grabKeyboardFocus();};
     OKButton.setButtonText ("OK");
     addAndMakeVisible(OKButton);
 }
@@ -905,19 +899,18 @@ void View::InputChannelDialog::invalidState(InvalidType type)
     message.setColour(Label::textColourId, Colours::lightsalmon);
 }
 
-void View::InputChannelDialog::resetState()
+void View::InputChannelDialog::resetState(bool editorFocus)
 {
     setVisible(true);
     
-    message.setText("Number of input channels is missing, \n"
-    "please enter it manually:", dontSendNotification);
+    message.setText("Number of input channels is missing, \nplease enter it manually:", dontSendNotification);
     message.setColour(Label::textColourId, Colours::white);
     
-    textEditor.setText("");
+    textEditor.setText("",dontSendNotification);
 
     if(diagonalToggle.getToggleState())
         diagonalToggle.setToggleState(false, sendNotification);
-    else
+    else if (editorFocus)
         textEditor.grabKeyboardFocus();
 
 }
