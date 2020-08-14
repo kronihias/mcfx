@@ -162,27 +162,27 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     switch (processor.numInputsStatus)
     {
         case Mcfx_convolverAudioProcessor::NumInputsStatus::missing:
-            view.inputChannelDialog.setVisible(true);
-            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            
+            view.inputChannelDialog.resetState();
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::notFeasible:
-            view.inputChannelDialog.setVisible(true);
-            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible) ;
-            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            view.inputChannelDialog.resetState();
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible);
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::notMultiple:
-            view.inputChannelDialog.setVisible(true);
-            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple) ;
-            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            view.inputChannelDialog.resetState();
+            view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple);
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::requested:
-            view.inputChannelDialog.setVisible(true);
+            view.inputChannelDialog.resetState();
             if(processor.tempNumInputs == -1)
                 view.inputChannelDialog.diagonalToggle.setToggleState(true, sendNotification);
             else
+            {
                 view.inputChannelDialog.textEditor.setText((String)processor.tempNumInputs);
-                
-            view.inputChannelDialog.textEditor.grabKeyboardFocus();
+                view.inputChannelDialog.textEditor.grabKeyboardFocus();
+            }
+            
             break;
         
         default:
@@ -328,16 +328,11 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
         if (view.inputChannelDialog.diagonalToggle.getToggleState())
-        {
             processor.tempNumInputs = -1;
-            ///reset input dialog with toggle uncheck
-            view.inputChannelDialog.resetState(true);
-        }
         else
-        {
             processor.tempNumInputs = getInputChannelFromDialog();
-            view.inputChannelDialog.resetState();
-        }
+        
+        view.inputChannelDialog.setVisible(false);
         processor.notify();
     }
     /*

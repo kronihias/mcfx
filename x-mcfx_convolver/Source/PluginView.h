@@ -191,7 +191,7 @@ public:
         
         enum InvalidType {notFeasible, notMultiple};
         void invalidState(InvalidType type);
-        void resetState(bool toggleChecked=false);
+        void resetState();
     private:
         void paint (Graphics& g);
         void resized();

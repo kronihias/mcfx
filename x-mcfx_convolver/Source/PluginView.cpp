@@ -759,12 +759,6 @@ rectSize (260,200)
                     "please enter it manually:", dontSendNotification);
     addAndMakeVisible(message);
     
-    invalidMessage.setFont(Font (12.4000f, Font::plain));
-    invalidMessage.setColour(Label::textColourId, Colours::lightsalmon);
-    invalidMessage.setJustificationType (Justification::bottomLeft);
-    addAndMakeVisible(invalidMessage);
-    invalidMessage.setVisible(false);
-    
     textEditor.setColour(TextEditor::textColourId, Colours::black);
     textEditor.setJustification(Justification::left);
     textEditor.setCaretVisible(true);
@@ -837,6 +831,8 @@ void View::InputChannelDialog::resized()
     int editorHeight = 18;
     int separator = 6;
     
+    int centerHeight = 120;
+    
     rectSize.setX((getWidth()/2)-rectSize.getWidth()/2);
     rectSize.setY((getHeight()/2)-rectSize.getHeight()/2);
     
@@ -850,7 +846,7 @@ void View::InputChannelDialog::resized()
     flexBox.justifyContent = FlexBox::JustifyContent::spaceAround;
     flexBox.alignItems = FlexBox::AlignItems::center;
     
-    FlexItem text (areaToDraw.proportionOfWidth(0.86f) , height*2, message);
+    FlexItem text (areaToDraw.proportionOfWidth(0.90f) , height*2, message);
     text.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     FlexItem editor (areaToDraw.proportionOfWidth(0.60f), editorHeight, textEditor);
@@ -860,7 +856,7 @@ void View::InputChannelDialog::resized()
     toggle.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     flexBox.items.addArray({ text, editor, toggle });
-    flexBox.performLayout(areaToDraw.removeFromTop(height*2+editorHeight*2+separator*4).toFloat());
+    flexBox.performLayout(areaToDraw.removeFromTop(centerHeight).toFloat());
     
     /*
     Rectangle<int> messageArea = areaToDraw.removeFromTop(height*2);
@@ -905,23 +901,23 @@ void View::InputChannelDialog::invalidState(InvalidType type)
         default:
             break;
     }
-    invalidMessage.setText(text, dontSendNotification);
-    message.setVisible(false);
-    invalidMessage.setVisible(true);
+    message.setText(text, dontSendNotification);
+    message.setColour(Label::textColourId, Colours::lightsalmon);
 }
 
-void View::InputChannelDialog::resetState(bool toggleChecked)
+void View::InputChannelDialog::resetState()
 {
-    message.setVisible(true);
-    invalidMessage.setVisible(false);
+    setVisible(true);
+    
+    message.setText("Number of input channels is missing, \n"
+    "please enter it manually:", dontSendNotification);
+    message.setColour(Label::textColourId, Colours::white);
+    
     textEditor.setText("");
-    
-    if(toggleChecked)
-//        diagonalToggle.triggerClick();
+
+    if(diagonalToggle.getToggleState())
         diagonalToggle.setToggleState(false, sendNotification);
-    
-//    if(!textEditor.hasKeyboardFocus(true))
-        grabKeyboardFocus();
-    
-    setVisible(false);
+    else
+        textEditor.grabKeyboardFocus();
+
 }
