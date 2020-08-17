@@ -111,7 +111,7 @@ newStatusText(false)
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
 {
     if(isThreadRunning())
-        stopThread(10);
+        stopThread(500);
 #ifdef USE_ZITA_CONVOLVER
     zita_conv.stop_process();
     zita_conv.cleanup();
