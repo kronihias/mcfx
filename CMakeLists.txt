@@ -38,8 +38,8 @@ set (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
 #choices at compile time
 # set(NUM_CHANNELS 64 CACHE STRING "number of channels for each plugin")
 
-set(NUM_IN_CHANNELS 32 CACHE STRING "number of input channels for each plugin")
-set(NUM_OUT_CHANNELS 32 CACHE STRING "number of output channels for each plugin")
+set(NUM_IN_CHANNELS 64 CACHE STRING "number of input channels for each plugin")
+set(NUM_OUT_CHANNELS 64 CACHE STRING "number of output channels for each plugin")
 
 set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 
