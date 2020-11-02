@@ -241,20 +241,20 @@ void Ambix_meterAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasM
     if (sliderThatWasMoved == &sld_hold)
     {
         //[UserSliderCode_sld_hold] -- add your slider handling code here..
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::HoldParam, (float)sld_hold.getValue()/5.f);
+        ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::HoldParam, (float)sld_hold.getValue()/5.f);
         
         //[/UserSliderCode_sld_hold]
     }
     else if (sliderThatWasMoved == &sld_fall)
     {
         //[UserSliderCode_sld_fall] -- add your slider handling code here..
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::FallParam, (float)sld_fall.getValue()/99.f);
+        ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::FallParam, (float)sld_fall.getValue()/99.f);
         
         //[/UserSliderCode_sld_fall]
     }
     else if (sliderThatWasMoved == &sld_offset)
     {
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::OffsetParam, (float)(sld_offset.getValue()+36.f)/54.f);
+        ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::OffsetParam, (float)(sld_offset.getValue()+36.f)/54.f);
     }
     
     //[UsersliderValueChanged_Post]
@@ -267,7 +267,7 @@ void Ambix_meterAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicke
     
     if (buttonThatWasClicked == &tgl_pkhold)
     {
-        ourProcessor->setParameter(Ambix_meterAudioProcessor::PkHoldParam, (float)tgl_pkhold.getToggleState());
+        ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::PkHoldParam, (float)tgl_pkhold.getToggleState());
         
     }
     

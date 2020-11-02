@@ -726,6 +726,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
       */
     }
 
+    setParameterNotifyingHost(0, getParameter(0)); // this is a hack to make some hosts save the plugin state!
     sendChangeMessage(); // notify editor again
 }
 

@@ -341,31 +341,31 @@ void FilterGraph::buttonClicked (Button* buttonThatWasClicked)
     
     switch (buttonThatWasClicked->getName().getIntValue()) {
         case 0:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::LCfreqParam, freq2param(f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LCfreqParam, freq2param(f));
             break;
             
         case 1:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::LSfreqParam, freq2param(f));
-            myprocessor_->setParameter(LowhighpassAudioProcessor::LSGainParam, db2param(g));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LSfreqParam, freq2param(f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LSGainParam, db2param(g));
             break;
             
         case 2:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF1freqParam, freq2param(f));
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF1GainParam, db2param(g));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1freqParam, freq2param(f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1GainParam, db2param(g));
             break;
             
         case 3:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF2freqParam, freq2param(f));
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF2GainParam, db2param(g));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2freqParam, freq2param(f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2GainParam, db2param(g));
             break;
             
         case 4:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::HSfreqParam, freq2param(f));
-            myprocessor_->setParameter(LowhighpassAudioProcessor::HSGainParam, db2param(g));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HSfreqParam, freq2param(f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HSGainParam, db2param(g));
             break;
             
         case 5:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::HCfreqParam, freq2param(f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HCfreqParam, freq2param(f));
             break;
             
         default:
@@ -392,19 +392,19 @@ void FilterGraph::mouseWheelMove (const MouseEvent &event, const MouseWheelDetai
             break;
             
         case 1:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::LSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::LSQParam)+wheel.deltaY*0.5f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::LSQParam)+wheel.deltaY*0.5f));
             break;
             
         case 2:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF1QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF1QParam)+wheel.deltaY*0.5f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF1QParam)+wheel.deltaY*0.5f));
             break;
             
         case 3:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::PF2QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF2QParam)+wheel.deltaY*0.5f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF2QParam)+wheel.deltaY*0.5f));
             break;
             
         case 4:
-            myprocessor_->setParameter(LowhighpassAudioProcessor::HSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::HSQParam)+wheel.deltaY*0.5f));
+            myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::HSQParam)+wheel.deltaY*0.5f));
             break;
             
         default:

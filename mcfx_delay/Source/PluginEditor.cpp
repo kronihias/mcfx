@@ -163,11 +163,11 @@ void Mcfx_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasMo
 
     if (sliderThatWasMoved == &sld_del_ms)
     {
-        ourProcessor->setParameter(0, sld_del_ms.getValue()/1000/MAX_DELAYTIME_S);
+        ourProcessor->setParameterNotifyingHost(0, sld_del_ms.getValue()/1000/MAX_DELAYTIME_S);
     }
     else if (sliderThatWasMoved == &sld_del_smpl)
     {
-        ourProcessor->setParameter(0, (double)sld_del_smpl.getValue()/ourProcessor->_samplerate/(double)MAX_DELAYTIME_S);
+        ourProcessor->setParameterNotifyingHost(0, (double)sld_del_smpl.getValue()/ourProcessor->_samplerate/(double)MAX_DELAYTIME_S);
     }
 
     //[UsersliderValueChanged_Post]
