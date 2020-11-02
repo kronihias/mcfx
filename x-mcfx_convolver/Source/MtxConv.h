@@ -86,10 +86,10 @@ private:
     
     // complex fft data
 #if SPLIT_COMPLEX
-    float               **a_re_; // N/2+1
-    float               **a_im_; // N/2+1
+    float               **a_re_; // N/2+1 -> (M/2+1 = N+1, with M length of fft sequence)
+    float               **a_im_; // N/2+1 -> (M/2+1 = N+1)
 #else
-    fftwf_complex       **a_c_; // N+1 -> interleaved complex data
+    fftwf_complex       **a_c_; // N+1 -> interleaved complex data (M+1 with M length of fft)
 #endif
     
 };
@@ -309,7 +309,7 @@ private:
     WaitableEvent       waitnewdata_;       // this will signal the threads that new work is here!
     WaitableEvent       waitprocessing_;    // this will signal work is done.
 
-    float               *fft_t_;             // time data for fft/ifft -> 2*N
+    float               *fft_t_;             // time data for fft/ifft -> 2*N -> (M = 2*N, inNode will split complex numbers in M/2)
     float               fft_norm_;           // normalization for fft
     
 #if SPLIT_COMPLEX
@@ -323,7 +323,7 @@ private:
     fftwf_plan          fftwf_plan_r2c_;     // FFTWF forward plan
     fftwf_plan          fftwf_plan_c2r_;     // FFTWF inverse plan
     float               *fftwf_t_data_;      // FFTWF buffer for time domain signal (2*N)
-    fftwf_complex       *fft_c_;             // FFTWF buffer for complex signal (N+1)
+    fftwf_complex        *fft_c_;             // FFTWF buffer for complex signal (N+1)
 #endif
     
     OwnedArray<InNode> innodes_;            // holds input nodes

@@ -1,6 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
+        
         {
             "name": "(gdb) Launch",
             "type": "cppdbg",
@@ -36,7 +37,7 @@
             "name": "(lldb) Launch",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/_bin/standalone/mcfx_convolver_standalone36.app/Contents/MacOS/mcfx_convolver_standalone36",
+            "program": "${workspaceFolder}/build/x-mcfx_convolver/x-mcfx_convolver_64x64_artefacts/Release/Standalone/X-MCFX_convolver_64x64/Contents/MacOS/X-MCFX_convolver_64x64",
             "args": [],
             "stopAtEntry": true,
             "cwd": "${workspaceFolder}",

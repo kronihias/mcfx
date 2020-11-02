@@ -3,9 +3,7 @@
         {
             "name": "Mac",
             "includePath": [
-                "${workspaceFolder}/**",
-                "/usr/local/opt/openblas/include",
-                "${workspaceFolder}/build/mcfx_convolver/mcfx_convolver36_artefacts/JuceLibraryCode"
+                "${workspaceFolder}/**"
             ],
             "defines": [],
             "macFrameworkPath": [

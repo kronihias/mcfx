@@ -18,7 +18,7 @@
 
 #include "MtxConv.h"
 
-// #define DEBUG_COUT 1
+//#define DEBUG_COUT 1
 
 MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
                                  outbuf_(1, 256),
@@ -38,7 +38,9 @@ MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
 	File file;
 	String filename("MtxConvMaster.txt");
 	file = file.getSpecialLocation(File::SpecialLocationType::tempDirectory).getChildFile(filename);
-	debug_out_ = new FileOutputStream(file);
+    std::cout << file.getFullPathName() << std::endl;
+//	debug_out_ = new FileOutputStream(file);
+    debug_out_.reset(new FileOutputStream(file));
 #endif
 
 #if !SPLIT_COMPLEX
@@ -208,32 +210,27 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
     
     // gardener scheme -> n, n, 2n 2n, 4n 4n, 8n 8n, ....
     
-    // try bit different...
+    // try bit different... (n, n, n, n, 2n 2n, 2n 2n, 4n 4n, 4n 4n, .... less efficient!! restored gardner scheme)
     
-    int partsize = minpart_;
-    numpartitions_=0;
-    int priority = 0;
-    int offset = 0;
+    int partsize  = minpart_;
+    numpartitions_ = 0;
+    int priority  = 0;
+    int offset    = 0;
     
     
     while (maxsize > 0) {
         
-        int numpartitions = 4;
+        int numpartitions = 2;
         
         numpartitions_++;
         partitions_.add(new MtxConvSlave());
         
-        
+        //check if max part size is reached
         if (partsize >= maxpart_)
-        {
-            // max partition size reached -> put rest into this partition...
+            // max partition size reached -> put rest of the filter into partitions with this size...
             numpartitions = (int)ceilf((float)maxsize/(float)partsize);
-            
-        } else {
-            
+        else
             numpartitions = jmin(numpartitions, (int)ceilf((float)maxsize/(float)partsize));
-            
-        }
         
         partitions_.getLast()->Configure(partsize, numpartitions, offset, priority, &inbuf_, &outbuf_);
         
@@ -270,7 +267,8 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
         outoffset_ += outbufsize_;
 
     // set the actual buffersize and compute correct offsets!
-    for (int i=0; i < numpartitions_; i++) {
+    for (int i=0; i < numpartitions_; i++)
+    {
         MtxConvSlave *partition = partitions_.getUnchecked(i);
         partition->SetBufsize(inbufsize_, outbufsize_, blocksize_);
     }
@@ -427,7 +425,7 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
 #endif
     
     waitnewdata_.reset();
-    waitprocessing_.signal();
+//    waitprocessing_.signal();
     
 #ifdef DEBUG_COUT
 	// open debug txt
@@ -440,7 +438,8 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
 		filename << priority;
 		filename << ".txt";
 		file = file.getSpecialLocation(File::SpecialLocationType::tempDirectory).getChildFile(filename);
-		debug_out_ = new FileOutputStream(file);
+//		debug_out_ = new FileOutputStream(file);
+        debug_out_.reset(new FileOutputStream(file));
 	}
 #endif
 
@@ -653,9 +652,9 @@ void MtxConvSlave::run()
 				return;
 			
 			for (int i = 1; i < numpartitions_; i++)
-			{
+            {
 				Process(i);
-			}
+            }
             
             waitprocessing_.signal(); // signal callback we are done in case he is waiting
         }
@@ -709,16 +708,16 @@ void MtxConvSlave::TransformInput(bool skip)
 		part_idx_ = 0;
 
 #ifdef DEBUG_COUT
-	if (finished_part_.get() < numpartitions_)
-  {
-    String txt = "Did not finish all partitions\n";
-    WriteLog(txt);
-  }
-	else
-  {
-    String txt = "Finished all partitions\n";
-    WriteLog(txt);
-  }
+    if (finished_part_.get() < numpartitions_)
+    {
+        String txt = "Did not finish all partitions\n";
+        WriteLog(txt);
+    }
+    else
+    {
+        String txt = "Finished all partitions\n";
+        WriteLog(txt);
+    }
 #endif
 
     // reset the finished counter
@@ -753,10 +752,28 @@ void MtxConvSlave::TransformInput(bool skip)
 
             if (smplstoread_start)
                 FloatVectorOperations::copy(fft_t_ + smplstoread_end, inbuf_->getReadPointer(chan, 0), smplstoread_start);
+                
 
-
-            // std::cout << "RMS IN_FFT max: " << FloatVectorOperations::findMaximum(fft_t_, partitionsize_) << " PartIdx: " << part_idx_ << std::endl;
-
+//            std::cout << "RMS IN_FFT max: " << FloatVectorOperations::findMaximum(fft_t_, partitionsize_) << " PartIdx: " << part_idx_ << std::endl;
+            
+            /*
+            std::cout << "CH: " << i << " | partsize: " << partitionsize_ << " | part_idx: " << part_idx_<< " | fft_t_: ";
+            for (int k=0;k<(2*partitionsize_);k++)
+            {
+                 std::cout << std::endl;
+                 std::cout << "bit: " << k << " | " << *(fft_t_+k) ;
+            }
+            std::cout << std::endl;
+            
+            const DSPComplex *test = reinterpret_cast<const COMPLEX*>(fft_t_);
+            for (int k=0;k<(partitionsize_);k++)
+            {
+                std::cout << std::endl;
+                std::cout << "ref: " << k << " | real: " << test[k].real << "| imag: " << test[k].imag << std::endl;
+            }
+            std::cout << std::endl;
+            */
+             
             // do the fft
 #if SPLIT_COMPLEX
             DSPSplitComplex splitcomplex;
@@ -770,7 +787,6 @@ void MtxConvSlave::TransformInput(bool skip)
             innode->a_re_[part_idx_][partitionsize_] = innode->a_im_[part_idx_][0];
             innode->a_im_[part_idx_][0] = 0.0f;
             // fft_im_[partitionsize_] = 0.0f; // not necessary-> we wont use this value anyway
-
 
 #else
             fftwf_execute_dft_r2c(fftwf_plan_r2c_, fft_t_, innode->a_c_[part_idx_]);
@@ -906,7 +922,6 @@ void MtxConvSlave::WriteToOutbuf(int numsamples, bool skip)
 	outnodeoffset_ += numsamples;
 }
 
-
 void MtxConvSlave::Process(int filt_part_idx)
 {
     
@@ -943,7 +958,7 @@ void MtxConvSlave::Process(int filt_part_idx)
 			if (filt_part_idx < filternode->numpartitions_)
 			{
                     
-	#if SPLIT_COMPLEX
+        #if SPLIT_COMPLEX
 				float *a_re = filternode->innode_->a_re_[part_idx_];
 				float *a_im = filternode->innode_->a_im_[part_idx_];
                     
@@ -978,7 +993,7 @@ void MtxConvSlave::Process(int filt_part_idx)
 				// handle last bin separately
 				c_re[partitionsize_] += a_re[partitionsize_] * b_re[partitionsize_];
 				// c_im[partitionsize_] = 0; // should be zero anyway
-#else
+        #else
 				// sse 3 from http://yangkunlun.blogspot.de/2011/09/fast-complex-multiply-with-sse.html
                     
 				float *A = (float *) filternode->innode_->a_c_[part_idx_];
@@ -1036,7 +1051,8 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
     if (numnewinsamples_ >= partitionsize_)
     {
         if (forcesync)
-            waitprocessing_.wait(1000); // maximum wait for 1 seconds if force sync... this is a long time anyway...
+            // first time triggered from slave configuration -> no wait at all
+            waitprocessing_.wait(1000);  // maximum wait for 1 seconds if force sync... this is a long time anyway...
         //else
         //    waitprocessing_.wait(1); // should we try to wait in realtime mode as well?
 
@@ -1051,7 +1067,6 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
         {
             if (priority_ == 0) // highest priority has to deliver immediateley
             {
-
                 // first check wheter we have to skip a cycle
                 while (skip_cycles_.get() > 0)
                 {
@@ -1073,7 +1088,6 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
                 waitnewdata_.signal();
 
                 TransformOutput(false);
-
                 WriteToOutbuf(partitionsize_, false); // should i do something different here if skipped??!!
             }
             else // lower priority has some time for computations...

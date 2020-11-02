@@ -96,7 +96,7 @@ juce_add_plugin(${SUBPROJECT_NAME}
 	VST3_CATEGORIES				tools
 	#UNITY_COPY_DIR			    "${SRC_DIR}/WinSetup/ToInstall"
 	#VST_COPY_DIR                "${SRC_DIR}/WinSetup/ToInstall"
-
+	MICROPHONE_PERMISSION_ENABLED TRUE
 )
 
 set(JUCE_COPY_PLUGIN_AFTER_BUILD TRUE)
