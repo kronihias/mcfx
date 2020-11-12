@@ -1,45 +1,42 @@
 /*
   ==============================================================================
 
-   This file is part of the juce_core module of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   This file is part of the JUCE library.
+   Copyright (c) 2020 - Raw Material Software Limited
 
-   Permission to use, copy, modify, and/or distribute this software for any purpose with
-   or without fee is hereby granted, provided that the above copyright notice and this
-   permission notice appear in all copies.
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD
-   TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN
-   NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL
-   DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER
-   IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
-   CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   ------------------------------------------------------------------------------
-
-   NOTE! This permissive ISC license applies ONLY to files within the juce_core module!
-   All other JUCE modules are covered by a dual GPL/commercial license, so if you are
-   using any other modules, be sure to check that you also comply with their license.
-
-   For more details, visit www.juce.com
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
-#ifndef JUCE_WEBINPUTSTREAM_H_INCLUDED
-#define JUCE_WEBINPUTSTREAM_H_INCLUDED
+namespace juce
+{
 
 //==============================================================================
 /**
     An InputStream which can be used to read from a given url.
+
+    @tags{Core}
 */
 class JUCE_API WebInputStream : public InputStream
 {
  public:
+    /** Used to receive callbacks for data send progress */
     class JUCE_API Listener
     {
     public:
-        virtual ~Listener() {}
+        virtual ~Listener() = default;
 
         virtual bool postDataSendProgress (WebInputStream& /*request*/, int /*bytesSent*/, int /*totalBytes*/)    { return true; }
     };
@@ -48,12 +45,12 @@ class JUCE_API WebInputStream : public InputStream
 
         @param url      The url that should be retrieved. This parameter may also contain
                         post data and/or parameters.
-        @param usePost  Specifies wheather a GET or a POST command should be used. This
+        @param usePost  Specifies whether a GET or a POST command should be used. This
                         parameter will also influence the way parameters are encoded.
     */
     WebInputStream (const URL& url, const bool usePost);
 
-    ~WebInputStream();
+    ~WebInputStream() override;
 
 
     /** Add extra headers to http request
@@ -91,10 +88,9 @@ class JUCE_API WebInputStream : public InputStream
 
         Returns a reference to itself so that several methods can be chained.
 
-        @param numRedirectsToFollow specifies the number of redirects that will
-                                    be followed before returning a response
-                                    (ignored for Android which follows up to 5
-                                    redirects)
+        @param numRedirects specifies the number of redirects that will be followed
+                            before returning a response (ignored for Android which
+                            follows up to 5 redirects)
     */
     WebInputStream& withNumRedirectsToFollow (int numRedirects);
 
@@ -105,7 +101,7 @@ class JUCE_API WebInputStream : public InputStream
 
         If getResponseHeaders is called without an established connection, then
         getResponseHeaders will call connect internally and block until connect
-        returns - either due to a succesful connection or a connection
+        returns - either due to a successful connection or a connection
         error.
 
         @see connect
@@ -116,7 +112,7 @@ class JUCE_API WebInputStream : public InputStream
 
         If getStatusCode is called without an established connection, then
         getStatusCode will call connect internally and block until connect
-        returns - either due to a succesful connection or a connection
+        returns - either due to a successful connection or a connection
         error.
 
         @see connect
@@ -130,7 +126,7 @@ class JUCE_API WebInputStream : public InputStream
         an error has occurred.
 
         Note that most methods will call connect internally if they are called without
-        an established connection. Therefore, it is not necessary to explicitely
+        an established connection. Therefore, it is not necessary to explicitly
         call connect unless you would like to use a custom listener.
 
         After a successful call to connect, getResponseHeaders, getTotalLength and
@@ -143,10 +139,10 @@ class JUCE_API WebInputStream : public InputStream
     */
     bool connect (Listener* listener);
 
-    /** Returns true if there was an error during the connection attempt */
+    /** Returns true if there was an error during the connection attempt. */
     bool isError() const;
 
-    /** Will cancel a blocking read. */
+    /** Will cancel a blocking read and prevent any subsequent connection attempts. */
     void cancel();
 
     //==============================================================================
@@ -157,7 +153,7 @@ class JUCE_API WebInputStream : public InputStream
 
         If getTotalLength is called without an established connection, then
         getTotalLength will call connect internally and block until connect
-        returns - either due to a succesful connection or a connection
+        returns - either due to a successful connection or a connection
         error.
 
         If the size of the stream isn't actually known, this will return -1.
@@ -179,7 +175,7 @@ class JUCE_API WebInputStream : public InputStream
         @returns    the actual number of bytes that were read, which may be less than
                     maxBytesToRead if the stream is exhausted before it gets that far
     */
-    int read (void* buffer, int bytesToRead) override;
+    int read (void* destBuffer, int maxBytesToRead) override;
 
     /** Returns true if the stream has no more data to read. */
     bool isExhausted() override;
@@ -194,10 +190,10 @@ class JUCE_API WebInputStream : public InputStream
         The position is an absolute number of bytes from the stream's start.
 
         For a WebInputStream, this method will fail if wantedPos is smaller
-        than the curent position. If wantedPos is greater than the current
+        than the current position. If wantedPos is greater than the current
         position, then calling setPosition is the same as calling read, i.e.
         the skipped data will still be downloaded, although skipped bytes will
-        be discarded immedietely.
+        be discarded immediately.
 
         @returns  true if the stream manages to reposition itself correctly
         @see getPosition
@@ -217,4 +213,4 @@ class JUCE_API WebInputStream : public InputStream
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (WebInputStream)
 };
 
-#endif // JUCE_WEBINPUTSTREAM_H_INCLUDED
+} // namespace juce

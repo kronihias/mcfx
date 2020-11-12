@@ -2,38 +2,42 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2020 - Raw Material Software Limited
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 6 End-User License
+   Agreement and JUCE Privacy Policy (both effective as of the 16th June 2020).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-6-licence
+   Privacy Policy: www.juce.com/juce-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
+
+namespace juce
+{
 
 struct FlexBoxLayoutCalculation
 {
     using Coord = double;
 
-    FlexBoxLayoutCalculation (const FlexBox& fb, Coord w, Coord h)
+    FlexBoxLayoutCalculation (FlexBox& fb, Coord w, Coord h)
        : owner (fb), parentWidth (w), parentHeight (h), numItems (owner.items.size()),
          isRowDirection (fb.flexDirection == FlexBox::Direction::row
-                          || fb.flexDirection == FlexBox::Direction::rowReverse),
+                      || fb.flexDirection == FlexBox::Direction::rowReverse),
          containerLineLength (isRowDirection ? parentWidth : parentHeight)
     {
-        lineItems.calloc ((size_t) (numItems * numItems));
-        lineInfo.calloc ((size_t) numItems);
+        lineItems.calloc (numItems * numItems);
+        lineInfo.calloc (numItems);
     }
 
     struct ItemWithState
@@ -79,7 +83,7 @@ struct FlexBoxLayoutCalculation
         Coord crossSize, lineY, totalLength;
     };
 
-    const FlexBox& owner;
+    FlexBox& owner;
     const Coord parentWidth, parentHeight;
     const int numItems;
     const bool isRowDirection;
@@ -106,7 +110,8 @@ struct FlexBoxLayoutCalculation
         for (auto& item : owner.items)
             itemStates.add (item);
 
-        itemStates.sort (*this, true);
+        std::stable_sort (itemStates.begin(), itemStates.end(),
+                          [] (const ItemWithState& i1, const ItemWithState& i2)  { return i1.item->order < i2.item->order; });
 
         for (auto& item : itemStates)
         {
@@ -380,6 +385,8 @@ struct FlexBoxLayoutCalculation
 
                         if (isRowDirection)
                             item.setHeightChecked (lineSize - item.item->margin.top - item.item->margin.bottom);
+                        else
+                            item.setWidthChecked (lineSize - item.item->margin.left - item.item->margin.right);
                     }
                     else if (owner.alignItems == FlexBox::AlignItems::flexStart)
                     {
@@ -387,11 +394,17 @@ struct FlexBoxLayoutCalculation
                     }
                     else if (owner.alignItems == FlexBox::AlignItems::flexEnd)
                     {
-                        item.lockedMarginTop = lineSize - item.lockedHeight - item.item->margin.bottom;
+                        if (isRowDirection)
+                            item.lockedMarginTop = lineSize - item.lockedHeight - item.item->margin.bottom;
+                        else
+                            item.lockedMarginLeft = lineSize - item.lockedWidth - item.item->margin.right;
                     }
                     else if (owner.alignItems == FlexBox::AlignItems::center)
                     {
-                        item.lockedMarginTop = (lineSize - item.lockedHeight - item.item->margin.top - item.item->margin.bottom) / 2;
+                        if (isRowDirection)
+                            item.lockedMarginTop = (lineSize - item.lockedHeight - item.item->margin.top - item.item->margin.bottom) / 2;
+                        else
+                            item.lockedMarginLeft = (lineSize - item.lockedWidth - item.item->margin.left - item.item->margin.right) / 2;
                     }
                 }
             }
@@ -526,11 +539,6 @@ struct FlexBoxLayoutCalculation
         reverseWrap();
     }
 
-    static int compareElements (const ItemWithState& i1, const ItemWithState& i2) noexcept
-    {
-        return i1.item->order < i2.item->order ? -1 : (i2.item->order < i1.item->order ? 1 : 0);
-    }
-
 private:
     void resetRowItems (const int row) noexcept
     {
@@ -588,12 +596,12 @@ private:
 
         if (positiveFlexibility)
         {
-            if (totalFlexGrow != 0)
+            if (totalFlexGrow != 0.0)
                 changeUnit = difference / totalFlexGrow;
         }
         else
         {
-            if (totalFlexShrink != 0)
+            if (totalFlexShrink != 0.0)
                 changeUnit = difference / totalFlexShrink;
         }
 
@@ -759,7 +767,8 @@ FlexBox::FlexBox (JustifyContent jc) noexcept  : justifyContent (jc) {}
 
 FlexBox::FlexBox (Direction d, Wrap w, AlignContent ac, AlignItems ai, JustifyContent jc) noexcept
     : flexDirection (d), flexWrap (w), alignContent (ac), alignItems (ai), justifyContent (jc)
-{}
+{
+}
 
 void FlexBox::performLayout (Rectangle<float> targetArea)
 {
@@ -784,10 +793,13 @@ void FlexBox::performLayout (Rectangle<float> targetArea)
         {
             item.currentBounds += targetArea.getPosition();
 
-            if (auto comp = item.associatedComponent)
-                comp->setBounds (item.currentBounds.getSmallestIntegerContainer());
+            if (auto* comp = item.associatedComponent)
+                comp->setBounds (Rectangle<int>::leftTopRightBottom ((int) item.currentBounds.getX(),
+                                                                     (int) item.currentBounds.getY(),
+                                                                     (int) item.currentBounds.getRight(),
+                                                                     (int) item.currentBounds.getBottom()));
 
-            if (auto box = item.associatedFlexBox)
+            if (auto* box = item.associatedFlexBox)
                 box->performLayout (item.currentBounds);
         }
     }
@@ -806,8 +818,9 @@ FlexItem::FlexItem (float w, float h, FlexBox& fb) noexcept     : FlexItem (w, h
 FlexItem::FlexItem (Component& c) noexcept                      : associatedComponent (&c) {}
 FlexItem::FlexItem (FlexBox& fb) noexcept                       : associatedFlexBox (&fb) {}
 
-FlexItem::Margin::Margin() noexcept           : left(), right(), top(), bottom() {}
-FlexItem::Margin::Margin (float v) noexcept   : left (v), right (v), top (v), bottom (v) {}
+FlexItem::Margin::Margin() noexcept                                     : left(), right(), top(), bottom() {}
+FlexItem::Margin::Margin (float v) noexcept                             : left (v), right (v), top (v), bottom (v) {}
+FlexItem::Margin::Margin (float t, float r, float b, float l) noexcept  : left (l), right (r), top (t), bottom (b) {}
 
 //==============================================================================
 FlexItem FlexItem::withFlex (float newFlexGrow) const noexcept
@@ -835,9 +848,12 @@ FlexItem FlexItem::withWidth (float newWidth) const noexcept         { auto fi =
 FlexItem FlexItem::withMinWidth (float newMinWidth) const noexcept   { auto fi = *this; fi.minWidth = newMinWidth; return fi; }
 FlexItem FlexItem::withMaxWidth (float newMaxWidth) const noexcept   { auto fi = *this; fi.maxWidth = newMaxWidth; return fi; }
 
-FlexItem FlexItem::withMinHeight (float newMinHeight) const noexcept { auto fi = *this; fi.minHeight = newMinHeight; return fi; };
-FlexItem FlexItem::withMaxHeight (float newMaxHeight) const noexcept { auto fi = *this; fi.maxHeight = newMaxHeight; return fi; };
+FlexItem FlexItem::withMinHeight (float newMinHeight) const noexcept { auto fi = *this; fi.minHeight = newMinHeight; return fi; }
+FlexItem FlexItem::withMaxHeight (float newMaxHeight) const noexcept { auto fi = *this; fi.maxHeight = newMaxHeight; return fi; }
 FlexItem FlexItem::withHeight (float newHeight) const noexcept       { auto fi = *this; fi.height = newHeight; return fi; }
 
 FlexItem FlexItem::withMargin (Margin m) const noexcept              { auto fi = *this; fi.margin = m; return fi; }
 FlexItem FlexItem::withOrder (int newOrder) const noexcept           { auto fi = *this; fi.order = newOrder; return fi; }
+FlexItem FlexItem::withAlignSelf (AlignSelf a) const noexcept        { auto fi = *this; fi.alignSelf = a; return fi; }
+
+} // namespace juce

@@ -2,25 +2,29 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2015 - ROLI Ltd.
+   Copyright (c) 2020 - Raw Material Software Limited
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   By using JUCE, you agree to the terms of both the JUCE 6 End-User License
+   Agreement and JUCE Privacy Policy (both effective as of the 16th June 2020).
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+   End User License Agreement: www.juce.com/juce-6-licence
+   Privacy Policy: www.juce.com/juce-privacy-policy
 
-   ------------------------------------------------------------------------------
+   Or: You may also use this code under the terms of the GPL v3 (see
+   www.gnu.org/licenses).
 
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
+
+namespace juce
+{
 
 struct NSViewResizeWatcher
 {
@@ -77,7 +81,7 @@ private:
     private:
         static void frameChanged (id self, SEL, NSNotification*)
         {
-            if (NSViewResizeWatcher* const target = getIvar<NSViewResizeWatcher*> (self, "target"))
+            if (auto* target = getIvar<NSViewResizeWatcher*> (self, "target"))
                 target->viewResized();
         }
 
@@ -93,7 +97,7 @@ class NSViewAttachment  : public ReferenceCountedObject,
                           private NSViewResizeWatcher
 {
 public:
-    NSViewAttachment (NSView* const v, Component& comp)
+    NSViewAttachment (NSView* v, Component& comp)
         : ComponentMovementWatcher (&comp),
           view (v), owner (comp),
           currentPeer (nullptr)
@@ -108,7 +112,7 @@ public:
         attachViewWatcher (view);
     }
 
-    ~NSViewAttachment()
+    ~NSViewAttachment() override
     {
         detachViewWatcher();
         removeFromParent();
@@ -129,9 +133,9 @@ public:
 
     void componentMovedOrResized (bool /*wasMoved*/, bool /*wasResized*/) override
     {
-        if (ComponentPeer* const peer = owner.getTopLevelComponent()->getPeer())
+        if (auto* peer = owner.getTopLevelComponent()->getPeer())
         {
-            NSRect r = makeNSRect (peer->getAreaCoveredBy (owner));
+            auto r = makeNSRect (peer->getAreaCoveredBy (owner));
             r.origin.y = [[view superview] frame].size.height - (r.origin.y + r.size.height);
             [view setFrame: r];
         }
@@ -139,7 +143,7 @@ public:
 
     void componentPeerChanged() override
     {
-        ComponentPeer* const peer = owner.getPeer();
+        auto* peer = owner.getPeer();
 
         if (currentPeer != peer)
         {
@@ -147,7 +151,7 @@ public:
 
             if (peer != nullptr)
             {
-                NSView* const peerView = (NSView*) peer->getNativeHandle();
+                auto peerView = (NSView*) peer->getNativeHandle();
                 [peerView addSubview: view];
                 componentMovedOrResized (false, false);
             }
@@ -177,7 +181,8 @@ public:
 
     NSView* const view;
 
-    typedef ReferenceCountedObjectPtr<NSViewAttachment> Ptr;
+    using Ptr = ReferenceCountedObjectPtr<NSViewAttachment>;
+
 private:
     Component& owner;
     ComponentPeer* currentPeer;
@@ -196,11 +201,11 @@ private:
 NSViewComponent::NSViewComponent() {}
 NSViewComponent::~NSViewComponent() {}
 
-void NSViewComponent::setView (void* const view)
+void NSViewComponent::setView (void* view)
 {
     if (view != getView())
     {
-        NSViewAttachment::Ptr old = attachment;
+        auto old = attachment;
 
         attachment = nullptr;
 
@@ -221,7 +226,7 @@ void NSViewComponent::resizeToFitView()
 {
     if (attachment != nullptr)
     {
-        NSRect r = [static_cast<NSViewAttachment*> (attachment.get())->view frame];
+        auto r = [static_cast<NSViewAttachment*> (attachment.get())->view frame];
         setBounds (Rectangle<int> ((int) r.size.width, (int) r.size.height));
     }
 }
@@ -234,7 +239,9 @@ void NSViewComponent::alphaChanged()
         (static_cast<NSViewAttachment*> (attachment.get()))->updateAlpha();
 }
 
-ReferenceCountedObject* NSViewComponent::attachViewToComponent (Component& comp, void* const view)
+ReferenceCountedObject* NSViewComponent::attachViewToComponent (Component& comp, void* view)
 {
     return new NSViewAttachment ((NSView*) view, comp);
 }
+
+} // namespace juce

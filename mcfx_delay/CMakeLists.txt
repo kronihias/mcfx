@@ -1,5 +1,0 @@
-ADD_SUBDIRECTORY ( mcfx_delay )
-
-IF (BUILD_STANDALONE)
-	ADD_SUBDIRECTORY ( mcfx_delay_standalone )
-ENDIF (BUILD_STANDALONE)

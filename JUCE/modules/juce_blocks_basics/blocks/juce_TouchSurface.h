@@ -2,29 +2,31 @@
   ==============================================================================
 
    This file is part of the JUCE library.
-   Copyright (c) 2016 - ROLI Ltd.
+   Copyright (c) 2020 - Raw Material Software Limited
 
-   Permission is granted to use this software under the terms of either:
-   a) the GPL v2 (or any later version)
-   b) the Affero GPL v3
+   JUCE is an open source library subject to commercial or open-source
+   licensing.
 
-   Details of these licenses can be found at: www.gnu.org/licenses
+   The code included in this file is provided under the terms of the ISC license
+   http://www.isc.org/downloads/software-support-policy/isc-license. Permission
+   To use, copy, modify, and/or distribute this software for any purpose with or
+   without fee is hereby granted provided that the above copyright notice and
+   this permission notice appear in all copies.
 
-   JUCE is distributed in the hope that it will be useful, but WITHOUT ANY
-   WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
-   A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-   ------------------------------------------------------------------------------
-
-   To release a closed-source product which uses JUCE, commercial licenses are
-   available: visit www.juce.com for more information.
+   JUCE IS PROVIDED "AS IS" WITHOUT ANY WARRANTY, AND ALL WARRANTIES, WHETHER
+   EXPRESSED OR IMPLIED, INCLUDING MERCHANTABILITY AND FITNESS FOR PURPOSE, ARE
+   DISCLAIMED.
 
   ==============================================================================
 */
 
+namespace juce
+{
 
 /**
     Represents the touch surface of a BLOCKS device.
+
+    @tags{Blocks}
 */
 class TouchSurface
 {
@@ -35,6 +37,7 @@ public:
     virtual ~TouchSurface();
 
     //==============================================================================
+    /** Structure used to describe touch properties */
     struct Touch
     {
         /** A touch index, which will stay constant for each finger as it is tracked. */
@@ -64,7 +67,7 @@ public:
         */
         float yVelocity;
 
-        /** The current pressure of this touch, in the range 0.0 (no pressure) to 1.o (very hard). */
+        /** The current pressure of this touch, in the range 0.0 (no pressure) to 1.0 (very hard). */
         float z;
 
         /** The rate at which pressure is currently changing, measured in units/second. This is
@@ -96,13 +99,10 @@ public:
     /** Forces a touch-off message for all active touches. */
     virtual void cancelAllActiveTouches() noexcept = 0;
 
-<<<<<<< HEAD
-=======
     /** For the on-screen seaboard view, this will return the number of keys.
         For other types of touch-surface, it will return 0. */
     virtual int getNumberOfKeywaves() const = 0;
 
->>>>>>> 119640f55f51f4e4b6da50df236a3184f4f4afc8
     //==============================================================================
     /** Receives callbacks when a touch moves or changes pressure. */
     struct Listener
@@ -115,7 +115,7 @@ public:
     /** Testing feature: this allows you to inject touches onto a touch surface. */
     void callListenersTouchChanged (const TouchSurface::Touch& t)
     {
-        listeners.call (&Listener::touchChanged, *this, t);
+        listeners.call ([this, &t] (Listener& l) { l.touchChanged (*this, t); });
     }
 
     /** Adds a listener to be called when the surface is touched. */
@@ -130,7 +130,9 @@ public:
 
 protected:
     //==============================================================================
-    juce::ListenerList<Listener> listeners;
+    ListenerList<Listener> listeners;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TouchSurface)
 };
+
+} // namespace juce
