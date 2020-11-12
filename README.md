@@ -64,8 +64,5 @@ Other plug-ins of the suite
 
 changelog
 ==============
-- 0.5.11 (2020-05-20) - mcfx_convolver - Mac OS version added a +6dB gain to the filtered output, this is fixed now (Windows version was correct) -> this might influence old projects under OSX since mcfx_convolver will output 6dB less than older versions!
-
-- 0.5.10 (2020-05-19) - mcfx_filter - High-Shelf Q was not stored in the plugin state, this is fixed now
 
 - 1.0.0 (2020-11-12) first stable version
