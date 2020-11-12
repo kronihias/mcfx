@@ -1,144 +1,68 @@
-mcfx - multichannel cross plattform audio plug-in suite
+X-MCFX-Convolver and suite
+==============
+new non-uniform partitioned multichannel convolver and other audio mutichannel plug-ins
+------------------------------------
+
+- X-MCFX plugin suite contains an alternative version of the mcfx-convolver plugin included in the suite developed by Kronlachner at https://github.com/kronihias/mcfx
+
+- X-MCFX-Convolver involves a new matrix of filters loading mode which do not necessitates any external configuration files
+
+- In X-MCFX-Convolver has been upgraded the performances of the non-uniform partition scheme
+
+- Entire suite has been upgraded to be compiled with the last version of JUCE Framework (www.juce.com, GPLv3), which includes the completely support to CMake (www.cmake.org)
+
+- Cross-platform multiformat for MacOS and Windows (VST2 and VST3)
+
+- Binaries of external libraries included in the repo 
+    + libsoxr (LGPL, http://soxr.sourceforge.net) both for Windows and MacOS
+    + fftw3 (http://www.fftw.org/) convolver library for Windows
+    
+- Plug-ins channel configuration editabe at compile stage
+
+License
+--------------
+
+X-MCFX is free software and licensed under the GNU General Public License version 3 (GPLv3).
+
+Prerequisites for building
+--------------
+
+- An installed CMake build (GUI version also works good) min 3.15
+- An Installed system based develope environment (Visual Studio for Windows or XCode for MacOS)
+- VST2 SDK for VST2 binaries
+- ASIO SDK for Windows standalone
+
+How-to build
+--------------
+
+- Open CMake GUI and select this repo folder as source code
+- Design a build folder of your choice
+- Generate CMake configuration for your system environment
+- Design the channel configuration with the following variables:
+    + NUM_IN_CHANNELS
+    + NUM_OUT_CHANNELS
+    + LAST_2CHARS_PLUGINCODE
+this last point an univoque code act for each plug-in channel configuration to be shown as individual by host applications.
+Choose it differently for any channel setup you want to compile
+- Design the VST2 SDK folder (and ASIO SDK folder on Windows) if different from default (../\*USER_FOLDER\*/SDKs/VST_SDK/VST2_SDK)
+- Plug-in format flags have been inserted on CMake entries. One can choose the only VST3 version to be compiled as any further SDK won't be necessary
+
+Variant description
 ==============
 
-- mcfx is a suite of multichannel vst plug-ins or standalone applications (standalone currently meter and convolver only)
-
-- channel count is configurable with compile time flag
-
-- cross plattform VST for MacOSX, Windows and Linux
-
-- uses the JUCE framework (www.juce.com, GPLv3), libsoxr (LGPL, http://soxr.sourceforge.net)
-
-- ready to use binaries for MacOSX (> 10.5, 32/64 bit) and Windows (32/64 bit) can be found at http://www.matthiaskronlachner.com/?p=1910
-
-- these plug-ins have been developed to be used with the ambiX Ambisonic plug-ins: http://www.matthiaskronlachner.com/?p=2015
-
-license
+X-MCFX_Convolver
 --------------
++ Multichannel convolver will now accept "packed" filters matrix version in single wavefile.
++ It will be necessary to insert just the input channels number of the matrix in loading phase. The value will be stored in the host project savings
++ The input channels value can be also stored within the metadata of the filters wavefile through a specific option which will be export the new version file
++ Partitioning scheme has been upgraded to a more efficient version and tested with benchmarks
 
-mcfx is free software and licensed under the GNU General Public License version 3 (GPLv3).
-
-prerequisites for building
---------------
-
-- cmake, working build environment
-- libsoxr for the convolver (http://soxr.sourceforge.net)
-
-Install LINUX Libraries (Debian, Ubuntu):
-
-*$ sudo apt-get install libasound-dev libfreetype6-dev libgl1-mesa-dev libx11-dev libxext-dev libxinerama-dev libxcursor-dev freeglut3-dev libxmu-dev libxi-dev libfftw3-dev libsoxr-dev*
-
-howto build yourself:
---------------
-
-- use cmake gui or cmake/ccmake from terminal:
-
-- *NUM_CHANNELS* adjusts the number of input/output channels
-
-**TERMINAL:**
-
-- create a folder in the *mcfx* folder eg. *BUILD*
-
-*mcfx/BUILD> $ ccmake ..*
-
-- adjust NUM_CHANNELS 
-
-then
-*mcfx/BUILD> $ make*
-
-- find the binaries in the *mcfx/BUILD/_bin* folder and copy to system VST folder
-
-**VST installation folders:**
+Other plug-ins of the suite
+-----------------------------
++ After the JUCE upgrade some of them have been succesfully test while others dont. They have been actually maintained for completeness of the suite but not all of them will probably work
 
 
-- MacOSX: /Library/Audio/Plug-Ins/VST or ~/Library/Audio/Plug-Ins/VST
-- Windows: eg. C:\Programm Files\Steinberg\VstPlugins
-- Linux: /usr/lib/lxvst or /usr/local/lib/lxvst
-
-plug-ins explained:
+changelog
 ==============
 
-mcfx_convolver
---------------
-multichannel convolution matrix
-loads configuration files (compatible to jconvolver .conf files)
-have a look at 'CONVOLVER_CONFIG_HOWTO.txt' for details about the configuration files
-searches for configuration file in following folders:
-		* Windows 7,8: C:\Users\username\AppData\Roaming\mcfx\convolver_presets\
-		* MacOS: ~/Library/mcfx/convolver_presets/
-		* Linux: ~/mcfx/convolver_presets/
-
-
-mcfx_delay
---------------
-delay each channel about the same time (maximum delay time in seconds is a compile time flag (default 0.5s): MAX_DELAYTIME_S)
-
-
-mcfx_filter
---------------
-filter each channel with the same low/high cut, peak filter and high/low shelf filter settings, frequency analyzer that displays a sum of all channels
-
-low and high pass: 2nd order butterworth filter or 2x 2nd order butterworth cascaded (resulting in linkwitz riley characteristic) for use as x-over network
-plus 2x parametric filter +- 18dB
-plus low and high shelf filters +- 18dB
-
-
-mcfx_gain_delay
---------------
-set different delay time and gain setting for each channel (good for multispeaker calibration), includes a signal generator for testing individual channels
-the GUI allows to paste a list of float gain and delay values from the clipboard with semicolon, comma, newline, tab or space separated.
-maximum delay time in seconds is a compile time flag (MAX_DELAYTIME_S)
-
-mcfx_meter
---------------
-
-multichannel level meter with RMS, peak and peak hold
-
-
-changelog:
-==============
-- 0.5.11 (2020-05-20) - mcfx_convolver - Mac OS version added a +6dB gain to the filtered output, this is fixed now (Windows version was correct) -> this might influence old projects under OSX since mcfx_convolver will output 6dB less than older versions!
-
-- 0.5.10 (2020-05-19) - mcfx_filter - High-Shelf Q was not stored in the plugin state, this is fixed now
-
-- 0.5.9 (2020-02-05) - mcfx_convolver - fix dropouts/artifacts for hosts that send incomplete block sizes (eg. Adobe, Steinberg), fix reloading of stored presets, add filter length and latency debug messages, fix gui crash in Adobe hosts
-
-- 0.5.8 (2020-01-31) - mcfx_convolver - option to store preset within the project -> allows to exchange a DAW (eg. Reaper) project without need to provide the preset files extra, allow to export stored preset as .zip file for recovering it from the project
-
-- 0.5.7 (2019-04-28) - mcfx_convolver - osc receive support: /reload, /load <preset.conf> -> allows remote control of reloading/loading presets, port can be set in GUI
-
-- 0.5.6 (2019-03-20) - mcfx_convolver - maintain fir filter gain if resampled, add plugin parameter to trigger reload of configuration
-
-- 0.5.5 (2018-03-16) - filter, gain_delay, delay: slider behavior changed for more accurate control; gain_delay: ctrl+click for exclusive solo/phase/mute, add toneburst for signalgenerator, bugfix saving channel state of signalgenerator
-
-- 0.5.4 (2017-05-20) - mcfx_convolver and mcfx_filter: fixed threadsafety to avoid startup crash if other plugins use fftw
-
-- 0.5.3 (2017-05-02) - mcfx_delay and mcfx_gain_delay fixed glitch in delayline
-
-- 0.5.2 (2017-03-20) - various bugfixes; mcfx_convolver: performance optimizations, adjustable maximum partition size
-
-- 0.5.1 (2016-04-25) - mcfx_convolver: fixed bug in loading packed (dense) matrix; mcfx_gain_delay gui fix
-
-- 0.5.0 (2016-04-08) - add signal generator to mcfx_gain_delay; convolver: support for packed wav file to load a dense FIR matrix from only one .wav file -> have a look at CONVOLVER_CONFIG_HOWTO.txt; filter: smooth iir filter to avoid clicks when parameters change
-
-- 0.4.2 (2016-02-19) - fixed one more convolver bug
-
-- 0.4.1 (2016-02-17) - fixed convolver bug which resulted in mixed up partitions
-
-- 0.4.0 (2015-11-04) - gui for mcfx_delay, gui for mcfx_filter (with fft analyzer), added phase, solo and mute buttons to mcfx_gain_delay
-
-- 0.3.3 (2015-07-19) - performance improvements for mcfx_convolver
-_
-- 0.3.2 (2014-12-28) - audiomulch compatibility, gui for mcfx_gain_delay with paste from clipboard functionality, mcfx_meter added scale offset
-
-- 0.3.1 (2014-06-16) - fixed vst id for bidule compatibility
-
-- 0.3 (2014-03-15) - added mcfx_convolver
-
-- 0.2 (2014-02-25) - removed some license incompatible code, juce update
-
-- 0.1 (2014-01-10) - first release 
-
-______________________________
-(C) 2013-2017 Matthias Kronlachner
-m.kronlachner@gmail.com
+- 1.0.0 (2020-11-12) first stable version
