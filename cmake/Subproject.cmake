@@ -46,9 +46,9 @@ if(BUILD_STANDALONE)
 	set(STANDALONE "Standalone")
 endif(BUILD_STANDALONE)
 
-if(BUILD_VST)
+if(BUILD_VST2)
 	set(VST "VST")
-endif(BUILD_VST)
+endif(BUILD_VST2)
 
 if(BUILD_VST3)
 	set(VST3 "VST3")
@@ -172,9 +172,9 @@ if(WITH_LIBSOXR)
 		add_library_to_apple_bundle(${SUBPROJECT_NAME}_Standalone "${LIBSOXR_LIBRARIES}")
 		endif(BUILD_STANDALONE)
 
-		if(BUILD_VST)
+		if(BUILD_VST2)
 		add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST "${LIBSOXR_LIBRARIES}")
-		endif(BUILD_VST)
+		endif(BUILD_VST2)
 
 		if(BUILD_VST3)
 		add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST3 "${LIBSOXR_LIBRARIES}")
