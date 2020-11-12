@@ -1,0 +1,10 @@
+{
+    "githubPullRequests.remotes": [],
+    "files.associations": {
+        "*.inc": "cmake",
+        "*.json": "json",
+        "*.mm": "cpp",
+        "memory": "cpp"
+    },
+    "C_Cpp.dimInactiveRegions": false
+}

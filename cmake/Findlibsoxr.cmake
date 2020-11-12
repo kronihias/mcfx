@@ -29,6 +29,8 @@ else (LIBSOXR_LIBRARIES AND LIBSOXR_INCLUDE_DIRS)
       /usr/local/include
       /opt/local/include
       /sw/include
+      "C:/Program Files (x86)/soxr/include"
+      "${SOXR_ROOT_DIR}/include"
   )
 
   find_library(LIBSOXR_LIBRARY
@@ -39,6 +41,8 @@ else (LIBSOXR_LIBRARIES AND LIBSOXR_INCLUDE_DIRS)
       /usr/local/lib
       /opt/local/lib
       /sw/lib
+      "C:/Program Files (x86)/soxr/lib"
+      "${SOXR_ROOT_DIR}/lib"
   )
 
   set(LIBSOXR_INCLUDE_DIRS

@@ -1,5 +1,0 @@
-ADD_SUBDIRECTORY ( mcfx_meter )
-
-IF (BUILD_STANDALONE)
-	ADD_SUBDIRECTORY ( mcfx_meter_standalone )
-ENDIF (BUILD_STANDALONE)

@@ -1,5 +1,0 @@
-ADD_SUBDIRECTORY ( mcfx_filter )
-
-IF (BUILD_STANDALONE)
-	ADD_SUBDIRECTORY ( mcfx_filter_standalone )
-ENDIF (BUILD_STANDALONE)

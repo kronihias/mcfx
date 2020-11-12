@@ -1,263 +1,197 @@
-cmake_minimum_required(VERSION 2.8)
+# Example Audio Plugin CMakeLists.txt
+
+# To get started on a new plugin, copy this entire folder (containing this file and C++ sources) to
+# a convenient location, and then start making modifications.
+
+# The first line of any CMake project should be a call to `cmake_minimum_required`, which checks
+# that the installed CMake will be able to understand the following CMakeLists, and ensures that
+# CMake's behaviour is compatible with the named version. This is a standard CMake command, so more
+# information can be found in the CMake docs.
+
+cmake_minimum_required(VERSION 3.15)
+
+# The top-level CMakeLists.txt file for a project must contain a literal, direct call to the
+# `project()` command. `project()` sets up some helpful variables that describe source/binary
+# directories, and the current project version. This is a standard CMake command.
 
 ################################################
-#set name
-PROJECT(mcfx_plugin_suite)
-
-################################################
-#version
+#version and name
 file(READ VERSION VERSION)
-ADD_DEFINITIONS(-DVERSION=${VERSION})
+add_definitions(-DVERSION=${VERSION}) #?? FOR THE DELAY
+
+project(x-mcfx_plugin_suite VERSION ${VERSION})
+
+set(MANUFACTURER_CODE "Unpr")
+set(PLUGIN_CODE "M")
+set(PLUGIN_LABEL "X-MCFX")
+
+################################################
+set(CMAKE_BUILD_TYPE Release)
+# ADD_DEFINITIONS(-DNDEBUG=1)
+# ADD_DEFINITIONS(-D_NDEBUG=1)
+
+#save path for later
+set (SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
+set (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
 
 ################################################
 #choices at compile time
-SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
-SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
-SET(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
+# set(NUM_CHANNELS 64 CACHE STRING "number of channels for each plugin")
 
-SET(VSTSDK_PATH "~/SDKs/VST3" CACHE PATH "Path to VST SDK")
+set(NUM_IN_CHANNELS 64 CACHE STRING "number of input channels for each plugin")
+set(NUM_OUT_CHANNELS 64 CACHE STRING "number of output channels for each plugin")
 
+set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 
-IF(UNIX AND NOT APPLE AND NOT ANDROID)
-	SET(WITH_ZITA_CONVOLVER FALSE CACHE BOOL "build with zita-convolver (better performance under linux)")
-ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
+set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
+set(BUILD_VST TRUE CACHE BOOL "build VST format")
+set(BUILD_VST3 TRUE CACHE BOOL "build VST3 format")
 
-IF(BUILD_STANDALONE)
-
-	IF(UNIX AND NOT APPLE AND NOT ANDROID)
-		SET(JUCE_JACK TRUE CACHE BOOL "build standalone app with Jack support")
-		SET(JUCE_ALSA TRUE CACHE BOOL "build standalone app with ALSA support")
-	ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
-
-	IF(WIN32)
-		SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
-	ENDIF(WIN32)
-
-ENDIF(BUILD_STANDALONE)
-
-ADD_DEFINITIONS(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
+set(LAST_2CHARS_PLUGINCODE 64 CACHE STRING "to allow more configurations, specify different characters for the same plugin code")
 
 
-IF (JUCE_JACK)
-	ADD_DEFINITIONS(-DJUCE_JACK=1)
-ENDIF (JUCE_JACK)
+add_definitions(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
 
-IF (JUCE_ALSA)
-	ADD_DEFINITIONS(-DJUCE_ALSA=1)
-ENDIF (JUCE_ALSA)
-
-IF (JUCE_ASIO)
-	ADD_DEFINITIONS(-DJUCE_ASIO=1)
-  
-  SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
-  INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
-  
-ENDIF (JUCE_ASIO)
-
-# set release and optimization flags
-# SET(CMAKE_C_FLAGS_RELEASE "-Os") # use small size?
-# SET(CMAKE_CXX_FLAGS_RELEASE "-Os") # use small size?
-
-SET(CMAKE_BUILD_TYPE Release)
-
-ADD_DEFINITIONS(-DNDEBUG=1)
-ADD_DEFINITIONS(-D_NDEBUG=1)
-
-#save path for later
-SET (SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR})
-SET (BIN_DIR ${CMAKE_CURRENT_BINARY_DIR})
-
-IF(APPLE)
-# switch to c++11
-   SET(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
-   
-   SET( CMAKE_OSX_ARCHITECTURES i386;x86_64 )
-   SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.7 )
-ENDIF (APPLE)
+# Possible different convolver library under Linux systems
+if(UNIX AND NOT APPLE AND NOT ANDROID)
+	set(WITH_ZITA_CONVOLVER FALSE CACHE BOOL "build with zita-convolver (better performance under linux)")
+endif(UNIX AND NOT APPLE AND NOT ANDROID)
 
 ################################################
-# INCLUDES
+# additional cmake find library packages
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${SRC_DIR}/cmake)
 
-INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/JUCE )
-INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules )
+if (WITH_ZITA_CONVOLVER)
+	find_package(FFTW3 REQUIRED COMPONENTS single)
+endif(WITH_ZITA_CONVOLVER)
 
-################################################
-# additional cmake find packages
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+if (WIN32)
+	set(FFTW3_ROOT_DIR "${SRC_DIR}/Libraries/Windows/fftw" CACHE STRING "path to the fftw3 include folder library")
+	set(FFTW3F_LIBRARY "${SRC_DIR}/Libraries/Windows/fftw/lib/fftw3f.lib" CACHE STRING "path to the fftw3 library")
+	find_package(FFTW3 REQUIRED COMPONENTS single)
 
+	set(SOXR_ROOT_DIR "${SRC_DIR}/Libraries/Windows/soxr" CACHE STRING "path to the installed soxr library")
+endif (WIN32)
+
+if(UNIX AND NOT APPLE AND NOT ANDROID)
+	find_package(FFTW3 REQUIRED COMPONENTS single threads)
+endif(UNIX AND NOT APPLE AND NOT ANDROID)
+
+if(APPLE)
+	set(LIBSOXR_INCLUDE_DIRS "${SRC_DIR}/Libraries/MacOS/soxr/include" CACHE STRING "path to the include folder of soxr library")
+	find_library(LIBSOXR_LIBRARY
+		NAMES
+			soxr
+		PATHS
+			"${SRC_DIR}/Libraries/MacOS/soxr/lib"
+		NO_DEFAULT_PATH
+	)
+	set(LIBSOXR_LIBRARIES ${LIBSOXR_LIBRARY})
+endif(APPLE)
 find_package(libsoxr REQUIRED)
 
-IF (WITH_ZITA_CONVOLVER OR WIN32)
-	find_package(FFTW3 COMPONENTS single)
-ENDIF (WITH_ZITA_CONVOLVER OR WIN32)
-
-IF(UNIX AND NOT APPLE AND NOT ANDROID)
-	find_package(FFTW3 COMPONENTS single threads)
-ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
-
-include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS} ${VSTSDK_PATH})
-
+include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${LIBLO_INCLUDE_DIRS} ${LIBSOXR_INCLUDE_DIRS})
 
 ################################################
-# this are the link libraries for juce
+# Windows specific directives
 
+# Static link to external libraries
+#set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>")
+if(WIN32)
+	if(MSVC)
+    	add_compile_options(
+        	$<$<CONFIG:>:/MT> #---------|
+        	$<$<CONFIG:Debug>:/MTd> #---|-- Dinamically link the runtime libraries
+        	$<$<CONFIG:Release>:/MT> #--|
+    	)
+	endif(MSVC)
+	IF(BUILD_STANDALONE)
+		SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
+	ENDIF(BUILD_STANDALONE)
+
+	IF (JUCE_ASIO)
+		ADD_DEFINITIONS(-DJUCE_ASIO=1)
+  		SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
+  		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
+	ENDIF (JUCE_ASIO)
+endif(WIN32)
+
+################################################
+# # MacOS specific directives
 IF(APPLE)
-   FIND_LIBRARY(ACCELERATE_LIBRARY Accelerate)
-   FIND_LIBRARY(AUDIOTOOLBOX_LIBRARY AudioToolbox)
-   FIND_LIBRARY(CARBON_LIBRARY Carbon)
-   FIND_LIBRARY(COCOA_LIBRARY Cocoa)
-   FIND_LIBRARY(COREAUDIO_LIBRARY CoreAudio)
-   FIND_LIBRARY(COREMIDI_LIBRARY CoreMIDI)
-   FIND_LIBRARY(DISCRECORDING_LIBRARY DiscRecording)
-   FIND_LIBRARY(IOKIT_LIBRARY IOKit)
-   FIND_LIBRARY(OPENGL_LIBRARY OpenGL)
-   FIND_LIBRARY(QTKIT_LIBRARY QTKit)
-   FIND_LIBRARY(QUARTZCORE_LIBRARY QuartzCore)
-   # FIND_LIBRARY(QUICKTIME_LIBRARY QuickTime)
-   FIND_LIBRARY(WEBKIT_LIBRARY WebKit)
-   MARK_AS_ADVANCED (ACCELERATE_LIBRARY AUDIOTOOLBOX_LIBRARY CARBON_LIBRARY COCOA_LIBRARY COREAUDIO_LIBRARY COREMIDI_LIBRARY COREMIDI_LIBRARY DISCRECORDING_LIBRARY IOKIT_LIBRARY OPENGL_LIBRARY QTKIT_LIBRARY QUARTZCORE_LIBRARY WEBKIT_LIBRARY)
-   SET(JUCE_LIBRARIES ${ACCELERATE_LIBRARY} ${AUDIOTOOLBOX_LIBRARY} ${CARBON_LIBRARY} ${COCOA_LIBRARY} ${COREAUDIO_LIBRARY} ${COREMIDI_LIBRARY} ${COREMIDI_LIBRARY} ${DISCRECORDING_LIBRARY} ${IOKIT_LIBRARY} ${OPENGL_LIBRARY} ${QTKIT_LIBRARY} ${QUARTZCORE_LIBRARY} ${WEBKIT_LIBRARY})
-    
-    ADD_DEFINITIONS(-DJUCE_MAC=1)
+#	# switch to c++11
+# 	ADD_DEFINITIONS(
+# 		-std=c++11
+# 	)
+	SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.11)
 ENDIF (APPLE)
 
-
-IF(UNIX AND NOT APPLE AND NOT ANDROID)
-
-   ADD_DEFINITIONS(-DLINUX=1)
-   ADD_DEFINITIONS(-DJUCE_LINUX=1)
-   
-   SET ( OpenGL_GL_PREFERENCE "LEGACY" )
-   FIND_PACKAGE    ( OpenGL REQUIRED )
-   FIND_LIBRARY    ( X11_LIBRARY X11 )
-   FIND_LIBRARY    ( XEXT_LIBRARY Xext )
-   FIND_LIBRARY    ( XINERAMA_LIBRARY Xinerama )
-   FIND_LIBRARY    ( ASOUND_LIBRARY asound )
-   FIND_LIBRARY    ( DL_LIBRARY dl )
-   FIND_LIBRARY    ( FREETYPE_LIBRARY freetype )
-   FIND_LIBRARY    ( PTHREAD_LIBRARY pthread )
-   FIND_LIBRARY    ( RT_LIBRARY rt )
-   FIND_LIBRARY    ( CURL_LIBRARY curl )
-   # Use the package PkgConfig to detect GTK+ headers/library files
-   FIND_PACKAGE(PkgConfig REQUIRED)
-   PKG_CHECK_MODULES(GTK3 REQUIRED gtk+-3.0)
-   PKG_CHECK_MODULES(WEBKIT REQUIRED webkit2gtk-4.0)
-
-   MARK_AS_ADVANCED(GL_LIBRARY X11_LIBRARY XEXT_LIBRARY XINERAMA_LIBRARY ASOUND_LIBRARY DL_LIBRARY FREETYPE_LIBRARY PTHREAD_LIBRARY RT_LIBRARY)
-
-   # get freetype includes...
-   
-   INCLUDE(FindFreetype)
-
-   IF(NOT FREETYPE_FOUND)
-      FIND_LIBRARY(FREETYPE_LIBRARIES NAMES libfreetype freetype.dll PATHS "./libs/MacOS" "./libs/Windows" DOC "Freetype library")
-      FIND_PATH(FREETYPE_INCLUDE_DIRS ftbuild.h "./includes" DOC "Freetype includes")
-   ENDIF(NOT FREETYPE_FOUND)
-   
-   INCLUDE_DIRECTORIES(${FREETYPE_INCLUDE_DIRS})
-   INCLUDE_DIRECTORIES(${GTK3_INCLUDE_DIRS})
-   INCLUDE_DIRECTORIES(${WEBKIT_INCLUDE_DIRS})
-
-   SET ( JUCE_LIBRARIES ${GTK3_LIBRARIES} ${WEBKIT_LIBRARIES} ${CURL_LIBRARY} ${X11_LIBRARY} ${XEXT_LIBRARY} ${XINERAMA_LIBRARY} ${ASOUND_LIBRARY} ${DL_LIBRARY} ${FREETYPE_LIBRARY} ${RT_LIBRARY} ${OPENGL_LIBRARIES} ${PTHREAD_LIBRARY} )
-   
-   FIND_LIBRARY    ( LIBSOXR_LIBRARY soxr )
-   
-   IF(WITH_ZITA_CONVOLVER)
-	FIND_PACKAGE(libzita-convolver REQUIRED)
-        INCLUDE_DIRECTORIES(${LIBZITACONVOLVER_INCLUDE_DIRS})
-	ADD_DEFINITIONS(-DWITH_ZITA_CONVOLVER=1)
-   ENDIF(WITH_ZITA_CONVOLVER)
-   
-   #add sse
-   set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -msse3")
-   set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3")
-   
-ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
-
-
-IF(WIN32)
-   ADD_DEFINITIONS(-DJUCE_WINDOWS=1)
-ENDIF(WIN32)
-
 ################################################
-# juce source modules
-# build all modules except the vst wrapper -> this is done individually for each plugin
+# Linux specific directives
+		# get freetype includes...
+if(UNIX AND NOT APPLE AND NOT ANDROID)
 
-IF(APPLE)
+	# INCLUDE(FindFreetype)
 
-SET ( JUCE_SOURCE
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_basics/juce_audio_basics.mm
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_devices/juce_audio_devices.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_formats/juce_audio_formats.mm
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/VST/juce_VST_Wrapper.mm
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/VST/juce_VST_Wrapper.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/utility/juce_PluginUtilities.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_processors/juce_audio_processors.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_utils/juce_audio_utils.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_box2d/juce_box2d.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_browser_plugin_client/juce_browser_plugin.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_core/juce_core.mm
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_cryptography/juce_cryptography.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_data_structures/juce_data_structures.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_events/juce_events.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_graphics/juce_graphics.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_basics/juce_gui_basics.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_extra/juce_gui_extra.mm
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_opengl/juce_opengl.mm
-		${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_osc/juce_osc.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_video/juce_video.mm
-)
+	# IF(NOT FREETYPE_FOUND)
+	# FIND_LIBRARY(FREETYPE_LIBRARIES NAMES libfreetype freetype.dll PATHS "./libs/MacOS" "./libs/Windows" DOC "Freetype library")
+	# FIND_PATH(FREETYPE_INCLUDE_DIRS ftbuild.h "./includes" DOC "Freetype includes")
+	# ENDIF(NOT FREETYPE_FOUND)
 
-SET ( JUCE_STANDALONE_SOURCE
-	${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_devices/juce_audio_devices.mm
-)
+	# INCLUDE_DIRECTORIES(${FREETYPE_INCLUDE_DIRS})
+	# INCLUDE_DIRECTORIES(${GTK3_INCLUDE_DIRS})
+	# INCLUDE_DIRECTORIES(${WEBKIT_INCLUDE_DIRS})
 
-SET ( JUCE_PLUGIN_CLIENT_SOURCE
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/VST/juce_VST_Wrapper.mm
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/VST/juce_VST_Wrapper.cpp
-)
+	# SET ( JUCE_LIBRARIES ${GTK3_LIBRARIES} ${WEBKIT_LIBRARIES} ${CURL_LIBRARY} ${X11_LIBRARY} ${XEXT_LIBRARY} ${XINERAMA_LIBRARY} ${ASOUND_LIBRARY} ${DL_LIBRARY} ${FREETYPE_LIBRARY} ${RT_LIBRARY} ${OPENGL_LIBRARIES} ${PTHREAD_LIBRARY} )
 
-ELSE(APPLE)
+	find_library(LIBSOXR_LIBRARY soxr)
 
-SET ( JUCE_SOURCE
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_basics/juce_audio_basics.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_devices/juce_audio_devices.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_formats/juce_audio_formats.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/VST/juce_VST_Wrapper.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/utility/juce_PluginUtilities.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_processors/juce_audio_processors.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_utils/juce_audio_utils.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_box2d/juce_box2d.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_browser_plugin_client/juce_browser_plugin.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_core/juce_core.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_cryptography/juce_cryptography.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_data_structures/juce_data_structures.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_events/juce_events.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_graphics/juce_graphics.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_basics/juce_gui_basics.cpp
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_gui_extra/juce_gui_extra.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_opengl/juce_opengl.cpp
-		${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_osc/juce_osc.cpp
-#        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_video/juce_video.cpp
-)
+	if(WITH_ZITA_CONVOLVER)
+		find_package(libzita-convolver REQUIRED)
+		include_directories(${LIBZITACONVOLVER_INCLUDE_DIRS})
+		add_definitions(-DWITH_ZITA_CONVOLVER=1)
+	endif(WITH_ZITA_CONVOLVER)
 
-SET ( JUCE_STANDALONE_SOURCE
-	${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_devices/juce_audio_devices.cpp
-)
-
-SET ( JUCE_PLUGIN_CLIENT_SOURCE
-        ${CMAKE_HOME_DIRECTORY}/JUCE/modules/juce_audio_plugin_client/VST/juce_VST_Wrapper.cpp
-)
-
-ENDIF(APPLE)
-
+	#add sse
+	# set (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -msse3")
+	# set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3")
 	
-################################################
-# add all subprojects (plugins)
+	IF(BUILD_STANDALONE)	
+		SET(JUCE_JACK TRUE CACHE BOOL "build standalone app with Jack support")
+		SET(JUCE_ALSA TRUE CACHE BOOL "build standalone app with ALSA support")
+	ENDIF(BUILD_STANDALONE)
+	
+	IF (JUCE_JACK)
+		ADD_DEFINITIONS(-DJUCE_JACK=1)
+	ENDIF (JUCE_JACK)
 
-ADD_SUBDIRECTORY ( JUCE )
-ADD_SUBDIRECTORY ( mcfx_convolver )
-ADD_SUBDIRECTORY ( mcfx_delay )
-ADD_SUBDIRECTORY ( mcfx_filter )
-ADD_SUBDIRECTORY ( mcfx_gain_delay )
-ADD_SUBDIRECTORY ( mcfx_meter )
+	IF (JUCE_ALSA)
+		ADD_DEFINITIONS(-DJUCE_ALSA=1)
+	ENDIF (JUCE_ALSA)
+
+endif(UNIX AND NOT APPLE AND NOT ANDROID)
+
+
+
+# If you've installed JUCE somehow (via a package manager, or directly using the CMake install
+# target), you'll need to tell this project that it depends on the installed copy of JUCE. If you've
+# included JUCE directly in your source tree (perhaps as a submodule), you'll need to tell CMake to
+# include that subdirectory as part of the build.
+
+# find_package(JUCE CONFIG REQUIRED)        # If you've installed JUCE to your system
+# or
+add_subdirectory(JUCE)                    # If you've put JUCE in a subdirectory called JUCE
+
+# If you are building a VST2 or AAX plugin, CMake needs to be told where to find these SDKs on your
+# system. This setup should be done before calling `juce_add_plugin`.
+SET(VSTSDK_PATH $ENV{HOME}/SDKs/VST_SDK/VST2_SDK CACHE PATH "specify the path of the VST SDK")
+juce_set_vst2_sdk_path("${VSTSDK_PATH}")
+
+# juce_set_aax_sdk_path(...)
+
+
+add_subdirectory(x-mcfx_convolver)
+add_subdirectory(x-mcfx_delay)
+add_subdirectory(x-mcfx_filter)
+add_subdirectory(x-mcfx_gain_delay)
+add_subdirectory(x-mcfx_meter)
