@@ -167,9 +167,18 @@ if(WITH_LIBSOXR)
 	)
 	if (APPLE)
 		include(addToBundle)
+
+		if(BUILD_STANDALONE)
 		add_library_to_apple_bundle(${SUBPROJECT_NAME}_Standalone "${LIBSOXR_LIBRARIES}")
+		endif(BUILD_STANDALONE)
+
+		if(BUILD_VST)
 		add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST "${LIBSOXR_LIBRARIES}")
+		endif(BUILD_VST)
+
+		if(BUILD_VST3)
 		add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST3 "${LIBSOXR_LIBRARIES}")
+		endif(BUILD_VST3)
 	endif(APPLE)
 endif(WITH_LIBSOXR)
 
