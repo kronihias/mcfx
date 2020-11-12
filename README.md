@@ -41,8 +41,9 @@ How-to build
 - Design the channel configuration with the following variables:
     + NUM_IN_CHANNELS
     + NUM_OUT_CHANNELS
-    + LAST_2CHARS_PLUGINCODE*
-this last point an univoque code act for each plug-in channel configuration to be shown as individual by host applications. Choose it differently for any channel setup you want to compile
+    + LAST_2CHARS_PLUGINCODE
+this last point an univoque code act for each plug-in channel configuration to be shown as individual by host applications.
+Choose it differently for any channel setup you want to compile
 - Design the VST2 SDK folder (and ASIO SDK folder on Windows) if different from default (../\*USER_FOLDER\*/SDKs/VST_SDK/VST2_SDK)
 - Plug-in format flags have been inserted on CMake entries. One can choose the only VST3 version to be compiled as any further SDK won't be necessary
 
