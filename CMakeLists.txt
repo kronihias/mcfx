@@ -17,9 +17,11 @@ cmake_minimum_required(VERSION 3.15)
 ################################################
 #version and name
 file(READ VERSION VERSION)
-add_definitions(-DVERSION=${VERSION}) #?? FOR THE DELAY
 
 project(x-mcfx_plugin_suite VERSION ${VERSION})
+
+add_definitions(-DVERSION=${VERSION}) #?? FOR THE DELAY
+
 
 set(MANUFACTURER_CODE "Unpr")
 set(PLUGIN_CODE "M")
@@ -44,7 +46,7 @@ set(NUM_OUT_CHANNELS 64 CACHE STRING "number of output channels for each plugin"
 set(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 
 set(BUILD_STANDALONE TRUE CACHE BOOL "build standalone application (for those with editor)")
-set(BUILD_VST TRUE CACHE BOOL "build VST format")
+set(BUILD_VST2 TRUE CACHE BOOL "build VST format")
 set(BUILD_VST3 TRUE CACHE BOOL "build VST3 format")
 
 set(LAST_2CHARS_PLUGINCODE 64 CACHE STRING "to allow more configurations, specify different characters for the same plugin code")
@@ -184,10 +186,10 @@ add_subdirectory(JUCE)                    # If you've put JUCE in a subdirectory
 
 # If you are building a VST2 or AAX plugin, CMake needs to be told where to find these SDKs on your
 # system. This setup should be done before calling `juce_add_plugin`.
-if(BUILD_VST)
+if(BUILD_VST2)
 SET(VSTSDK_PATH $ENV{HOME}/SDKs/VST_SDK/VST2_SDK CACHE PATH "specify the path of the VST SDK")
 juce_set_vst2_sdk_path("${VSTSDK_PATH}")
-endif(BUILD_VST)
+endif(BUILD_VST2)
 
 
 # juce_set_aax_sdk_path(...)
