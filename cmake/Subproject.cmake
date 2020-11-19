@@ -165,35 +165,23 @@ if(WITH_LIBSOXR)
 	target_link_libraries(${SUBPROJECT_NAME} PRIVATE 
 		${LIBSOXR_LIBRARIES}
 	)
-	if (APPLE)
-		include(addToBundle)
+	## IF DYNAMIC LIBRARY !!
+	# if (APPLE)
+	# 	include(addToBundle)
 
-		if(BUILD_STANDALONE)
-		add_library_to_apple_bundle(${SUBPROJECT_NAME}_Standalone "${LIBSOXR_LIBRARIES}")
-		endif(BUILD_STANDALONE)
+	# 	if(BUILD_STANDALONE)
+	# 	add_library_to_apple_bundle(${SUBPROJECT_NAME}_Standalone "${LIBSOXR_LIBRARIES}")
+	# 	endif(BUILD_STANDALONE)
 
-		if(BUILD_VST2)
-		add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST "${LIBSOXR_LIBRARIES}")
-		endif(BUILD_VST2)
+	# 	if(BUILD_VST2)
+	# 	add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST "${LIBSOXR_LIBRARIES}")
+	# 	endif(BUILD_VST2)
 
-		if(BUILD_VST3)
-		add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST3 "${LIBSOXR_LIBRARIES}")
-		endif(BUILD_VST3)
-	endif(APPLE)
+	# 	if(BUILD_VST3)
+	# 	add_library_to_apple_bundle(${SUBPROJECT_NAME}_VST3 "${LIBSOXR_LIBRARIES}")
+	# 	endif(BUILD_VST3)
+	# endif(APPLE)
 endif(WITH_LIBSOXR)
-
-# old way for copy libraries into bundle
-# if(APPLE)
-# 	IF( DEFINED OSX_COPY_LIB )
-# 	#copy additional files (eg. dynamic libraries)
-# 	ADD_CUSTOM_COMMAND(
-# 		TARGET ${SUBPROJECT_NAME} POST_BUILD 
-# 		COMMAND ${CMAKE_COMMAND} 
-# 		ARGS -E copy ${SRC_DIR}/mac-libs/${OSX_COPY_LIB} ${BIN_DIR}/_bin/${SUBPROJECT_NAME}.vst/Contents/Frameworks/${OSX_COPY_LIB}
-# 		)
-# 	ENDIF( DEFINED OSX_COPY_LIB )
-
-# endif(APPLE)
 
 if(WITH_ZITA_CONVOLVER)
 	target_link_libraries( ${SUBPROJECT_NAME} PRIVATE

@@ -125,7 +125,7 @@ IF(APPLE)
 # 	ADD_DEFINITIONS(
 # 		-std=c++11
 # 	)
-	SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.11)
+	SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
 ENDIF (APPLE)
 
 ################################################

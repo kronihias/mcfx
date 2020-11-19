@@ -1,0 +1,36 @@
+========================== WINDOWS ==========================
+
+---- fftw3 CMAKE settings ----
+
+shared lib 		-> UNCHECK
+enable float 		-> CHECK
+with combined thread 	-> CHECK
+
+- COMPILE IN VISUAL STUDIO WITH MT RUNTIME LIBRARY (STATIC MODE)
+- COMPILE "INSTALL"
+- SEARCH INSTALLED FFTW FOLDER IN \PROGRAM FILES(X86)
+
+
+
+---- soxr CMAKE settings ----
+
+shared lib 		-> UNCHECK
+(shared runtime)	-> CHECK
+
+to run cmake configuration under widows you need to remove some lines of CMakeList.txt
+I removed like 71 and 72 (not 100% sure) but you will have an error which describes it
+Run soxr and soxr.lsr. Then run install. You will find in the installed folder what necessary
+
+
+
+
+========================== MACOS ==========================
+
+---- soxr CMAKE settings ----
+
+shared lib 		-> UNCHECK
+
+Design an install folder different from /usr/local/ in CMake, Xcode won't have permissions
+Compile soxr and soxr.lsr. Then run install scheme
+
+In the new design folder you will find what necessary
