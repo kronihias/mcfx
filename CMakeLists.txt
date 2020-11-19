@@ -187,8 +187,15 @@ add_subdirectory(JUCE)                    # If you've put JUCE in a subdirectory
 # If you are building a VST2 or AAX plugin, CMake needs to be told where to find these SDKs on your
 # system. This setup should be done before calling `juce_add_plugin`.
 if(BUILD_VST2)
-SET(VSTSDK_PATH $ENV{HOME}/SDKs/VST_SDK/VST2_SDK CACHE PATH "specify the path of the VST SDK")
-juce_set_vst2_sdk_path("${VSTSDK_PATH}")
+	if(APPLE OR UNIX)
+		SET(VSTSDK_PATH $ENV{HOME}/SDKs/VST_SDK/VST2_SDK CACHE PATH "specify the path of the VST SDK")
+	endif(APPLE OR UNIX)
+
+	if(WIN32)
+		SET(VSTSDK_PATH ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/VST2_SDK CACHE PATH "specify the path of the VST SDK")
+	endif(WIN32)
+
+	juce_set_vst2_sdk_path("${VSTSDK_PATH}")
 endif(BUILD_VST2)
 
 

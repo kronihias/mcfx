@@ -183,10 +183,6 @@ private:
     void            setTargetFilter(File newTargetFile);
     bool            holdNumInputChannel;
     
-//    File            _tempConfigZipFile;
-//    Array<File>     _cleanUpFilesOnExit;
-//    void            DeleteTemporaryFiles();
-    
     double          _SampleRate;
     unsigned int    _BufferSize;        // size of the processing Block
     unsigned int    _ConvBufferSize;    // size of the head convolution block (possibility to make it larger in order to reduce CPU load)

@@ -205,15 +205,15 @@ double Mcfx_convolverAudioProcessor::getTailLengthSeconds() const
     }
 }
 
-int Mcfx_convolverAudioProcessor::getNumPrograms()                                      { return 0; }
+int Mcfx_convolverAudioProcessor::getNumPrograms()                                          { return 0; }
 
-int Mcfx_convolverAudioProcessor::getCurrentProgram()                                   { return 0; }
+int Mcfx_convolverAudioProcessor::getCurrentProgram()                                       { return 0; }
 
-void Mcfx_convolverAudioProcessor::setCurrentProgram (int index)                        { }
+void Mcfx_convolverAudioProcessor::setCurrentProgram (int index)                            { }
 
-const String Mcfx_convolverAudioProcessor::getProgramName (int index)                   { return String(); }
+const String Mcfx_convolverAudioProcessor::getProgramName (int index)                       { return String(); }
 
-void Mcfx_convolverAudioProcessor::changeProgramName (int index, const String& newName) { }
+void Mcfx_convolverAudioProcessor::changeProgramName (int index, const String& newName)     { }
 
 //==============================================================================
 void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -521,34 +521,6 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     addNewStatus("Convolver ready");
     
     sendChangeMessage(); // notify editor
-    
-    //BLOCK save config/wave as zip file
-    ///DEPRECATED
-    /*
-    _tempConfigZipFile = _tempConfigZipFile.createTempFile(".zip");
-    _cleanUpFilesOnExit.add(_tempConfigZipFile);
-    
-    ZipFile::Builder compressedFileToStore;
-//    auto test = filterFile.getParentDirectory().getFileName();
-    
-    compressedFileToStore.addFile(filterFile, 5);
-    
-    FileOutputStream outputStream(_tempConfigZipFile);
-//    std::cout << "temp file path: " << _tempConfigZipFile.getFullPathName() << std::endl;
-    
-    if (outputStream.openedOk())
-    {
-        outputStream.setPosition(0); // overwrite file if already exists
-        outputStream.truncate();
-
-        double progress = 0.;
-        compressedFileToStore.writeToStream(outputStream, &progress);
-
-    _readyToSaveConfiguration.set(true);
-    }
-    
-    sendChangeMessage(); // notify editor again. Ready to save configuration to zip (wavefile)
-    */
 
 }
 

@@ -506,15 +506,6 @@ void View::IODetailBox::resized()
 
     DSPgrid.templateRows    = { TrackL (1_fr), TrackL (1_fr) };
     DSPgrid.templateColumns = { TrackL (1_fr), TrackL (50_px) };
-
-//    GridItem inCh (inputNumber);
-//    inCh = inCh.withMargin(GridItem::Margin(0,10,0,0));
-//
-//    GridItem outCh (outputNumber);
-//    outCh = outCh.withMargin(GridItem::Margin(0,10,0,0));
-//
-//    GridItem irNum (IRNumber);
-//    irNum = irNum.withMargin(GridItem::Margin(0,10,0,0));
     
     DSPgrid.items = {   GridItem(sampleRateLabel),      GridItem(sampleRateNumber),
                         GridItem(hostBufferLabel),      GridItem(hostBufferNumber)
@@ -663,23 +654,6 @@ void View::ConvManagingBox::resized()
                };
     
     grid.performLayout (localArea);
-    
-    /*
-    int height = 20;
-    int width = proportionOfWidth(0.40f);
-     
-    FlexBox flexBox;
-    flexBox.justifyContent = FlexBox::JustifyContent::spaceAround;
-    flexBox.alignItems = FlexBox::AlignItems::flexEnd;
-    
-    FlexItem bufferCombo (width, height, bufferCombobox);
-    bufferCombo.alignSelf = FlexItem::AlignSelf::autoAlign;
-    FlexItem maxPartCombo (width, height, maxPartCombobox);
-    maxPartCombo.alignSelf = FlexItem::AlignSelf::autoAlign;
-    
-    flexBox.items.addArray({ bufferCombo, maxPartCombo });
-    flexBox.performLayout(getLocalBounds().toFloat());
-     */
 }
 
 //==============================================================================
@@ -851,27 +825,9 @@ void View::InputChannelDialog::resized()
     
     flexBox.items.addArray({ text, editor, toggle });
     flexBox.performLayout(areaToDraw.removeFromTop(centerHeight).toFloat());
-    
-    /*
-    Rectangle<int> messageArea = areaToDraw.removeFromTop(height*2);
-    messageArea.reduce(messageArea.proportionOfWidth(0.07f), 0);
-    message.setBounds(messageArea);
-    invalidMessage.setBounds(messageArea);
-    areaToDraw.removeFromTop(separator);
-    
-    int shrinkValue = areaToDraw.proportionOfWidth(0.20f);
-    auto editorArea = areaToDraw.reduced(shrinkValue, 0);
-    
-    textEditor.setBounds(editorArea.removeFromTop(editorHeight));
-    editorArea.removeFromTop(separator);
-    
-    diagonalToggle.setBounds(editorArea.removeFromTop(editorHeight));
-    areaToDraw.removeFromTop(editorHeight*2+separator*3);
-    */
+   
     int shrinkValue = areaToDraw.proportionOfWidth(0.12f);
     areaToDraw.reduce(shrinkValue, 0);
-    
-//    saveIntoMetaToggle.setBounds(areaToDraw.removeFromTop(editorHeight));
     
     areaToDraw.reduce(40, 0);
     OKButton.setSize(areaToDraw.getWidth(), height);
