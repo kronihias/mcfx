@@ -107,15 +107,14 @@ if(WIN32)
         	$<$<CONFIG:Release>:/MT> #--|
     	)
 	endif(MSVC)
+	
 	IF(BUILD_STANDALONE)
 		SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
+		ADD_DEFINITIONS(-DJUCE_ASIO=1)
+		SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
+		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
 	ENDIF(BUILD_STANDALONE)
 
-	IF (JUCE_ASIO)
-		ADD_DEFINITIONS(-DJUCE_ASIO=1)
-  		SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
-  		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
-	ENDIF (JUCE_ASIO)
 endif(WIN32)
 
 ################################################
@@ -125,7 +124,7 @@ IF(APPLE)
 # 	ADD_DEFINITIONS(
 # 		-std=c++11
 # 	)
-	SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.11)
+	SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
 ENDIF (APPLE)
 
 ################################################
@@ -187,8 +186,15 @@ add_subdirectory(JUCE)                    # If you've put JUCE in a subdirectory
 # If you are building a VST2 or AAX plugin, CMake needs to be told where to find these SDKs on your
 # system. This setup should be done before calling `juce_add_plugin`.
 if(BUILD_VST2)
-SET(VSTSDK_PATH $ENV{HOME}/SDKs/VST_SDK/VST2_SDK CACHE PATH "specify the path of the VST SDK")
-juce_set_vst2_sdk_path("${VSTSDK_PATH}")
+	if(APPLE OR UNIX)
+		SET(VSTSDK_PATH $ENV{HOME}/SDKs/VST_SDK/VST2_SDK CACHE PATH "specify the path of the VST SDK")
+	endif(APPLE OR UNIX)
+
+	if(WIN32)
+		SET(VSTSDK_PATH ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/VST2_SDK CACHE PATH "specify the path of the VST SDK")
+	endif(WIN32)
+
+	juce_set_vst2_sdk_path("${VSTSDK_PATH}")
 endif(BUILD_VST2)
 
 

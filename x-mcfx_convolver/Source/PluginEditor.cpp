@@ -27,8 +27,6 @@
 Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_convolverAudioProcessor& processorToUse)
     : AudioProcessorEditor (&processorToUse), processor(processorToUse)
 {
-//    LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
-
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
     
     view.changePathBox.pathButton.addListener(this);
@@ -39,7 +37,6 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.convManagingBox.maxPartCombobox.addListener(this);
     
     view.inputChannelDialog.OKButton.addListener(this);
-//    view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
     view.ioDetailBox.gainKnob.addListener(this);
     
@@ -49,9 +46,9 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
 
     setSize (460, 420); //originally 350, 330
     
-    UpdateText();
-    
     UpdateFiltersMenu();
+    
+    UpdateText();
     
     processor.addChangeListener(this);
 
@@ -63,6 +60,9 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
 Mcfx_convolverAudioProcessorEditor::~Mcfx_convolverAudioProcessorEditor()
 {
     processor.removeChangeListener(this);
+    
+    if(processor.getStatusText().isNotEmpty())
+        processor.newStatusText = true;
 }
 
 //==============================================================================
@@ -121,8 +121,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.gainKnob.setValue(processor.masterGain.get());
     
     view.convManagingBox.latencyValue.setText(String(processor.getLatencySamples()), sendNotification);
-    
-//    view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
     
     if(processor.restoredSettings.get())
         view.filterManagingBox.restoredSettingsLabel.setVisible(true);
@@ -264,7 +262,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
             tickedFolder = subDirectories.size()-1;
             tickedItem = i;
         }
-        
     }
     
     // add all subdirs to main menu
@@ -335,15 +332,6 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         view.inputChannelDialog.setVisible(false);
         processor.notify();
     }
-    /*
-    else if (buttonThatWasClicked == &(view.inputChannelDialog.saveIntoMetaToggle))
-    {
-        if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
-            processor.storeNumInputsIntoWav.set(true);
-        else
-            processor.storeNumInputsIntoWav.set(false);
-    }
-     */
 }
 
 void Mcfx_convolverAudioProcessorEditor::righClickButtonCallback(int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
@@ -372,61 +360,6 @@ void Mcfx_convolverAudioProcessorEditor::righClickButtonCallback(int result, Mcf
         }
     }
 }
-
-/*
-void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
-{
-    // file chooser....
-    if (result == 0)
-    {
-        // do nothing
-    }
-    else if (result == -1)
-    {
-        String extension = "*.wav";
-        
-        FileChooser myChooser ("Please select the filter file to load...",
-                               demoComponent->processor.lastSearchDir, //old version: ourProcessor->lastSearchDir,
-                               extension);
-        if (myChooser.browseForFileToOpen())
-        {
-            File mooseFile (myChooser.getResult());
-            demoComponent->processor.LoadFilterFromFile(mooseFile);
-            demoComponent->processor.lastSearchDir = mooseFile.getParentDirectory();
-        }
-        else
-        {
-            if(demoComponent->processor.filterNameToShow.isEmpty())
-                demoComponent->view.filterManagingBox.filterSelector.setText("",dontSendNotification);
-            else
-            {
-                String previousName = demoComponent->processor.filterNameToShow;
-                demoComponent->view.filterManagingBox.filterSelector.setText(previousName, dontSendNotification);
-            }
-        }
-    }
-    else if (result == -2)
-    {
-        demoComponent->chooseExportFile();
-              
-        MessageManager::callAsync([&] () {
-            if (demoComponent->exportFile.getFullPathName().isNotEmpty())
-            {
-                 ScopedLock lock(demoComponent->exportFileMutex);
-                 demoComponent->processor.exportWavefileWithMetadata(File(demoComponent->exportFile));//demoComponent->exportFile);
-                 demoComponent->processor.lastSearchDir = demoComponent->exportFile.getParentDirectory();
-             
-            }
-        });
-        
-    }
-    else // load filter from menu based on chosen index
-    {
-        File empty;
-        demoComponent->processor.LoadFilterFromMenu(result - 1);
-    }
-}
-*/
 
 void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
 {
@@ -481,31 +414,10 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
     }
 }
 
-/*
-void Mcfx_convolverAudioProcessorEditor::chooseExportFile()
-{
-    ScopedLock lock(exportFileMutex);
-    exportFile = File();
-    FileChooser myChooser("Export filter as .wav file...",
-                              processor.lastSearchDir.getChildFile(processor.filterNameForStoring),
-                              "*.wav"
-                              );
-    if (myChooser.browseForFileToSave(true))
-    {
-        exportFile = myChooser.getResult();
-    }
-}
-*/
-
 void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
     if (comboBoxThatHasChanged == &view.filterManagingBox.filterSelector)
     {
-//        MessageManager::callAsync([&] () {
-//            menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId(), this);
-//            menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId());
-//        });
-//        menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId(), this);
         menuItemChosenCallback(view.filterManagingBox.filterSelector.getSelectedId());
     }
     else if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
