@@ -1,0 +1,20 @@
+General concept: 
+first character tens identifier; 
+second one increment with alphabet letters
+
+4x4	0a
+8x8	0b
+8x9	0c
+9x12	0d
+12x9	1a
+16x16	1b
+16x32	1c
+19x16	1d
+32x16	3a
+32x25	3b
+32x32	3c
+32x128	3d
+48x48	4a
+64x64	6a
+64x128	6b
+128x128	10
