@@ -107,15 +107,14 @@ if(WIN32)
         	$<$<CONFIG:Release>:/MT> #--|
     	)
 	endif(MSVC)
+	
 	IF(BUILD_STANDALONE)
 		SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
+		ADD_DEFINITIONS(-DJUCE_ASIO=1)
+		SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
+		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
 	ENDIF(BUILD_STANDALONE)
 
-	IF (JUCE_ASIO)
-		ADD_DEFINITIONS(-DJUCE_ASIO=1)
-  		SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
-  		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
-	ENDIF (JUCE_ASIO)
 endif(WIN32)
 
 ################################################
