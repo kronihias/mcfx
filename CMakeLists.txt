@@ -201,8 +201,8 @@ endif(BUILD_VST2)
 # juce_set_aax_sdk_path(...)
 
 
-add_subdirectory(x-mcfx_convolver)
-add_subdirectory(x-mcfx_delay)
-add_subdirectory(x-mcfx_filter)
-add_subdirectory(x-mcfx_gain_delay)
-add_subdirectory(x-mcfx_meter)
+add_subdirectory(x-mcfx-convolver)
+add_subdirectory(x-mcfx-delay)
+add_subdirectory(x-mcfx-filter)
+add_subdirectory(x-mcfx-gain-delay)
+add_subdirectory(x-mcfx-meter)
