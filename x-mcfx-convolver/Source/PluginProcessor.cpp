@@ -296,8 +296,8 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 void Mcfx_convolverAudioProcessor::run()
 {
-    if (threadTask == ThreadTask::loading)
-    {
+//    if (threadTask == ThreadTask::loading)
+//    {
         DebugPrint("Loading Filter...\n\n");
 
         setConvolverStatus(ConvolverStatus::Loading);
@@ -318,9 +318,9 @@ void Mcfx_convolverAudioProcessor::run()
         changeNumInputChannels = false;
         
         sendChangeMessage();
-    }
-    else
-        exportWavefileWithMetadata(targetExport);
+//    }
+//    else
+//        exportWavefileWithMetadata(targetExport);
 }
 
 void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad)
@@ -353,13 +353,13 @@ void Mcfx_convolverAudioProcessor::ReloadConfiguration()
     sendChangeMessage();
 }
 
-void Mcfx_convolverAudioProcessor::exportWavefileAsync(File newAudioFile)
-{
-    targetExport = newAudioFile;
-    
-    threadTask = ThreadTask::exporting;
-    startThread(6); // medium priority
-}
+//void Mcfx_convolverAudioProcessor::exportWavefileAsync(File newAudioFile)
+//{
+//    targetExport = newAudioFile;
+//
+//    threadTask = ThreadTask::exporting;
+//    startThread(6); // medium priority
+//}
 //-------------------------------------------------------------------------
 
 void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
@@ -793,7 +793,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     String metaTagValue =  reader->metadataValues.getValue(WavAudioFormat::riffInfoKeywords, "0");
     int inChannels = metaTagValue.getIntValue();
     
-    if(inChannels != 0 && !changeNumInputChannels)
+    if (inChannels != 0 && !changeNumInputChannels)
     {
         tempNumInputs = inChannels;
         delete reader;
@@ -801,14 +801,18 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     }
     else
     {
+        /// if the value was included in the metadata, will be here proposed to store it again inside it. Else not
+        if (inChannels != 0)
+            storeNumInputsIntoWav.set(true);
+        else
+            storeNumInputsIntoWav.set(false);
+        
         /// request new input channels number to the user
         addNewStatus("Waiting for user input...");
         getInChannels(IRBuffer->getNumSamples());
-        
-        //DEPRECATED
+    
         /// write the new value in metadata tag
-        /*
-        if (storeNumInputsIntoWav.get())
+        if (storeNumInputsIntoWav.get() && tempNumInputs != -2)
         {
             addNewStatus("Storing number of input channel into wavefile metadata...");
             reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempNumInputs);
@@ -832,7 +836,6 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
             writer->writeFromAudioSampleBuffer(bufferRead, 0, bufferRead.getNumSamples());
             delete writer;
         }
-         */
     }
     
     delete reader;
@@ -947,18 +950,8 @@ int Mcfx_convolverAudioProcessor::getSkippedCyclesCount()
 }
 
 //======================== Utility functions ========================
-/*
-void Mcfx_convolverAudioProcessor::DeleteTemporaryFiles()
-{
-    _readyToSaveConfiguration.set(false);
 
-    for (int i = 0; i < _cleanUpFilesOnExit.size(); i++)
-    {
-        _cleanUpFilesOnExit.getUnchecked(i).deleteRecursively();
-    }
-    _cleanUpFilesOnExit.clear();
-}*/
-
+/* NO MORE IN USE
 void Mcfx_convolverAudioProcessor::exportWavefileWithMetadata(File newAudioFile)
 {
     addNewStatus("Configuring new wavefile for export...");
@@ -995,6 +988,7 @@ void Mcfx_convolverAudioProcessor::exportWavefileWithMetadata(File newAudioFile)
     
     delete writer;
 }
+*/
 
 void Mcfx_convolverAudioProcessor::DebugPrint(String debugText, bool reset)
 {

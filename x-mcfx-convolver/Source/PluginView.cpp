@@ -718,7 +718,7 @@ void View::StatusLed::setStatus(State newState)
 
 //==============================================================================
 View::InputChannelDialog::InputChannelDialog() :
-rectSize (260,200)
+rectSize (320,260)
 {
     title.setFont(Font (17.2000f, Font::bold));
     title.setColour(Label::textColourId, Colours::white);
@@ -736,7 +736,7 @@ rectSize (260,200)
     textEditor.setColour(TextEditor::textColourId, Colours::black);
     textEditor.setJustification(Justification::left);
     textEditor.setCaretVisible(true);
-    textEditor.setTextToShowWhenEmpty("value", Colours::darkgrey);
+    textEditor.setTextToShowWhenEmpty("enter value", Colours::darkgrey);
     textEditor.setInputRestrictions(3,"1234567890");
     textEditor.onReturnKey = [&] {OKButton.triggerClick();};
     textEditor.setSelectAllWhenFocused(true);
@@ -750,16 +750,39 @@ rectSize (260,200)
         if ( diagonalToggle.getToggleState() )
         {
             textEditor.setEnabled(false);
+            textEditor.setVisible(false);
+            textEditor.setTextToShowWhenEmpty("", Colours::darkgrey);
             textEditor.setText("");
             diagonalToggle.grabKeyboardFocus();
         }
         else
         {
             textEditor.setEnabled(true);
+            textEditor.setVisible(true);
+            textEditor.setTextToShowWhenEmpty("enter value", Colours::darkgrey);
             textEditor.grabKeyboardFocus();
         }
             };
     addAndMakeVisible(diagonalToggle);
+    
+    saveIntoMetaToggle.setButtonText(TRANS("Store into wavefile metadata"));
+    saveIntoMetaToggle.setTooltip(TRANS("Check if you want to store the input channels number into the wavefile metadata information"));
+    saveIntoMetaToggle.setToggleState(false, dontSendNotification);
+    saveIntoMetaToggle.setColour(ToggleButton::textColourId, Colours::white);
+    saveIntoMetaToggle.onClick = [&]{
+        if ( saveIntoMetaToggle.getToggleState() )
+            warningMessage.setVisible(true);
+        else
+            warningMessage.setVisible(false);
+    };
+    addAndMakeVisible(saveIntoMetaToggle);
+    
+    warningMessage.setFont(Font (12.4000f, Font::bold));
+    warningMessage.setColour(Label::textColourId, Colours::yellow);
+    warningMessage.setJustificationType (Justification::bottomLeft);
+    warningMessage.setText("WARNING: storing will overwrite the whole wavefile", dontSendNotification);
+    addChildComponent(warningMessage);
+
     
     OKButton.setColour (TextButton::buttonColourId, Colours::white);
     OKButton.setColour (TextButton::buttonOnColourId, Colours::blue);
@@ -795,43 +818,52 @@ void View::InputChannelDialog::paint(Graphics& g)
 
 void View::InputChannelDialog::resized()
 {
-    int height = 24;
-    int editorHeight = 18;
+    int titleHeight = 24;
+    int height = 50;
+    int editorHeight = 20;
+    int toggleHeight = 18;
+    int buttonHeight = 30;
     int separator = 6;
     
-    int centerHeight = 120;
+    int centerHeight = 160;
     
     rectSize.setX((getWidth()/2)-rectSize.getWidth()/2);
     rectSize.setY((getHeight()/2)-rectSize.getHeight()/2);
     
     Rectangle<int> areaToDraw = rectSize;
-    areaToDraw.reduce(12, 4); // border
+    areaToDraw.reduce(12, 12); // border
     
-    title.setBounds(areaToDraw.removeFromTop(height));
+    title.setBounds(areaToDraw.removeFromTop(titleHeight));
         
     FlexBox flexBox;
     flexBox.flexDirection = FlexBox::Direction::column;
-    flexBox.justifyContent = FlexBox::JustifyContent::spaceAround;
+    flexBox.justifyContent = FlexBox::JustifyContent::spaceBetween;
     flexBox.alignItems = FlexBox::AlignItems::center;
     
-    FlexItem text (areaToDraw.proportionOfWidth(0.90f) , height*2, message);
-    text.alignSelf = FlexItem::AlignSelf::autoAlign;
+    FlexItem text1 (areaToDraw.proportionOfWidth(0.85f), height, message);
+    text1.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    FlexItem editor (areaToDraw.proportionOfWidth(0.60f), editorHeight, textEditor);
+    FlexItem editor (areaToDraw.proportionOfWidth(0.70f), editorHeight, textEditor);
     editor.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    FlexItem toggle (areaToDraw.proportionOfWidth(0.60f), editorHeight, diagonalToggle);
-    toggle.alignSelf = FlexItem::AlignSelf::autoAlign;
+    FlexItem toggle1 (areaToDraw.proportionOfWidth(0.70f), toggleHeight, diagonalToggle);
+    toggle1.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    flexBox.items.addArray({ text, editor, toggle });
+    FlexItem toggle2 (areaToDraw.proportionOfWidth(0.70f), toggleHeight, saveIntoMetaToggle);
+    toggle2.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    FlexItem text2 (areaToDraw.getWidth(), toggleHeight, warningMessage);
+    text2.alignSelf = FlexItem::AlignSelf::autoAlign;
+    
+    flexBox.items.addArray({ text1, editor, toggle1, toggle2, text2 });
     flexBox.performLayout(areaToDraw.removeFromTop(centerHeight).toFloat());
    
     int shrinkValue = areaToDraw.proportionOfWidth(0.12f);
     areaToDraw.reduce(shrinkValue, 0);
     
     areaToDraw.reduce(40, 0);
-    OKButton.setSize(areaToDraw.getWidth(), height);
-    OKButton.setTopLeftPosition(areaToDraw.getX(), areaToDraw.getY()+areaToDraw.getHeight()/2-height/2);
+    areaToDraw.removeFromBottom(8);
+    OKButton.setBounds(areaToDraw.removeFromBottom(buttonHeight));
 }
 
 void View::InputChannelDialog::invalidState(InvalidType type)
@@ -852,17 +884,33 @@ void View::InputChannelDialog::invalidState(InvalidType type)
             break;
     }
     message.setText(text, dontSendNotification);
+    message.setFont(Font (12.4000f, Font::bold));
     message.setColour(Label::textColourId, Colours::lightsalmon);
 }
 
-void View::InputChannelDialog::resetState(bool editorFocus)
+void View::InputChannelDialog::resetState(bool editorFocus, storeToggleState storeState)
 {
     setVisible(true);
+    title.setText("A value is missing...", dontSendNotification);
     
     message.setText("Number of input channels is missing, \nplease enter it manually:", dontSendNotification);
+    message.setFont(Font (12.4000f, Font::plain));
     message.setColour(Label::textColourId, Colours::white);
     
-    textEditor.setText("",dontSendNotification);
+    textEditor.setText("", dontSendNotification);
+    
+    if (storeState == storeToggleState::checked)
+    {
+        if (saveIntoMetaToggle.getToggleState())
+        {
+            saveIntoMetaToggle.setToggleState(false, sendNotification);
+            saveIntoMetaToggle.setToggleState(true, sendNotification);
+        }
+        else
+            saveIntoMetaToggle.setToggleState(true, sendNotification);
+    }
+    else
+        saveIntoMetaToggle.setToggleState(false, sendNotification);
 
     if(diagonalToggle.getToggleState())
         diagonalToggle.setToggleState(false, sendNotification);
