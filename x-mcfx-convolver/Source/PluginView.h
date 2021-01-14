@@ -181,17 +181,18 @@ public:
         
         Label title;
         Label message;
-        Label invalidMessage;
+        Label warningMessage;
         TextEditor textEditor;
         ToggleButton diagonalToggle;
-//        ToggleButton saveIntoMetaToggle;
+        ToggleButton saveIntoMetaToggle;
         TextButton OKButton;
         
         InputChannelDialog();
         
+        enum storeToggleState {checked,unchecked};
         enum InvalidType {notFeasible, notMultiple};
         void invalidState(InvalidType type);
-        void resetState(bool editorFocus=true);
+        void resetState(bool editorFocus, storeToggleState storeState);
     private:
         void paint (Graphics& g);
         void resized();

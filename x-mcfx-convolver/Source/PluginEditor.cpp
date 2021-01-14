@@ -37,6 +37,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.convManagingBox.maxPartCombobox.addListener(this);
     
     view.inputChannelDialog.OKButton.addListener(this);
+    view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
     view.ioDetailBox.gainKnob.addListener(this);
     
@@ -157,22 +158,41 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
         processor.newStatusText = false;
     }
     
+    view.inputChannelDialog.saveIntoMetaToggle.setToggleState(processor.storeNumInputsIntoWav.get(), dontSendNotification);
+    
     switch (processor.numInputsStatus)
     {
         case Mcfx_convolverAudioProcessor::NumInputsStatus::missing:
-            view.inputChannelDialog.resetState();
+            view.inputChannelDialog.resetState(true,View::InputChannelDialog::storeToggleState::unchecked);
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::notFeasible:
-            view.inputChannelDialog.resetState();
+            if (processor.storeNumInputsIntoWav.get())
+                view.inputChannelDialog.resetState(true, View::InputChannelDialog::storeToggleState::checked);
+            else
+                view.inputChannelDialog.resetState(true, View::InputChannelDialog::storeToggleState::unchecked);
+            
+            view.inputChannelDialog.title.setText("Invalid value",dontSendNotification);
             view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notFeasible);
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::notMultiple:
-            view.inputChannelDialog.resetState();
+            if (processor.storeNumInputsIntoWav.get())
+                view.inputChannelDialog.resetState(true, View::InputChannelDialog::storeToggleState::checked);
+            else
+                view.inputChannelDialog.resetState(true, View::InputChannelDialog::storeToggleState::unchecked);
+            
+            view.inputChannelDialog.title.setText("Invalid value",dontSendNotification);
             view.inputChannelDialog.invalidState(View::InputChannelDialog::InvalidType::notMultiple);
             break;
         case Mcfx_convolverAudioProcessor::NumInputsStatus::requested:
 
-            view.inputChannelDialog.resetState(false);
+            if (processor.storeNumInputsIntoWav.get())
+                view.inputChannelDialog.resetState(false, View::InputChannelDialog::storeToggleState::checked);
+            else
+                view.inputChannelDialog.resetState(false, View::InputChannelDialog::storeToggleState::unchecked);
+            
+            view.inputChannelDialog.title.setText("New value required",dontSendNotification);
+            view.inputChannelDialog.message.setText("Specify new input channels number:", dontSendNotification);
+            
             if(processor.tempNumInputs == -1)
                 view.inputChannelDialog.diagonalToggle.setToggleState(true, sendNotification);
             else
@@ -273,11 +293,11 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
             view.filterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i));
     }
     
-    if (processor.getTargetFilter().existsAsFile())
-    {
-        view.filterManagingBox.filterSelector.addSeparator();
-        view.filterManagingBox.filterSelector.getRootMenu()->addItem(-2, String("Export filter with metadata info..."), processor.readyToExportWavefile.get());
-    }
+//    if (processor.getTargetFilter().existsAsFile())
+//    {
+//        view.filterManagingBox.filterSelector.addSeparator();
+//        view.filterManagingBox.filterSelector.getRootMenu()->addItem(-2, String("Export filter with metadata info..."), processor.readyToExportWavefile.get());
+//    }
 
     view.filterManagingBox.filterSelector.addSeparator();
     view.filterManagingBox.filterSelector.getRootMenu()->addItem(-1, String("Open filter from file..."));
@@ -329,9 +349,21 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         else
             processor.tempNumInputs = getInputChannelFromDialog();
         
+        if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
+            processor.storeNumInputsIntoWav.set(true);
+        else
+            processor.storeNumInputsIntoWav.set(false);
+        
         view.inputChannelDialog.setVisible(false);
         processor.notify();
     }
+//    else if (buttonThatWasClicked == &(view.inputChannelDialog.saveIntoMetaToggle))
+//    {
+//        if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
+//            processor.storeNumInputsIntoWav.set(true);
+//        else
+//            processor.storeNumInputsIntoWav.set(false);
+//    }
 }
 
 void Mcfx_convolverAudioProcessorEditor::righClickButtonCallback(int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
@@ -392,21 +424,21 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
             }
         }
     }
-    else if (result == -2)
-    {
-        FileChooser myChooser("Export filter as .wav file...",
-                                  processor.lastSearchDir.getChildFile(processor.filterNameForStoring),
-                                  "*.wav"
-                                  );
-        if (myChooser.browseForFileToSave(true))
-        {
-            File mooseFile =  myChooser.getResult();
-            processor.exportWavefileAsync(mooseFile);
-            processor.lastSearchDir = mooseFile.getParentDirectory();
-        }
-        else
-            UpdateText();
-    }
+//    else if (result == -2)
+//    {
+//        FileChooser myChooser("Export filter as .wav file...",
+//                                  processor.lastSearchDir.getChildFile(processor.filterNameForStoring),
+//                                  "*.wav"
+//                                  );
+//        if (myChooser.browseForFileToSave(true))
+//        {
+//            File mooseFile =  myChooser.getResult();
+//            processor.exportWavefileAsync(mooseFile);
+//            processor.lastSearchDir = mooseFile.getParentDirectory();
+//        }
+//        else
+//            UpdateText();
+//    }
     else // load filter from menu based on chosen index
     {
         File empty;
