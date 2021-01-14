@@ -718,7 +718,7 @@ void View::StatusLed::setStatus(State newState)
 
 //==============================================================================
 View::InputChannelDialog::InputChannelDialog() :
-rectSize (320,260)
+rectSize (320,278)
 {
     title.setFont(Font (17.2000f, Font::bold));
     title.setColour(Label::textColourId, Colours::white);
@@ -766,7 +766,7 @@ rectSize (320,260)
     addAndMakeVisible(diagonalToggle);
     
     saveIntoMetaToggle.setButtonText(TRANS("Store into wavefile metadata"));
-    saveIntoMetaToggle.setTooltip(TRANS("Check if you want to store the input channels number into the wavefile metadata information"));
+    saveIntoMetaToggle.setTooltip(TRANS("Check if you want to store the input channels number into the wavefile metadata"));
     saveIntoMetaToggle.setToggleState(false, dontSendNotification);
     saveIntoMetaToggle.setColour(ToggleButton::textColourId, Colours::white);
     saveIntoMetaToggle.onClick = [&]{
@@ -777,10 +777,10 @@ rectSize (320,260)
     };
     addAndMakeVisible(saveIntoMetaToggle);
     
-    warningMessage.setFont(Font (12.4000f, Font::bold));
+    warningMessage.setFont(Font (12.4000f, Font::plain));
     warningMessage.setColour(Label::textColourId, Colours::yellow);
     warningMessage.setJustificationType (Justification::bottomLeft);
-    warningMessage.setText("WARNING: storing will overwrite the whole wavefile", dontSendNotification);
+    warningMessage.setText("Warning! The original file will be modified, a comment \nabout this value will be added to the metadata chunk ", dontSendNotification);
     addChildComponent(warningMessage);
 
     
@@ -825,7 +825,7 @@ void View::InputChannelDialog::resized()
     int buttonHeight = 30;
     int separator = 6;
     
-    int centerHeight = 160;
+    int centerHeight = 178;
     
     rectSize.setX((getWidth()/2)-rectSize.getWidth()/2);
     rectSize.setY((getHeight()/2)-rectSize.getHeight()/2);
@@ -852,7 +852,7 @@ void View::InputChannelDialog::resized()
     FlexItem toggle2 (areaToDraw.proportionOfWidth(0.70f), toggleHeight, saveIntoMetaToggle);
     toggle2.alignSelf = FlexItem::AlignSelf::autoAlign;
     
-    FlexItem text2 (areaToDraw.getWidth(), toggleHeight, warningMessage);
+    FlexItem text2 (areaToDraw.getWidth(), 25, warningMessage);
     text2.alignSelf = FlexItem::AlignSelf::autoAlign;
     
     flexBox.items.addArray({ text1, editor, toggle1, toggle2, text2 });
