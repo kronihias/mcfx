@@ -41,6 +41,8 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     
     view.ioDetailBox.gainKnob.addListener(this);
     
+    masterGainAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "MASTERGAIN", view.ioDetailBox.gainKnob);
+    
     setNewGeneralPath.addItem(-1, "Set new generic path");
     
     addAndMakeVisible(view);
@@ -96,7 +98,7 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
 {
     
-    view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
+//    view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     view.filterManagingBox.filterSelector.setTooltip(view.filterManagingBox.filterSelector.getText()); //to see all the string
     
     view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
@@ -274,7 +276,9 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
         }
         
         // add item to submenu
-        filterSubmenus.getLast()->addItem(i+1, processor.filterFilesList.getUnchecked(i).getFileNameWithoutExtension());
+        String itemLabel = std::to_string(i+1);
+        itemLabel << ". " << processor.filterFilesList.getUnchecked(i).getFileNameWithoutExtension();
+        filterSubmenus.getLast()->addItem(i+1, itemLabel);
         
         // save indexes of current item and folder if it's the target one for loading
         if (processor.getTargetFilter() == processor.filterFilesList.getUnchecked(i))
@@ -305,6 +309,14 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
     //tick the selected item (if present)
     if (tickedItem != -1)
         view.filterManagingBox.filterSelector.setSelectedItemIndex(tickedItem,dontSendNotification);
+    
+    if (view.filterManagingBox.filterSelector.getSelectedId() == 0)
+    {
+        if(processor.filterNameToShow.isEmpty())
+            view.filterManagingBox.filterSelector.setText("",dontSendNotification);
+        else
+            view.filterManagingBox.filterSelector.setText(processor.filterNameToShow, dontSendNotification);
+    }
 }
 
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
@@ -410,6 +422,12 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
         if (myChooser.browseForFileToOpen())
         {
             File mooseFile (myChooser.getResult());
+            // storing filename
+            processor.filterNameToShow.clear();
+            processor.filterNameToShow << mooseFile.getFileNameWithoutExtension() << " (outside library)";
+            
+            view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
+            
             processor.LoadFilterFromFile(mooseFile);
             processor.lastSearchDir = mooseFile.getParentDirectory();
         }
@@ -418,10 +436,7 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
             if(processor.filterNameToShow.isEmpty())
                 view.filterManagingBox.filterSelector.setText("",dontSendNotification);
             else
-            {
-                String previousName = processor.filterNameToShow;
-                view.filterManagingBox.filterSelector.setText(previousName, dontSendNotification);
-            }
+                view.filterManagingBox.filterSelector.setText(processor.filterNameToShow, dontSendNotification);
         }
     }
 //    else if (result == -2)
@@ -442,6 +457,7 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
     else // load filter from menu based on chosen index
     {
         File empty;
+        processor.filterNameToShow = view.filterManagingBox.filterSelector.getText();
         processor.LoadFilterFromMenu(result - 1);
     }
 }

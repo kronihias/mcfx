@@ -35,9 +35,10 @@
 //==============================================================================
 /**
 */
-class Mcfx_convolverAudioProcessor  :   public AudioProcessor,
-                                        public ChangeBroadcaster,
-                                        public Thread
+class Mcfx_convolverAudioProcessor  :   public AudioProcessor
+                                        , public ChangeBroadcaster
+                                        , public Thread
+                                        , private AudioProcessorValueTreeState::Listener
 {
 public:
     //==============================================================================
@@ -53,10 +54,11 @@ public:
     //==============================================================================
     AudioProcessorEditor*   createEditor();
     bool                    hasEditor() const;
-
-    //==============================================================================
     const String    getName() const;
 
+    //==============================================================================
+    // Deprecated host passthrough parameters
+    /*
     int             getNumParameters();
 
     float           getParameter (int index);
@@ -64,7 +66,9 @@ public:
 
     const String    getParameterName (int index);
     const String    getParameterText (int index);
+    */
 
+    //==============================================================================
     const String    getInputChannelName (int channelIndex) const;
     const String    getOutputChannelName (int channelIndex) const;
     bool            isInputChannelStereoPair (int index) const;
@@ -148,6 +152,13 @@ public:
     Atomic<bool>     readyToExportWavefile;
     
     Atomic<float>   masterGain;
+    
+    //----------------------------------------------------------------------------
+    AudioProcessorValueTreeState apvts;
+    AudioProcessorValueTreeState::ParameterLayout createParameters();
+    
+    std::atomic<float>* filterIndexParameter = nullptr;
+    void parameterChanged(const String& parameterID, float newValue);
 
 private:
     String          _DebugText;

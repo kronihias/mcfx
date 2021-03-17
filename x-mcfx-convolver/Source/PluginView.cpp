@@ -533,7 +533,7 @@ View::ConvManagingBox::ConvManagingBox()
     bufferLabel.setFont (Font (12.4000f, Font::plain));
     bufferLabel.setColour (Label::textColourId, Colours::white);
     bufferLabel.setJustificationType(Justification::left);
-    bufferLabel.setText("First Partition size", dontSendNotification);
+    bufferLabel.setText("First Partition Size", dontSendNotification);
     bufferLabel.attachToComponent(&bufferCombobox, true);
     addAndMakeVisible (bufferLabel);
     

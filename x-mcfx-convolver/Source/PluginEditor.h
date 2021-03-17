@@ -75,8 +75,6 @@ public:
     void sliderValueChanged(Slider *slider);
 
 private:
-    Mcfx_convolverAudioProcessor& processor;
-    
     View view;
 
     TooltipWindow tooltipWindow;
@@ -88,6 +86,10 @@ private:
     
     File exportFile;
     CriticalSection exportFileMutex;
+    
+    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> masterGainAttachment;
+    
+    Mcfx_convolverAudioProcessor& processor;
 };
 
 

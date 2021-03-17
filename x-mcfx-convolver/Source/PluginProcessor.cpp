@@ -71,7 +71,9 @@ _paramReload(false),
 _skippedCycles(0),
 safemode_(false),
 
-newStatusText(false)
+newStatusText(false),
+
+apvts(*this, nullptr, "PARAMETERS", createParameters())
 {
     // check these values... they are all zeros in this point
     _SampleRate = getSampleRate();
@@ -106,6 +108,13 @@ newStatusText(false)
     
     // this is for the open dialog of the gui
     lastSearchDir = lastSearchDir.getSpecialLocation(File::userHomeDirectory);
+    
+
+//    boolParameter = apvts.getRawParameterValue("FLOAT");
+    
+    apvts.addParameterListener("FILTERID", this);
+    apvts.addParameterListener("RELOAD", this);
+    apvts.addParameterListener("ENGAGE", this);
 }
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
@@ -120,12 +129,13 @@ Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
     mtxconv_.Cleanup();
 #endif
 
-//    DeleteTemporaryFiles();
+    //    DeleteTemporaryFiles();
 }
 
 //==============================================================================
 const String Mcfx_convolverAudioProcessor::getName() const                      { return JucePlugin_Name; }
 
+/* deprecated host passthrough parameters
 int Mcfx_convolverAudioProcessor::getNumParameters()                            { return 1;}
 
 float Mcfx_convolverAudioProcessor::getParameter (int index)                    { return (float)_paramReload;}
@@ -148,7 +158,7 @@ const String Mcfx_convolverAudioProcessor::getParameterText (int index)
     else
         return "";
 }
-
+*/
 const String Mcfx_convolverAudioProcessor::getInputChannelName (int channelIndex) const     { return String (channelIndex + 1); }
 
 const String Mcfx_convolverAudioProcessor::getOutputChannelName (int channelIndex) const    { return String (channelIndex + 1); }
@@ -248,7 +258,6 @@ void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samples
     {
         // mtxconv_.Reset();
     }
-    
 }
 
 void Mcfx_convolverAudioProcessor::releaseResources()
@@ -881,7 +890,8 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex, 
     {
 //        DeleteTemporaryFiles();
         LoadConfigurationAsync(filterFilesList.getUnchecked(filterIndex));
-        filterNameToShow = filterFilesList.getUnchecked(filterIndex).getFileNameWithoutExtension();
+//        filterNameToShow = std::to_string(filterIndex+1);
+//        filterNameToShow << ". " << filterFilesList.getUnchecked(filterIndex).getFileNameWithoutExtension();
     }
     if (restored)
         restoredSettings.set(true);
@@ -893,8 +903,8 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool re
 {
 //    DeleteTemporaryFiles();
     LoadConfigurationAsync(filterToLoad);
-    filterNameToShow.clear();
-    filterNameToShow << filterToLoad.getFileNameWithoutExtension() << " (outside library)";
+//    filterNameToShow.clear();
+//    filterNameToShow << filterToLoad.getFileNameWithoutExtension() << " (outside library)";
     
     if (restored)
         restoredSettings.set(true);
@@ -1257,4 +1267,49 @@ AudioProcessor* JUCE_CALLTYPE createPluginFilter()
     return new Mcfx_convolverAudioProcessor();
 }
 
+//==============================================================================
+//
+AudioProcessorValueTreeState::ParameterLayout Mcfx_convolverAudioProcessor::createParameters()
+{
+    AudioProcessorValueTreeState::ParameterLayout parameters;
 
+    parameters.add (std::make_unique<AudioParameterInt> ("FILTERID", "Filter Index", 1, 127, 0));
+    parameters.add (std::make_unique<AudioParameterBool> ("RELOAD", "ReloadConfig", false));
+    parameters.add (std::make_unique<AudioParameterBool> ("ENGAGE", "Engage filter", false));
+    parameters.add (std::make_unique<AudioParameterFloat> ("MASTERGAIN", "Master gain", -100.0f, 40.0f, 0));
+
+    return parameters;
+}
+
+void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, float newValue)
+{
+//    if (parameterID == "FLOAT")
+//        addNewStatus(std::to_string(newValue));
+    
+    if ( parameterID == "RELOAD" )
+    {
+        if (newValue == true)
+            ReloadConfiguration();
+    }
+    else if (parameterID == "ENGAGE")
+    {
+        if (newValue == true)
+        {
+            addNewStatus("engage");
+//            filterIndexParameter = apvts.getRawParameterValue("FILTERID");
+//
+//            addNewStatus(std::to_string(*filterIndexParameter));
+////            LoadFilterFromMenu((int)*filterIndexParameter-1, false);
+        }
+        else
+            addNewStatus("dont engage");
+        
+    }
+    else if (parameterID == "FILTERID")
+    {
+        String label;
+        label << (int)newValue;
+        addNewStatus(label);
+        LoadFilterFromMenu((int)newValue-1, false);
+    }
+}
