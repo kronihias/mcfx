@@ -458,7 +458,14 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
     {
         File empty;
         processor.filterNameToShow = view.filterManagingBox.filterSelector.getText();
-        processor.LoadFilterFromMenu(result - 1);
+        
+        //normalization of input value as corresponding value tree state parameter
+        float normalized_value = processor.apvts.getParameter("FILTERID")->convertTo0to1(result);
+        //parameter updating notifyin host will call automatically call the loadin function
+        processor.apvts.getParameter("FILTERID")->setValueNotifyingHost(normalized_value);
+        
+        //DEPRECATED directly call 
+//        processor.LoadFilterFromMenu(result - 1);
     }
 }
 

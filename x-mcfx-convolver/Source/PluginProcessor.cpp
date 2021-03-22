@@ -38,42 +38,46 @@ Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() : /*
 AudioProcessor (BusesProperties()   .withInput  ("MainInput",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )
                                     .withOutput ("MainOutput", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )
                                     ), */
-Thread("mtx_convolver_master"),
-threadTask(ThreadTask::loading),
-restoredSettings(false),
+Thread("mtx_convolver_master")
+, threadTask(ThreadTask::loading)
+, restoredSettings(false)
 
-activeNumInputs(0),
-activeNumOutputs(0),
-activeNumIRs(0),
-_MaxPartSize(MAX_PART_SIZE),
-filterLenghtInSecs(0),
-filterLenghtInSmpls(0),
-wavefileHasBeenResampled(false),
+, activeNumInputs(0)
+, activeNumOutputs(0)
+, activeNumIRs(0)
+, _MaxPartSize(MAX_PART_SIZE)
+, filterLenghtInSecs(0)
+, filterLenghtInSmpls(0)
+, wavefileHasBeenResampled(false)
 
-_isProcessing(false),
+, _isProcessing(false)
 
-convolverReady(false),
-convolverStatus(ConvolverStatus::Unloaded),
-holdNumInputChannel(false),
+, convolverReady(false)
+, convolverStatus(ConvolverStatus::Unloaded)
+, holdNumInputChannel(false)
 
-changeNumInputChannels(false),
-numInputsStatus(NumInputsStatus::agreed),
-tempNumInputs(0),
-//storeNumInputsIntoWav(false),
-storedInChannels(0),
+, changeNumInputChannels(false)
+, numInputsStatus(NumInputsStatus::agreed)
+, tempNumInputs(0)
+//, storeNumInputsIntoWav(false)
+, storedInChannels(0)
 
-readyToExportWavefile(false),
+, readyToExportWavefile(false)
 
-masterGain(0),
-storedGain(nullptr),
+, masterGain(0)
+, storedGain(nullptr)
 
-_paramReload(false),
-_skippedCycles(0),
-safemode_(false),
+, _paramReload(false)
+, _skippedCycles(0)
+, safemode_(false)
 
-newStatusText(false),
+, newStatusText(false)
 
-apvts(*this, nullptr, "PARAMETERS", createParameters())
+, apvts(*this, nullptr, "PARAMETERS", createParameters())
+
+//, osc_in_port(7200)
+//, osc_in(false)
+
 {
     // check these values... they are all zeros in this point
     _SampleRate = getSampleRate();
@@ -111,6 +115,7 @@ apvts(*this, nullptr, "PARAMETERS", createParameters())
     
 
 //    boolParameter = apvts.getRawParameterValue("FLOAT");
+//    filterIndexParameter = apvts.getRawParameterValue ("FILTERID");
     
     apvts.addParameterListener("FILTERID", this);
     apvts.addParameterListener("RELOAD", this);
@@ -1313,3 +1318,75 @@ void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, 
         LoadFilterFromMenu((int)newValue-1, false);
     }
 }
+
+//==============================================================================
+// OSC implementation
+/*
+void Mcfx_convolverAudioProcessor::setOscIn(bool arg)
+{
+  if (arg) {
+
+    if (oscReceiver.connect(osc_in_port))
+    {
+      oscReceiver.addListener(this, "/reload");
+      oscReceiver.addListener(this, "/load");
+      osc_in = true;
+    }
+    else
+    {
+      DebugPrint("Could not open UDP port, try a different port.\n");
+    }
+      
+
+  } else { // turn off osc
+
+    osc_in = false;
+
+    oscReceiver.removeListener(this);
+
+    oscReceiver.disconnect();
+
+  }
+}
+
+bool Mcfx_convolverAudioProcessor::getOscIn()
+{
+  return osc_in;
+}
+
+void Mcfx_convolverAudioProcessor::setOscInPort(int port)
+{
+  osc_in_port = port;
+
+  if (osc_in)
+  {
+    setOscIn(false);
+    setOscIn(true);
+  }
+}
+
+int Mcfx_convolverAudioProcessor::getOscInPort()
+{
+  return osc_in_port;
+}
+
+void Mcfx_convolverAudioProcessor::oscMessageReceived(const OSCMessage & message)
+{
+  if (message.getAddressPattern() == "/reload")
+  {
+    DebugPrint("Received Reload via OSC (/reload).\n");
+    ReloadConfiguration();
+  }
+  else if (message.getAddressPattern() == "/load")
+  {
+
+    DebugPrint("Received Load via OSC (/load).\n");
+
+    if (message.size() < 1)
+      return;
+
+//    if (message[0].isString())
+//      LoadPresetByName(message[0].getString());
+  }
+}
+*/

@@ -39,6 +39,8 @@ class Mcfx_convolverAudioProcessor  :   public AudioProcessor
                                         , public ChangeBroadcaster
                                         , public Thread
                                         , private AudioProcessorValueTreeState::Listener
+//                                        , private juce::OSCReceiver
+//                                        , private juce::OSCReceiver::ListenerWithOSCAddress<juce::OSCReceiver::MessageLoopCallback>
 {
 public:
     //==============================================================================
@@ -154,11 +156,22 @@ public:
     Atomic<float>   masterGain;
     
     //----------------------------------------------------------------------------
+    // Plug-in parameters
     AudioProcessorValueTreeState apvts;
     AudioProcessorValueTreeState::ParameterLayout createParameters();
     
     std::atomic<float>* filterIndexParameter = nullptr;
+    
     void parameterChanged(const String& parameterID, float newValue);
+    
+    //----------------------------------------------------------------------------
+    /*
+    void setOscIn(bool arg); // activate osc in
+    bool getOscIn();
+    void setOscInPort(int port);
+    int getOscInPort();
+    void oscMessageReceived(const OSCMessage& message);
+     */
 
 private:
     String          _DebugText;
@@ -231,7 +244,15 @@ private:
     void                exportWavefileWithMetadata(File targetAudioFile);
         
     float*          storedGain;
-
+    
+    // -----------------------------------------------------------------------------
+    // OSC objects
+    /*
+    OSCReceiver oscReceiver;
+    int osc_in_port;
+    bool osc_in;
+     */
+     
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_convolverAudioProcessor)
 };
