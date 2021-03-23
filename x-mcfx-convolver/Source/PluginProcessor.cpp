@@ -332,6 +332,9 @@ void Mcfx_convolverAudioProcessor::run()
         changeNumInputChannels = false;
         
         sendChangeMessage();
+        // if the load was called by reload parameter, we need to reset it
+        apvts.getParameter("RELOAD")->setValueNotifyingHost(false);
+    
 //    }
 //    else
 //        exportWavefileWithMetadata(targetExport);
@@ -1294,7 +1297,9 @@ void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, 
     if ( parameterID == "RELOAD" )
     {
         if (newValue == true)
+        {
             ReloadConfiguration();
+        }
     }
     else if (parameterID == "ENGAGE")
     {
@@ -1315,7 +1320,7 @@ void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, 
         String label;
         label << (int)newValue;
         addNewStatus(label);
-        LoadFilterFromMenu((int)newValue-1, false);
+        LoadFilterFromMenu((int)newValue-1);
     }
 }
 

@@ -352,7 +352,8 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     else if (buttonThatWasClicked == &(view.filterManagingBox.reloadButton))
     {
         processor.changeNumInputChannels = true;
-        processor.ReloadConfiguration();
+        processor.apvts.getParameter("RELOAD")->setValueNotifyingHost(true);
+//        processor.ReloadConfiguration();
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
