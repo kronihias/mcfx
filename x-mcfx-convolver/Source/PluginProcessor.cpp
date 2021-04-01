@@ -115,7 +115,7 @@ Thread("mtx_convolver_master")
     
 
 //    boolParameter = apvts.getRawParameterValue("FLOAT");
-//    filterIndexParameter = apvts.getRawParameterValue ("FILTERID");
+    filterIndexParameter = apvts.getRawParameterValue ("FILTERID");
     
     apvts.addParameterListener("FILTERID", this);
     apvts.addParameterListener("RELOAD", this);
@@ -1216,7 +1216,10 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                     if (*storedGain == 9999)
                         storedGain = nullptr;
                     
-                    LoadFilterFromMenu(filterIndex, true);
+                    float normalized_value = apvts.getParameter("FILTERID")->convertTo0to1(filterIndex+1);
+                    apvts.getParameter("FILTERID")->setValueNotifyingHost(normalized_value);
+                    
+//                    LoadFilterFromMenu(filterIndex, true);
                     return;
                 }
                 filterNameToShow = targetFilter.getFileNameWithoutExtension();
@@ -1284,6 +1287,7 @@ AudioProcessorValueTreeState::ParameterLayout Mcfx_convolverAudioProcessor::crea
     parameters.add (std::make_unique<AudioParameterInt> ("FILTERID", "Filter Index", 1, 127, 0));
     parameters.add (std::make_unique<AudioParameterBool> ("RELOAD", "ReloadConfig", false));
     parameters.add (std::make_unique<AudioParameterBool> ("ENGAGE", "Engage filter", false));
+    parameters.add (std::make_unique<AudioParameterBool> ("AUTOLOAD", "Auto load filter", false));
     parameters.add (std::make_unique<AudioParameterFloat> ("MASTERGAIN", "Master gain", -100.0f, 40.0f, 0));
 
     return parameters;
@@ -1291,9 +1295,7 @@ AudioProcessorValueTreeState::ParameterLayout Mcfx_convolverAudioProcessor::crea
 
 void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, float newValue)
 {
-//    if (parameterID == "FLOAT")
-//        addNewStatus(std::to_string(newValue));
-    
+    //Reload must be maintain a separate parameter from Engage for his skill of working with matrix outside menu
     if ( parameterID == "RELOAD" )
     {
         if (newValue == true)
@@ -1304,23 +1306,12 @@ void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, 
     else if (parameterID == "ENGAGE")
     {
         if (newValue == true)
-        {
-            addNewStatus("engage");
-//            filterIndexParameter = apvts.getRawParameterValue("FILTERID");
-//
-//            addNewStatus(std::to_string(*filterIndexParameter));
-////            LoadFilterFromMenu((int)*filterIndexParameter-1, false);
-        }
-        else
-            addNewStatus("dont engage");
-        
+            LoadFilterFromMenu((int)filterIndexParameter->load()-1);
     }
     else if (parameterID == "FILTERID")
     {
-        String label;
-        label << (int)newValue;
-        addNewStatus(label);
-        LoadFilterFromMenu((int)newValue-1);
+        if (apvts.getParameter("AUTOLOAD")->getValue())
+            LoadFilterFromMenu((int)newValue-1);
     }
 }
 
