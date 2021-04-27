@@ -1286,8 +1286,6 @@ AudioProcessorValueTreeState::ParameterLayout Mcfx_convolverAudioProcessor::crea
 
     parameters.add (std::make_unique<AudioParameterInt> ("FILTERID", "Filter Index", 1, 127, 0));
     parameters.add (std::make_unique<AudioParameterBool> ("RELOAD", "ReloadConfig", false));
-    parameters.add (std::make_unique<AudioParameterBool> ("ENGAGE", "Engage filter", false));
-    parameters.add (std::make_unique<AudioParameterBool> ("AUTOLOAD", "Auto load filter", false));
     parameters.add (std::make_unique<AudioParameterFloat> ("MASTERGAIN", "Master gain", -100.0f, 40.0f, 0));
 
     return parameters;
@@ -1299,18 +1297,11 @@ void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, 
     if ( parameterID == "RELOAD" )
     {
         if (newValue == true)
-        {
             ReloadConfiguration();
-        }
-    }
-    else if (parameterID == "ENGAGE")
-    {
-        if (newValue == true)
-            LoadFilterFromMenu((int)filterIndexParameter->load()-1);
     }
     else if (parameterID == "FILTERID")
     {
-        if (apvts.getParameter("AUTOLOAD")->getValue())
+        if (!isThreadRunning())
             LoadFilterFromMenu((int)newValue-1);
     }
 }
