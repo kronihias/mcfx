@@ -43,9 +43,9 @@
 #endif
 // #endif
 
+#define GARDNER_SCHEME 1
 
-// Aligned Memory Allocation and Deallocation
-
+/// Aligned Memory Allocation and Deallocation
 inline void* aligned_malloc(size_t size, size_t align) {
     void *result;
 #ifdef _MSC_VER
@@ -67,24 +67,30 @@ inline void aligned_free(void *ptr) {
 
 
 ////////////////////////////
-// class which holds frequency domain data of input signal
-// Frequency Domain Delay Line (FDL)
+/** Class which holds frequency domain data of input signal
+ 
+    Frequency Domain Delay Line (FDL)
+ */
 class InNode
 {
 public:
+    /// Allocates memory
+    InNode(int in, int numpartitions, int partitionsize);
     
-    InNode(int in, int numpartitions, int partitionsize); // allocates memory
-    
-    ~InNode(); // deallocates memory
+    /// Deallocates memory
+    ~InNode();
     
 private:
     
     friend class MtxConvSlave;
     
-    int                 in_; // input channel assignment
-    int                 numpartitions_; // number of partitions (length of FDL)
+    /// Input channel assignment
+    int                 in_;
     
-    // complex fft data
+    /// Number of partitions (length of FDL)
+    int                 numpartitions_;
+    
+    /// Complex fft data
 #if SPLIT_COMPLEX
     float               **a_re_; // N/2+1 -> (M/2+1 = N+1, with M length of fft sequence)
     float               **a_im_; // N/2+1 -> (M/2+1 = N+1)
@@ -95,25 +101,30 @@ private:
 };
 
 ////////////////////////////
-// class which holds frequency domain data of filter (x numpartitions_)
-// Frequency Domain Delay Line (FDL)
+/** Class which holds frequency domain data of filter (x numpartitions_)
+    
+    Frequency Domain Delay Line (FDL)
+ */
 class FilterNode
 {
 public:
+    /// Allocates memory
+    FilterNode(InNode *innode, int numpartitions, int partitionsize);
     
-    FilterNode(InNode *innode, int numpartitions, int partitionsize); // allocates memory
-    
-    ~FilterNode(); // deallocates memory
+    /// Deallocates memory
+    ~FilterNode();
     
 private:
     
     friend class MtxConvSlave;
     
-    InNode              *innode_; // assigned input node
+    /// Assigned input node
+    InNode              *innode_;
     
-    int numpartitions_; // number of partitions (length of FDL)
+    /// Number of partitions (length of FDL)
+    int numpartitions_;
     
-    // complex fft data
+    /// Complex fft data
 #if SPLIT_COMPLEX
     float               **b_re_; // N/2+1
     float               **b_im_; // N/2+1
@@ -129,84 +140,28 @@ private:
 class OutNode
 {
 public:
+    /// Allocates memory
+    OutNode(int out, int partitionsize, int numpartitions);
     
-    OutNode(int out, int partitionsize, int numpartitions) // resize buffer
-    {
-        numpartitions_ = numpartitions;
-
-        out_ = out;
-        outbuf_.setSize(1, partitionsize);
-        outbuf_.clear();
-        
-        // allocate complex output for each partition stage
-#if SPLIT_COMPLEX
-        c_re_ = new float* [numpartitions_];
-        c_im_ = new float* [numpartitions_];
-#else
-        c_c_ = new fftwf_complex* [numpartitions_];
-#endif
-
-        for (int i=0; i<numpartitions_; i++)
-        {
-            // allocate memory in constructor
-#if SPLIT_COMPLEX
-            // vdsp framework needs N split complex samples
-            c_re_[i] = reinterpret_cast<float*>( aligned_malloc( (partitionsize+1)*sizeof(float), 16 ) );
-            c_im_[i] = reinterpret_cast<float*>( aligned_malloc( (partitionsize+1)*sizeof(float), 16 ) );
-            
-            
-            FloatVectorOperations::clear(c_re_[i], partitionsize+1);
-            FloatVectorOperations::clear(c_im_[i], partitionsize+1);
-        
-#else
-            // fftw needs N+1 complex samples
-            c_c_[i] = reinterpret_cast<fftwf_complex*>( aligned_malloc( (partitionsize+1)*sizeof(fftwf_complex), 16 ) );
-            
-            FloatVectorOperations::clear((float*)c_c_[i], 2*(partitionsize+1));
-#endif  
-        }
-        
-    };
-    
-    ~OutNode()
-    {
-        filternodes_.clear();
-        
-        // free memory in destructor
-        for (int i=0; i<numpartitions_; i++)
-        {
-#if SPLIT_COMPLEX
-            if (c_re_[i])
-                aligned_free(c_re_[i]);
-            if (c_im_[i])
-                aligned_free(c_im_[i]);
-#else
-            if (c_c_[i])
-                aligned_free(c_c_[i]);
-#endif
-        }
-
-#if SPLIT_COMPLEX
-        delete[] c_re_;
-        delete[] c_im_;
-#else
-        delete[] c_c_;
-#endif
-    };
+    /// Dellocates memory
+    ~OutNode();
     
 private:
     
     friend class MtxConvSlave;
     
-    int                 out_; // output channel assignement
+    /// Output channel assignement
+    int                 out_;
     
-    Array<FilterNode*>  filternodes_; // a list of all assigned filternodes
+    /// A list of all assigned filternodes
+    Array<FilterNode*>  filternodes_;
     
-    AudioSampleBuffer   outbuf_; // output samples, 1 channels (no concur. access problem)
+    /// Output samples, 1 channels (no concur. access problem)
+    AudioSampleBuffer   outbuf_;
     
     int                 numpartitions_;
     
-        // complex fft data
+    /// complex fft data
 #if SPLIT_COMPLEX
     float               **c_re_; // N/2+1
     float               **c_im_; // N/2+1
@@ -214,8 +169,6 @@ private:
     fftwf_complex       **c_c_; // N+1 -> interleaved complex data
 #endif
 };
-
-
 
 
 ///////////////////////////
@@ -230,28 +183,29 @@ public:
 private:
     friend class MtxConvMaster;
     
-    
-    // threadfunct
+    /// threadfunct
     void run ();
     
-    // this is called by the callback or thread to perform convolution of one input signal partition
+    /// this is called by the callback or thread to perform convolution of one input signal partition
     void Process (int filt_part_idx);
 
-    // transform the new input data
+    /// transform the new input data
     void TransformInput(bool skip);
 
-    // transform the accumulated output
+    /// transform the accumulated output
     void TransformOutput(bool skip);
 
-    // Write the time data to the master output buffer
+    /// Write the time data to the master output buffer
     void WriteToOutbuf(int numsamples, bool skip);
 
-    // this is called to get the time domain output signal
-    // returns true if all partitions finished in time, false if some have been skipped
-    // if forcesync = true this will wait until all partitions are finished
+    /** This is called to get the time domain output signal
+        
+        returns true if all partitions finished in time, false if some have been skipped
+        if forcesync = true this will wait until all partitions are finished
+     */
     bool ReadOutput(int numsamples, bool forcesync);
     
-    // start/stop thread
+    /// start/stop thread
     void StartProc();
     void StopProc();
     
@@ -268,69 +222,128 @@ private:
                      int out,
                      const AudioSampleBuffer& data);
     
-    int CheckInNode (int in, bool create); // return InNode ID if found, otherwise returns id of newly created or -1 if not available
-    int CheckOutNode (int out, bool create); // return OutNode ID if found, otherwise returns id of newly created or -1 if not available
+    /// Return InNode ID if found,  otherwise returns id of newly created or -1 if not available
+    int CheckInNode (int in, bool create);
     
-    // Set all Input/Output Buffers to Zero
+    /// Return OutNode ID if found, otherwise returns id of newly created or -1 if not available
+    int CheckOutNode (int out, bool create); //
+    
+    /// Set all Input/Output Buffers to Zero
     void Reset ();
     
-    // Destroy all allocated Memory....
+    /// Destroy all allocated Memory....
     void Cleanup ();
     
-    // print debug info
+    /// print debug info
     void DebugInfo();
     
-	// write to debug file
+	/// Write to debug file
 	void WriteLog(String &text);
 	
-	
-    AudioSampleBuffer   *inbuf_;            // Shared Input Buffer
-    AudioSampleBuffer   *outbuf_;           // Shared Output Buffer
-	
-	int					inbufsize_;			// size of time domain input buffer (2*maxpart_)
-	int                 outbufsize_;        // size of time domain output buffer (2*maxsize_)
-
-    int                 inoffset_;          // current input ring buffer offset
-    int                 outoffset_;         // current output ring buffer offset (of shared output buf)
+    /// Shared Input Buffer
+    AudioSampleBuffer   *inbuf_;
     
-    int                 numnewinsamples_;   // number of new samples in the input buffer since last process
-    int                 outnodeoffset_;     // offset in the outnode buffer
+    /// Shared Output Buffer
+    AudioSampleBuffer   *outbuf_;
+    
+	
+    /// Size of time domain input buffer (2*maxpart_)
+	int					inbufsize_;
+    
+    /// Size of time domain output buffer (2*maxsize_)
+	int                 outbufsize_;
+    
+    /// Current input ring buffer offset
+    int                 inoffset_;
+    
+    /// Current output ring buffer offset (of shared output buf)
+    int                 outoffset_;
+    
+    /// Number of new samples in the input buffer since last process
+    int                 numnewinsamples_;
+    
+    /// Offset in the outnode buffer
+    int                 outnodeoffset_;
+    
+    /// Partition index for Frequency Domain Delay Line
+    int                 part_idx_;
 
-    int                 part_idx_;          // partition index for Frequency Domain Delay Line
+    /// Counter how many partitions are done
+    Atomic<int>         finished_part_;
+    
+    /// Counter of how many cycles should be skipped on next processing cycle...
+    Atomic<int>         skip_cycles_;
 
-    Atomic<int>         finished_part_;     // counter how many partitions are done
-    Atomic<int>         skip_cycles_;       // counter of how many cycles should be skipped on next processing cycle...
+    /// Number of partitions within this level (-> with same size)
+    int                 numpartitions_;
+    
+    /// Size of the partition (fft will be 2x this size!)
+    int                 partitionsize_;
+    
+    /// Offset in the impulse response for the first partition of this size
+    int                 offset_;
+    
+    /// thread priority... short partitions have to deliver first!
+    int                 priority_;
 
-    int                 numpartitions_;     // number of partitions within this level (-> with same size)
-    int                 partitionsize_;     // size of the partition (fft will be 2x this size!)
-    int                 offset_;            // offset in the impulse response for the first partition of this size
-    int                 priority_;          // thread priority... short partitions have to deliver first!
+    /// this will signal the threads that new work is here!
+    WaitableEvent       waitnewdata_;
+    
+    /// this will signal thread work is done.
+    WaitableEvent       waitprocessing_;
 
-    WaitableEvent       waitnewdata_;       // this will signal the threads that new work is here!
-    WaitableEvent       waitprocessing_;    // this will signal work is done.
-
-    float               *fft_t_;             // time data for fft/ifft -> 2*N -> (M = 2*N, inNode will split complex numbers in M/2)
-    float               fft_norm_;           // normalization for fft
+    /** time data for FFT / iFFT
+     
+        2*N
+        M = 2*N, inNode will split complex numbers in M/2
+     */
+    float               *fft_t_;
+    
+    /// Normalization for fft
+    float               fft_norm_;
     
 #if SPLIT_COMPLEX
-    FFTSetup            vdsp_fft_setup_;     // Apple vDSP FFT plan
+    /// Apple vDSP FFT plan
+    FFTSetup            vdsp_fft_setup_;
     DSPSplitComplex     splitcomplex_;
     
-    float               *fft_re_;            // N+1
-    float               *fft_im_;            // N+1
-    int                 vdsp_log2_;      // vDSP needs the exponent of two
+    /// N+1
+    float               *fft_re_;
+    /// N+1
+    float               *fft_im_;
+    /// vDSP needs the exponent of two
+    int                 vdsp_log2_;
 #else
-    fftwf_plan          fftwf_plan_r2c_;     // FFTWF forward plan
-    fftwf_plan          fftwf_plan_c2r_;     // FFTWF inverse plan
-    float               *fftwf_t_data_;      // FFTWF buffer for time domain signal (2*N)
-    fftwf_complex        *fft_c_;             // FFTWF buffer for complex signal (N+1)
+    /// FFTWF forward plan
+    fftwf_plan          fftwf_plan_r2c_;
+    
+    /// FFTWF inverse plan
+    fftwf_plan          fftwf_plan_c2r_;
+    
+    /// FFTWF buffer for time domain signal (2*N)
+    float               *fftwf_t_data_;
+    
+    /// FFTWF buffer for complex signal (N+1)
+    fftwf_complex        *fft_c_;
 #endif
     
-    OwnedArray<InNode> innodes_;            // holds input nodes
-    OwnedArray<FilterNode> filternodes_;    // holds filter nodes
-    OwnedArray<OutNode> outnodes_;          // holds output nodes
+    /// Holds input nodes
+    OwnedArray<InNode>      innodes_;
     
-	std::unique_ptr<FileOutputStream>   debug_out_; // Debug output Text File
+    /// Holds filter nodes
+    OwnedArray<FilterNode>  filternodes_;
+    
+    /// Holds output nodes
+    OwnedArray<OutNode>     outnodes_;
+    
+    /// Debug output Text File
+	std::unique_ptr<FileOutputStream>   debug_out_;
+    
+#if GARDNER_SCHEME
+    WaitableEvent       inter_sync;
+    int                 inter_offset;
+#endif
+    
 };
 
 

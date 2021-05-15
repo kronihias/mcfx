@@ -240,15 +240,19 @@ void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samples
     }
     
     if (convolverReady && change)
+    {
         ReloadConfiguration();
-
+    }
     change = false;
     
     if (convolverReady)
     {
         // mtxconv_.Reset();
+        if (isNonRealtime())
+            addNewStatus("Performing offline processing");
+        else
+            addNewStatus("Performing realtime processing");
     }
-    
 }
 
 void Mcfx_convolverAudioProcessor::releaseResources()
@@ -279,8 +283,8 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
             memcpy(buffer.getWritePointer(i), outdata, NumSamples*sizeof(float));
         }
 #else
-        //mtxconv_.processBlock(buffer, buffer, isNonRealtime()); // if isNotRealtime always set to true!
-        mtxconv_.processBlock(buffer, buffer, NumSamples, true); // try to always wait except - add a special flag to deactivate waiting...
+        mtxconv_.processBlock(buffer, buffer, NumSamples, isNonRealtime()); // if isNotRealtime always set to true!
+//        mtxconv_.processBlock(buffer, buffer, NumSamples, true); // try to always wait except - add a special flag to deactivate waiting...
         buffer.applyGain(juce::Decibels::decibelsToGain(masterGain.get()));
         _skippedCycles.set(mtxconv_.getSkipCount());
         
@@ -327,7 +331,7 @@ void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad)
 {
     //store for the thread
     setTargetFilter(fileToLoad);
-    readyToExportWavefile.set(false);
+//    readyToExportWavefile.set(false);
     
     if(isThreadRunning())
         stopThread(100);
@@ -340,7 +344,7 @@ void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad)
 void Mcfx_convolverAudioProcessor::ReloadConfiguration()
 {
 //    if (convolverReady || filterNameForStoring.isNotEmpty())
-    if (convolverReady || getTargetFilter().existsAsFile())
+    if (convolverReady || getTargetFilter().existsAsFile()) 
     {
         String debug = "reloading for host new samplerate or buffer size \n";
         DebugPrint(debug);
@@ -426,7 +430,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
         tempNumInputs = 0;
         return;
     }
-    readyToExportWavefile.set(true);
+//    readyToExportWavefile.set(true);
     
     bool isDiagonal;
     if(tempNumInputs == -1)
@@ -1256,5 +1260,4 @@ AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new Mcfx_convolverAudioProcessor();
 }
-
 

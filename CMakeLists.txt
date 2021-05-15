@@ -51,6 +51,7 @@ set(BUILD_VST3 TRUE CACHE BOOL "build VST3 format")
 
 set(LAST_2CHARS_PLUGINCODE 64 CACHE STRING "to allow more configurations, specify different characters for the same plugin code")
 
+set(JUCE_COPY_PLUGIN_AFTER_BUILD TRUE CACHE BOOL "Check if you want to copy plugin after building in the selected location")
 
 add_definitions(-DMAX_DELAYTIME_S=${MAX_DELAYTIME_S})
 
@@ -115,6 +116,8 @@ if(WIN32)
 		INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
 	ENDIF(BUILD_STANDALONE)
 
+	set(VST_COPY_DIR $ENV{HOME}/set/VST/location CACHE STRING "Set the location to copy the VST plugin after build")
+	set(VST3_COPY_DIR $ENV{HOME}/set/VST3/location CACHE STRING "Set the location to copy the VST3 plugin after build")
 endif(WIN32)
 
 ################################################
@@ -124,7 +127,10 @@ IF(APPLE)
 # 	ADD_DEFINITIONS(
 # 		-std=c++11
 # 	)
-	SET( CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
+	set( CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
+
+	set(VST_COPY_DIR $ENV{HOME}/Library/Audio/Plug-Ins/VST CACHE STRING "Set the location to copy the VST plugin after build")
+	set(VST3_COPY_DIR $ENV{HOME}/Library/Audio/Plug-Ins/VST3 CACHE STRING "Set the location to copy the VST3 plugin after build")
 ENDIF (APPLE)
 
 ################################################

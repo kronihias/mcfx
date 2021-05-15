@@ -91,15 +91,14 @@ juce_add_plugin(${SUBPROJECT_NAME}
 	PLUGIN_MANUFACTURER_CODE 	${PLUGIN_MANUFACTURER_CODE}#'Kron'             			# A four-character manufacturer id with at least one upper-case character
 	PLUGIN_CODE 				${PLUGIN_CODE}#'mc36'                  	# A unique four-character plugin id with at least one upper-case character
 	DESCRIPTION 				"Plugin part of the MCFX Suite"
-	#COPY_PLUGIN_AFTER_BUILD		TRUE
+	COPY_PLUGIN_AFTER_BUILD		${JUCE_COPY_PLUGIN_AFTER_BUILD}
 	VST2_CATEGORY				kPlugCategEffect
 	VST3_CATEGORIES				tools
 	#UNITY_COPY_DIR			    "${SRC_DIR}/WinSetup/ToInstall"
-	#VST_COPY_DIR                "${SRC_DIR}/WinSetup/ToInstall"
+	VST_COPY_DIR                ${VST_COPY_DIR}
+	VST3_COPY_DIR				${VST3_COPY_DIR}
 	MICROPHONE_PERMISSION_ENABLED TRUE
 )
-
-set(JUCE_COPY_PLUGIN_AFTER_BUILD TRUE)
 
 # `juce_generate_juce_header` will create a JuceHeader.h for a given target, which will be generated
 # into your build tree. This should be included with `#include <JuceHeader.h>`. The include path for
