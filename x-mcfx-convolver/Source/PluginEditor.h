@@ -36,7 +36,6 @@ class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public Button::Listener,
                                             public ChangeListener,
                                             public ComboBox::Listener,
-                                            public Slider::Listener,
                                             public Timer,
                                             public TextEditor::Listener
 {
@@ -71,8 +70,6 @@ public:
     void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
     
     int getInputChannelFromDialog();
-    
-    void sliderValueChanged(Slider *slider);
 
 private:
     View view;
@@ -88,6 +85,7 @@ private:
     CriticalSection exportFileMutex;
     
     std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> masterGainAttachment;
+    std::unique_ptr<AudioProcessorValueTreeState::ComboBoxAttachment> MinPSComboAttachment;
     
     Mcfx_convolverAudioProcessor& processor;
 };

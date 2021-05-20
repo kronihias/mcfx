@@ -429,13 +429,11 @@ View::IODetailBox::IODetailBox()
     addAndMakeVisible (gainLabel);
     
     gainKnob.setSliderStyle (Slider::RotaryVerticalDrag);
-//    gainKnob.setRotaryParameters (MathConstants<float>::pi * 1.2f, MathConstants<float>::pi * 2.8f, false);
     gainKnob.setRange(-100, 40);
     gainKnob.setValue(0);
     gainKnob.setDoubleClickReturnValue(true, 0);
     gainKnob.setColour(Slider::rotarySliderFillColourId, Colours::white);
     gainKnob.setTextBoxStyle (Slider::TextBoxRight, false, 70, 20);
-    gainKnob.setNumDecimalPlacesToDisplay(1);
     gainKnob.setTextValueSuffix (" dB");
     gainKnob.setMouseDragSensitivity(125);
 //    auto color = gainKnob.getLookAndFeel().findColour(Slider::textBoxOutlineColourId);

@@ -39,9 +39,9 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.inputChannelDialog.OKButton.addListener(this);
     view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
-    view.ioDetailBox.gainKnob.addListener(this);
-    
     masterGainAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "MASTERGAIN", view.ioDetailBox.gainKnob);
+    
+    MinPSComboAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts,"MINPS", view.convManagingBox.bufferCombobox);
     
     setNewGeneralPath.addItem(-1, "Set new generic path");
     
@@ -97,8 +97,9 @@ void Mcfx_convolverAudioProcessorEditor::changeListenerCallback (ChangeBroadcast
 /// update the overall plugin text based on the processor data and the stored one
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
 {
+    if (processor.targetOutMenu.get())
+        view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     
-//    view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
     view.filterManagingBox.filterSelector.setTooltip(view.filterManagingBox.filterSelector.getText()); //to see all the string
     
     view.changePathBox.pathText.setText(processor.defaultFilterDir.getFullPathName(), dontSendNotification);
@@ -120,8 +121,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.filterLengthInSeconds.setText(String(processor.filterLenghtInSecs, 2), dontSendNotification);
     view.ioDetailBox.filterLengthInSamples.setText(String(processor.filterLenghtInSmpls), dontSendNotification);
     view.ioDetailBox.resampledLabel.setVisible(processor.wavefileHasBeenResampled.get());
-    
-    view.ioDetailBox.gainKnob.setValue(processor.masterGain.get());
     
     view.convManagingBox.latencyValue.setText(String(processor.getLatencySamples()), sendNotification);
     
@@ -228,6 +227,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
             sel = i;
     }
      view.convManagingBox.bufferCombobox.setSelectedItemIndex(sel, dontSendNotification);
+   
     
 //  ---------------------------------------------------------------------------------------
     view.convManagingBox.maxPartCombobox.clear(dontSendNotification);
@@ -423,12 +423,6 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
         if (myChooser.browseForFileToOpen())
         {
             File mooseFile (myChooser.getResult());
-            // storing filename
-            processor.filterNameToShow.clear();
-            processor.filterNameToShow << mooseFile.getFileNameWithoutExtension() << " (outside library)";
-            
-            view.filterManagingBox.filterSelector.setText(processor.filterNameToShow,dontSendNotification);
-            
             processor.LoadFilterFromFile(mooseFile);
             processor.lastSearchDir = mooseFile.getParentDirectory();
         }
@@ -464,9 +458,6 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
         float normalized_value = processor.apvts.getParameter("FILTERID")->convertTo0to1(result);
         //parameter updating notifyin host will call automatically call the loadin function
         processor.apvts.getParameter("FILTERID")->setValueNotifyingHost(normalized_value);
-        
-        //DEPRECATED directly call 
-//        processor.LoadFilterFromMenu(result - 1);
     }
 }
 
@@ -501,14 +492,4 @@ int Mcfx_convolverAudioProcessorEditor::getInputChannelFromDialog()
     else
         return -2;
 }
-
-void Mcfx_convolverAudioProcessorEditor::sliderValueChanged(Slider *slider)
-{
-    if (slider == &view.ioDetailBox.gainKnob)
-    {
-        if(view.ioDetailBox.gainKnob.getValue() != -60)
-            processor.masterGain.set(view.ioDetailBox.gainKnob.getValue());
-        else
-            processor.masterGain.set(0);
-    }
-}
+ 

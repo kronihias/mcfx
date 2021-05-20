@@ -146,6 +146,7 @@ public:
     Array<File>     filterFilesList;
     File            getTargetFilter();
     
+    Atomic<bool>    targetOutMenu;
     String          filterNameForStoring; // store filename
     String          filterNameToShow; // string for gui
     Atomic<bool>    restoredSettings;
@@ -153,16 +154,15 @@ public:
     //----------------------------------------------------------------------------
     Atomic<bool>     readyToExportWavefile;
     
-    Atomic<float>   masterGain;
-    
     //----------------------------------------------------------------------------
     // Plug-in parameters
     AudioProcessorValueTreeState apvts;
     AudioProcessorValueTreeState::ParameterLayout createParameters();
-    
-    std::atomic<float>* filterIndexParameter = nullptr;
-    
     void parameterChanged(const String& parameterID, float newValue);
+    Atomic<bool> restoringFromMemory;
+    
+    std::atomic<float>* masterGain = nullptr;
+    float previousGain;
     
     //----------------------------------------------------------------------------
     /*
@@ -242,8 +242,6 @@ private:
     File                targetExport;
     void                setTargetExport(File targetAudioFile);
     void                exportWavefileWithMetadata(File targetAudioFile);
-        
-    float*          storedGain;
     
     // -----------------------------------------------------------------------------
     // OSC objects
