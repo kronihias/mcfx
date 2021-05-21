@@ -39,9 +39,7 @@ Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor(Mcfx_conv
     view.inputChannelDialog.OKButton.addListener(this);
     view.inputChannelDialog.saveIntoMetaToggle.addListener(this);
     
-    masterGainAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.apvts, "MASTERGAIN", view.ioDetailBox.gainKnob);
-    
-    MinPSComboAttachment = std::make_unique<AudioProcessorValueTreeState::ComboBoxAttachment>(processor.apvts,"MINPS", view.convManagingBox.bufferCombobox);
+    masterGainAttachment = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.valueTreeState, "MASTERGAIN", view.ioDetailBox.gainKnob);
     
     setNewGeneralPath.addItem(-1, "Set new generic path");
     
@@ -113,7 +111,7 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     view.ioDetailBox.outputValue.setText(outChannels, dontSendNotification);
     
     view.ioDetailBox.IRValue.setText(String(processor.activeNumIRs), dontSendNotification);
-    view.ioDetailBox.diagonalValue.setVisible(processor.tempNumInputs == -1);
+    view.ioDetailBox.diagonalValue.setVisible(processor.numInputChannels == -1);
     
     view.ioDetailBox.sampleRateNumber.setText(String(processor.getSamplerate()), dontSendNotification);
     view.ioDetailBox.hostBufferNumber.setText(String(processor.getBufferSize()), dontSendNotification);
@@ -194,11 +192,11 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
             view.inputChannelDialog.title.setText("New value required",dontSendNotification);
             view.inputChannelDialog.message.setText("Specify new input channels number:", dontSendNotification);
             
-            if(processor.tempNumInputs == -1)
+            if(processor.numInputChannels == -1)
                 view.inputChannelDialog.diagonalToggle.setToggleState(true, sendNotification);
             else
             {
-                view.inputChannelDialog.textEditor.setText((String)processor.tempNumInputs,dontSendNotification);
+                view.inputChannelDialog.textEditor.setText((String)processor.numInputChannels,dontSendNotification);
                 view.inputChannelDialog.grabKeyboardFocus();
                 view.inputChannelDialog.textEditor.selectAll();
             }
@@ -210,16 +208,15 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
     
 //  ---------------------------------------------------------------------------------------
     view.convManagingBox.bufferCombobox.clear(dontSendNotification);
-    
-    unsigned int buf = jmax(processor.getBufferSize(), (unsigned int) 1);
-    unsigned int conv_buf = jmax(processor.getConvBufferSize(), buf);
+    unsigned int buffer = jmax(processor.getBufferSize(), (unsigned int) 1);
+    unsigned int conv_buf = jmax(processor.getConvBufferSize(), buffer);
   
     int sel = 0;
     unsigned int val = 0;
     
-    for (int i=0; val < 8192; i++) {
-        
-        val = (unsigned int)floor(buf*pow(2,i));
+    for (int i=0; val < 8192; i++)
+    {
+        val = (unsigned int)floor(buffer*pow(2,i));
         
         view.convManagingBox.bufferCombobox.addItem(String(val), i+1);
         
@@ -227,16 +224,17 @@ void Mcfx_convolverAudioProcessorEditor::UpdateText()
             sel = i;
     }
      view.convManagingBox.bufferCombobox.setSelectedItemIndex(sel, dontSendNotification);
-   
     
 //  ---------------------------------------------------------------------------------------
     view.convManagingBox.maxPartCombobox.clear(dontSendNotification);
     sel = 0;
     val = 0;
     unsigned int max_part_size = processor.getMaxPartitionSize();
-    for (int i=0; val < 65536; i++)
+    int numSteps = processor.valueTreeState.getParameter("MAXPS")->getNumSteps();
+    int maxPartFS = (unsigned int)floor(pow(2,numSteps-1));
+    
+    for (int i=0; val < maxPartFS; i++)
     {
-      
       val = (unsigned int)floor(conv_buf*pow(2,i));
       
       view.convManagingBox.maxPartCombobox.addItem(String(val), i+1);
@@ -296,12 +294,6 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
         else
             view.filterManagingBox.filterSelector.getRootMenu()->addSubMenu(subDirectories.getReference(i), *filterSubmenus.getUnchecked(i));
     }
-    
-//    if (processor.getTargetFilter().existsAsFile())
-//    {
-//        view.filterManagingBox.filterSelector.addSeparator();
-//        view.filterManagingBox.filterSelector.getRootMenu()->addItem(-2, String("Export filter with metadata info..."), processor.readyToExportWavefile.get());
-//    }
 
     view.filterManagingBox.filterSelector.addSeparator();
     view.filterManagingBox.filterSelector.getRootMenu()->addItem(-1, String("Open filter from file..."));
@@ -321,12 +313,8 @@ void Mcfx_convolverAudioProcessorEditor::UpdateFiltersMenu()
 
 void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
-    /*
-    if (buttonThatWasClicked == &(view.FilterManagingBox.chooseButton))
-    {
-        filterMenu.showMenuAsync(PopupMenu::Options().withTargetComponent (view.FilterManagingBox.chooseButton), ModalCallbackFunction::forComponent (menuItemChosenCallback, this));
-    }
-    else*/ if (buttonThatWasClicked == &(view.changePathBox.pathButton) )
+    
+    if (buttonThatWasClicked == &(view.changePathBox.pathButton) )
     {
         if (view.changePathBox.pathButton.rightclick)
         {
@@ -352,15 +340,14 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     else if (buttonThatWasClicked == &(view.filterManagingBox.reloadButton))
     {
         processor.changeNumInputChannels = true;
-        processor.apvts.getParameter("RELOAD")->setValueNotifyingHost(true);
-//        processor.ReloadConfiguration();
+        processor.valueTreeState.getParameter("RELOAD")->setValueNotifyingHost(true);
     }
     else if (buttonThatWasClicked == &(view.inputChannelDialog.OKButton))
     {
         if (view.inputChannelDialog.diagonalToggle.getToggleState())
-            processor.tempNumInputs = -1;
+            processor.numInputChannels = -1;
         else
-            processor.tempNumInputs = getInputChannelFromDialog();
+            processor.numInputChannels = getInputChannelFromDialog();
         
         if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
             processor.storeNumInputsIntoWav.set(true);
@@ -370,13 +357,6 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         view.inputChannelDialog.setVisible(false);
         processor.notify();
     }
-//    else if (buttonThatWasClicked == &(view.inputChannelDialog.saveIntoMetaToggle))
-//    {
-//        if(view.inputChannelDialog.saveIntoMetaToggle.getToggleState())
-//            processor.storeNumInputsIntoWav.set(true);
-//        else
-//            processor.storeNumInputsIntoWav.set(false);
-//    }
 }
 
 void Mcfx_convolverAudioProcessorEditor::righClickButtonCallback(int result, Mcfx_convolverAudioProcessorEditor* demoComponent)
@@ -434,30 +414,16 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result)
                 view.filterManagingBox.filterSelector.setText(processor.filterNameToShow, dontSendNotification);
         }
     }
-//    else if (result == -2)
-//    {
-//        FileChooser myChooser("Export filter as .wav file...",
-//                                  processor.lastSearchDir.getChildFile(processor.filterNameForStoring),
-//                                  "*.wav"
-//                                  );
-//        if (myChooser.browseForFileToSave(true))
-//        {
-//            File mooseFile =  myChooser.getResult();
-//            processor.exportWavefileAsync(mooseFile);
-//            processor.lastSearchDir = mooseFile.getParentDirectory();
-//        }
-//        else
-//            UpdateText();
-//    }
     else // load filter from menu based on chosen index
     {
         File empty;
         processor.filterNameToShow = view.filterManagingBox.filterSelector.getText();
         
         //normalization of input value as corresponding value tree state parameter
-        float normalized_value = processor.apvts.getParameter("FILTERID")->convertTo0to1(result);
+        float normalized_value = processor.valueTreeState.getParameter("FILTERID")->convertTo0to1(result);
+        
         //parameter updating notifyin host will call automatically call the loadin function
-        processor.apvts.getParameter("FILTERID")->setValueNotifyingHost(normalized_value);
+        processor.valueTreeState.getParameter("FILTERID")->setValueNotifyingHost(normalized_value);
     }
 }
 
@@ -470,8 +436,6 @@ void Mcfx_convolverAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThat
     else if (comboBoxThatHasChanged == &view.convManagingBox.bufferCombobox)
     {
         int val = view.convManagingBox.bufferCombobox.getText().getIntValue();
-        
-        // std::cout << "set size: " << val << std::endl;
         processor.setConvBufferSize(val);
     }
     else if (comboBoxThatHasChanged == &view.convManagingBox.maxPartCombobox)

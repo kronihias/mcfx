@@ -46,8 +46,15 @@ public:
     //==============================================================================
     Mcfx_convolverAudioProcessor();
     ~Mcfx_convolverAudioProcessor();
+    
+    /** Manage plugin channels
+            
+     it is currently not in used because the channels setup is performed in pre-building phase by cmake settings
+     */
+    //    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
 
     //==============================================================================
+    /// Block processing functions
     void    prepareToPlay (double sampleRate, int samplesPerBlock);
     void    releaseResources();
 
@@ -56,7 +63,7 @@ public:
     //==============================================================================
     AudioProcessorEditor*   createEditor();
     bool                    hasEditor() const;
-    const String    getName() const;
+    const String            getName() const;
 
     //==============================================================================
     // Deprecated host passthrough parameters
@@ -71,6 +78,7 @@ public:
     */
 
     //==============================================================================
+    // ARE THESE FUNCTIONS REALLY NECESSARY?
     const String    getInputChannelName (int channelIndex) const;
     const String    getOutputChannelName (int channelIndex) const;
     bool            isInputChannelStereoPair (int index) const;
@@ -82,19 +90,17 @@ public:
     double          getTailLengthSeconds() const;
 
     //==============================================================================
-    int     getNumPrograms();
-    int     getCurrentProgram();
-    void    setCurrentProgram (int index);
-    const   String getProgramName (int index);
-    void    changeProgramName (int index, const String& newName);
+    // ARE THESE FUNCTIONS REALLY NECESSARY?
+    int             getNumPrograms();
+    int             getCurrentProgram();
+    void            setCurrentProgram (int index);
+    const           String getProgramName (int index);
+    void            changeProgramName (int index, const String& newName);
 
     //==============================================================================
-    void    getStateInformation (MemoryBlock& destData);
-    void    setStateInformation (const void* data, int sizeInBytes);
-    
-//    bool isBusesLayoutSupported (const BusesLayout& layouts) const;
-    
-    void            ReloadConfiguration(); //reload convolver the whole config
+    /// Storing/restoring settings from memory (host project)
+    void            getStateInformation (MemoryBlock& destData);
+    void            setStateInformation (const void* data, int sizeInBytes);
 
     // functions for gui control =======================================================
     // debug status text
@@ -114,18 +120,46 @@ public:
     void            LoadFilterFromFile(File filterToLoad, bool restored = false);
     void            exportWavefileAsync(File newAudioFile);
     
-    //returning parameter for gui --------------------------------------------------------
+    // Audio processing parameters  --------------------------------------------------------
     double          getSamplerate();
     unsigned int    getBufferSize();
-    unsigned int    getConvBufferSize();
-    unsigned int    getMaxPartitionSize();
-    int             getSkippedCyclesCount();
     
-    //setting up parameter from gui ------------------------------------------------------
+    unsigned int    getConvBufferSize();
     void            setConvBufferSize(unsigned int bufsize);
+    
+    unsigned int    getMaxPartitionSize();
     void            setMaxPartitionSize(unsigned int maxsize);
     
-    // VARIABLES =========================================================================
+    int             getSkippedCyclesCount();
+    
+    
+    // =========================================================================
+    /** Matrix filter file interfaces for GUI */
+    
+    /// Path to the directory to use for the filter menu build
+    File            defaultFilterDir;
+    
+    /// Store the location of the last directory been questioned for a filter file outside menu
+    File            lastSearchDir;
+    
+    /// It maintains the list of file of the menu of filter
+    Array<File>     filterFilesList;
+    
+    /// Return the target filter file
+    File            getTargetFilter();
+    
+    /// If target is oustide menu we need this for the correct storing of the name in the GUI
+    Atomic<bool>    targetOutMenu;
+    
+    /// This label will be applied to the GUI combobox when a restore setting occurr or the filter is take oustide
+    String          filterNameToShow;
+    
+    /// Employed in GUI when a filter has been restored from a save
+    Atomic<bool>    restoredSettings;
+    
+    // =========================================================================
+    /** Convolver setup variables */
+    
     int             activeNumInputs;
     int             activeNumOutputs;
     int             activeNumIRs;
@@ -133,36 +167,36 @@ public:
     int             filterLenghtInSmpls;
     Atomic<bool>    wavefileHasBeenResampled;
     
-    bool            changeNumInputChannels; //request from gui a reload with new input channels number
+    /// Number of input channels to adopt in the convolver loading
+    int             numInputChannels;
+    
+    /// Triggered by a request of reload from GUI that need a different input channels number
+    bool            changeNumInputChannels;
+    
+    /// Enumerator fot the number of input channels check when coming from GUI
     enum            NumInputsStatus {agreed, missing, notMultiple, notFeasible, requested};
     NumInputsStatus numInputsStatus;
-    int             tempNumInputs;
+    
+    /// Represents the flag check og the GUI requesting to save the number of input channel into the metadata of wavefile
     Atomic<bool>    storeNumInputsIntoWav;
     
-    //----------------------------------------------------------------------------
-    File            defaultFilterDir; // where to search for presets
-    File            lastSearchDir; // for open file dialog...
-    
-    Array<File>     filterFilesList;
-    File            getTargetFilter();
-    
-    Atomic<bool>    targetOutMenu;
-    String          filterNameForStoring; // store filename
-    String          filterNameToShow; // string for gui
-    Atomic<bool>    restoredSettings;
-    
-    //----------------------------------------------------------------------------
-    Atomic<bool>     readyToExportWavefile;
-    
-    //----------------------------------------------------------------------------
-    // Plug-in parameters
-    AudioProcessorValueTreeState apvts;
+    // =========================================================================
+    /**  Plug-in parameters  */
+    AudioProcessorValueTreeState valueTreeState;
     AudioProcessorValueTreeState::ParameterLayout createParameters();
-    void parameterChanged(const String& parameterID, float newValue);
-    Atomic<bool> restoringFromMemory;
     
+    void parameterChanged(const String& parameterID, float newValue);
+    
+    /// Represents raw value of parameters
     std::atomic<float>* masterGain = nullptr;
+    std::atomic<float>* minPartSize = nullptr;
+    std::atomic<float>* maxPartSize = nullptr;
+    
+    
     float previousGain;
+    
+    /// this is a safe chack to not trigger multiple action when restoring parameters from save
+    Atomic<bool>    restoringFromMemory;
     
     //----------------------------------------------------------------------------
     /*
@@ -174,74 +208,92 @@ public:
      */
 
 private:
-    String          _DebugText;
-    CriticalSection _DebugTextMutex;
-    void            DebugPrint(String debugText, bool reset = false);
+    // old debug status windows TO BE REMOVED in future releases
+    String              _DebugText;
+    CriticalSection     _DebugTextMutex;
+    void                DebugPrint(String debugText, bool reset = false);
     
-    String          statusText;
-    void            addNewStatus(String newStatus);
+    // new status bar text handling
+    String              statusText;
+    void                addNewStatus(String newStatus);
     
-    enum            ThreadTask {loading, exporting};
-    ThreadTask      threadTask;
+    // ===========================================================================
+    /** FILTER LOADING  */
     
-    void            run();
-    void            LoadConfigurationAsync(File fileToLoad);
-    void            LoadIRMatrixFilter(File filterFile);
+    /// Convolver data to configure to emply the convolver library
+    ConvolverData       conv_data;
+    Array<int>          _conv_in;    // list with input routing
+    Array<int>          _conv_out;   // list with output routing
     
-    void            loadConvolver();
-    void            unloadConvolver();
+    /// this will add some latency for hosts that might send partial blocks,  done automatically based on host type
+    bool                safemode_;
     
+    /// It manages the target filter to load path
+    File                targetFilter;    //config file copy for thread
+    CriticalSection     targetFilterMutex;
+    void                setTargetFilter(File newTargetFile);
+    
+    /// Starts the thread that handles the matrix of filters loading
+    void                LoadConfigurationAsync(File fileToLoad);
+    void                run();
+    
+    /// Manage the actual loading process.  It configures the convolver data from the IRs file
+    void                LoadIRMatrixFilter(File filterFile);
+    
+    /// It manages the IR file load to the buffer, subdividing the wavefile channels into the right amount of samples per each filter
+    bool                loadIr(AudioSampleBuffer*   IRBuffer,
+                               const File&          audioFile,
+                               int                  channel,
+                               double               &samplerate,
+                               float                gain=1.f,
+                               int                  offset=0,
+                               int                  length=0
+                               );
+    
+    /// Employed in LoadIr for handling the IR file
+    AudioSampleBuffer   bufferRead;
+    
+    /// This variable is activated during a reload that demand a different number of input channels (action triggered only from GUI)
+    bool                holdNumInputChannel;
+    
+    /// Number of input channels is also stored in the host settings for those filter matrix files which do not embody the value by itself
+    int                 storedInChannels;
+    
+    /// Apply controls on the input channles value coming from GUI
+    void                getInChannels(int waveFileLength);
+    
+    /// Report and set the convolver library status to the GUI
+    bool                convolverReady; //substitute for _configLoaded ande filterLoaded
+    ConvolverStatus     convolverStatus;
+    CriticalSection     convStatusMutex;
+    void                setConvolverStatus(ConvolverStatus status);
+    
+    /// Manage the convolver library
+    void                loadConvolver();
+    void                unloadConvolver();
+    
+    /// Reload convolver for different parameters occurring
+    void                ReloadConfiguration();
+    
+    // ===========================================================================
+    /** AUDIO PROCESSING   */
+    
+    double              _SampleRate;
+    unsigned int        _BufferSize;        // size of the processing Block
+//    unsigned int        _ConvBufferSize;    // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
+//    unsigned int        _MaxPartSize;       // maximum size of the partition
+    
+    /// Convoling process (ext. library)
 #ifdef USE_ZITA_CONVOLVER
-    Convproc        zita_conv; /* zita-convolver engine class instances */
+    Convproc            zita_conv; /* zita-convolver engine class instances */
 #else
-    MtxConvMaster   mtxconv_;
+    MtxConvMaster       mtxconv_;
 #endif
     
-    ConvolverData   conv_data;
+    Atomic<int>         _skippedCycles; // the number of skipped cycles do to unfinished partitions
+    bool                _isProcessing;
     
-    Array<int>      _conv_in;    // list with input routing
-    Array<int>      _conv_out;   // list with output routing
-    
-    File            targetFilter;    //config file copy for thread
-    CriticalSection targetFilterMutex;
-    void            setTargetFilter(File newTargetFile);
-    bool            holdNumInputChannel;
-    
-    double          _SampleRate;
-    unsigned int    _BufferSize;        // size of the processing Block
-    unsigned int    _ConvBufferSize;    // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
-    unsigned int    _MaxPartSize;       // maximum size of the partition
-    
-    int             storedInChannels;
-    void            getInChannels(int waveFileLength);
-    
-    bool            changingPresetType;
-    bool            convolverReady; //substitute for _configLoaded ande filterLoaded
-    ConvolverStatus convolverStatus;
-    CriticalSection convStatusMutex;
-    void            setConvolverStatus(ConvolverStatus status);
-    
-	bool            _paramReload; // vst parameter to allow triggering reload of configuration
-    Atomic<int>     _skippedCycles; // the number of skipped cycles do to unfinished partitions
-    
-    bool            _isProcessing;
-    
-    bool            safemode_; // this will add some latency for hosts that might send partial blocks, done automatically based on host type
-    
-    // ----------------------------------------------------------------------------
-    bool            loadIr(AudioSampleBuffer*   IRBuffer,
-                           const File&          audioFile,
-                           int                  channel,
-                           double               &samplerate,
-                           float                gain=1.f,
-                           int                  offset=0,
-                           int                  length=0
-                           );
-    
-    AudioSampleBuffer   bufferRead;
-    File                targetExport;
-    void                setTargetExport(File targetAudioFile);
-    void                exportWavefileWithMetadata(File targetAudioFile);
+//	bool                _paramReload; // vst parameter to allow triggering reload of configuration
     
     // -----------------------------------------------------------------------------
     // OSC objects

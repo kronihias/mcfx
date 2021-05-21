@@ -39,13 +39,12 @@ AudioProcessor (BusesProperties()   .withInput  ("MainInput",  juce::AudioChanne
                                     .withOutput ("MainOutput", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true )
                                     ), */
 Thread("mtx_convolver_master")
-, threadTask(ThreadTask::loading)
 , restoredSettings(false)
 
 , activeNumInputs(0)
 , activeNumOutputs(0)
 , activeNumIRs(0)
-, _MaxPartSize(MAX_PART_SIZE)
+//, _MaxPartSize(MAX_PART_SIZE)
 , filterLenghtInSecs(0)
 , filterLenghtInSmpls(0)
 , wavefileHasBeenResampled(false)
@@ -58,37 +57,52 @@ Thread("mtx_convolver_master")
 
 , changeNumInputChannels(false)
 , numInputsStatus(NumInputsStatus::agreed)
-, tempNumInputs(0)
+, numInputChannels(0)
 //, storeNumInputsIntoWav(false)
 , storedInChannels(0)
 
-, readyToExportWavefile(false)
-
-, _paramReload(false)
+//, _paramReload(false)
 , _skippedCycles(0)
 , safemode_(false)
+
+, masterGain(nullptr)
+, minPartSize(nullptr)
+, maxPartSize(nullptr)
 
 , newStatusText(false)
 
 , restoringFromMemory(false)
-, apvts(*this, nullptr, "PARAMETERS", createParameters())
+, valueTreeState(*this, nullptr, "PARAMETERS", createParameters())
 
 //, osc_in_port(7200)
 //, osc_in(false)
 
 {
-    // check these values... they are all zeros in this point
+    // check these values... they are all zeros in this point. Trying avoiding it
+    /*
     _SampleRate = getSampleRate();
     _BufferSize = getBlockSize();
     _ConvBufferSize = getBlockSize();
+     */
     
-    if (_MaxPartSize != 8192)
-        _MaxPartSize = 8192;
+    masterGain = valueTreeState.getRawParameterValue ("MASTERGAIN");
+    minPartSize = valueTreeState.getRawParameterValue ("MINPS");
+    maxPartSize = valueTreeState.getRawParameterValue ("MAXPS");
+    
+    valueTreeState.addParameterListener("FILTERID", this);
+    valueTreeState.addParameterListener("RELOAD", this);
+    valueTreeState.addParameterListener("MINPS", this);
+    valueTreeState.addParameterListener("MAXPS", this);
+    
+//    if (_MaxPartSize != 8192)
+//        _MaxPartSize = 8192;
+    
 #if JUCE_MAC
     File globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("Application Support/x-mcfx/options.ini");
 #else
     File globalPluginOptions = globalPluginOptions.getSpecialLocation(File::userApplicationDataDirectory).getChildFile("x-mcfx/options.ini");
 #endif
+    
     StringArray readLines;
     if (globalPluginOptions.existsAsFile())
     {
@@ -111,10 +125,7 @@ Thread("mtx_convolver_master")
     // this is for the open dialog of the gui
     lastSearchDir = lastSearchDir.getSpecialLocation(File::userHomeDirectory);
     
-    masterGain = apvts.getRawParameterValue ("MASTERGAIN");
-    
-    apvts.addParameterListener("FILTERID", this);
-    apvts.addParameterListener("RELOAD", this);
+
 }
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
@@ -243,16 +254,18 @@ void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samples
         _BufferSize = samplesPerBlock;
         change = true;
     }
-    if (_ConvBufferSize < _BufferSize)
+    
+    if (getConvBufferSize() < _BufferSize)
     {
-        _ConvBufferSize = _BufferSize;
-        change = true;
+        unsigned int safeVal = nextPowerOfTwo(_BufferSize);
+        setConvBufferSize(safeVal);
+        
+        change = false; // reload will be triggered by convBufferSize changee
     }
     
-    if (convolverReady && change)
+    if (change)
         ReloadConfiguration();
-
-    change = false;
+    
     
     if (convolverReady)
     {
@@ -316,55 +329,47 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 void Mcfx_convolverAudioProcessor::run()
 {
-//    if (threadTask == ThreadTask::loading)
-//    {
-        DebugPrint("Loading Filter...\n\n");
+    DebugPrint("Loading Filter...\n\n");
 
-        setConvolverStatus(ConvolverStatus::Loading);
-        sendChangeMessage();
-        
-        //unload first....
-        if (convolverReady)
-            unloadConvolver();
-        
-         LoadIRMatrixFilter(getTargetFilter());
-        
-        if (!convolverReady)
-            setConvolverStatus(ConvolverStatus::Unloaded);
-        else
-            setConvolverStatus(ConvolverStatus::Loaded);
-        
-        holdNumInputChannel = false;
-        changeNumInputChannels = false;
-        
-        sendChangeMessage();
-        // if the load was called by reload parameter, we need to reset it
-        apvts.getParameter("RELOAD")->setValueNotifyingHost(false);
+    setConvolverStatus(ConvolverStatus::Loading);
+    sendChangeMessage();
     
-//    }
-//    else
-//        exportWavefileWithMetadata(targetExport);
+    //unload first....
+    if (convolverReady)
+        unloadConvolver();
+    
+     LoadIRMatrixFilter(getTargetFilter());
+    
+    if (!convolverReady)
+        setConvolverStatus(ConvolverStatus::Unloaded);
+    else
+        setConvolverStatus(ConvolverStatus::Loaded);
+    
+    holdNumInputChannel = false;
+    changeNumInputChannels = false;
+    
+    sendChangeMessage();
+    
+    // reset parameters...if the load was called by reload parameter
+    valueTreeState.getParameter("RELOAD")->setValueNotifyingHost(false);
 }
 
 void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File fileToLoad)
 {
     //store for the thread
     setTargetFilter(fileToLoad);
-    readyToExportWavefile.set(false);
     
+    // still need this? Previous checks implemented...
     if(isThreadRunning())
         stopThread(100);
     
-    threadTask = ThreadTask::loading;
     startThread(6); // medium priority
 }
 
 
 void Mcfx_convolverAudioProcessor::ReloadConfiguration()
 {
-//    if (convolverReady || filterNameForStoring.isNotEmpty())
     if ( !isThreadRunning() &&
-         !restoringFromMemory.get() &&
         ( convolverReady ||
          getTargetFilter().existsAsFile() )
         )
@@ -380,13 +385,6 @@ void Mcfx_convolverAudioProcessor::ReloadConfiguration()
     sendChangeMessage();
 }
 
-//void Mcfx_convolverAudioProcessor::exportWavefileAsync(File newAudioFile)
-//{
-//    targetExport = newAudioFile;
-//
-//    threadTask = ThreadTask::exporting;
-//    startThread(6); // medium priority
-//}
 //-------------------------------------------------------------------------
 
 void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
@@ -405,7 +403,7 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
         return;
     }
     
-    _ConvBufferSize = nextPowerOfTwo(_ConvBufferSize);
+    int _ConvBufferSize = getConvBufferSize();
     
     //---------------------------------------------------------------------------------------------
     debug.clear();
@@ -418,9 +416,6 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     debug << "Host Buffer Size: "       << (int)_BufferSize << "\n";
     debug << "Internal Buffer Size: "   << (int)_ConvBufferSize << "\n\n";
     DebugPrint(debug);
-    
-    // store filename only, on restart search filters folder for it!
-    filterNameForStoring = filterFile.getFileName();
 
     // global settings
     /// temporary audio buffer backward compatible with old 32bit audio buffer
@@ -447,16 +442,15 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     }
         
     ///kill the thread if requested
-    if (tempNumInputs == -2)
+    if (numInputChannels == -2)
     {
         ///on restoring, a value will be still needed
-        tempNumInputs = 0;
+        numInputChannels = 0;
         return;
     }
-    readyToExportWavefile.set(true);
     
     bool isDiagonal;
-    if(tempNumInputs == -1)
+    if(numInputChannels == -1)
         isDiagonal = true;
     else
         isDiagonal = false;
@@ -471,8 +465,8 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
     }
     else
     {
-        irLength = tempAudioBuffer.getNumSamples()/tempNumInputs;
-        inChannels = tempNumInputs;
+        irLength = tempAudioBuffer.getNumSamples()/numInputChannels;
+        inChannels = numInputChannels;
     }
      
     
@@ -548,6 +542,9 @@ void Mcfx_convolverAudioProcessor::LoadIRMatrixFilter(File filterFile)
 
 void Mcfx_convolverAudioProcessor::loadConvolver()
 {
+    int _ConvBufferSize = getConvBufferSize();
+    int _MaxPartSize = getMaxPartitionSize();
+    
 #ifdef USE_ZITA_CONVOLVER
     int err=0;
     
@@ -669,22 +666,23 @@ void Mcfx_convolverAudioProcessor::getInChannels(int waveFileLength)
     {
         sendChangeMessage();
         wait(-1);
+        
         /// thread kill
         if (threadShouldExit())
         {
-            tempNumInputs = -2;
+            numInputChannels = -2;
             return;
         }
         ///value returned check
-        if (tempNumInputs == -1)
+        if (numInputChannels == -1)
         {
             numInputsStatus = NumInputsStatus::agreed;
             return;
         }
-        if (tempNumInputs > 0 )
+        if (numInputChannels > 0 )
         {
-            int irLength = waveFileLength/tempNumInputs;
-            if (irLength*tempNumInputs != waveFileLength)
+            int irLength = waveFileLength/numInputChannels;
+            if (irLength*numInputChannels != waveFileLength)
             {
                 numInputsStatus = NumInputsStatus::notMultiple;
             }
@@ -800,7 +798,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     // search for the input channels number into the wavefile metadata tags
     if (storedInChannels != 0)
     {
-        tempNumInputs = storedInChannels;
+        numInputChannels = storedInChannels;
         storedInChannels = 0;
         delete reader;
         return true;
@@ -817,7 +815,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     
     if (inChannels != 0 && !changeNumInputChannels)
     {
-        tempNumInputs = inChannels;
+        numInputChannels = inChannels;
         delete reader;
         return true;
     }
@@ -834,10 +832,10 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
         getInChannels(IRBuffer->getNumSamples());
     
         /// write the new value in metadata tag
-        if (storeNumInputsIntoWav.get() && tempNumInputs != -2)
+        if (storeNumInputsIntoWav.get() && numInputChannels != -2)
         {
             addNewStatus("Storing number of input channel into wavefile metadata...");
-            reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempNumInputs);
+            reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)numInputChannels);
             FileOutputStream* outStream = new FileOutputStream(audioFile);
             if (outStream->openedOk())
             {
@@ -899,15 +897,13 @@ void Mcfx_convolverAudioProcessor::setNewGlobalFilterFolder(File newGloablFolder
 void Mcfx_convolverAudioProcessor::LoadFilterFromMenu(unsigned int filterIndex, bool restored)
 {
     //check if the ID of the loading filter is coherent with the filter list
-    if (filterIndex < (unsigned int)filterFilesList.size())
+    if ( !isThreadRunning()
+        && filterIndex < (unsigned int)filterFilesList.size() )
     {
         targetOutMenu.set(false);
+        restoredSettings.set(restored);
         LoadConfigurationAsync(filterFilesList.getUnchecked(filterIndex));
     }
-    if (restored)
-        restoredSettings.set(true);
-    else
-        restoredSettings.set(false);
 }
 
 void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool restored)
@@ -915,13 +911,10 @@ void Mcfx_convolverAudioProcessor::LoadFilterFromFile(File filterToLoad, bool re
     targetOutMenu.set(true);
     filterNameToShow.clear();
     filterNameToShow << filterToLoad.getFileNameWithoutExtension() << " (outside library)";
+    restoredSettings.set(restored);
     
+    // no need to check thread state as this action can be triggered just from GUI which already contains safe lock state
     LoadConfigurationAsync(filterToLoad);
-    
-    if (restored)
-        restoredSettings.set(true);
-    else
-        restoredSettings.set(false);
 }
 
 // ================= Editor set/get functions =================
@@ -935,14 +928,12 @@ unsigned int Mcfx_convolverAudioProcessor::getBufferSize()
     return _BufferSize;
 }
 
+
+// DEPRECATED
+/*
 unsigned int Mcfx_convolverAudioProcessor::getConvBufferSize()
 {
     return _ConvBufferSize;
-}
-
-unsigned int Mcfx_convolverAudioProcessor::getMaxPartitionSize()
-{
-  return _MaxPartSize;
 }
 
 void Mcfx_convolverAudioProcessor::setConvBufferSize(unsigned int bufsize)
@@ -954,6 +945,11 @@ void Mcfx_convolverAudioProcessor::setConvBufferSize(unsigned int bufsize)
     }
 }
 
+unsigned int Mcfx_convolverAudioProcessor::getMaxPartitionSize()
+{
+    return _MaxPartSize;
+}
+ 
 void Mcfx_convolverAudioProcessor::setMaxPartitionSize(unsigned int maxsize)
 {
     if (maxsize > MAX_PART_SIZE)
@@ -966,51 +962,41 @@ void Mcfx_convolverAudioProcessor::setMaxPartitionSize(unsigned int maxsize)
     }
 }
 
+ */
+
+unsigned int Mcfx_convolverAudioProcessor::getConvBufferSize()
+{
+    int convBuffer = (unsigned int)floor(pow(2,*minPartSize));
+    return convBuffer;
+}
+
+void Mcfx_convolverAudioProcessor::setConvBufferSize(unsigned int bufsize)
+{
+    float normalized = valueTreeState.getParameter("MINPS")->convertTo0to1((int)log2(bufsize));
+    valueTreeState.getParameter("MINPS")->setValueNotifyingHost(normalized);
+}
+
+unsigned int Mcfx_convolverAudioProcessor::getMaxPartitionSize()
+{
+    int maxPart = (unsigned int)floor(pow(2,*maxPartSize));
+    return maxPart;
+}
+
+void Mcfx_convolverAudioProcessor::setMaxPartitionSize(unsigned int maxsize)
+{
+    if (maxsize > MAX_PART_SIZE)
+        return;
+  
+    float normalized = valueTreeState.getParameter("MAXPS")->convertTo0to1((int)log2(maxsize));
+    valueTreeState.getParameter("MAXPS")->setValueNotifyingHost(normalized);
+}
+
 int Mcfx_convolverAudioProcessor::getSkippedCyclesCount()
 {
     return _skippedCycles.get();
 }
 
 //======================== Utility functions ========================
-
-/* NO MORE IN USE
-void Mcfx_convolverAudioProcessor::exportWavefileWithMetadata(File newAudioFile)
-{
-    addNewStatus("Configuring new wavefile for export...");
-    AudioFormatManager formatManager;
-    // this can read .wav and .aiff
-    formatManager.registerBasicFormats();
-    
-    AudioFormatReader* reader = formatManager.createReaderFor(getTargetFilter());
-    
-    reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)tempNumInputs);
-    FileOutputStream* outStream = new FileOutputStream(newAudioFile);
-    if (outStream->openedOk())
-    {
-        outStream->setPosition (0);
-        outStream->truncate();
-
-    }
-    WavAudioFormat* wave = new WavAudioFormat();
-    AudioFormatWriter* writer = wave->createWriterFor(outStream,
-                                                      reader->sampleRate,
-                                                      reader->getChannelLayout(),
-                                                      reader->bitsPerSample,
-                                                      reader->metadataValues,
-                                                      0
-                                                      );
-    delete reader;
-    delete wave;
-    addNewStatus("Exporting wavefile with metadata info...");
-    bool executed = writer->writeFromAudioSampleBuffer(bufferRead, 0, bufferRead.getNumSamples());
-    if (executed)
-        addNewStatus("Done.");
-    else
-        addNewStatus("An error occurred during the export phase...");
-    
-    delete writer;
-}
-*/
 
 void Mcfx_convolverAudioProcessor::DebugPrint(String debugText, bool reset)
 {
@@ -1076,21 +1062,6 @@ void Mcfx_convolverAudioProcessor::setConvolverStatus(ConvolverStatus status)
     convolverStatus = status;
 }
 
-//-----------------------------------------------------------------
-void Mcfx_convolverAudioProcessor::setTargetExport(File targetAudioFile)
-{
-    targetExport = targetAudioFile;
-}
-
-//======================== Save to zipfile ========================
-//bool Mcfx_convolverAudioProcessor::SaveConfiguration(File zipFile)
-//{
-//    if (_readyToSaveConfiguration.get())
-//        return _tempConfigZipFile.copyFileTo(zipFile);
-//    else
-//        return false;
-//}
-
 //==============================================================================
 void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
 {
@@ -1100,26 +1071,25 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     
     // Create an outer XML element..
     // We create master xml element for the value tree state parameters and the non-external parameters
-    auto state = apvts.copyState();
+    auto state = valueTreeState.copyState();
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     
     // add attributes
     xml->setAttribute("SampleRate", (int)_SampleRate);
     xml->setAttribute("BufferSize", (int)_BufferSize);
-    xml->setAttribute("ConvBufferSize", (int)_ConvBufferSize);
-    xml->setAttribute("MaxPartSize", (int)_MaxPartSize);
+//    xml->setAttribute("ConvBufferSize", (int)_ConvBufferSize); // added to value tree state
+//    xml->setAttribute("MaxPartSize", (int)_MaxPartSize);
     
     xml->setAttribute ("defaultFilterDir", defaultFilterDir.getFullPathName());
     
     // if filter has been loaded...
     if (convolverReady)
     {
-        xml->setAttribute("filterFileName", filterNameForStoring);
-        xml->setAttribute("inputChannelsNumber",(int)tempNumInputs);
+        xml->setAttribute("inputChannelsNumber",(int)numInputChannels);
         
         /// save also fullpath of the config files, in case it is not possible to restored from saved data
         Array <File> files;
-        defaultFilterDir.findChildFiles(files, File::findFiles, true, filterNameForStoring);
+        defaultFilterDir.findChildFiles(files, File::findFiles, true, getTargetFilter().getFileName());
         if (files.size())
         {
             xml->setAttribute ("targetWasInMenu", (bool)true);
@@ -1129,6 +1099,9 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
         {
             xml->setAttribute ("targetWasInMenu", (bool)false);
             xml->setAttribute("filterNameToShow", "");
+            
+            // Putting this value to avoid double convolver loading at restore
+            valueTreeState.getParameter("FILTERID")->setValue(0);
         }
         
         xml->setAttribute("filterFullPathName", targetFilter.getFullPathName());
@@ -1150,14 +1123,15 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
     
     if (xmlState != nullptr)
     {
-        restoringFromMemory.set(false);
-        if (xmlState->hasTagName (apvts.state.getType()))
+        restoringFromMemory.set(true);
+
+        if (xmlState->hasTagName (valueTreeState.state.getType()))
         {
             // Pull out audio parameters
             _SampleRate         = xmlState->getIntAttribute("SampleRate", 44100);
             _BufferSize         = xmlState->getIntAttribute("BufferSize", 512);
-            _ConvBufferSize     = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize);
-            _MaxPartSize        = xmlState->getIntAttribute("MaxPartSize", _MaxPartSize);
+//            _ConvBufferSize     = xmlState->getIntAttribute("ConvBufferSize", _ConvBufferSize); // put in value tree state
+//            _MaxPartSize        = xmlState->getIntAttribute("MaxPartSize", _MaxPartSize);
             
             // Rebuilding the filter menu
             String newFilterDir = xmlState->getStringAttribute("defaultFilterDir", defaultFilterDir.getFullPathName());
@@ -1182,10 +1156,14 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 if (filterIndex != -1)
                 {
                     storedInChannels = xmlState->getIntAttribute("inputChannelsNumber");
-                    
                     filterNameToShow = xmlState->getStringAttribute("filterNameToShow", "");
-                    float normalized_value = apvts.getParameter("FILTERID")->convertTo0to1(filterIndex+1);
-                    apvts.getParameter("FILTERID")->setValueNotifyingHost(normalized_value);
+                    LoadFilterFromMenu(filterIndex, true);
+                    
+                    /** FILTERID parameter is already included in the tree, we do this just to be sure it is the right value
+                     The index of filter inside the menu could be changed
+                     */
+                    float normalized_value = valueTreeState.getParameter("FILTERID")->convertTo0to1(filterIndex+1);
+                    valueTreeState.getParameter("FILTERID")->setValueNotifyingHost(normalized_value);
                 }
                 else
                 {
@@ -1210,13 +1188,15 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
                 filterNameToShow = targetFilter.getFileNameWithoutExtension();
                 filterNameToShow << " (outside library)";
                 restoredSettings.set(true);
+                
                 addNewStatus(debug);
                 
                 DebugPrint(debug << "\n\n");
             }
         }
-        restoringFromMemory.set(true);
-        apvts.replaceState (juce::ValueTree::fromXml (*xmlState));
+        
+        // Restoring Value Tree State
+        valueTreeState.replaceState (juce::ValueTree::fromXml (*xmlState));
         restoringFromMemory.set(false);
     }
 }
@@ -1231,10 +1211,6 @@ AudioProcessorEditor* Mcfx_convolverAudioProcessor::createEditor()
 {
     //new way Controller-View editor type
     return new Mcfx_convolverAudioProcessorEditor (*this);
-
-
-    //old way pointer creation
-    // return new Mcfx_convolverAudioProcessorEditor (this);
 }
 
 //==============================================================================
@@ -1250,36 +1226,56 @@ AudioProcessorValueTreeState::ParameterLayout Mcfx_convolverAudioProcessor::crea
 {
     AudioProcessorValueTreeState::ParameterLayout layout;
 
-    layout.add (std::make_unique<AudioParameterInt> ("FILTERID", "Filter Index", 1, 127, 0));
-    layout.add (std::make_unique<AudioParameterBool> ("RELOAD", "ReloadConfig", false));
-    layout.add (std::make_unique<AudioParameterFloat> ("MASTERGAIN"
-                                                       , "Master gain"
-                                                       , NormalisableRange<float> ( -100.0f,   // minimum value
-                                                                                   40.0f,   // maximum value
-                                                                                   0.1f)
-                                                       ,0.0f
-                                                       ));
-    layout.add (std::make_unique<AudioParameterChoice> ("MINPS"
-                                                        , "Min Partition Size"
-                                                        , StringArray("8","16","32","64","128","256","512","1024","2048","4096")
-                                                        , 0
-                                                        ));
+    layout.add (std::make_unique<AudioParameterInt>     (   "FILTERID", "Filter Index", 1, 127, 0));
+    layout.add (std::make_unique<AudioParameterBool>    (   "RELOAD", "ReloadConfig", false));
+    layout.add (std::make_unique<AudioParameterFloat>   (   "MASTERGAIN"
+                                                         ,  "Master gain"
+                                                         ,  NormalisableRange<float> ( -100.0f,   // minimum value
+                                                                                      40.0f,   // maximum value
+                                                                                      0.1f)
+                                                         ,  0.0f
+                                                         ));
+    
+    /** Min and max partition size are stored as the exponent of the power of 2 linear scale.
+     
+        @MINPS  has 8192 as full-scale value.
+        @MAXPS has a a macro defined value as full-scale and 8192 as default
+     */
+    unsigned int mps = (int)log2(MAX_PART_SIZE);
+    layout.add (std::make_unique<AudioParameterInt> ("MINPS", "Min Partition Size",0, 13, 0));
+    layout.add (std::make_unique<AudioParameterInt> ("MAXPS", "Max Partition Size", 0, mps, 13));
           
     return layout;
 }
 
 void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, float newValue)
 {
-    //Reload must be maintain a separate parameter from Engage for his skill of working with matrix outside menu
-    if ( parameterID == "RELOAD" )
+    if (!restoringFromMemory.get())
     {
-        if (newValue == true)
-            ReloadConfiguration();
-    }
-    else if (parameterID == "FILTERID")
-    {
-        if (!isThreadRunning() && !restoringFromMemory.get())
-            LoadFilterFromMenu((int)newValue-1);
+        if ( parameterID == "RELOAD" )
+        {
+            if (newValue == true)
+                ReloadConfiguration();
+        }
+        else if (parameterID == "FILTERID")
+        {
+            if (newValue > 0)
+                LoadFilterFromMenu((int)newValue-1);
+        }
+        else if (parameterID == "MINPS")
+        {
+            if (getConvBufferSize() >= _BufferSize)
+                ReloadConfiguration();
+            else
+                setConvBufferSize(_BufferSize);
+        }
+        else if (parameterID == "MAXPS")
+        {
+            if (getMaxPartitionSize() >= getConvBufferSize())
+                ReloadConfiguration();
+            else
+                setMaxPartitionSize(getConvBufferSize());
+        }
     }
 }
 
