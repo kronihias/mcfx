@@ -97,7 +97,7 @@ public:
         XSetWindowAttributes swa;
         swa.colormap = colourMap;
         swa.border_pixel = 0;
-        swa.event_mask = ExposureMask | StructureNotifyMask;
+        swa.event_mask = embeddedWindowEventMask;
 
         auto glBounds = component.getTopLevelComponent()
                            ->getLocalArea (&component, component.getLocalBounds());
@@ -126,13 +126,26 @@ public:
 
     ~NativeContext()
     {
-        juce_LinuxRemoveRepaintListener (component.getPeer(), &dummy);
-
-        if (embeddedWindow != 0)
+        if (auto* peer = component.getPeer())
         {
-            XWindowSystemUtilities::ScopedXLock xLock;
-            X11Symbols::getInstance()->xUnmapWindow (display, embeddedWindow);
-            X11Symbols::getInstance()->xDestroyWindow (display, embeddedWindow);
+            juce_LinuxRemoveRepaintListener (peer, &dummy);
+
+            if (embeddedWindow != 0)
+            {
+                XWindowSystemUtilities::ScopedXLock xLock;
+
+                X11Symbols::getInstance()->xUnmapWindow (display, embeddedWindow);
+                X11Symbols::getInstance()->xDestroyWindow (display, embeddedWindow);
+                X11Symbols::getInstance()->xSync (display, False);
+
+                XEvent event;
+                while (X11Symbols::getInstance()->xCheckWindowEvent (display,
+                                                                     embeddedWindow,
+                                                                     embeddedWindowEventMask,
+                                                                     &event) == True)
+                {
+                }
+            }
         }
 
         if (bestVisual != nullptr)
@@ -229,11 +242,13 @@ public:
     struct Locker { Locker (NativeContext&) {} };
 
 private:
+    static constexpr int embeddedWindowEventMask = ExposureMask | StructureNotifyMask;
+
     Component& component;
     GLXContext renderContext = {};
     Window embeddedWindow = {};
 
-    int swapFrames = 0;
+    int swapFrames = 1;
     Rectangle<int> bounds;
     XVisualInfo* bestVisual = nullptr;
     void* contextToShareWith;

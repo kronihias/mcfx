@@ -63,7 +63,7 @@ public:
         auto area = getLocalBounds();
 
         text.createLayout (getLookAndFeel().createFileChooserHeaderText (getName(), instructions),
-                           getWidth() - 12.0f);
+                           (float) getWidth() - 12.0f);
 
         area.removeFromTop (roundToInt (text.getHeight()) + 10);
 
@@ -114,6 +114,8 @@ FileChooserDialogBox::FileChooserDialogBox (const String& name,
 
     if (parentComp != nullptr)
         parentComp->addAndMakeVisible (this);
+    else
+        setAlwaysOnTop (juce_areThereAnyAlwaysOnTopWindows());
 }
 
 FileChooserDialogBox::~FileChooserDialogBox()

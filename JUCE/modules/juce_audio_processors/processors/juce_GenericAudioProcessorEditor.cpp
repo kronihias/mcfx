@@ -73,7 +73,7 @@ private:
             parameterValueHasChanged = 1;
     }
 
-    void audioProcessorChanged (AudioProcessor*) override {}
+    void audioProcessorChanged (AudioProcessor*, const ChangeDetails&) override {}
 
     //==============================================================================
     void timerCallback() override
@@ -284,7 +284,7 @@ private:
         {
             // The parameter is producing some unexpected text, so we'll do
             // some linear interpolation.
-            index = roundToInt (getParameter().getValue() * (parameterValues.size() - 1));
+            index = roundToInt (getParameter().getValue() * (float) (parameterValues.size() - 1));
         }
 
         box.setSelectedItemIndex (index);

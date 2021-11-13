@@ -363,7 +363,9 @@ void MtxConvMaster::DebugInfo()
 // SLAVE METHODS
 //////////////////////////////////////
 MtxConvSlave::MtxConvSlave() :  Thread("mtx_convolver_slave_")
+#if GARDNER_SCHEME
                             ,   inter_sync(false)
+#endif
 {
 }
 
@@ -482,7 +484,7 @@ void MtxConvSlave::StartProc()
     
     // start a thread for each partitionsize
 #if GARDNER_SCHEME
-    if (priority_ != 0)
+    if (offset_ >= partitionsize_ )
         startThread(priority);
 #else
     startThread(priority); // priority is negative... juce: 10 is highest...0
@@ -492,13 +494,16 @@ void MtxConvSlave::StartProc()
 
 void MtxConvSlave::StopProc()
 {
+    // dedicated thread shutting down
     signalThreadShouldExit();
-    
-    // ThreadShouldExit check put in functions!
-//    waitnewdata_.signal();
-//    waitprocessing_.signal();
-    
+    waitnewdata_.signal();
     stopThread(2000);
+    
+    // host block elaboration thread unlock
+#if GARDNER_SCHEME
+    inter_sync.signal();
+#endif
+    waitprocessing_.signal();
 }
 
 
@@ -660,8 +665,8 @@ void MtxConvSlave::run()
 		{
 			waitnewdata_.wait(); // wait realtime thread calling for new data available
 			
-			if (threadShouldExit())
-				return;
+            if (threadShouldExit())
+                return;
 			
 			for (int i = 1; i < numpartitions_; i++)
             {
@@ -678,7 +683,7 @@ void MtxConvSlave::run()
 			waitnewdata_.wait();
 			
 			if ( threadShouldExit() )
-				return;
+                return;
 			
             // first check wheter we have to skip a cycle
             while (skip_cycles_.get() > 0)
@@ -1115,7 +1120,9 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
                 // signal thread to do the other partitions
 #if GARDNER_SCHEME
                 if (offset_ == partitionsize_)
+                {
                     waitnewdata_.signal();
+                }
 #else
                 waitnewdata_.signal();
 #endif

@@ -85,8 +85,8 @@ public:
     void getHighlightArea (RectangleList<float>& area, float x, int y, int lineH, float characterWidth) const
     {
         if (highlightColumnStart < highlightColumnEnd)
-            area.add (Rectangle<float> (x + highlightColumnStart * characterWidth - 1.0f, y - 0.5f,
-                                        (highlightColumnEnd - highlightColumnStart) * characterWidth + 1.5f, lineH + 1.0f));
+            area.add (Rectangle<float> (x + (float) highlightColumnStart * characterWidth - 1.0f, (float) y - 0.5f,
+                                        (float) (highlightColumnEnd - highlightColumnStart) * characterWidth + 1.5f, (float) lineH + 1.0f));
     }
 
     void draw (CodeEditorComponent& owner, Graphics& g, const Font& fontToUse,
@@ -100,7 +100,7 @@ public:
 
         for (auto& token : tokens)
         {
-            const float tokenX = x + column * characterWidth;
+            const float tokenX = x + (float) column * characterWidth;
             if (tokenX > rightClip)
                 break;
 
@@ -108,7 +108,7 @@ public:
             column += token.length;
         }
 
-        as.draw (g, { x, (float) y, column * characterWidth + 10.0f, (float) lineH });
+        as.draw (g, { x, (float) y, (float) column * characterWidth + 10.0f, (float) lineH });
     }
 
 private:
@@ -301,7 +301,7 @@ public:
                                          lastNumLines - editor.firstLineOnScreen);
 
         auto lineNumberFont = editor.getFont().withHeight (jmin (13.0f, lineHeightFloat * 0.8f));
-        auto w = getWidth() - 2.0f;
+        auto w = (float) getWidth() - 2.0f;
         GlyphArrangement ga;
 
         for (int i = firstLineToDraw; i < lastLineToDraw; ++i)
@@ -348,9 +348,6 @@ CodeEditorComponent::CodeEditorComponent (CodeDocument& doc, CodeTokeniser* cons
     setMouseCursor (MouseCursor::IBeamCursor);
     setWantsKeyboardFocus (true);
 
-    lookAndFeelChanged();
-    addAndMakeVisible (caret.get());
-
     addAndMakeVisible (verticalScrollBar);
     verticalScrollBar.setSingleStepSize (1.0);
 
@@ -369,6 +366,8 @@ CodeEditorComponent::CodeEditorComponent (CodeDocument& doc, CodeTokeniser* cons
     verticalScrollBar.addListener (pimpl.get());
     horizontalScrollBar.addListener (pimpl.get());
     document.addListener (pimpl.get());
+
+    lookAndFeelChanged();
 }
 
 CodeEditorComponent::~CodeEditorComponent()
@@ -405,7 +404,10 @@ void CodeEditorComponent::setTemporaryUnderlining (const Array<Range<int>>&)
 
 Rectangle<int> CodeEditorComponent::getCaretRectangle()
 {
-    return getLocalArea (caret.get(), caret->getLocalBounds());
+    if (caret != nullptr)
+        return getLocalArea (caret.get(), caret->getLocalBounds());
+
+    return {};
 }
 
 void CodeEditorComponent::setLineNumbersShown (const bool shouldBeShown)
@@ -443,7 +445,7 @@ void CodeEditorComponent::resized()
 {
     auto visibleWidth = getWidth() - scrollbarThickness - getGutterSize();
     linesOnScreen   = jmax (1, (getHeight() - scrollbarThickness) / lineHeight);
-    columnsOnScreen = jmax (1, (int) (visibleWidth / charWidth));
+    columnsOnScreen = jmax (1, (int) ((float) visibleWidth / charWidth));
     lines.clear();
     rebuildLineTokens();
     updateCaretPosition();
@@ -582,7 +584,8 @@ void CodeEditorComponent::retokenise (int startIndex, int endIndex)
 //==============================================================================
 void CodeEditorComponent::updateCaretPosition()
 {
-    caret->setCaretPosition (getCharacterBounds (getCaretPos()));
+    if (caret != nullptr)
+        caret->setCaretPosition (getCharacterBounds (getCaretPos()));
 }
 
 void CodeEditorComponent::moveCaretTo (const CodeDocument::Position& newPos, const bool highlighting)
@@ -737,7 +740,7 @@ void CodeEditorComponent::scrollToKeepCaretOnScreen()
 
 Rectangle<int> CodeEditorComponent::getCharacterBounds (const CodeDocument::Position& pos) const
 {
-    return { roundToInt ((getGutterSize() - xOffset * charWidth) + indexToColumn (pos.getLineNumber(), pos.getIndexInLine()) * charWidth),
+    return { roundToInt ((getGutterSize() - xOffset * charWidth) + (float) indexToColumn (pos.getLineNumber(), pos.getIndexInLine()) * charWidth),
              (pos.getLineNumber() - firstLineOnScreen) * lineHeight,
              roundToInt (charWidth),
              lineHeight };
@@ -1318,6 +1321,7 @@ bool CodeEditorComponent::perform (const InvocationInfo& info)
 void CodeEditorComponent::lookAndFeelChanged()
 {
     caret.reset (getLookAndFeel().createCaretComponent (this));
+    addAndMakeVisible (*caret);
 }
 
 bool CodeEditorComponent::performCommand (const CommandID commandID)

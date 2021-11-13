@@ -37,7 +37,7 @@ public:
     }
 
 private:
-    template<typename InterpolatorType>
+    template <typename InterpolatorType>
     void runInterplatorTests (const String& interpolatorName)
     {
         auto createGaussian = [] (std::vector<float>& destination, float scale, float centreInSamples, float width)
@@ -167,7 +167,7 @@ private:
                                   (int) input.size(), (int) input.size());
 
             std::vector<float> secondGaussian (doubleLengthOutput.size());
-            createGaussian (secondGaussian, 1.0f, expectedGaussianMidpoint + outputBufferSize, expectedGaussianWidth);
+            createGaussian (secondGaussian, 1.0f, expectedGaussianMidpoint + (float) outputBufferSize, expectedGaussianWidth);
             FloatVectorOperations::add (expectedDoubleLengthOutput.data(), secondGaussian.data(), (int) expectedDoubleLengthOutput.size());
 
             expectAllElementsWithin (doubleLengthOutput, expectedDoubleLengthOutput, 0.02f);

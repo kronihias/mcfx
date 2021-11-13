@@ -20,7 +20,7 @@
   ==============================================================================
 */
 
-#if JUCE_MAC || JUCE_IOS
+#if ! DOXYGEN && (JUCE_MAC || JUCE_IOS)
  // Annoyingly we can only forward-declare a typedef by forward-declaring the
  // aliased type
  #if __has_attribute(objc_bridge)
@@ -1049,7 +1049,8 @@ public:
         This will look for a value at the end of the string.
         e.g. for "321 xyz654" it will return 654; for "2 3 4" it'll return 4.
 
-        Negative numbers are not handled, so "xyz-5" returns 5.
+        If the string ends with a hyphen followed by numeric characters, the
+        return value will be negative.
 
         @see getIntValue
     */
