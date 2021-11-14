@@ -205,7 +205,7 @@ View::TitleBox::TitleBox()
     subtitle.setFont(Font (12.4000f, Font::plain));
     subtitle.setColour(Label::textColourId, Colours::white);
     subtitle.setJustificationType (Justification::centredTop);
-    subtitle.setText("multichannel non-equal partioned convolution matrix", dontSendNotification);
+    subtitle.setText("matricial multichannel non-equally partitioned convolution", dontSendNotification);
     addAndMakeVisible(subtitle);
 }
 
