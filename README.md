@@ -64,6 +64,6 @@ Other plug-ins of the suite
 
 changelog
 ==============
-
+- 1.0.4 (2021-11-14) plug-in external parameters control (bugfixes)
 - 1.0.2 (2021-01-15) metadata option restored
 - 1.0.0 (2020-11-12) first stable version
