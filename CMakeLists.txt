@@ -124,10 +124,11 @@ endif(WIN32)
 # # MacOS specific directives
 IF(APPLE)
 #	# switch to c++11
+	SET(CMAKE_CXX_FLAGS "-std=c++11 -stdlib=libc++")
 # 	ADD_DEFINITIONS(
 # 		-std=c++11
 # 	)
-	set( CMAKE_OSX_DEPLOYMENT_TARGET 10.15)
+	set(CMAKE_OSX_DEPLOYMENT_TARGET 10.7)
 
 	set(VST_COPY_DIR $ENV{HOME}/Library/Audio/Plug-Ins/VST CACHE STRING "Set the location to copy the VST plugin after build")
 	set(VST3_COPY_DIR $ENV{HOME}/Library/Audio/Plug-Ins/VST3 CACHE STRING "Set the location to copy the VST3 plugin after build")
