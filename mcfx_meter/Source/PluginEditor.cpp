@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -38,10 +38,10 @@ _scale_right(163, true)
     LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
 
     tooltipWindow.setMillisecondsBeforeTipAppears (500); // tooltip delay
-    
+
     String label_text = "mcfx_meter";
     label_text << NUM_CHANNELS;
-    
+
     addAndMakeVisible (label);
     label.setText(label_text, dontSendNotification);
     label.setFont (Font (15.0000f, Font::plain));
@@ -50,7 +50,7 @@ _scale_right(163, true)
     label.setColour (Label::textColourId, Colours::aquamarine);
     label.setColour (TextEditor::textColourId, Colours::black);
     label.setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
+
     addAndMakeVisible (sld_hold);
     sld_hold.setTooltip ("peak hold time in [s]");
     sld_hold.setRange (0, 5, 0.1);
@@ -60,7 +60,7 @@ _scale_right(163, true)
     sld_hold.addListener (this);
     sld_hold.setSkewFactor(0.7f);
     sld_hold.setDoubleClickReturnValue(true, 0.5f);
-    
+
     addAndMakeVisible (sld_fall);
     sld_fall.setTooltip ("peak fall [dB/s]");
     sld_fall.setRange (0, 99, 1);
@@ -70,7 +70,7 @@ _scale_right(163, true)
     sld_fall.addListener (this);
     sld_fall.setSkewFactor(0.6f);
     sld_fall.setDoubleClickReturnValue(true, 15.f);
-    
+
     addAndMakeVisible (label2);
     label2.setText("hold [s]\n", dontSendNotification);
     label2.setFont (Font (15.0000f, Font::plain));
@@ -79,7 +79,7 @@ _scale_right(163, true)
     label2.setColour (Label::textColourId, Colours::white);
     label2.setColour (TextEditor::textColourId, Colours::black);
     label2.setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
+
     addAndMakeVisible (label3);
     label3.setText("fall [dB/s]\n", dontSendNotification);
     label3.setFont (Font (15.0000f, Font::plain));
@@ -88,7 +88,7 @@ _scale_right(163, true)
     label3.setColour (Label::textColourId, Colours::white);
     label3.setColour (TextEditor::textColourId, Colours::black);
     label3.setColour (TextEditor::backgroundColourId, Colour (0x0));
-    
+
     // not make visible... not needed
     addAndMakeVisible (tgl_pkhold);
     tgl_pkhold.setButtonText ("peak hold");
@@ -96,9 +96,9 @@ _scale_right(163, true)
     tgl_pkhold.addListener (this);
     tgl_pkhold.setColour (ToggleButton::textColourId, Colours::white);
     tgl_pkhold.setColour (TextButton::buttonColourId, Colours::grey);
-  
+
     cachedImage_meter_scale_png = ImageCache::getFromMemory (meter_scale_png, meter_scale_pngSize);
-    
+
     addAndMakeVisible (sld_offset);
     sld_offset.setTooltip ("offset scale");
     sld_offset.setRange (-36, 18, 1);
@@ -108,7 +108,7 @@ _scale_right(163, true)
     sld_offset.setColour (Slider::thumbColourId, Colours::grey);
     sld_offset.addListener (this);
     sld_offset.setDoubleClickReturnValue(true, 0.f);
-    
+
     // create meters and labels!
     for (int i=0; i<NUM_CHANNELS; i++)
     {
@@ -117,7 +117,7 @@ _scale_right(163, true)
             _meters.add(METER);
             addChildComponent(_meters.getUnchecked(i));
             _meters.getUnchecked(i)->setVisible(true);
-            
+
             if (Label* const LABEL = new Label ("new label", String (i+1)))
             {
                 _labels.add(LABEL);
@@ -129,23 +129,23 @@ _scale_right(163, true)
             }
         }
     }
-    
+
     addAndMakeVisible(_scale_left);
     addAndMakeVisible(_scale_right);
-    
+
     //[UserPreSize]
     //[/UserPreSize]
 
     // make space between each group of eight
     int gr_of_eight = NUM_CHANNELS / GROUP_CHANNELS;
-    
+
     _width = 50 + METER_WIDTH * NUM_CHANNELS + 50 + gr_of_eight*METER_GROUP_SPACE;
     setSize (_width, 220);
 
     // register as change listener (gui/dsp sync)
     ownerFilter->addChangeListener(this);
     ownerFilter->sendChangeMessage(); // get status from dsp
-    
+
     //[Constructor] You can add your own custom stuff here..
     startTimer (40);
     //[/Constructor]
@@ -156,10 +156,10 @@ Ambix_meterAudioProcessorEditor::~Ambix_meterAudioProcessorEditor()
     //[Destructor_pre]. You can add your own custom destruction code here..
     //[/Destructor_pre]
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    
+
     // remove me as listener for changes
     ourProcessor->removeChangeListener(this);
-    
+
     //[Destructor]. You can add your own custom destruction code here..
     //[/Destructor]
 }
@@ -171,14 +171,14 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
     //[/UserPrePaint]
 
     g.fillAll (Colour (0xff1a1a1a));
-    
+
     g.setGradientFill (ColourGradient (Colour (0xff4e4e4e),
                                        (float) (proportionOfWidth (0.6400f)), (float) (proportionOfHeight (0.6933f)),
                                        Colours::black,
                                        (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
                                        true));
     g.fillRect (0, 0, _width, 220);
-    
+
     /* Version text */
     g.setColour (Colours::white);
     g.setFont (Font (10.00f, Font::plain));
@@ -187,14 +187,14 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
     g.drawText (version_string,
                 getWidth()-51, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);
-    
+
     // draw left scale
     /*
     g.drawImage (cachedImage_meter_scale_png,
                  25, 23, 20, 170,
                  0, 0, cachedImage_meter_scale_png.getWidth(), cachedImage_meter_scale_png.getHeight());
     */
-    
+
     // draw right scale
     /*
     g.drawImage (cachedImage_meter_scale_png,
@@ -207,29 +207,29 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
 
 void Ambix_meterAudioProcessorEditor::resized()
 {
-    
+
     label.setBounds (0, 0, 104, 16);
     sld_hold.setBounds (166, 0, 70, 24);
     sld_fall.setBounds (307, 0, 70, 24);
     label2.setBounds (111, 3, 64, 16);
     label3.setBounds (239, 3, 77, 16);
     tgl_pkhold.setBounds (382, 0, 91, 24);
-    
+
     sld_offset.setBounds (4, 23, 18, 167);
-    
+
     for (int i=0; i<NUM_CHANNELS; i++)
     {
         int group = i / GROUP_CHANNELS;
-        
+
         int x = 50 + i * METER_WIDTH + group * METER_GROUP_SPACE;
         _meters.getUnchecked(i)->setBounds(x, 30, 8, 163);
-        
+
         _labels.getUnchecked(i)->setBounds((int)(x-METER_WIDTH*0.75), 195, (int)(METER_WIDTH*2), 14);
     }
-    
+
     _scale_left.setBounds(20, 23, 50, 200);
     _scale_right.setBounds(_width-65, 23, 50, 200);
-    
+
     //[UserResized] Add your own custom resize handling here..
     //[/UserResized]
 }
@@ -237,26 +237,26 @@ void Ambix_meterAudioProcessorEditor::resized()
 void Ambix_meterAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasMoved)
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    
+
     if (sliderThatWasMoved == &sld_hold)
     {
         //[UserSliderCode_sld_hold] -- add your slider handling code here..
         ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::HoldParam, (float)sld_hold.getValue()/5.f);
-        
+
         //[/UserSliderCode_sld_hold]
     }
     else if (sliderThatWasMoved == &sld_fall)
     {
         //[UserSliderCode_sld_fall] -- add your slider handling code here..
         ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::FallParam, (float)sld_fall.getValue()/99.f);
-        
+
         //[/UserSliderCode_sld_fall]
     }
     else if (sliderThatWasMoved == &sld_offset)
     {
         ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::OffsetParam, (float)(sld_offset.getValue()+36.f)/54.f);
     }
-    
+
     //[UsersliderValueChanged_Post]
     //[/UsersliderValueChanged_Post]
 }
@@ -264,13 +264,13 @@ void Ambix_meterAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasM
 void Ambix_meterAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    
+
     if (buttonThatWasClicked == &tgl_pkhold)
     {
         ourProcessor->setParameterNotifyingHost(Ambix_meterAudioProcessor::PkHoldParam, (float)tgl_pkhold.getToggleState());
-        
+
     }
-    
+
     //[UserbuttonClicked_Post]
     //[/UserbuttonClicked_Post]
 }
@@ -278,35 +278,35 @@ void Ambix_meterAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicke
 void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    
-    
+
+
     for (int i=0; i<NUM_CHANNELS; i++)
     {
         // _meters.getUnchecked(i)->setValue(ourProcessor->_rms.getUnchecked(i), ourProcessor->_peak.getUnchecked(i));
         _meters.getUnchecked(i)->setValue(ourProcessor->_my_meter_dsp.getUnchecked(i)->getRMS(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeak(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeakHold());
     }
-    
+
 }
 
 void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    
+
     sld_hold.setValue(ourProcessor->_hold,dontSendNotification);
     sld_fall.setValue(ourProcessor->_fall,dontSendNotification);
     tgl_pkhold.setToggleState(ourProcessor->_pk_hold, dontSendNotification);
-    
+
     sld_offset.setValue(ourProcessor->_offset, dontSendNotification);
-    
+
     _scale_left.offset(sld_offset.getValue());
     _scale_right.offset(sld_offset.getValue());
-    
+
     for (int i=0; i<NUM_CHANNELS; i++)
     {
         _meters.getUnchecked(i)->offset( (int)ourProcessor->_offset);
         _meters.getUnchecked(i)->_peak_hold = ourProcessor->_pk_hold;
     }
-    
+
 }
 
 void Ambix_meterAudioProcessorEditor::mouseDown (const MouseEvent& e)
@@ -315,13 +315,13 @@ void Ambix_meterAudioProcessorEditor::mouseDown (const MouseEvent& e)
     //[UserCode_mouseDown] -- Add your code here...
     for (int i=0; i<NUM_CHANNELS; i++)
     {
-        
+
         // ourProcessor->_kmdsp.getUnchecked(i)->reset();
-        
+
         ourProcessor->_my_meter_dsp.getUnchecked(i)->reset();
-        
+
         _meters.getUnchecked(i)->reset();
-        
+
     }
     //[/UserCode_mouseDown]
 }

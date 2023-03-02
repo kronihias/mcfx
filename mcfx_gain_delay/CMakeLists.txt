@@ -1,5 +1,11 @@
-ADD_SUBDIRECTORY ( mcfx_gain_delay )
+SET (SPECIFIC_SOURE_DIR ${SRC_DIR}/mcfx_gain_delay)
 
-IF (BUILD_STANDALONE)
-	ADD_SUBDIRECTORY ( mcfx_gain_delay_standalone )
-ENDIF (BUILD_STANDALONE)
+
+IF(${NUM_CHANNELS} LESS 10)
+	SET(PLUGIN_CODE MGd${NUM_CHANNELS})
+else()
+	SET(PLUGIN_CODE MG${NUM_CHANNELS})
+endif()
+
+
+INCLUDE(${SRC_DIR}/Subproject.cmake)

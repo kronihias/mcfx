@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -35,55 +35,57 @@ public:
     ~Ambix_meterAudioProcessor();
 
     //==============================================================================
-    void prepareToPlay (double sampleRate, int samplesPerBlock);
-    void releaseResources();
+    void prepareToPlay (double sampleRate, int samplesPerBlock) override;
+    void releaseResources() override;
 
-    void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages);
+    bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
 
-    //==============================================================================
-    AudioProcessorEditor* createEditor();
-    bool hasEditor() const;
+    void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 
     //==============================================================================
-    const String getName() const;
-
-    int getNumParameters();
-
-    float getParameter (int index);
-    void setParameter (int index, float newValue);
-    
-    const String getParameterName (int index);
-    const String getParameterText (int index);
-
-    const String getInputChannelName (int channelIndex) const;
-    const String getOutputChannelName (int channelIndex) const;
-    bool isInputChannelStereoPair (int index) const;
-    bool isOutputChannelStereoPair (int index) const;
-
-    bool acceptsMidi() const;
-    bool producesMidi() const;
-    bool silenceInProducesSilenceOut() const;
-    double getTailLengthSeconds() const;
+    AudioProcessorEditor* createEditor() override;
+    bool hasEditor() const override;
 
     //==============================================================================
-    int getNumPrograms();
-    int getCurrentProgram();
-    void setCurrentProgram (int index);
-    const String getProgramName (int index);
-    void changeProgramName (int index, const String& newName);
+    const String getName() const override;
+
+    int getNumParameters() override;
+
+    float getParameter (int index) override;
+    void setParameter (int index, float newValue) override;
+
+    const String getParameterName (int index) override;
+    const String getParameterText (int index) override;
+
+    const String getInputChannelName (int channelIndex) const override;
+    const String getOutputChannelName (int channelIndex) const override;
+    bool isInputChannelStereoPair (int index) const override;
+    bool isOutputChannelStereoPair (int index) const override;
+
+    bool acceptsMidi() const override;
+    bool producesMidi() const override;
+    bool silenceInProducesSilenceOut() const override;
+    double getTailLengthSeconds() const override;
 
     //==============================================================================
-    void getStateInformation (MemoryBlock& destData);
-    void setStateInformation (const void* data, int sizeInBytes);
-    
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram (int index) override;
+    const String getProgramName (int index) override;
+    void changeProgramName (int index, const String& newName) override;
+
+    //==============================================================================
+    void getStateInformation (MemoryBlock& destData) override;
+    void setStateInformation (const void* data, int sizeInBytes) override;
+
     OwnedArray<MyMeterDsp> _my_meter_dsp;
-    
+
     float _hold; // peak hold time, seconds
     float _fall; // peak fallback rate, dB/s
-    
+
     bool _pk_hold;
     float _offset;
-    
+
     enum Parameters
 	{
 		HoldParam,
@@ -92,9 +94,9 @@ public:
         OffsetParam,
 		totalNumParams
 	};
-    
+
 private:
-    
+
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Ambix_meterAudioProcessor)
 };

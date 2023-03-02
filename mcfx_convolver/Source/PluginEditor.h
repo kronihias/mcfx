@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  mcfx is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -41,24 +41,24 @@ public:
     //==============================================================================
     // This is just a standard Juce paint method...
     void paint (Graphics& g);
-    
+
     void resized();
     void buttonClicked (Button* buttonThatWasClicked);
-    
+
     void changeListenerCallback (ChangeBroadcaster *source);
-    
+
     void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
-    
+
     void textEditorFocusLost(TextEditor& ed);
-    
+
     void textEditorReturnKeyPressed(TextEditor& ed);
 
     static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
-    
+
     void UpdatePresets();
-    
+
     void UpdateText();
-    
+
     void timerCallback();
 
 private:
@@ -67,7 +67,7 @@ private:
         return static_cast <Mcfx_convolverAudioProcessor*> (getAudioProcessor());
     }
     TooltipWindow tooltipWindow;
-    
+
     Label label;
     TextEditor txt_preset;
     PopupMenu popup_presets;
@@ -88,7 +88,7 @@ private:
     TextEditor txt_rcv_port;
     ToggleButton tgl_rcv_active;
     ToggleButton tgl_save_preset;
-    
+
     LookAndFeel_V3 MyLookAndFeel;
 };
 
