@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -21,7 +21,12 @@
 #include "PluginEditor.h"
 
 //==============================================================================
-Mcfx_delayAudioProcessor::Mcfx_delayAudioProcessor() : _delay_ms(0.f),
+Mcfx_delayAudioProcessor::Mcfx_delayAudioProcessor() :
+    AudioProcessor (BusesProperties()
+        .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+        .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+    ),
+    _delay_ms(0.f),
     _delay_smpls(0),
     _delay_buffer(2,256),
     _buf_write_pos(0),
@@ -29,11 +34,11 @@ Mcfx_delayAudioProcessor::Mcfx_delayAudioProcessor() : _delay_ms(0.f),
     _buf_size(256)
 {
     _samplerate = getSampleRate();
-    
+
     if (_samplerate == 0.f) {
         _samplerate = 44100.f;
     }
-    
+
 }
 
 Mcfx_delayAudioProcessor::~Mcfx_delayAudioProcessor()
@@ -59,9 +64,9 @@ float Mcfx_delayAudioProcessor::getParameter (int index)
 void Mcfx_delayAudioProcessor::setParameter (int index, float newValue)
 {
     _delay_smpls = (int)floor(newValue*MAX_DELAYTIME_S*_samplerate+0.5f);
-    
+
     _delay_ms = _delay_smpls/_samplerate/MAX_DELAYTIME_S;
-    
+
     sendChangeMessage();
 }
 
@@ -154,7 +159,7 @@ void Mcfx_delayAudioProcessor::changeProgramName (int index, const String& newNa
 void Mcfx_delayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     _samplerate = sampleRate;
-    
+
     _buf_size = (int)(MAX_DELAYTIME_S * sampleRate + samplesPerBlock + 1); // MAX_DELAYTIME_S maximum
     _delay_buffer.clear();
     _delay_smpls = (int)(_delay_ms*MAX_DELAYTIME_S*sampleRate);
@@ -176,23 +181,29 @@ void Mcfx_delayAudioProcessor::releaseResources()
     // spare memory, etc.
 }
 
+bool Mcfx_delayAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+    return ((layouts.getMainOutputChannelSet().size() == NUM_CHANNELS) &&
+            (layouts.getMainInputChannelSet().size() == NUM_CHANNELS));
+}
+
 void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
-    
+
     // compute read position
     _buf_read_pos = _buf_write_pos - _delay_smpls;
     if (_buf_read_pos < 0)
         _buf_read_pos = _buf_size + _buf_read_pos;
-    
+
     // std::cout << "size : " << _buf_size << " read pos: " << _buf_read_pos << std::endl;
     // resize buffer if necessary
     if (_delay_buffer.getNumChannels() < buffer.getNumChannels() || _delay_buffer.getNumSamples() < _buf_size) {
         // resize buffer
         _delay_buffer.setSize(buffer.getNumChannels(), _buf_size, true, true, false);
     }
-    
+
     // write to the buffer
-    
+
     if (_buf_write_pos + buffer.getNumSamples() < _buf_size)
     {
         for (int ch = 0; ch < buffer.getNumChannels(); ch++)
@@ -202,29 +213,29 @@ void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuff
         }
         // update write position
         _buf_write_pos += buffer.getNumSamples();
-        
+
     } else { // if buffer reaches end
-        
+
         int samples_to_write1 = _buf_size - _buf_write_pos;
         int samples_to_write2 = buffer.getNumSamples() - samples_to_write1;
-        
+
         // std::cout << "spl_write1: " << samples_to_write1 << " spl_write2: " << samples_to_write2 << std::endl;
-        
+
         for (int ch = 0; ch < buffer.getNumChannels(); ch++)
         {
-            
+
             // copy until end
             _delay_buffer.copyFrom(ch, _buf_write_pos, buffer, ch, 0, samples_to_write1);
-            
-                        
+
+
             // start copy to front
             _delay_buffer.copyFrom(ch, 0, buffer, ch, samples_to_write1, samples_to_write2);
         }
         // update write position
         _buf_write_pos = samples_to_write2;
     }
-    
-    
+
+
     // read from buffer
     if (_buf_read_pos + buffer.getNumSamples() < _buf_size)
     {
@@ -235,24 +246,24 @@ void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuff
         // update read position
         _buf_read_pos += buffer.getNumSamples();
     } else {
-        
+
         int samples_to_read1 = _buf_size - _buf_read_pos;
         int samples_to_read2 = buffer.getNumSamples() - samples_to_read1;
-        
+
         for (int ch = 0; ch < buffer.getNumChannels(); ch++)
         {
-            
+
             // copy until end
             buffer.copyFrom(ch, 0, _delay_buffer, ch, _buf_read_pos, samples_to_read1);
-            
+
             // start copy from front
             buffer.copyFrom(ch, samples_to_read1, _delay_buffer, ch, 0, samples_to_read2);
         }
         // update write position
         _buf_read_pos = samples_to_read2;
     }
-    
-    
+
+
 
     // In case we have more outputs than inputs, we'll clear any output
     // channels that didn't contain input data, (because these aren't
@@ -282,15 +293,15 @@ void Mcfx_delayAudioProcessor::getStateInformation (MemoryBlock& destData)
     // You could do that either as raw data, or use the XML or ValueTree classes
     // as intermediaries to make it easy to save and load complex data.
     // Create an outer XML element..
-    
+
     XmlElement xml ("MYPLUGINSETTINGS");
-    
+
     // add some attributes to it..
     for (int i=0; i < getNumParameters(); i++)
     {
         xml.setAttribute (String(i), getParameter(i));
     }
-    
+
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
 }
@@ -299,9 +310,9 @@ void Mcfx_delayAudioProcessor::setStateInformation (const void* data, int sizeIn
 {
     // You should use this method to restore your parameters from this memory block,
     // whose contents will have been created by the getStateInformation() call.
-    
+
     std::unique_ptr<XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
-    
+
     if (xmlState != nullptr)
     {
         // make sure that it's actually our type of XML object..
@@ -311,7 +322,7 @@ void Mcfx_delayAudioProcessor::setStateInformation (const void* data, int sizeIn
                 setParameter(i, xmlState->getDoubleAttribute(String(i)));
             }
         }
-        
+
     }
 }
 

@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -30,18 +30,6 @@
 #ifndef NUM_CHANNELS
     #define NUM_CHANNELS 36
 #endif
-
-#define Plugin_Name                   mcfx_delay
-#define Plugin_Code                   1296314416 // MD00
-
-// generate plugin name with channel count
-#define QU(x) #x
-#define QUH(x) QU(x)
-#define JucePlugin_Name                   QUH(Plugin_Name) QUH(NUM_CHANNELS)
-
-#define ADD(x, y) ((x) + (y))
-
-#define JucePlugin_PluginCode             ADD(Plugin_Code,NUM_CHANNELS)
 
 // [END_USER_CODE_SECTION]
 
@@ -222,15 +210,6 @@
 #endif
 #ifndef  JucePlugin_PluginCode
  #define JucePlugin_PluginCode             'MCDe'
-#endif
-#ifndef  JucePlugin_MaxNumInputChannels
- #define JucePlugin_MaxNumInputChannels    NUM_CHANNELS
-#endif
-#ifndef  JucePlugin_MaxNumOutputChannels
- #define JucePlugin_MaxNumOutputChannels   NUM_CHANNELS
-#endif
-#ifndef  JucePlugin_PreferredChannelConfigurations
- #define JucePlugin_PreferredChannelConfigurations  {NUM_CHANNELS, NUM_CHANNELS}
 #endif
 #ifndef  JucePlugin_IsSynth
  #define JucePlugin_IsSynth                0

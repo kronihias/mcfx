@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -33,8 +33,8 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
     setLookAndFeel (&MyLookAndFeel);
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
-    
-    
+
+
     addAndMakeVisible (lbl_g);
     lbl_g.setText("mcfx_delay", dontSendNotification);
     lbl_g.setFont (Font (15.00f, Font::plain));
@@ -46,9 +46,9 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
 
     addAndMakeVisible (sld_del_ms);
     sld_del_ms.setTooltip ("delay in milliseconds");
-    
+
     sld_del_ms.setRange (0, MAX_DELAYTIME_S*1000, 0.01);
-    
+
     sld_del_ms.setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
     sld_del_ms.setVelocityBasedMode(true);
     sld_del_ms.setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
@@ -99,7 +99,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
 
     ownerFilter->addChangeListener(this);
     ownerFilter->sendChangeMessage(); // get status from dsp
-    
+
     //[Constructor] You can add your own custom stuff here..
     //[/Constructor]
 }
@@ -107,7 +107,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
 Mcfx_delayAudioProcessorEditor::~Mcfx_delayAudioProcessorEditor()
 {
     Mcfx_delayAudioProcessor* ourProcessor = getProcessor();
-    
+
     // remove me as listener for changes
     ourProcessor->removeChangeListener(this);
 
@@ -128,7 +128,7 @@ void Mcfx_delayAudioProcessorEditor::paint (Graphics& g)
                                        (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
                                        true));
     g.fillRect (0, 0, this->getBounds().getWidth(), this->getBounds().getHeight());
-    
+
     /* Version text */
     g.setColour (Colours::white);
     g.setFont (Font (10.00f, Font::plain));
@@ -137,7 +137,7 @@ void Mcfx_delayAudioProcessorEditor::paint (Graphics& g)
     g.drawText (version_string,
                 getWidth()-51, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);
-    
+
     //[UserPaint] Add your own custom painting code here..
     //[/UserPaint]
 }
