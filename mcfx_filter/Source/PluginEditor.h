@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -55,11 +55,11 @@ public:
     void resized();
     void buttonClicked (Button* buttonThatWasClicked);
     void sliderValueChanged (Slider* sliderThatWasMoved);
-    
+
     void changeListenerCallback (ChangeBroadcaster *source);
-    
+
     void timerCallback();
-    
+
     // Binary resources:
     static const char* lc_off_png;
     static const int lc_off_pngSize;
@@ -88,9 +88,9 @@ public:
 private:
     //[UserVariables]   -- You can add your own custom variables in this section.
     //[/UserVariables]
-    
+
     void updateSliders();
-    
+
     //==============================================================================
     Label lbl_gd;
     ImageButton btn_lc_on;
@@ -117,14 +117,14 @@ private:
     LookAndFeel_V3 MyLookAndFeel;
 
     bool changed_;
-    
+
     LowhighpassAudioProcessor* getProcessor() const
     {
         return static_cast <LowhighpassAudioProcessor*> (getAudioProcessor());
     }
-    
+
     TooltipWindow tooltipWindow;
-    
+
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LowhighpassAudioProcessorEditor)
 };

@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -58,7 +58,7 @@ public:
     void modifierKeysChanged(const ModifierKeys & modifiers);
 
     void changeListenerCallback (ChangeBroadcaster *source);
-    
+
     // Binary resources:
     static const char* clipboard35_png;
     static const int clipboard35_pngSize;
@@ -99,13 +99,13 @@ private:
     Label label3;
     ImageButton btn_paste_gain;
     ImageButton btn_paste_gain2;
-  
-  
+
+
     DrawableButton btn_phase_reset;
     DrawableButton btn_mute_reset;
     DrawableButton btn_solo_reset;
     DrawableButton btn_sig_reset;
-    
+
     OwnedArray<Slider> sld_del;
     OwnedArray<Slider> sld_gain;
     OwnedArray<Label> lbl_ch;
@@ -113,7 +113,7 @@ private:
     OwnedArray<DrawableButton> btn_mute;
     OwnedArray<DrawableButton> btn_solo;
     OwnedArray<DrawableButton> btn_sig;
-    
+
     Slider sld_siggain;
     ComboBox box_signal;
     ComboBox box_sigtime;
@@ -123,7 +123,7 @@ private:
     Label label4;
     Label label6;
     Label label7;
-    
+
     bool isStrgDown;
 
     LookAndFeel_V3 MyLookAndFeel;
@@ -132,9 +132,9 @@ private:
     {
         return static_cast <Mcfx_gain_delayAudioProcessor*> (getAudioProcessor());
     }
-    
+
     TooltipWindow tooltipWindow;
-    
+
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_gain_delayAudioProcessorEditor)
 };

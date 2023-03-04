@@ -70,6 +70,33 @@ endif(BUILD_LV2)
 if (BUILD_STANDALONE)
     message ("-- Building Standalone versions")
     list (APPEND MCFX_FORMATS Standalone)
+
+    IF(WIN32)
+        SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
+        SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
+        INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
+    ENDIF(WIN32)
+
+    IF(UNIX AND NOT APPLE AND NOT ANDROID)
+        SET(JUCE_ALSA TRUE CACHE BOOL "build standalone app with ALSA support")
+    ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
+
+    IF(UNIX AND NOT ANDROID)
+        SET(JUCE_JACK TRUE CACHE BOOL "build standalone app with Jack support")
+    ENDIF(UNIX AND NOT ANDROID)
+
+    IF(JUCE_ASIO)
+        ADD_DEFINITIONS(-DJUCE_ASIO=1)
+    ENDIF(JUCE_ASIO)
+
+    IF (JUCE_JACK)
+        ADD_DEFINITIONS(-DJUCE_JACK=1)
+    ENDIF (JUCE_JACK)
+
+    IF (JUCE_ALSA)
+        ADD_DEFINITIONS(-DJUCE_ALSA=1)
+    ENDIF (JUCE_ALSA)
+
 endif(BUILD_STANDALONE)
 
 

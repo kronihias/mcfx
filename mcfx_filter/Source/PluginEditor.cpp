@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -22,6 +22,8 @@
 
 #include "PluginEditor.h"
 
+#define Q(x) #x
+#define QUOTE(x) Q(x)
 
 //[MiscUserDefs] You can add your own user definitions and misc code here...
 //[/MiscUserDefs]
@@ -36,7 +38,7 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     setLookAndFeel (&MyLookAndFeel); // rotary wheel look of V3 is better for this plugin...
 
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
-    
+
     addAndMakeVisible (lbl_gd);
     lbl_gd.setText("mcfx_filter", dontSendNotification);
     lbl_gd.setFont (Font (15.00f, Font::plain));
@@ -54,10 +56,10 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
                           ImageCache::getFromMemory (lc_off_png, lc_off_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (lc_over_png, lc_over_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (lc_on_png, lc_on_pngSize), 1.000f, Colour (0x00000000));
-    
+
     btn_lc_on.setClickingTogglesState(true);
-    
-    
+
+
     addAndMakeVisible (sld_lc_f);
     sld_lc_f.setTooltip ("low cutoff frequency");
     sld_lc_f.setRange (24, 21618, 1);
@@ -71,7 +73,7 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     sld_lc_f.addListener (this);
     sld_lc_f.setSkewFactor (0.55);
     sld_lc_f.setDoubleClickReturnValue(true, 48.f);
-    
+
     addAndMakeVisible (btn_lc_order);
     btn_lc_order.setTooltip ("2nd order low cut");
     btn_lc_order.addListener (this);
@@ -80,10 +82,10 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
                              ImageCache::getFromMemory (_2nd_png, _2nd_pngSize), 1.000f, Colour (0x00000000),
                              Image(), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (_4th_png, _4th_pngSize), 1.000f, Colour (0x00000000));
-    
+
     btn_lc_order.setClickingTogglesState(true);
-    
-    
+
+
     addAndMakeVisible (btn_hc_on);
     btn_hc_on.setTooltip ("high cut off");
     btn_hc_on.addListener (this);
@@ -92,10 +94,10 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
                           ImageCache::getFromMemory (hc_off_png, hc_off_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (hc_over_png, hc_over_pngSize), 1.000f, Colour (0x00000000),
                           ImageCache::getFromMemory (hc_on_png, hc_on_pngSize), 1.000f, Colour (0x00000000));
-    
+
     btn_hc_on.setClickingTogglesState(true);
-    
-    
+
+
     addAndMakeVisible (sld_hc_f);
     sld_hc_f.setTooltip ("high cutoff frequency");
     sld_hc_f.setRange (24, 21618, 1);
@@ -110,7 +112,7 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     sld_hc_f.setSkewFactor (0.55);
     sld_hc_f.setDoubleClickReturnValue(true, 10960.f);
     //sld_hc_f.setLookAndFeel(&slider_look_and_feel);
-    
+
     addAndMakeVisible (btn_hc_order);
     btn_hc_order.setTooltip ("2nd order high cut");
     btn_hc_order.addListener (this);
@@ -119,10 +121,10 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
                              ImageCache::getFromMemory (_2nd_png, _2nd_pngSize), 1.000f, Colour (0x00000000),
                              Image(), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (_4th_png, _4th_pngSize), 1.000f, Colour (0x00000000));
-    
+
     btn_hc_order.setClickingTogglesState(true);
-    
-    
+
+
     addAndMakeVisible (sld_hs_f);
     sld_hs_f.setTooltip ("high shelf frequency");
     sld_hs_f.setRange (24, 21618, 1);
@@ -290,35 +292,35 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     filtergraph = std::make_unique<FilterGraph>(ownerFilter, ownerFilter);
     addAndMakeVisible (filtergraph.get());
     filtergraph->setName ("new component");
-    
+
     filtergraph->analyzeron_ = ownerFilter->_freqanalysis;
-    
+
     addAndMakeVisible (btn_analyzer);
     btn_analyzer.addListener (this);
-    
+
     btn_analyzer.setImages (false, true, true,
                              ImageCache::getFromMemory (analyzer_off_png, analyzer_off_pngSize), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (analyzer_over_png, analyzer_over_pngSize), 1.000f, Colour (0x00000000),
                              ImageCache::getFromMemory (analyzer_on_png, analyzer_on_pngSize), 1.000f, Colour (0x00000000));
     btn_analyzer.setClickingTogglesState(true);
     btn_analyzer.setToggleState(ownerFilter->_freqanalysis, dontSendNotification);
-    
-    
-    
+
+
+
     //[UserPreSize]
     //[/UserPreSize]
 
     setSize (630, 300);
 
     ownerFilter->_editorOpen = true;
-    
+
     ownerFilter->addChangeListener(this);
-    
+
     // turn on the fft
     // ownerFilter->freqanalysis(true);
-    
+
     startTimer(80);
-    
+
     //[Constructor] You can add your own custom stuff here..
     //[/Constructor]
 }
@@ -328,11 +330,11 @@ LowhighpassAudioProcessorEditor::~LowhighpassAudioProcessorEditor()
     //[Destructor_pre]. You can add your own custom destruction code here..
     //[/Destructor_pre]
     // getProcessor()->freqanalysis(false);
-    
+
     // remove me as listener for changes
     getProcessor()->removeChangeListener(this);
-    
-    
+
+
     getProcessor()->_editorOpen = false;
 
     //[Destructor]. You can add your own custom destruction code here..
@@ -428,7 +430,7 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
                 538, 219, 70, 23,
                 Justification::centred, true);
 
-    
+
     /* Version text */
     g.setColour (Colours::white);
     g.setFont (Font (10.00f, Font::plain));
@@ -437,7 +439,7 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
     g.drawText (version_string,
                 getWidth()-51, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);
-    
+
     //[UserPaint] Add your own custom painting code here..
     //[/UserPaint]
 }
@@ -475,7 +477,7 @@ void LowhighpassAudioProcessorEditor::resized()
 void LowhighpassAudioProcessorEditor::updateSliders()
 {
     LowhighpassAudioProcessor* ourProcessor = getProcessor();
-    
+
     float lc_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::LCfreqParam));
     sld_lc_f.setValue(lc_f, dontSendNotification);
     float ls_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::LSfreqParam));
@@ -488,13 +490,13 @@ void LowhighpassAudioProcessorEditor::updateSliders()
     sld_hs_f.setValue(hs_f, dontSendNotification);
     float hc_f = param2freq(ourProcessor->getParameter(LowhighpassAudioProcessor::HCfreqParam));
     sld_hc_f.setValue(hc_f, dontSendNotification);
-    
-    
+
+
     sld_ls_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::LSQParam)), dontSendNotification);
     sld_p1_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::PF1QParam)), dontSendNotification);
     sld_p2_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::PF2QParam)), dontSendNotification);
     sld_hs_q.setValue(param2q(ourProcessor->getParameter(LowhighpassAudioProcessor::HSQParam)), dontSendNotification);
-    
+
     float ls_g = param2db(ourProcessor->getParameter(LowhighpassAudioProcessor::LSGainParam));
     sld_ls_g.setValue(ls_g, dontSendNotification);
     float p1_g = param2db(ourProcessor->getParameter(LowhighpassAudioProcessor::PF1GainParam));
@@ -503,32 +505,32 @@ void LowhighpassAudioProcessorEditor::updateSliders()
     sld_p2_g.setValue(p2_g, dontSendNotification);
     float hs_g = param2db(ourProcessor->getParameter(LowhighpassAudioProcessor::HSGainParam));
     sld_hs_g.setValue(hs_g, dontSendNotification);
-    
-    
+
+
     filtergraph->setDragButton(0, lc_f, 0.f);
     filtergraph->setDragButton(1, ls_f, ls_g);
     filtergraph->setDragButton(2, p1_f, p1_g);
     filtergraph->setDragButton(3, p2_f, p2_g);
     filtergraph->setDragButton(4, hs_f, hs_g);
     filtergraph->setDragButton(5, hc_f, 0.f);
-    
-    
+
+
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::LCOnParam) > 0.5f)
         btn_lc_on.setToggleState(true, dontSendNotification);
     else
         btn_lc_on.setToggleState(false, dontSendNotification);
-    
+
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::HCOnParam) > 0.5f)
         btn_hc_on.setToggleState(true, dontSendNotification);
     else
         btn_hc_on.setToggleState(false, dontSendNotification);
-    
-    
+
+
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::LCorderParam) > 0.5f)
         btn_lc_order.setToggleState(true, dontSendNotification);
     else
         btn_lc_order.setToggleState(false, dontSendNotification);
-    
+
     if (ourProcessor->getParameter(LowhighpassAudioProcessor::HCorderParam) > 0.5f)
         btn_hc_order.setToggleState(true, dontSendNotification);
     else
@@ -538,8 +540,8 @@ void LowhighpassAudioProcessorEditor::updateSliders()
 void LowhighpassAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
     filtergraph->changed(true);
-    
-    changed_ = true;    
+
+    changed_ = true;
 }
 
 void LowhighpassAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
