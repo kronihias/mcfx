@@ -20,10 +20,14 @@
 #ifndef __PLUGINPROCESSOR_H_43F61266__
 #define __PLUGINPROCESSOR_H_43F61266__
 
-#include "../JuceLibraryCode/JuceHeader.h"
+#include "JuceHeader.h"
 
 #include "MySignalGenerator.h"
 #include "ChannelStepper.h"
+
+#ifndef MAX_DELAYTIME_S
+    #define MAX_DELAYTIME_S 1
+#endif
 
 // number of parameters per channel
 #define PARAMS_PER_CH 6

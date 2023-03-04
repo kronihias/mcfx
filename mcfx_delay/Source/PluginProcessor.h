@@ -20,8 +20,11 @@
 #ifndef PLUGINPROCESSOR_H_INCLUDED
 #define PLUGINPROCESSOR_H_INCLUDED
 
-#include "../JuceLibraryCode/JuceHeader.h"
+#include "JuceHeader.h"
 
+#ifndef MAX_DELAYTIME_S
+    #define MAX_DELAYTIME_S 0.5
+#endif
 
 //==============================================================================
 /**

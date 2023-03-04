@@ -24,6 +24,9 @@
 #include "PluginEditor.h"
 #include "PluginProcessor.h"
 
+#define Q(x) #x
+#define QUOTE(x) Q(x)
+
 extern float iec_scale(float dB);
 
 //[MiscUserDefs] You can add your own user definitions and misc code here...

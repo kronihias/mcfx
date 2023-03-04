@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -22,6 +22,8 @@
 
 #include "PluginEditor.h"
 
+#define Q(x) #x
+#define QUOTE(x) Q(x)
 
 //[MiscUserDefs] You can add your own user definitions and misc code here...
 //[/MiscUserDefs]
@@ -58,7 +60,7 @@ isStrgDown(false)
 {
     LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
-    
+
     addAndMakeVisible (lbl_gd);
     lbl_gd.setText("mcfx_gain_delay", dontSendNotification);
     lbl_gd.setFont (Font (15.00f, Font::plain));
@@ -95,7 +97,7 @@ isStrgDown(false)
                                 ImageCache::getFromMemory (clipboard35_grey_png, clipboard35_grey_pngSize), 1.000f, Colour (0x00000000),
                                 ImageCache::getFromMemory (clipboard35_png, clipboard35_pngSize), 1.000f, Colour (0x00000000),
                                 Image(), 1.000f, Colour (0x00000000));
-    
+
     addAndMakeVisible (btn_paste_gain2);
     btn_paste_gain2.setTooltip ("paste delay values from clipboard");
     btn_paste_gain2.addListener (this);
@@ -106,7 +108,7 @@ isStrgDown(false)
                                 Image(), 1.000f, Colour (0x00000000));
 
 
-    
+
     addAndMakeVisible (sld_siggain);
     sld_siggain.setTooltip ("Signalgenerator Gain");
     sld_siggain.setRange (-99, 6, 0.1);
@@ -119,7 +121,7 @@ isStrgDown(false)
     sld_siggain.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
     sld_siggain.addListener (this);
     sld_siggain.setDoubleClickReturnValue(true, -40.f);
-    
+
     addAndMakeVisible (box_signal);
     box_signal.setTooltip ("Signal Type");
     box_signal.setEditableText (false);
@@ -135,7 +137,7 @@ isStrgDown(false)
     box_signal.addItem("toneburst", 7);
     box_signal.addListener (this);
     box_signal.setColour(ComboBox::buttonColourId, Colours::grey);
-  
+
     addAndMakeVisible (box_sigtime);
     box_sigtime.setTooltip ("Signal generator time sequence");
     box_sigtime.setEditableText (false);
@@ -146,7 +148,7 @@ isStrgDown(false)
     box_sigtime.addItem ("pulsed", 2);
     box_sigtime.addListener (this);
     box_sigtime.setColour(ComboBox::buttonColourId, Colours::grey);
-  
+
     addAndMakeVisible (sld_sigfreq);
     sld_sigfreq.setTooltip ("Signalgenerator Frequency");
     sld_sigfreq.setExplicitFocusOrder (20000);
@@ -161,7 +163,7 @@ isStrgDown(false)
     sld_sigfreq.addListener (this);
     sld_sigfreq.setSkewFactor(0.5f);
     sld_sigfreq.setDoubleClickReturnValue(true, 440.f);
-    
+
     addAndMakeVisible (sld_sigstepinterval);
     sld_sigstepinterval.setTooltip ("Step Interval");
     sld_sigstepinterval.setExplicitFocusOrder (5000);
@@ -175,14 +177,14 @@ isStrgDown(false)
     sld_sigstepinterval.setColour (Slider::rotarySliderOutlineColourId, Colours::yellow);
     sld_sigstepinterval.addListener (this);
     sld_sigstepinterval.setDoubleClickReturnValue(true, 400);
-    
+
     addAndMakeVisible (tgl_sigstep);
     tgl_sigstep.setTooltip ("Signalgenerator step through channels");
     tgl_sigstep.setButtonText ("step through channels");
     tgl_sigstep.addListener (this);
     tgl_sigstep.setColour (ToggleButton::textColourId, Colours::white);
     tgl_sigstep.setColour (TextButton::buttonColourId, Colours::grey);
-  
+
     addAndMakeVisible (label4);
     label4.setText("gain [dB]\n", dontSendNotification);
     label4.setFont (Font (13.00f, Font::plain));
@@ -191,7 +193,7 @@ isStrgDown(false)
     label4.setColour (Label::textColourId, Colours::white);
     label4.setColour (TextEditor::textColourId, Colours::black);
     label4.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
-    
+
     addAndMakeVisible (label6);
     label6.setText("[Hz]", dontSendNotification);
     label6.setFont (Font (13.00f, Font::plain));
@@ -200,7 +202,7 @@ isStrgDown(false)
     label6.setColour (Label::textColourId, Colours::white);
     label6.setColour (TextEditor::textColourId, Colours::black);
     label6.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
-    
+
     addAndMakeVisible (label7);
     label7.setText("[ms]", dontSendNotification);
     label7.setFont (Font (13.00f, Font::plain));
@@ -209,37 +211,37 @@ isStrgDown(false)
     label7.setColour (Label::textColourId, Colours::white);
     label7.setColour (TextEditor::textColourId, Colours::black);
     label7.setColour (TextEditor::backgroundColourId, Colour (0x00000000));
-    
+
     //////////////
     //////////////
-    
+
     DrawableImage phase_normal, phase_over, phase_inv;
     phase_normal.setImage(ImageCache::getFromMemory (phase_symbol_png, phase_symbol_pngSize));
     phase_over.setImage(ImageCache::getFromMemory (phase_symbol_over_png, phase_symbol_over_pngSize));
     phase_inv.setImage(ImageCache::getFromMemory (phase_symbol_inv_png, phase_symbol_inv_pngSize));
-    
+
     DrawableImage mute_normal, mute_over, mute_act;
     mute_normal.setImage(ImageCache::getFromMemory (mute_symbol_png, mute_symbol_pngSize));
     mute_over.setImage(ImageCache::getFromMemory (mute_symbol_over_png, mute_symbol_over_pngSize));
     mute_act.setImage(ImageCache::getFromMemory (mute_symbol_act_png, mute_symbol_act_pngSize));
-    
+
     DrawableImage solo_normal, solo_over, solo_act;
     solo_normal.setImage(ImageCache::getFromMemory (solo_symbol_png, solo_symbol_pngSize));
     solo_over.setImage(ImageCache::getFromMemory (solo_symbol_over_png, solo_symbol_over_pngSize));
     solo_act.setImage(ImageCache::getFromMemory (solo_symbol_act_png, solo_symbol_act_pngSize));
-  
+
     DrawableImage sig_normal, sig_over, sig_act;
     sig_normal.setImage(ImageCache::getFromMemory (sig_symbol_png, sig_symbol_pngSize));
     sig_over.setImage(ImageCache::getFromMemory (sig_symbol_over_png, sig_symbol_over_pngSize));
     sig_act.setImage(ImageCache::getFromMemory (sig_symbol_act_png, sig_symbol_act_pngSize));
-  
+
     ////////////////
-  
+
     addAndMakeVisible (btn_mute_reset);
     btn_mute_reset.setVisible(true);
     btn_mute_reset.setTooltip ("Unmute all channels");
     btn_mute_reset.addListener (this);
-    
+
     btn_mute_reset.setImages ( &mute_normal,
                                          &mute_over,
                                          &mute_act,
@@ -248,17 +250,17 @@ isStrgDown(false)
                                          &mute_over,
                                          &mute_act,
                                          &mute_act);
-    
+
     btn_mute_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
     btn_mute_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
     btn_mute_reset.setClickingTogglesState(true);
-    
-    
+
+
     addAndMakeVisible (btn_solo_reset);
     btn_solo_reset.setVisible(true);
     btn_solo_reset.setTooltip ("Unsolo all channels");
     btn_solo_reset.addListener (this);
-    
+
     btn_solo_reset.setImages ( &solo_normal,
                                &solo_over,
                                &solo_act,
@@ -267,17 +269,17 @@ isStrgDown(false)
                                &solo_over,
                                &solo_act,
                                &solo_act);
-    
+
     btn_solo_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
     btn_solo_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
     btn_solo_reset.setClickingTogglesState(true);
-    
-    
+
+
     addAndMakeVisible (btn_sig_reset);
     btn_sig_reset.setVisible(true);
     btn_sig_reset.setTooltip ("Turn On Signal Generator for all Channels");
     btn_sig_reset.addListener (this);
-    
+
     btn_sig_reset.setImages ( &sig_normal,
                                &sig_over,
                                &sig_act,
@@ -286,17 +288,17 @@ isStrgDown(false)
                                &sig_over,
                                &sig_act,
                                &sig_act);
-    
+
     btn_sig_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
     btn_sig_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
     btn_sig_reset.setClickingTogglesState(true);
-    
-    
+
+
     addAndMakeVisible (btn_phase_reset);
     btn_phase_reset.setVisible(true);
     btn_phase_reset.setTooltip ("Reset phase for all channels");
     btn_phase_reset.addListener (this);
-    
+
     btn_phase_reset.setImages ( &phase_normal,
                                &phase_over,
                                &phase_inv,
@@ -305,12 +307,12 @@ isStrgDown(false)
                                &phase_over,
                                &phase_inv,
                                &phase_inv);
-    
+
     btn_phase_reset.setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
     btn_phase_reset.setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
     btn_phase_reset.setClickingTogglesState(true);
-    
-    
+
+
     // create labels and knobs!
     for (int i=0; i<NUM_CHANNELS; i++)
     {
@@ -331,12 +333,12 @@ isStrgDown(false)
             sld_del.add(DELAY);
             addChildComponent(sld_del.getUnchecked(i));
             sld_del.getUnchecked(i)->setVisible(true);
-            
+
             String tooltip = "delay ch";
             tooltip.append(String(i+1), 3);
-            
+
             sld_del.getUnchecked(i)->setTooltip(tooltip);
-            
+
             sld_del.getUnchecked(i)->setRange (0, MAX_DELAYTIME_S*1000.f, 0.1);
             sld_del.getUnchecked(i)->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
             sld_del.getUnchecked(i)->setVelocityBasedMode(true);
@@ -351,12 +353,12 @@ isStrgDown(false)
             sld_gain.add(GAIN);
             addChildComponent(sld_gain.getUnchecked(i));
             sld_gain.getUnchecked(i)->setVisible(true);
-            
+
             String tooltip = "gain ch";
             tooltip.append(String(i+1), 3);
-            
+
             sld_gain.getUnchecked(i)->setTooltip(tooltip);
-            
+
             sld_gain.getUnchecked(i)->setRange (-18, 18, 0.01);
             sld_gain.getUnchecked(i)->setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
             sld_gain.getUnchecked(i)->setVelocityBasedMode(true);
@@ -366,7 +368,7 @@ isStrgDown(false)
             sld_gain.getUnchecked(i)->setExplicitFocusOrder(i);
             sld_gain.getUnchecked(i)->setDoubleClickReturnValue(true, 0.f);
         }
-        
+
         if (DrawableButton* const PHASE = new DrawableButton (String(i), DrawableButton::ImageFitted))
         {
             btn_phase.add(PHASE);
@@ -374,7 +376,7 @@ isStrgDown(false)
             btn_phase.getUnchecked(i)->setVisible(true);
             btn_phase.getUnchecked(i)->setTooltip ("phase normal");
             btn_phase.getUnchecked(i)->addListener (this);
-            
+
             btn_phase.getUnchecked(i)->setImages (&phase_normal,
                                                   &phase_over,
                                                   &phase_inv,
@@ -383,14 +385,14 @@ isStrgDown(false)
                                                   &phase_over,
                                                   &phase_inv,
                                                   &phase_inv);
-            
+
             btn_phase.getUnchecked(i)->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
             btn_phase.getUnchecked(i)->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-            
+
             btn_phase.getUnchecked(i)->setClickingTogglesState(true);
-            
+
         }
-        
+
         if (DrawableButton* const MUTE = new DrawableButton (String(NUM_CHANNELS+i), DrawableButton::ImageFitted))
         {
             btn_mute.add(MUTE);
@@ -398,7 +400,7 @@ isStrgDown(false)
             btn_mute.getUnchecked(i)->setVisible(true);
             btn_mute.getUnchecked(i)->setTooltip ("Not muted");
             btn_mute.getUnchecked(i)->addListener (this);
-            
+
             btn_mute.getUnchecked(i)->setImages ( &mute_normal,
                                                   &mute_over,
                                                   &mute_act,
@@ -407,14 +409,14 @@ isStrgDown(false)
                                                   &mute_over,
                                                   &mute_act,
                                                   &mute_act);
-            
+
             btn_mute.getUnchecked(i)->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
             btn_mute.getUnchecked(i)->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-            
+
             btn_mute.getUnchecked(i)->setClickingTogglesState(true);
-            
+
         }
-        
+
         if (DrawableButton* const SOLO = new DrawableButton (String(2*NUM_CHANNELS+i), DrawableButton::ImageFitted))
         {
             btn_solo.add(SOLO);
@@ -422,7 +424,7 @@ isStrgDown(false)
             btn_solo.getUnchecked(i)->setVisible(true);
             btn_solo.getUnchecked(i)->setTooltip ("Not soloed");
             btn_solo.getUnchecked(i)->addListener (this);
-            
+
             btn_solo.getUnchecked(i)->setImages ( &solo_normal,
                                                  &solo_over,
                                                  &solo_act,
@@ -431,14 +433,14 @@ isStrgDown(false)
                                                  &solo_over,
                                                  &solo_act,
                                                  &solo_act);
-            
+
             btn_solo.getUnchecked(i)->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
             btn_solo.getUnchecked(i)->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-            
+
             btn_solo.getUnchecked(i)->setClickingTogglesState(true);
-            
+
         }
-        
+
         if (DrawableButton* const SIGGEN = new DrawableButton (String(3*NUM_CHANNELS+i), DrawableButton::ImageFitted))
         {
             btn_sig.add(SIGGEN);
@@ -446,7 +448,7 @@ isStrgDown(false)
             btn_sig.getUnchecked(i)->setVisible(true);
             btn_sig.getUnchecked(i)->setTooltip ("Signalgenerator Off");
             btn_sig.getUnchecked(i)->addListener (this);
-            
+
             btn_sig.getUnchecked(i)->setImages ( &sig_normal,
                                                  &sig_over,
                                                  &sig_act,
@@ -455,21 +457,21 @@ isStrgDown(false)
                                                  &sig_over,
                                                  &sig_act,
                                                  &sig_act);
-            
+
             btn_sig.getUnchecked(i)->setColour(DrawableButton::backgroundColourId, Colours::transparentBlack);
             btn_sig.getUnchecked(i)->setColour(DrawableButton::backgroundOnColourId, Colours::transparentBlack);
-            
+
             btn_sig.getUnchecked(i)->setClickingTogglesState(true);
-            
+
         }
-        
+
     }
-    
+
     if (NUM_CHANNELS > GROUP_CHANNELS)
         setSize (540, 60+NUM_CHANNELS/2*LINE_WIDTH + METER_GROUP_SPACE * NUM_CHANNELS/GROUP_CHANNELS/2 + 75); // 75... Siggenerator UI
     else
         setSize (310, 60+NUM_CHANNELS*LINE_WIDTH + METER_GROUP_SPACE * NUM_CHANNELS/GROUP_CHANNELS/2 + 75);
-    
+
 
 
     // register as change listener (gui/dsp sync)
@@ -482,10 +484,10 @@ isStrgDown(false)
 Mcfx_gain_delayAudioProcessorEditor::~Mcfx_gain_delayAudioProcessorEditor()
 {
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
-    
+
     // remove me as listener for changes
     ourProcessor->removeChangeListener(this);
-    
+
 }
 
 //==============================================================================
@@ -502,19 +504,19 @@ void Mcfx_gain_delayAudioProcessorEditor::paint (Graphics& g)
                                        (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
                                        true));
     g.fillRect (0, 0, this->getBounds().getWidth(), this->getBounds().getHeight());
-    
-  
+
+
     /* signalgenerator */
     g.setColour (Colour (0xff111111));
     g.fillRoundedRectangle (9.0f, getHeight()-85.f, 279.0f, 77.0f, 10.000f);
-    
+
     g.setColour (Colour (0xfff64e0a));
     g.setFont (Font (15.00f, Font::plain));
     g.drawText ("Signalgenerator",
                 16, getHeight()-84.f, 107, 24,
                 Justification::centredLeft, true);
     ////////////////////
-    
+
     /* Version text */
     g.setColour (Colours::white);
     g.setFont (Font (10.00f, Font::plain));
@@ -523,7 +525,7 @@ void Mcfx_gain_delayAudioProcessorEditor::paint (Graphics& g)
     g.drawText (version_string,
                 getWidth()-51, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);
-    
+
     //[UserPaint] Add your own custom painting code here..
     //[/UserPaint]
 }
@@ -536,15 +538,15 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
     lbl_gd.setBounds (0, 0, 115, 16);
     label2.setBounds (35, 26, 66, 16);
     label3.setBounds (115, 26, 75, 16);
-    
+
     btn_paste_gain.setBounds (29, 26, 16, 16);
     btn_paste_gain2.setBounds (109, 26, 16, 16);
-  
+
     btn_phase_reset.setBounds (206-18, 26, 19, 19);
     btn_mute_reset.setBounds (212-6, 26, 19, 19);
     btn_solo_reset.setBounds (235-12, 26, 19, 19);
     btn_sig_reset.setBounds (235+5, 26, 19, 19);
-  
+
     /* signalgenerator */
     sld_siggain.setBounds (132, getHeight()+127-210, 80, 24);
     box_signal.setBounds (17, getHeight()+155-210, 80, 18);
@@ -556,28 +558,28 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
     label6.setBounds (258, getHeight()+155-210, 32, 16);
     label7.setBounds (256, getHeight()+181-210, 35, 16);
     /*                */
-  
+
     int num_groups_first_col = jmax(1, (int)floorf((jmax(NUM_CHANNELS,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f));
-  
+
     for (int i=0; i < NUM_CHANNELS; i++)
     {
         int i_rel = i;
-        
+
         int group = i / GROUP_CHANNELS;
-      
+
         int column = 0;
-        
+
         if (group >= num_groups_first_col)
         {
             column = 1;
             i_rel = i-num_groups_first_col*GROUP_CHANNELS;
             group -= num_groups_first_col;
         }
-        
+
         int y = 48 + i_rel * LINE_WIDTH + group * METER_GROUP_SPACE;
-        
+
         int x_offset = column * 275;
-        
+
         //int y=10;
         if (lbl_ch.size() > i)
             lbl_ch.getUnchecked(i)->setBounds(-2+x_offset, y, 29, 16);
@@ -593,9 +595,9 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
             btn_solo.getUnchecked(i)->setBounds (235+x_offset-12, y, 19, 19);
         if (btn_sig.size() > i)
             btn_sig.getUnchecked(i)->setBounds (235+x_offset+5, y, 19, 19);
-          
+
     }
-    
+
     //lbl_ch->setBounds (-2, 48, 29, 16);
     //sld_del->setBounds (117, 45, 84, 24);
     //sld_gain->setBounds (30, 45, 77, 24);
@@ -604,7 +606,7 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
 void Mcfx_gain_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasMoved)
 {
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
-    
+
     if (sliderThatWasMoved == &sld_siggain) {
         ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+0, jmap((float)sld_siggain.getValue(), -99.f, 6.f, 0.f, 1.f));
     }
@@ -619,16 +621,16 @@ void Mcfx_gain_delayAudioProcessorEditor::sliderValueChanged (Slider* sliderThat
     else
     {
         int slider_nr = sliderThatWasMoved->getName().getIntValue();
-        
+
         int ch_nr = slider_nr/2;
         int param_nr = slider_nr%2;
-        
+
         if (param_nr == 0)
             ourProcessor->setParameterNotifyingHost(PARAMS_PER_CH*ch_nr+param_nr, (float)sliderThatWasMoved->getValue()/36.f+0.5f);
         else
             ourProcessor->setParameterNotifyingHost(PARAMS_PER_CH*ch_nr+param_nr, (float)sliderThatWasMoved->getValue()/(MAX_DELAYTIME_S*1000.f));
     }
-    
+
 }
 
 void Mcfx_gain_delayAudioProcessorEditor::modifierKeysChanged(const ModifierKeys & modifiers)
@@ -638,37 +640,37 @@ void Mcfx_gain_delayAudioProcessorEditor::modifierKeysChanged(const ModifierKeys
 
 void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicked)
 {
-    
+
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
-    
-    
+
+
     // paste button was pressed...
     if ((buttonThatWasClicked == &btn_paste_gain) || (buttonThatWasClicked == &btn_paste_gain2))
     {
-        
+
         // prepare the clipboard
-        
+
         Array<float> values;
-        
+
         // get string from clipboard and remove any nonnumbers
         String clip (SystemClipboard::getTextFromClipboard());
-        
+
         if (clip.isNotEmpty())
         {
-            
+
             clip = clip.replaceCharacter(',', ' ');
             clip = clip.replaceCharacter(';', ' ');
             clip = clip.replaceCharacter('\n', ' ');
             clip = clip.replaceCharacter('\t', ' ');
             clip = clip.retainCharacters("-0123456789. ");
-            
+
             while (clip.isNotEmpty()) {
                 float nr = clip.upToFirstOccurrenceOf(" ", false, true).getFloatValue();
                 values.add(nr);
                 clip = clip.fromFirstOccurrenceOf(" ", false, true).trim();
             }
         }
-        
+
         if (buttonThatWasClicked == &btn_paste_gain)
         {
             if (values.size() > 0)
@@ -677,7 +679,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
                     sld_gain.getUnchecked(i)->setValue(values.getUnchecked(i), sendNotification);
                 }
             }
-            
+
         }
         else if (buttonThatWasClicked == &btn_paste_gain2)
         {
@@ -702,9 +704,9 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         {
             btn_mute.getUnchecked(i)->setToggleState(state, sendNotification);
         }
-        
+
         // btn_mute_reset.setToggleState(state, dontSendNotification);
-        
+
     } // end mute reset button
     else if (buttonThatWasClicked == &btn_solo_reset)
     {
@@ -712,55 +714,55 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         {
             btn_solo.getUnchecked(i)->setToggleState(false, sendNotification);
         }
-        
+
         btn_solo_reset.setToggleState(false, dontSendNotification);
-        
+
     } // end solo reset button
     else if (buttonThatWasClicked == &btn_phase_reset)
     {
         bool state = btn_phase_reset.getToggleState();
-        
+
         for (int i=0; i < NUM_CHANNELS; i++)
         {
             btn_phase.getUnchecked(i)->setToggleState(state, sendNotification);
         }
-        
+
     } // end phase reset button
     else if (buttonThatWasClicked == &btn_sig_reset)
     {
         bool state = btn_sig_reset.getToggleState();
-        
+
         if (state)
             btn_sig_reset.setTooltip ("Turn Off Signal Generator for all Channels");
         else
             btn_sig_reset.setTooltip ("Turn On Signal Generator for all Channels");
-        
+
         for (int i=0; i < NUM_CHANNELS; i++)
         {
             btn_sig.getUnchecked(i)->setToggleState(state, sendNotification);
         }
-        
+
     } // end siggenerator reset button
     else if (buttonThatWasClicked == &tgl_sigstep)
     {
         ourProcessor->setParameterNotifyingHost(NUM_CHANNELS*PARAMS_PER_CH+4, (float)tgl_sigstep.getToggleState());
     } // end tgl_sigstep button clicked
-  
+
   ////////////////////////
     else
-      
+
     { // channel setting button pressed... (phase, mute, solo)
         int btn_nr = buttonThatWasClicked->getName().getIntValue();
-        
+
         int ch_nr = btn_nr % NUM_CHANNELS;
-        
+
         if (btn_nr < NUM_CHANNELS)
         {
             float val = 0.f;
-            
+
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
-            
+
             if (!isStrgDown) // modifier key
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 2, val);
             else
@@ -778,10 +780,10 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         else if (btn_nr < 2*NUM_CHANNELS)
         {
             float val = 0.f;
-            
+
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
-            
+
             if (!isStrgDown) // modifier key
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH+3, val);
             else
@@ -799,10 +801,10 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         else if (btn_nr < 3*NUM_CHANNELS)
         {
             float val = 0.f;
-            
+
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
-            
+
             if (!isStrgDown) // modifier key
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 4, val);
             else
@@ -819,10 +821,10 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         else
         { // siggenerator pressed
             float val = 0.f;
-            
+
             if (buttonThatWasClicked->getToggleState())
                 val = 1.f;
-            
+
             if (!isStrgDown) // modifier key
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 5, val);
             else
@@ -836,9 +838,9 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
               }
             }
         }
-        
+
     }
-    
+
     //[UserbuttonClicked_Post]
     //[/UserbuttonClicked_Post]
 }
@@ -854,33 +856,33 @@ void Mcfx_gain_delayAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxTha
     {
         ourProcessor->setParameterNotifyingHost(PARAMS_PER_CH*NUM_CHANNELS+2, (float)(box_sigtime.getSelectedId()-1)/(float)(box_sigtime.getNumItems()-1));
     }
-    
+
 }
 
 void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
-  
+
     sld_siggain.setValue(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+0), -99.f, 6.f), dontSendNotification);
-    
+
     box_signal.setSelectedItemIndex((int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+1), 0.f, (float)box_signal.getNumItems()-1.f) + 0.5f), dontSendNotification );
-    
+
     box_sigtime.setSelectedItemIndex((int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+2), 0.f, (float)box_sigtime.getNumItems()-1.f) + 0.5f), dontSendNotification );
-    
+
     sld_sigfreq.setValue(param2freq(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+3)), dontSendNotification);
-    
+
     tgl_sigstep.setToggleState((bool)ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+4), dontSendNotification);
-    
+
     sld_sigstepinterval.setValue(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+5), 50.f, 5000.f), dontSendNotification);
-    
+
     // box_signal.setSelectedId( (int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+1), 0.f, (float)box_signal.getNumItems()-1.f) + 0.5f), dontSendNotification );
-    
+
     for (int i=0; i < NUM_CHANNELS; i++)
     {
         sld_del.getUnchecked(i)->setValue(ourProcessor->getParameter(PARAMS_PER_CH*i+1) * MAX_DELAYTIME_S*1000,dontSendNotification);
-        
+
         sld_gain.getUnchecked(i)->setValue((ourProcessor->getParameter(PARAMS_PER_CH*i)-0.5f)*36.f,dontSendNotification);
-      
+
         if (ourProcessor->getParameter(PARAMS_PER_CH*i+2) > 0.5) // phase
         {
           String tooltip = "ch";
@@ -896,7 +898,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
           btn_phase.getUnchecked(i)->setToggleState(false, dontSendNotification);
           btn_phase.getUnchecked(i)->setTooltip (tooltip);
         }
-        
+
         if (ourProcessor->getParameter(PARAMS_PER_CH*i+3) > 0.5) // mute
         {
             String tooltip = "ch";
@@ -912,7 +914,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
             btn_mute.getUnchecked(i)->setToggleState(false, dontSendNotification);
             btn_mute.getUnchecked(i)->setTooltip (tooltip);
         }
-        
+
         if (ourProcessor->getParameter(PARAMS_PER_CH*i+4) > 0.5) // solo
         {
             String tooltip = "ch";
@@ -928,7 +930,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
             btn_solo.getUnchecked(i)->setToggleState(false, dontSendNotification);
             btn_solo.getUnchecked(i)->setTooltip (tooltip);
         }
-        
+
         if (ourProcessor->getParameter(PARAMS_PER_CH*i+5) > 0.5) // siggen
         {
             String tooltip = "ch";
@@ -945,7 +947,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
             btn_sig.getUnchecked(i)->setTooltip (tooltip);
         }
     }
-    
+
 }
 
 
