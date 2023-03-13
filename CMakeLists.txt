@@ -154,7 +154,15 @@ IF(UNIX AND NOT APPLE AND NOT ANDROID)
 	find_package(FFTW3 COMPONENTS single threads)
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
-include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR})
+IF (JUCE_JACK)
+    find_package(Jack REQUIRED)
+
+    message ("-- Patching JUCE Jack implementation")
+    execute_process(COMMAND patch ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_devices/native/juce_linux_JackAudio.cpp ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_linux_JackAudio.cpp.patch --forward OUTPUT_VARIABLE patch_result)
+    message(${patch_result})
+ENDIF (JUCE_JACK)
+
+include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
 
 
 ################################################
