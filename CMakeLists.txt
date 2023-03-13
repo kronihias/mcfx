@@ -144,8 +144,6 @@ INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/LegendreU )
 # additional cmake find packages
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-find_package(Eigen3 REQUIRED)
-
 IF (WITH_ZITA_CONVOLVER OR WIN32)
 	find_package(FFTW3 COMPONENTS single)
 ENDIF (WITH_ZITA_CONVOLVER OR WIN32)
@@ -162,7 +160,7 @@ IF (JUCE_JACK)
     message(${patch_result})
 ENDIF (JUCE_JACK)
 
-include_directories(${EIGEN3_INCLUDE_DIR} ${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
+include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
 
 
 ################################################
