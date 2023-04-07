@@ -38,15 +38,15 @@ inline float LOG2F_( float n )
     return logf( n ) / logf( 2 );
 }
 
-// convert param 0...1 to freq 24Hz ... 21618Hz
+// convert param 0...1 to freq 10Hz ... 21618Hz
 inline float param2freq(float param)
 {
-    return powf(2.f, param*9.8f + 4.6f);
+  return powf(2.f, param*11.07f + 3.33f);
 }
 
 inline float freq2param(float freq)
 {
-    return (LOG2F_(freq)-4.6f)/9.8f;
+  return (LOG2F_(freq)-3.33f)/11.07f;
 }
 
 //==============================================================================
@@ -152,7 +152,7 @@ isStrgDown(false)
     addAndMakeVisible (sld_sigfreq);
     sld_sigfreq.setTooltip ("Signalgenerator Frequency");
     sld_sigfreq.setExplicitFocusOrder (20000);
-    sld_sigfreq.setRange (24, 21618, 1);
+    sld_sigfreq.setRange (10, 21618, 1);
     sld_sigfreq.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
     sld_sigfreq.setVelocityBasedMode(true);
     sld_sigfreq.setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
