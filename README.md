@@ -25,7 +25,8 @@ prerequisites for building
 
 Install LINUX Libraries (Debian, Ubuntu):
 
-```sudo apt install libasound2-dev libjack-jackd2-dev \
+```
+sudo apt install libasound2-dev libjack-jackd2-dev \
     ladspa-sdk \
     libcurl4-openssl-dev  \
     libfreetype6-dev \
