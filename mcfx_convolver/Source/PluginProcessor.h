@@ -97,6 +97,10 @@ public:
 
     void LoadConfiguration(File configFile); // do the loading
 
+    int getWavInputChannelMetadata(File wavFile);
+
+    void LoadWavFile(File wavFile, int numInputChannels = 0); // this will first create a .conf file, then load it async
+
     void UnloadConfiguration();
 
     void ReloadConfiguration();

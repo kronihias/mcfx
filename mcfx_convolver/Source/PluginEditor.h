@@ -32,7 +32,8 @@ class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public ChangeListener,
                                             public ComboBox::Listener,
                                             public Timer,
-                                            public TextEditor::Listener
+                                            public TextEditor::Listener,
+                                            public FileDragAndDropTarget
 {
 public:
     Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter);
@@ -40,18 +41,18 @@ public:
 
     //==============================================================================
     // This is just a standard Juce paint method...
-    void paint (Graphics& g);
+    void paint (Graphics& g) override;
 
-    void resized();
-    void buttonClicked (Button* buttonThatWasClicked);
+    void resized() override;
+    void buttonClicked (Button* buttonThatWasClicked) override;
 
-    void changeListenerCallback (ChangeBroadcaster *source);
+    void changeListenerCallback (ChangeBroadcaster *source) override;
 
-    void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
+    void comboBoxChanged (ComboBox* comboBoxThatHasChanged) override;
 
-    void textEditorFocusLost(TextEditor& ed);
+    void textEditorFocusLost(TextEditor& ed) override;
 
-    void textEditorReturnKeyPressed(TextEditor& ed);
+    void textEditorReturnKeyPressed(TextEditor& ed) override;
 
     static void menuItemChosenCallback (int result, Mcfx_convolverAudioProcessorEditor* demoComponent);
 
@@ -59,13 +60,41 @@ public:
 
     void UpdateText();
 
-    void timerCallback();
+    void timerCallback() override;
+
+    bool isInterestedInFileDrag(StringArray const& files) override;
+    void filesDropped(StringArray const& files, int x, int y) override;
 
 private:
     Mcfx_convolverAudioProcessor* getProcessor() const
     {
         return static_cast <Mcfx_convolverAudioProcessor*> (getAudioProcessor());
     }
+
+    void loadWavFile(File wavFile);
+
+    static void InputChannelCallback(int result, File dropped_file, Mcfx_convolverAudioProcessorEditor* ourEditor)
+    {
+        auto& aw = *ourEditor->asyncAlertWindow;
+
+        aw.exitModalState (result);
+        aw.setVisible (false);
+
+        if (result == 0)
+        {
+            // user pressed cancel
+            return;
+        }
+
+        auto isDiagonal = aw.getComboBoxComponent ("isDiagonal")->getSelectedItemIndex();
+        auto inputChannelsTextField = aw.getTextEditorContents ("numInChannels").getIntValue();
+
+        int numInChannels = (isDiagonal == 1) ? -1 : inputChannelsTextField;
+
+        auto ourProcessor = ourEditor->getProcessor();
+        ourProcessor->LoadWavFile(dropped_file, numInChannels);
+    }
+
     TooltipWindow tooltipWindow;
 
     Label label;
@@ -88,6 +117,8 @@ private:
     TextEditor txt_rcv_port;
     ToggleButton tgl_rcv_active;
     ToggleButton tgl_save_preset;
+
+    std::unique_ptr<AlertWindow> asyncAlertWindow;
 
     LookAndFeel_V3 MyLookAndFeel;
 };

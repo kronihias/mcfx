@@ -401,11 +401,12 @@ void Mcfx_convolverAudioProcessorEditor::UpdatePresets()
     if (ourProcessor->activePreset.isNotEmpty())
     {
         popup_presets.addSeparator();
-        popup_presets.addItem(-2, String("save preset to .zip file..."), ourProcessor->_readyToSaveConfiguration.get());
+        popup_presets.addItem(-3, String("save preset to .zip file..."), ourProcessor->_readyToSaveConfiguration.get());
     }
-
     popup_presets.addSeparator();
-    popup_presets.addItem(-1, String("open preset from file..."));
+    popup_presets.addItem(-2, String("load filters from .wav file..."));
+    popup_presets.addSeparator();
+    popup_presets.addItem(-1, String("open preset from .conf file..."));
 }
 
 
@@ -430,13 +431,26 @@ void Mcfx_convolverAudioProcessorEditor::menuItemChosenCallback (int result, Mcf
         {
 
             File mooseFile (myChooser.getResult());
-            //ourProcessor->ScheduleConfiguration(mooseFile);
             ourProcessor->LoadConfigurationAsync(mooseFile);
 
             ourProcessor->lastDir = mooseFile.getParentDirectory();
         }
     }
     else if (result == -2)
+    {
+        FileChooser myChooser ("Please select the wav file to load the filters from...",
+                               ourProcessor->lastDir,
+                               "*.wav");
+        if (myChooser.browseForFileToOpen())
+        {
+
+            File mooseFile (myChooser.getResult());
+            demoComponent->loadWavFile(mooseFile);
+
+            ourProcessor->lastDir = mooseFile.getParentDirectory();
+        }
+    }
+    else if (result == -3)
     {
         FileChooser myChooser("Save the loaded preset as .zip file...",
             ourProcessor->lastDir.getChildFile(ourProcessor->activePreset),
@@ -532,4 +546,60 @@ void Mcfx_convolverAudioProcessorEditor::textEditorFocusLost(TextEditor & ed)
 void Mcfx_convolverAudioProcessorEditor::textEditorReturnKeyPressed(TextEditor & ed)
 {
   textEditorFocusLost(ed);
+}
+
+bool Mcfx_convolverAudioProcessorEditor::isInterestedInFileDrag(StringArray const& files)
+{
+    // we allow dropping single .wav and .conf files
+    return files.size() == 1 && (File(files[0]).getFileExtension() == ".wav" || File(files[0]).getFileExtension() == ".conf");
+}
+
+void Mcfx_convolverAudioProcessorEditor::loadWavFile(File wavFile)
+{
+    Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
+
+    if (ourProcessor->getWavInputChannelMetadata(wavFile))
+    {
+        // no need to ask user for number of input channels, since they are provided in the metadata
+        ourProcessor->LoadWavFile(wavFile);
+        return;
+    }
+
+    // Popup: ask for # input channels, or use as diagonal matrix
+
+    asyncAlertWindow = std::make_unique<AlertWindow> ("Specify the number of input channels for this .wav file FIR filter(s)",
+                                                      "The output channel number is defined by the number of audio channels contained in the .wav file, however, the input channels are unknown.",
+                                                      MessageBoxIconType::QuestionIcon);
+
+    asyncAlertWindow->setColour(AlertWindow::ColourIds::backgroundColourId, Colours::black);
+    asyncAlertWindow->setColour(AlertWindow::ColourIds::textColourId, Colours::white);
+
+    asyncAlertWindow->addComboBox ("isDiagonal", { "Dense Matrix", "Diagonal Matrix" }, "Is this a dense, or a diagnoal matrix?");
+
+    asyncAlertWindow->addTextEditor ("numInChannels", "1", "If it's a dense matrix, enter the number of input channels:");
+    asyncAlertWindow->getTextEditor("numInChannels")->setInputRestrictions(6, "1234567890");
+
+    asyncAlertWindow->addButton ("OK",     1, KeyPress (KeyPress::returnKey, 0, 0));
+    asyncAlertWindow->addButton ("Cancel", 0, KeyPress (KeyPress::escapeKey, 0, 0));
+
+    asyncAlertWindow->enterModalState (true, ModalCallbackFunction::withParam(InputChannelCallback, wavFile, this));
+
+}
+
+void Mcfx_convolverAudioProcessorEditor::filesDropped(StringArray const& files, int /*x*/, int /*y*/)
+{
+    Mcfx_convolverAudioProcessor* ourProcessor = getProcessor();
+
+    auto droppedFile = File(files[0]);
+
+    if (!droppedFile.existsAsFile()) {
+        return;
+    }
+
+    if (droppedFile.getFileExtension() == ".conf") {
+        ourProcessor->LoadConfigurationAsync(droppedFile);
+    } else if (droppedFile.getFileExtension() == ".wav") {
+        loadWavFile(droppedFile);
+    }
+
 }

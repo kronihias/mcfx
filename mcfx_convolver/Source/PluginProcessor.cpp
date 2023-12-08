@@ -313,6 +313,80 @@ void getFloatFromLine(float &ret, String &line)
     line = line.fromFirstOccurrenceOf(" ", false, true).trim();
 }
 
+int Mcfx_convolverAudioProcessor::getWavInputChannelMetadata(File wavFile)
+{
+    // check audio file, maybe there is Info metadata specifying the number of input channels (x-mcfx does this, MATLAB can write it as well)
+    AudioFormatManager formatManager;
+    formatManager.registerBasicFormats();
+    AudioFormatReader* reader = formatManager.createReaderFor(wavFile);
+    // get metadata
+    String metaTagValue =  reader->metadataValues.getValue(WavAudioFormat::riffInfoKeywords, "0");
+
+    return metaTagValue.getIntValue();
+}
+
+void Mcfx_convolverAudioProcessor::LoadWavFile(File wavFile, int numPassedInputChannels)
+{
+    if (wavFile.getFileExtension() != ".wav") {
+        DebugPrint("Error: not a .wav file");
+        return;
+    }
+
+    // conf file should be located in the same folder
+    File confFile(wavFile.getParentDirectory().getChildFile(wavFile.getFileNameWithoutExtension() + ".conf"));
+    // check for existing .conf file and try to load if we don't have a specific numPassedInputChannels
+    if (confFile.existsAsFile() && !numPassedInputChannels) {
+        LoadConfigurationAsync(confFile);
+        return;
+    }
+
+    // use either the metadata or the passed value
+    int inChannels = numPassedInputChannels ? numPassedInputChannels : getWavInputChannelMetadata(wavFile);
+
+    // confText header
+    String confText = "# mcfx_convolver configuration\n";
+    confText << "# ------------------------\n";
+    confText << "/cd \n";
+    confText << "#\n#\n#\n";
+
+    if (!confFile.hasWriteAccess()) {
+        DebugPrint("Error: can not write config file");
+        return;
+    }
+
+    if (inChannels == 0) {
+        DebugPrint("Error: Invalid input channel count!");
+        return;
+    }
+
+    if (inChannels > 0) {
+        // dense matrix
+
+        confText << "#               #inchannels  gain  delay  offset  length        filename\n";
+        confText << "# ------------------------------------------------------------------------------\n#\n";
+        confText << "/impulse/packedmatrix " << String(inChannels) << " 1.0 0 0 0 " << wavFile.getFileName() << "\n";
+
+    } else if (inChannels == -1) {
+        // diagonal matrix
+
+        confText << "#/impulse/read   <input> <output> <gain> <delay> <offset> <length> <channel> <file>\n";
+
+        AudioFormatManager formatManager;
+        formatManager.registerBasicFormats();
+        AudioFormatReader* reader = formatManager.createReaderFor(wavFile);
+        int numChannels = reader->getChannelLayout().size();
+
+        for (int i = 1; i <= numChannels; i++) {
+            confText << "/impulse/read " << i << " " << i << " 1.0 0 0 0 " << i << " " << wavFile.getFileName() << "\n";
+        }
+
+    }
+
+    confFile.replaceWithText(confText);
+
+    LoadConfigurationAsync(confFile);
+}
+
 void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 {
     if (!configFile.existsAsFile())
@@ -360,7 +434,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     DebugPrint(debug);
 
     activePreset = configFile.getFileName(); // store filename only, on restart search preset folder for it!
-    //box_preset_str = configFile.getFileNameWithoutExtension();
+    box_preset_str = configFile.getFileNameWithoutExtension();
 
     Array<File> configFileAndDataFiles;
     configFileAndDataFiles.add(configFile);
