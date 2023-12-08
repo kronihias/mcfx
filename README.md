@@ -61,9 +61,9 @@ then
 **VST installation folders:**
 
 
-- MacOSX: /Library/Audio/Plug-Ins/VST or ~/Library/Audio/Plug-Ins/VST
-- Windows: eg. C:\Programm Files\Steinberg\VstPlugins
-- Linux: /usr/lib/lxvst or /usr/local/lib/lxvst
+- MacOSX: `/Library/Audio/Plug-Ins/VST`
+- Windows: eg. `C:\Programm Files\Steinberg\VstPlugins`
+- Linux: `/usr/lib/lxvst` or `/usr/local/lib/lxvst`
 
 plug-ins explained:
 ==============
@@ -71,15 +71,21 @@ plug-ins explained:
 mcfx_convolver
 --------------
 multichannel convolution matrix
+
 loads configuration files (compatible to jconvolver .conf files)
-supports loading .wav files directly (optionally reading input channel metadata)
-just drag/drop a .conf or .wav file into the GUI to load it
+
+supports loading `.wav` files directly (optionally reading input channel metadata)
+
+just drag/drop a `.conf` or `.wav` file into the GUI to load it
+
 have a look at `CONVOLVER_CONFIG_HOWTO.txt` for details about the configuration files
+
 check the `MATLAB` folder for simple export scripts
+
 searches for configuration file in following folders:
-		* Windows 7,8: `C:\Users\username\AppData\Roaming\mcfx\convolver_presets\`
-		* MacOS: `~/Library/mcfx/convolver_presets/`
-		* Linux: `~/mcfx/convolver_presets/`
+- Windows 7,8: `C:\Users\username\AppData\Roaming\mcfx\convolver_presets\`
+- MacOS: `~/Library/mcfx/convolver_presets/`
+- Linux: `~/mcfx/convolver_presets/`
 
 
 mcfx_delay
@@ -92,14 +98,18 @@ mcfx_filter
 filter each channel with the same low/high cut, peak filter and high/low shelf filter settings, frequency analyzer that displays a sum of all channels
 
 low and high pass: 2nd order butterworth filter or 2x 2nd order butterworth cascaded (resulting in linkwitz riley characteristic) for use as x-over network
+
 plus 2x parametric filter +- 18dB
+
 plus low and high shelf filters +- 18dB
 
 
 mcfx_gain_delay
 --------------
 set different delay time and gain setting for each channel (good for multispeaker calibration), includes a signal generator for testing individual channels
+
 the GUI allows to paste a list of float gain and delay values from the clipboard with semicolon, comma, newline, tab or space separated.
+
 maximum delay time in seconds is a compile time flag (MAX_DELAYTIME_S)
 
 mcfx_meter
@@ -110,7 +120,7 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
-- 0.6.1 (2023-12-08) - mcfx_convolver: support loading .wav files (a .conf file will be written to disk and loaded in the background!), support drag/drop .wav or .conf files onto the GUI for loading
+- 0.6.1 (2023-12-08) - mcfx_convolver: support loading `.wav` files (a `.conf` file will be written to disk and loaded in the background!), support drag/drop `.wav` or `.conf` files onto the GUI for loading
 
 - 0.6.0 (2023-04-16) - new builds optimized for Apple Silicon and 64 bit Intel Mac; Win 64 bit; Update to JUCE 7; removed soxr dependency to simplify build; mcfx_gain_delay: allow sine generator to start at f=10 Hz
 
