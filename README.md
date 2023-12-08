@@ -72,7 +72,10 @@ mcfx_convolver
 --------------
 multichannel convolution matrix
 loads configuration files (compatible to jconvolver .conf files)
+supports loading .wav files directly (optionally reading input channel metadata)
+just drag/drop a .conf or .wav file into the GUI to load it
 have a look at `CONVOLVER_CONFIG_HOWTO.txt` for details about the configuration files
+check the `MATLAB` folder for simple export scripts
 searches for configuration file in following folders:
 		* Windows 7,8: `C:\Users\username\AppData\Roaming\mcfx\convolver_presets\`
 		* MacOS: `~/Library/mcfx/convolver_presets/`
@@ -107,7 +110,9 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
-- 0.6.0 (2022-04-16) - new builds optimized for Apple Silicon and 64 bit Intel Mac; Win 64 bit; Update to JUCE 7; removed soxr dependency to simplify build; mcfx_gain_delay: allow sine generator to start at f=10 Hz
+- 0.6.1 (2023-12-08) - mcfx_convolver: support loading .wav files (a .conf file will be written to disk and loaded in the background!), support drag/drop .wav or .conf files onto the GUI for loading
+
+- 0.6.0 (2023-04-16) - new builds optimized for Apple Silicon and 64 bit Intel Mac; Win 64 bit; Update to JUCE 7; removed soxr dependency to simplify build; mcfx_gain_delay: allow sine generator to start at f=10 Hz
 
 - 0.5.11 (2020-05-20) - mcfx_convolver - Mac OS version added a +6dB gain to the filtered output, this is fixed now (Windows version was correct) -> this might influence old projects under OSX since mcfx_convolver will output 6dB less than older versions!
 
