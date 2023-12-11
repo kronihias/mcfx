@@ -467,10 +467,13 @@ isStrgDown(false)
 
     }
 
-    if (NUM_CHANNELS > GROUP_CHANNELS)
+    if (NUM_CHANNELS > 64) {
+        setSize (540 + 555, 60+64/2*LINE_WIDTH + METER_GROUP_SPACE * 64/GROUP_CHANNELS/2 + 75);
+    } else if (NUM_CHANNELS > GROUP_CHANNELS) {
         setSize (540, 60+NUM_CHANNELS/2*LINE_WIDTH + METER_GROUP_SPACE * NUM_CHANNELS/GROUP_CHANNELS/2 + 75); // 75... Siggenerator UI
-    else
+    } else {
         setSize (310, 60+NUM_CHANNELS*LINE_WIDTH + METER_GROUP_SPACE * NUM_CHANNELS/GROUP_CHANNELS/2 + 75);
+    }
 
 
 
@@ -559,9 +562,9 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
     label7.setBounds (256, getHeight()+181-210, 35, 16);
     /*                */
 
-    int num_groups_first_col = jmax(1, (int)floorf((jmax(NUM_CHANNELS,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f));
+    int num_groups_first_col = jmin(jmax(1, (int)floorf((jmax(NUM_CHANNELS,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f)), 8);
 
-    for (int i=0; i < NUM_CHANNELS; i++)
+    for (int i = 0; i < NUM_CHANNELS; i++)
     {
         int i_rel = i;
 
@@ -576,13 +579,21 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
             group -= num_groups_first_col;
         }
 
+        if (i >= 63) {
+            // special handling for 128 channels version
+            // all this logic should better be rewritten... but...
+            column = floor(i / 32);
+            i_rel = i - column * 32;
+            group = ceil((i % 32) / GROUP_CHANNELS);
+        }
+
         int y = 48 + i_rel * LINE_WIDTH + group * METER_GROUP_SPACE;
 
         int x_offset = column * 275;
 
         //int y=10;
         if (lbl_ch.size() > i)
-            lbl_ch.getUnchecked(i)->setBounds(-2+x_offset, y, 29, 16);
+            lbl_ch.getUnchecked(i)->setBounds(-12+x_offset, y+1, 40, 16);
         if (sld_del.size() > i)
             sld_del.getUnchecked(i)->setBounds(109+x_offset, y-3, 84, 24);
         if (sld_gain.size() > i)

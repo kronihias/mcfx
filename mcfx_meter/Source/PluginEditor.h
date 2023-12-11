@@ -77,10 +77,10 @@ private:
     OwnedArray<MeterComponent> _meters;
     OwnedArray<Label> _labels;
 
-    MeterScaleComponent _scale_left;
-    MeterScaleComponent _scale_right;
+    OwnedArray<MeterScaleComponent> _scales;
 
     int _width;
+    int _height;
 
     TooltipWindow tooltipWindow;
 
@@ -100,7 +100,6 @@ private:
     Label label3;
     ToggleButton tgl_pkhold;
     Slider sld_offset;
-    Image cachedImage_meter_scale_png;
 
 
     //==============================================================================
