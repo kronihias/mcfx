@@ -120,6 +120,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.6.2 (2023-12-11) - add 128 channel version of all plugins - since REAPER does allow for 128 channels per track, adjust mcfx_meter and mcfx_gain_delay GUI to display 128 channels properly
+
 - 0.6.1 (2023-12-08) - mcfx_convolver: support loading `.wav` files (a `.conf` file will be written to disk and loaded in the background!), support drag/drop `.wav` or `.conf` files onto the GUI for loading
 
 - 0.6.0 (2023-04-16) - new builds optimized for Apple Silicon and 64 bit Intel Mac; Win 64 bit; Update to JUCE 7; removed soxr dependency to simplify build; mcfx_gain_delay: allow sine generator to start at f=10 Hz
