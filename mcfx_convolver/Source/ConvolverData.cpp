@@ -19,6 +19,8 @@
 
 #include "ConvolverData.h"
 
+#include "resampler.h"
+
 ConvolverData::ConvolverData()
 {
     NumInCh = 0;
@@ -73,64 +75,73 @@ void ConvolverData::addIR(int in_ch, int out_ch, int offset, int delay, int leng
 
     AudioBuffer<float> *IRBuf = &IR.getLast()->Data;
 
-    int size = length + delay; // absolute length of ir
+    const int size = length + delay; // absolute length of ir
 
-    IRBuf->setSize(1, size);
-    IRBuf->clear();
-    IRBuf->copyFrom(0, delay, buffer, buffer_ch, offset, length); // copy the wanted part
+    if (src_samplerate == SampleRate) {
+        IRBuf->setSize(1, size);
+        IRBuf->clear();
+        IRBuf->copyFrom(0, delay, buffer, buffer_ch, offset, length); // copy the wanted part
+    } else {
+        // resampling path
 
-    if (src_samplerate != SampleRate)
-    {
-        double sr_conv_fact = SampleRate / src_samplerate;
-        int newsize = (int)ceil(size*sr_conv_fact);
+        const double ratio = SampleRate / src_samplerate; // output / input rate
 
-        double factorReading = 1. / sr_conv_fact;
+        const double lowpassRatio = (ratio < 1.0) ? ratio : 1.0;
+        const int num_filters = 512;
+        const int num_taps = 512;
 
-        MemoryAudioSource memorySource(*IRBuf, false);
-        ResamplingAudioSource resamplingSource (&memorySource, false, 1);
+        const int input_latency = num_taps / 2;
+        const int output_latency = ceil(input_latency * ratio);
+        const int inputsize_zeropadded = size + input_latency;
 
-        resamplingSource.setResamplingRatio (factorReading);
-        resamplingSource.prepareToPlay (newsize, SampleRate);
+        AudioBuffer<float> sourceBuffer(1, inputsize_zeropadded);
+        sourceBuffer.clear();
+        sourceBuffer.copyFrom(0, delay, buffer, buffer_ch, offset, length); // copy the wanted part
 
+        const int newsize = (int)ceil(size * ratio) + output_latency;
         AudioBuffer<float> resampledBuffer(1, newsize);
         resampledBuffer.clear();
 
-        juce::AudioSourceChannelInfo info;
-        info.startSample = 0;
-        info.numSamples = newsize;
-        info.buffer = &resampledBuffer;
+        Resample *resampler = resampleInit (1, num_taps, num_filters, lowpassRatio, BLACKMAN_HARRIS | INCLUDE_LOWPASS); // SUBSAMPLE_INTERPOLATE
+        auto result = resampleProcess(resampler, sourceBuffer.getArrayOfReadPointers(), inputsize_zeropadded, resampledBuffer.getArrayOfWritePointers(), newsize, ratio);
+        resampleFree(resampler);
 
-        resamplingSource.getNextAudioBlock (info);
+        resampledBuffer.applyGain(1. / ratio);
 
-        // scale to maintain filter gain
-        resampledBuffer.applyGain(src_samplerate / SampleRate);
+        auto val_1 = sourceBuffer.getMagnitude(0, 0, inputsize_zeropadded);
+        auto val_2 = resampledBuffer.getMagnitude(0, 0, newsize);
 
-        (*IRBuf) = resampledBuffer;
-#if 0
-        // do resampling
-        double sr_conv_fact = SampleRate / src_samplerate;
+        IRBuf->setSize(1, newsize);
+        IRBuf->clear();
+        IRBuf->copyFrom(0, 0, resampledBuffer, 0, output_latency, newsize - output_latency); // we truncate the pre-ringing / latency - this causes issues if IRs have a dirac in the beginning!
+# if 0
+        const double factorWriting = SampleRate / src_samplerate;
+        const double factorReading = src_samplerate / SampleRate;
 
-        int newsize = (int)ceil(size*sr_conv_fact);
+        juce::WindowedSincInterpolator interpolator;
+        //juce::LagrangeInterpolator interpolator;
 
-        AudioSampleBuffer ResampledBuffer(1, newsize);
-        ResampledBuffer.clear();
+        const int resampler_input_latency = roundToInt(interpolator.getBaseLatency());
+        const int resampler_output_latency = roundToInt(interpolator.getBaseLatency() / factorReading);
 
-        // do the resampling
-        soxr_quality_spec_t const q_spec = soxr_quality_spec(SOXR_HQ, 0);
-        size_t odone;
-        soxr_error_t error;
+        const int inputsize_zeropadded = size + 2*resampler_input_latency;
+        
+        const int newsize = (int)ceil(size * factorWriting) + resampler_output_latency;
 
-        error = soxr_oneshot(src_samplerate, SampleRate, 1, /* Rates and # of chans. */
-                             IRBuf->getReadPointer(0), size, NULL,         /* Input. */
-                             ResampledBuffer.getWritePointer(0), newsize, &odone,    /* Output. */
-                             NULL, // soxr_io_spec_t
-                             &q_spec, // soxr_quality_spec_t
-                             NULL); // soxr_runtime_spec_t
+        AudioBuffer<float> sourceBuffer(1, inputsize_zeropadded);
+        sourceBuffer.clear();
+        sourceBuffer.copyFrom(0, delay, buffer, buffer_ch, offset, length); // copy the wanted part
 
-        // scale to maintain filter gain
-        ResampledBuffer.applyGain(src_samplerate / SampleRate);
+        AudioBuffer<float> resampledBuffer(1, newsize + resampler_output_latency);
 
-        (*IRBuf) = ResampledBuffer;
+        auto used_samples = interpolator.process(factorReading, sourceBuffer.getReadPointer(0, 0), resampledBuffer.getWritePointer(0, 0), newsize + resampler_output_latency);
+
+        auto val_1 = sourceBuffer.getMagnitude(0, 0, inputsize_zeropadded);
+        auto val_2 = resampledBuffer.getMagnitude(0, 0, newsize + resampler_output_latency);
+
+        IRBuf->setSize(1, newsize);
+        IRBuf->clear();
+        IRBuf->copyFrom(0, 0, resampledBuffer, 0, resampler_output_latency, newsize); // we truncate the pre-ringing / latency - this causes issues if IRs have a dirac in the beginning!
 #endif
     }
 
