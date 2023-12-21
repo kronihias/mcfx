@@ -23,7 +23,7 @@
 #include "JuceHeader.h"
 
 #include "FilterInfo.h"
-#include "SmoothIIRFilter.h"
+#include "SmoothIIRFilter.hpp"
 
 #include <complex>
 
@@ -132,7 +132,6 @@ public:
 
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 
-    void checkFilters(bool force_update);
 
     freqResponse getResponse(double f) override;
 
@@ -211,13 +210,13 @@ public:
 
 private:
 
-    double _sampleRate;
+    void resetFilters(double sampleRate);
+    void updateFilterParameters(double sampleRate, bool fade);
 
     float _lc_on_param, // 1 = on
     _lc_freq_param, // 0...20kHz log
-    _lc_order_param,
-    _lc_freq_param_; // 1... 2x2nd order butterworth cascaded, 0... 1x2nd order butterworth
-    float _hc_on_param, _hc_freq_param, _hc_order_param,_hc_freq_param_;
+    _lc_order_param; // 1... 2x2nd order butterworth cascaded, 0... 1x2nd order butterworth
+    float _hc_on_param, _hc_freq_param, _hc_order_param;
 
     float _pf1_gain_param, _pf1_freq_param, _pf1_q_param;
     float _pf2_gain_param, _pf2_freq_param, _pf2_q_param;
@@ -225,39 +224,17 @@ private:
     float _ls_gain_param, _ls_freq_param, _ls_q_param;
     float _hs_gain_param, _hs_freq_param, _hs_q_param;
 
-    float _pf1_gain_param_, _pf1_freq_param_, _pf1_q_param_; // buffer
-    float _pf2_gain_param_, _pf2_freq_param_, _pf2_q_param_;
 
+    SmoothIIRFilter<HIGH_PASS, NUM_CHANNELS> _LC_IIR_1;
+    SmoothIIRFilter<HIGH_PASS, NUM_CHANNELS> _LC_IIR_2;
+    SmoothIIRFilter<LOW_PASS, NUM_CHANNELS> _HC_IIR_1;
+    SmoothIIRFilter<LOW_PASS, NUM_CHANNELS> _HC_IIR_2;
 
-    float _ls_gain_param_, _ls_freq_param_, _ls_q_param_;
-    float _hs_gain_param_, _hs_freq_param_, _hs_q_param_;
+    SmoothIIRFilter<PEAK, NUM_CHANNELS> _PF_IIR_1;
+    SmoothIIRFilter<PEAK, NUM_CHANNELS> _PF_IIR_2;
 
-    OwnedArray<SmoothIIRFilter> _LC_IIR_1;
-    OwnedArray<SmoothIIRFilter> _LC_IIR_2;
-    OwnedArray<SmoothIIRFilter> _HC_IIR_1;
-    OwnedArray<SmoothIIRFilter> _HC_IIR_2;
-
-
-    IIRCoefficients _IIR_LC_Coeff;
-    IIRCoefficients _IIR_HC_Coeff;
-
-    // Peak/Notch Filters
-    IIRCoefficients _IIR_PF_Coeff_1;
-    OwnedArray<SmoothIIRFilter> _PF_IIR_1;
-
-
-    IIRCoefficients _IIR_PF_Coeff_2;
-    OwnedArray<SmoothIIRFilter> _PF_IIR_2;
-
-
-    // High/Low Shelf
-
-    IIRCoefficients _IIR_LS_Coeff;
-    OwnedArray<SmoothIIRFilter> _LS_IIR;
-
-
-    IIRCoefficients _IIR_HS_Coeff;
-    OwnedArray<SmoothIIRFilter> _HS_IIR;
+    SmoothIIRFilter<LOW_SHELF, NUM_CHANNELS> _LS_IIR;
+    SmoothIIRFilter<HIGH_SHELF, NUM_CHANNELS> _HS_IIR;
 
     AudioSampleBuffer _analysis_inbuf, _analysis_outbuf;
     float *_in_mag, *_out_mag; // magnitude frequency

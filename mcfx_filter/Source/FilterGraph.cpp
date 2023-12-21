@@ -1,19 +1,19 @@
 /*
  ==============================================================================
- 
+
  This file is part of the mcfx (Multichannel Effects) plug-in suite.
  Copyright (c) 2013/2014 - Matthias Kronlachner
  www.matthiaskronlachner.com
- 
+
  Permission is granted to use this software under the terms of:
  the GPL v2 (or any later version)
- 
+
  Details of these licenses can be found at: www.gnu.org/licenses
- 
+
  ambix is distributed in the hope that it will be useful, but WITHOUT ANY
  WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
  A PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
  ==============================================================================
  */
 
@@ -29,20 +29,20 @@ FilterGraph::FilterGraph(FilterInfo* filterinfo, AudioProcessor* processor) :   
 								ymargin(12.f),
                                 changed_(true)
 {
-    
+
     tooltipWindow.setMillisecondsBeforeTipAppears (200); // tooltip delay
-    
+
     filterinfo_ = filterinfo;
-    
+
     myprocessor_ = processor;
-    
+
     for (int i=0; i < 6; i++)
     {
         btn_drag.add(new ImageButton (String(i)));
-        
+
         addAndMakeVisible(btn_drag.getLast());
         btn_drag.getLast()->addListener(this);
-        
+
         btn_drag.getLast()->setImages (false, true, true,
                                 ImageCache::getFromMemory (drag_off_png, drag_off_pngSize), 1.000f, Colour (0x00000000),
                                 ImageCache::getFromMemory (drag_over_png, drag_over_pngSize), 1.000f, Colour (0x00000000),
@@ -69,140 +69,138 @@ FilterGraph::FilterGraph(FilterInfo* filterinfo, AudioProcessor* processor) :   
             case 5:
                 tooltip << "High Cut";
                 break;
-                
+
             default:
                 break;
         }
         btn_drag.getLast()->setTooltip(tooltip);
     }
-    
+
     addAndMakeVisible (graph_);
-    
+
     addAndMakeVisible(analyzer_);
-    
+
     startTimer(150);
 }
 
 FilterGraph::~FilterGraph()
 {
     stopTimer();
-    
+
     btn_drag.clear();
-    
+
 }
 
 int FilterGraph::dbtoypos(float db_val)
 {
-    
+
     float height = (float) getHeight()-12.f;
-    
+
     float dyn = maxdb_-mindb_;
-    
+
     int ypos = ymargin/2 + (height - ymargin) * (1.f - (db_val - mindb_) / dyn);
-    
+
     return ypos;
 }
 
 float FilterGraph::ypostodb (int ypos)
 {
     float height = (float) getHeight()-12.f;
-    
+
     float dyn = maxdb_-mindb_;
-    
+
     return -((ypos - ymargin/2) / (height - ymargin) * dyn + mindb_);
-    
+
     // return ((ypos - ymargin/2) / (height - ymargin))*dyn - 1.f - mindb_;
 }
 
 int FilterGraph::hztoxpos(float hz_val)
 {
     float width = (float) getWidth();
-    
+
     int xpos = xmargin + (width-xmargin) * ( log(hz_val/minf_) / log(maxf_/minf_) );
-    
+
     return xpos;
 }
 
 float FilterGraph::xpostohz(int xpos)
 {
     float width = (float) getWidth();
-    
+
     return minf_ * powf ((maxf_ / minf_), ((xpos - xmargin) / (width - xmargin)));
 }
 
 void FilterGraph::paint (Graphics& g)
 {
-    
+
     int width = getWidth();
-    
+
     // background
     g.setGradientFill (ColourGradient (Colour (0xff232338), width / 2, getHeight() / 2, Colour (0xff21222a), 2.5f, getHeight() / 2, true));
     g.fillRoundedRectangle (xmargin-2, 0.f, width - xmargin+4, getHeight()-12, 10.000f);
-    
+
     g.setColour (Colour (0x60ffffff));
-    
+
     // db grid lines
-    
+
     // create the grid path
-    
+
     float dyn = maxdb_-mindb_;
     int numgridlines = dyn/grid_div+1;
-    
+
     for (int i=0; i < numgridlines; i++)
     {
         float db_val = maxdb_-i*grid_div;
-        
+
         int ypos = dbtoypos(db_val);
-        
+
         // text
         String axislabel = String((int)db_val);
-        axislabel << " dB";
+        axislabel << "dB";
         g.setFont (Font ("Arial Rounded MT", 12.0f, Font::plain));
-        g.drawText (axislabel, 0, ypos-6, 45, 12, Justification::left, false);
-        // g.drawText (String ("-") + axisLabel, 6, (int) (numHorizontalLines * (height - 5) / (numHorizontalLines + 1) + 3.5f), 45, 12, Justification::left, false);
+        g.drawText (axislabel, 0, ypos-6, 32, 12, Justification::right, false);
     }
-    
+
     // float f_range = maxf_-minf_;
-    
+
     // plot freq lines
     for (float f=minf_; f <= maxf_; f += powf(10, floorf(log10(f)))) {
         int xpos = hztoxpos(f);
-        
-        
+
+
         if ((f == 50) || (f == 100) || (f == 500) || (f == 1000) || (f == 5000) || (f == 10000))
         {
             // text
             String axislabel = String((int)f);
-            // axislabel << " Hz";
             g.setFont (Font ("Arial Rounded MT", 12.0f, Font::plain));
             g.drawText (axislabel, xpos, getHeight()-12, 45, 12, Justification::left, false);
-            
-            
+
+
         }
     }
-    
+
     g.setColour (Colour (0x60ffffff));
     g.strokePath (path_grid, PathStrokeType (0.25f));
-    
-    
+
+
     g.setColour (Colour (0xffffffff));
     g.strokePath (path_w_grid, PathStrokeType (0.25f));
-    
+
 }
 
 void FilterGraph::calcPathMagPhase()
 {
     int width = getWidth();
-    
+
     // plot magnitude
     path_mag_.clear();
-    
+
     path_mag_.startNewSubPath(xmargin, dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xmargin)).magnitude) ));
-    
+
     for (int xPos=xmargin+1; xPos<width; xPos++) {
         path_mag_.quadraticTo(xPos-1, dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xPos-1)).magnitude) ), xPos, dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xPos)).magnitude) ));
     }
-    
+
 }
 
 void  FilterGraph::calcPathAnalyzer()
@@ -210,35 +208,35 @@ void  FilterGraph::calcPathAnalyzer()
     int width = getWidth();
     // different scaling for the analyzer!
     float logscale = 10.f; // instead of 20...
-    
+
     float y = dbtoypos( logscale*log10f(filterinfo_->inMagnitude(xpostohz(xmargin))) );
-    
+
     float interp = 0.8f;
-    
+
     float offset = maxdb_ - 5.f;
-    
+
     // plot input magnitude
     path_in_mag_.clear();
-    
+
     path_in_mag_.startNewSubPath(xmargin, y);
-    
+
     for (int xPos=xmargin+1; xPos<width; xPos++) {
         y = interp*y + (1.f-interp)*dbtoypos( offset+logscale*log10f(filterinfo_->inMagnitude(xpostohz(xPos))) );
         path_in_mag_.lineTo(xPos, y);
     }
-    
+
     y = dbtoypos( logscale*log10f(filterinfo_->outMagnitude(xpostohz(xmargin))) );
-    
+
     // plot output magnitude
     path_out_mag_.clear();
-    
+
     path_out_mag_.startNewSubPath(xmargin, y);
-    
+
     for (int xPos=xmargin+1; xPos<width; xPos++) {
         y = interp*y + (1.f-interp)*dbtoypos( offset+logscale*log10f(filterinfo_->outMagnitude(xpostohz(xPos))) );
         path_out_mag_.lineTo(xPos, y);
     }
-    
+
 }
 
 
@@ -249,22 +247,22 @@ void FilterGraph::changed(bool changed)
 
 void FilterGraph::timerCallback()
 {
-    
+
     if (analyzeron_)
     {
         calcPathAnalyzer();
         analyzer_.setPath(&path_in_mag_, &path_out_mag_);
     }
-    
+
     if (changed_)
     {
         changed_ = false;
         calcPathMagPhase();
-        
+
         // update drag points
-        
+
         // btn_drag_lc->setBounds (hztoxpos(), 107, 9, 10);
-        
+
         graph_.setPath(&path_mag_);
         graph_.repaint();
     }
@@ -274,25 +272,25 @@ void FilterGraph::resized()
 {
     int width = getWidth();
     int height = getHeight();
-    
+
     graph_.setBounds (0, 0, width, height);
     analyzer_.setBounds (0, 0, width, height);
-    
-    
+
+
     // create the grid path
     path_w_grid.clear();
     path_grid.clear();
-    
-    
+
+
     float dyn = maxdb_-mindb_;
     int numgridlines = dyn/grid_div+1;
-    
+
     for (int i=0; i < numgridlines; i++)
     {
         float db_val = maxdb_-i*grid_div;
-        
+
         int ypos = dbtoypos(db_val);
-        
+
         if (db_val == 0)
         {
             path_w_grid.startNewSubPath(xmargin, ypos);
@@ -303,114 +301,114 @@ void FilterGraph::resized()
             path_grid.startNewSubPath(xmargin, ypos);
             path_grid.lineTo(width, ypos);
         }
-        
-        
+
+
     }
-    
+
     // float f_range = maxf_-minf_;
-    
+
     // plot freq lines
     for (float f=minf_; f <= maxf_; f += powf(10, floorf(log10(f)))) {
         int xpos = hztoxpos(f);
-        
-        
+
+
         if ((f == 50) || (f == 100) || (f == 500) || (f == 1000) || (f == 5000) || (f == 10000))
         {
             path_w_grid.startNewSubPath(xpos, dbtoypos(maxdb_));
             path_w_grid.lineTo(xpos, dbtoypos(mindb_));
-            
+
         } else
         {
             path_grid.startNewSubPath(xpos, dbtoypos(maxdb_));
             path_grid.lineTo(xpos, dbtoypos(mindb_));
         }
     }
-    
+
 }
 
 void FilterGraph::buttonClicked (Button* buttonThatWasClicked)
 {
-    
+
     float f =  xpostohz(buttonThatWasClicked->getPosition().getX() + buttonThatWasClicked->getMouseXYRelative().getX());
-    
+
     f = jlimit(minf_, maxf_, f);
-    
+
     float g = ypostodb(buttonThatWasClicked->getPosition().getY() + buttonThatWasClicked->getMouseXYRelative().getY());
 
     g = jlimit(mindb_, maxdb_, g);
-    
+
     switch (buttonThatWasClicked->getName().getIntValue()) {
         case 0:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LCfreqParam, freq2param(f));
             break;
-            
+
         case 1:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LSfreqParam, freq2param(f));
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LSGainParam, db2param(g));
             break;
-            
+
         case 2:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1freqParam, freq2param(f));
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1GainParam, db2param(g));
             break;
-            
+
         case 3:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2freqParam, freq2param(f));
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2GainParam, db2param(g));
             break;
-            
+
         case 4:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HSfreqParam, freq2param(f));
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HSGainParam, db2param(g));
             break;
-            
+
         case 5:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HCfreqParam, freq2param(f));
             break;
-            
+
         default:
             break;
     }
-    
-    
+
+
 }
 
 
 void FilterGraph::mouseWheelMove (const MouseEvent &event, const MouseWheelDetails &wheel)
 {
     int idx = 0;
-    
+
     for (int i=1; i<5; i++)
     {
         if (btn_drag.getUnchecked(i)->getState() == 1)
             idx = i;
-        
+
     }
-    
+
     switch (idx) {
         case 0:
             break;
-            
+
         case 1:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::LSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::LSQParam)+wheel.deltaY*0.5f));
             break;
-            
+
         case 2:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF1QParam)+wheel.deltaY*0.5f));
             break;
-            
+
         case 3:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2QParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::PF2QParam)+wheel.deltaY*0.5f));
             break;
-            
+
         case 4:
             myprocessor_->setParameterNotifyingHost(LowhighpassAudioProcessor::HSQParam, (float)jlimit(0.f, 1.f, myprocessor_->getParameter(LowhighpassAudioProcessor::HSQParam)+wheel.deltaY*0.5f));
             break;
-            
+
         default:
             break;
     }
-    
+
 }
 
 
