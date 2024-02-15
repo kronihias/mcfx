@@ -158,7 +158,10 @@ private:
 
     void DeleteTemporaryFiles();
 
-    void DebugPrint(String debugText, bool reset=false);
+    void DebugClear();
+    void DebugPrint(const String& debugText);
+
+
 
     String _DebugText;
     CriticalSection _DebugTextMutex;

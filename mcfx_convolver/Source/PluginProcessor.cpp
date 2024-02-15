@@ -61,7 +61,7 @@ Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
     std::cout << "Search dir:" << presetDir.getFullPathName() << std::endl;
 
 	String debug;
-    debug << "Search dir: " << presetDir.getFullPathName() << "\n\n";
+    debug << "Search dir: " << presetDir.getFullPathName();
 
     DebugPrint(debug);
 
@@ -286,7 +286,7 @@ void Mcfx_convolverAudioProcessor::run()
 
 void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile)
 {
-    DebugPrint("Loading preset...\n\n");
+    DebugPrint("Loading preset...");
     _desConfigFile = configFile;
     startThread(Thread::Priority::normal);
 }
@@ -393,7 +393,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     {
 
         String debug;
-        debug << "Configuration file does not exist:\n" << configFile.getFullPathName() << "\n\n";
+        debug << "Configuration file does not exist:\n" << configFile.getFullPathName();
 
         //std::cout << debug << std::endl;
         DebugPrint(debug);
@@ -410,7 +410,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
         std::cout << "Unloading Config..." << std::endl;
         UnloadConfiguration();
-        DebugPrint("", true); // clear debug window
+        // DebugClear(); // clear debug window
+        DebugPrint("Config Unloaded...");
         std::cout << "Config Unloaded..." << std::endl;
     }
 
@@ -420,7 +421,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     _ConvBufferSize = nextPowerOfTwo(_ConvBufferSize);
 
     String debug;
-    debug << "\ntrying to load " << configFile.getFullPathName() << "\n\n";
+    debug << "trying to load " << configFile.getFullPathName();
 
     DebugPrint(debug);
 
@@ -537,7 +538,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
                 String debug;
                 debug << "ERROR: channel assignment not feasible: In: " << in_ch << " Out: " << out_ch;
-                DebugPrint(debug << "\n");
+                DebugPrint(debug);
 
 
             } else {
@@ -554,12 +555,12 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     debug << "conv # " << conv_data.getNumIRs() << " " << IrFilename.getFullPathName() << " (" << TempAudioBuffer.getNumSamples() << " smpls) loaded";
                     if (src_samplerate != _SampleRate)
                       debug << " (resampled to " << conv_data.getLength(conv_data.getNumIRs()-1) <<  " smpls)";
-                    DebugPrint(debug << "\n");
+                    DebugPrint(debug);
 
                 } else {
                     String debug;
                     debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
-                    DebugPrint(debug << "\n");
+                    DebugPrint(debug);
 
                 }
 
@@ -635,7 +636,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             {
                 String debug;
                 debug << "ERROR: Number of input channels not feasible: " << inchannels;
-                DebugPrint(debug << "\n");
+                DebugPrint(debug);
 
                 return;
             }
@@ -653,7 +654,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 {
                     String debug;
                     debug << "ERROR: length of wav file is not multiple of irLength*numinchannels!" << IrFilename.getFullPathName();
-                    DebugPrint(debug << "\n");
+                    DebugPrint(debug);
 
                     return;
                 }
@@ -662,7 +663,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 {
                     String debug;
                     debug << "Input/Output channel assignement not feasible. Not enough input/output channels of the plugin. Need Input: " << inchannels << " Output: " << numOutChannels;
-                    DebugPrint(debug << "\n");
+                    DebugPrint(debug);
 
                     return;
                 }
@@ -687,13 +688,13 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 }
 
                 String debug;
-                debug << "loaded " << conv_data.getNumIRs() << " filters with\nlength " << length << "\ninput channels: " << inchannels << "\noutput channels: " << numOutChannels << "\nfilename: " << IrFilename.getFileName();
-                DebugPrint(debug << "\n\n");
+                debug << "loaded " << conv_data.getNumIRs() << " filters with: length " << length << ", input channels: " << inchannels << ", output channels: " << numOutChannels << ", filename: " << IrFilename.getFileName();
+                DebugPrint(debug);
 
             } else {
                 String debug;
                 debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
-                DebugPrint(debug << "\n");
+                DebugPrint(debug);
 
                 return;
             }
@@ -770,9 +771,10 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
 
     debug.clear();
-    debug << "Configuration loaded, maximum filter length: " << String(conv_data.getMaxLengthInSeconds(), 2) << "[s], " << conv_data.getMaxLength() << " [smpls] \n";
-    debug << "Plugin Latency: " << getLatencySamples() << " [smpls] \n";
-    DebugPrint(debug << "\n\n");
+    debug << "Configuration loaded, maximum filter length: " << String(conv_data.getMaxLengthInSeconds(), 2) << "[s], " << conv_data.getMaxLength() << " [smpls]";
+    DebugPrint(debug);
+    debug << "Plugin Latency: " << getLatencySamples() << " [smpls]";
+    DebugPrint(debug);
 
     sendChangeMessage(); // notify editor
 
@@ -820,7 +822,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     {
         String debug;
         debug << "ERROR: file does not exist!";
-        DebugPrint(debug << "\n");
+        DebugPrint(debug);
         return false;
     }
 
@@ -834,7 +836,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     if (!reader) {
         String debug;
         debug << "ERROR: could not read impulse response file!";
-        DebugPrint(debug << "\n");
+        DebugPrint(debug);
         return false;
     }
 
@@ -849,7 +851,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     if (wav_length <= 0) {
         String debug;
         debug << "ERROR: zero samples in impulse response file!";
-        DebugPrint(debug << "\n");
+        DebugPrint(debug);
         return false;
     }
 
@@ -858,13 +860,13 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
 
         String debug;
         debug << "Warning: not enough samples in impulse response file, reading maximum number of samples: " << String(length);
-        DebugPrint(debug << "\n");
+        DebugPrint(debug);
     }
 
     if ((int)reader->numChannels <= channel) {
         String debug;
         debug << "ERROR: wav file doesn't have enough channels: " << String(reader->numChannels);
-        DebugPrint(debug << "\n");
+        DebugPrint(debug);
         return false;
     }
 
@@ -944,6 +946,11 @@ void Mcfx_convolverAudioProcessor::setMaxPartitionSize(unsigned int maxsize)
 
 void Mcfx_convolverAudioProcessor::setOscIn(bool arg)
 {
+    
+String debug;
+debug << "OSC receiver " << (arg?"enabled":"disabled");
+DebugPrint(debug);
+
   if (arg) {
 
     if (oscReceiver.connect(_osc_in_port))
@@ -954,7 +961,7 @@ void Mcfx_convolverAudioProcessor::setOscIn(bool arg)
     }
     else
     {
-      DebugPrint("Could not open UDP port, try a different port.\n");
+      DebugPrint("Could not open UDP port, try a different port.");
     }
 
 
@@ -976,6 +983,11 @@ bool Mcfx_convolverAudioProcessor::getOscIn()
 
 void Mcfx_convolverAudioProcessor::setOscInPort(int port)
 {
+
+    String debug;
+    debug << "Set OSCreceiver port to " << juce::String(port);
+    DebugPrint(debug);
+
   _osc_in_port = port;
 
   if (_osc_in)
@@ -994,19 +1006,22 @@ void Mcfx_convolverAudioProcessor::oscMessageReceived(const OSCMessage & message
 {
   if (message.getAddressPattern() == "/reload")
   {
-    DebugPrint("Received Reload via OSC (/reload).\n");
+    DebugPrint("Received Reload via OSC (/reload).");
     ReloadConfiguration();
   }
   else if (message.getAddressPattern() == "/load")
   {
 
-    DebugPrint("Received Load via OSC (/load).\n");
+    DebugPrint("Received Load via OSC (/load).");
 
     if (message.size() < 1)
       return;
 
     if (message[0].isString())
       LoadPresetByName(message[0].getString());
+  }
+  else {
+    DebugPrint("Received unknown OSC message");
   }
 }
 
@@ -1050,14 +1065,33 @@ void Mcfx_convolverAudioProcessor::DeleteTemporaryFiles()
     _cleanUpFilesOnExit.clear();
 }
 
-void Mcfx_convolverAudioProcessor::DebugPrint(String debugText, bool reset)
+/**
+ * @brief Clear the debug text
+ * Clear the debug text that is displayed in the Debug window
+ */
+void Mcfx_convolverAudioProcessor::DebugClear()
 {
     ScopedLock lock(_DebugTextMutex);
     String temp;
+    temp << "";
 
-    if (!reset)
-        temp << debugText;
+    _DebugText = temp;
+}
 
+
+/**
+ * @brief Print a string to the debug window and add a newline
+ * @param debugText The string to print to the debug window
+ */
+void Mcfx_convolverAudioProcessor::DebugPrint(const String& debugText)
+{
+    
+    ScopedLock lock(_DebugTextMutex);
+    String temp;
+
+    juce::String currentTime = Time::getCurrentTime().formatted("%H:%M:%S"); // Log current time for better debugging
+
+    temp << currentTime << " | "<< debugText << "\n";
     temp << _DebugText;
 
     // std::cout << debugText << std::endl;
@@ -1114,7 +1148,7 @@ void Mcfx_convolverAudioProcessor::LoadPresetByName(String presetName)
     else
     { // preset not found -> post!
         String debug_msg;
-        debug_msg << "ERROR loading preset: " << presetName << ", Preset not found in search folder!\n\n";
+        debug_msg << "ERROR loading preset: " << presetName << ", Preset not found in search folder!";
         DebugPrint(debug_msg);
     }
 
@@ -1202,7 +1236,7 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
         // load config from chunk data
         if (xmlState->hasAttribute("configData") && _storeConfigDataInProject.get())
         {
-          DebugPrint("Load configuration from saved project data\n");
+          DebugPrint("Load configuration from saved project data");
           // todo....!
           MemoryBlock tempMem;
           tempMem.fromBase64Encoding(xmlState->getStringAttribute("configData"));
