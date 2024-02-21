@@ -184,7 +184,9 @@ box_maxpart("new combobox")
     tgl_save_preset.setToggleState(true, dontSendNotification);
     tgl_save_preset.setColour(ToggleButton::textColourId, Colours::white);
 
-    setSize (350, 330);
+    // setResizable (true,true);                                    // Uncomment to make resizable
+    // setResizeLimits(window_width, window_height, 1200, 1200);    // Uncomment to make resizable
+    setSize (window_width, window_height);
 
     UpdateText();
 
@@ -218,10 +220,10 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
                                        Colours::black,
                                        (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
                                        true));
-    g.fillRect (0, 0, 350, 330);
+    g.fillRect (0, 0, window_width, window_height);
 
     g.setColour (Colours::black);
-    g.drawRect (0, 0, 350, 330, 1);
+    g.drawRect (0, 0, window_width, window_height, 1);
 
     g.setColour (Colour (0x410000ff));
     g.fillRoundedRectangle (18.0f, 132.0f, 190.0f, 77.0f, 10.0000f);
@@ -230,20 +232,20 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.setFont (Font (17.2000f, Font::bold));
 
     g.drawText ("MCFX-CONVOLVER",
-                1, 3, 343, 25,
+                1, 3, fromRight(7), 25,
                 Justification::centred, true);
 
     g.setFont (Font (12.4000f, Font::plain));
     g.drawText ("multichannel non-equal partioned convolution matrix",
-                1, 23, 343, 25,
+                1, 23, fromRight(7), 25,
                 Justification::centred, true);
 
     g.setFont (Font (12.4000f, Font::plain));
     g.drawText ("First Partition Size",
-                200, 104, 135, 30,
+                fromRight(150), 104, 135, 30,
                 Justification::centredRight, true);
     g.drawText ("Maximum Partition Size",
-              200, 145, 135, 30,
+              fromRight(150), 145, 135, 30,
               Justification::centredRight, true);
 
 
@@ -259,27 +261,35 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
 void Mcfx_convolverAudioProcessorEditor::resized()
 {
+    auto area = getLocalBounds();
+    window_height = area.getHeight();
+    window_width = area.getWidth();
+
     label.setBounds (16, 134, 140, 24);
-    txt_preset.setBounds (72, 50, 200, 24);
+    txt_preset.setBounds (72, 50, fromRight(150), 24);
     label5.setBounds (8, 50, 56, 24);
-    txt_debug.setBounds (16, 214, 320, 96);
-    btn_open.setBounds (280, 50, 56, 24);
+    // txt_debug.setBounds (16, 214, 320, 96); // Original size
+    txt_debug.setBounds (16, 214, fromRight(30), frombottom(234)); //resizeable compliant
+
+    btn_open.setBounds (fromRight(70), 50, 56, 24);
     label2.setBounds (16, 158, 140, 24);
     label3.setBounds (16, 182, 140, 24);
-    label4.setBounds (24, 310, 64, 16);
-    lbl_skippedcycles.setBounds(110, 310, 150, 16);
+    label4.setBounds (24, frombottom(20), 64, 16);
+    lbl_skippedcycles.setBounds(110, frombottom(20), 150, 16);
     num_ch.setBounds (150, 134, 40, 24);
     num_spk.setBounds (150, 158, 40, 24);
     num_hrtf.setBounds (150, 182, 40, 24);
-    btn_preset_folder.setBounds (245, 80, 94, 24);
+    btn_preset_folder.setBounds (fromRight(105), 80, 94, 24);
 
-    box_conv_buffer.setBounds (270, 126, 67, 20);
-    box_maxpart.setBounds (270, 169, 65, 20);
+    box_conv_buffer.setBounds (fromRight(80), 126, 67, 20);
+    box_maxpart.setBounds (fromRight(80), 169, 65, 20);
 
     tgl_save_preset.setBounds(16, 79, 200, 24);
 
     txt_rcv_port.setBounds(146, 108, 40, 18);
     tgl_rcv_active.setBounds(16, 105, 130, 24);
+
+    repaint();
 }
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()

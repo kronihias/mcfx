@@ -118,6 +118,12 @@ private:
     ToggleButton tgl_rcv_active;
     ToggleButton tgl_save_preset;
 
+    int window_width = 450,
+        window_height = 330;  // Current window height, to support resizing of debug window
+    // Lambdas to simplify measuring from the right and bottom of the plugin window
+    std::function<int(int)> fromRight = [this](int c) { jassert(window_width>=0); return window_width-c; };
+    std::function<int(int)> frombottom = [this](int c) { jassert(window_height>=0); return window_height-c; };
+    
     std::unique_ptr<AlertWindow> asyncAlertWindow;
 
     LookAndFeel_V3 MyLookAndFeel;
