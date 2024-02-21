@@ -43,7 +43,7 @@
 
 inline void* aligned_malloc(size_t size, size_t align) {
     void *result;
-#ifdef _MSC_VER
+#if defined(_MSC_VER) or defined(_WIN32)
     result = _aligned_malloc(size, align);
 #else
     if(posix_memalign(&result, align, size)) result = 0;
