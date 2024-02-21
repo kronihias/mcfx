@@ -21,49 +21,88 @@ mcfx is free software and licensed under the GNU General Public License version 
 prerequisites for building
 --------------
 
-- cmake, working build environment
+CMake, working build environment
 
-Install LINUX Libraries (Debian, Ubuntu):
+- **Linux:**  
+    Install LINUX Libraries (Debian, Ubuntu):
 
+    ```
+    sudo apt install libasound2-dev libjack-jackd2-dev \
+        ladspa-sdk \
+        libcurl4-openssl-dev  \
+        libfreetype6-dev \
+        libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+        libwebkit2gtk-4.0-dev \
+        libglu1-mesa-dev mesa-common-dev \
+        libfftw3-dev \
+        libzita-convolver3 \
+        libzita-convolver-dev
+    ```
+
+- **Windows x64:**  
+    Download [FFTW](https://www.fftw.org/) for [Windows](https://www.fftw.org/install/windows.html) 64bit and run the command `lib /machine:x64 /def:libfftw3f-3.def` from the Visual Studio Developer Command Prompt to generate *libfftw3f-3.lib*.  
+    Alternatively, run the command `lib /def:libfftw3f-3.def` from the `x64 Native Tools Command Prompt for VS`.
+    Note that this simpler command, instructed by the FFTW documentation, will generate a 32bit library when called from the default Developer Command Prompt or Powershell (and therefore fail to link)
+
+Make sure of using fftw-3.3.6-pl2 or later, as earlier versions do not contain the `fftwf_make_planner_thread_safe()` function.
+
+Clone the repository with the submodules:
 ```
-sudo apt install libasound2-dev libjack-jackd2-dev \
-    ladspa-sdk \
-    libcurl4-openssl-dev  \
-    libfreetype6-dev \
-    libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
-    libwebkit2gtk-4.0-dev \
-    libglu1-mesa-dev mesa-common-dev \
-	libfftw3-dev \
-	libzita-convolver3 \
-	libzita-convolver-dev
+git clone --recurse-submodules https://github.com/kronihias/mcfx/
 ```
 
-howto build yourself:
+
+
+Howto build yourself:
 --------------
 
-- use cmake gui or cmake/ccmake from terminal:
+Use **cmake gui** or **cmake/ccmake** from terminal to configure the build.
 
-- *NUM_CHANNELS* adjusts the number of input/output channels
+1. Create a folder in the *mcfx* folder eg. *BUILD*
+    ```
+    mkdir BUILD # On Linux, MacOS or Windows Powershell    
+    ```
+2. Run cmake or ccmake from the *BUILD* folder, or use the cmake gui and press *Configure*.  
+    In the terminal:
+    ```
+    cd BUILD
+    ccmake ..
+    ```
+    Press the *C* key.
+      
+    If using the GUI instead, select the target build system (e.g., in Windows use Visual Studio or MinGW).
+3. Set the [Build Parameters](#build-parameters),  *Configure* again. Then *Generate*.
+4. Build the project with the selected build system (e.g., Visual Studio, Xcode, or make).  
+    E.g., for Linux:
+    ```
+    make -j$(nproc) config=Release
+    ```
+    `-j$(nproc)` will instruct make to use all available cores for the build.
+5. After a successful build, find the binaries in `BUILD/_bin/` or `BUILD/vst/` and copy to system VST folder  
 
-**TERMINAL:**
-
-- create a folder in the *mcfx* folder eg. *BUILD*
-
-*mcfx/BUILD> $ ccmake ..*
-
-- adjust NUM_CHANNELS 
-
-then
-*mcfx/BUILD> $ make*
-
-- find the binaries in the *mcfx/BUILD/_bin* folder and copy to system VST folder
-
-**VST installation folders:**
+    **VST installation folders:**
 
 
-- MacOSX: `/Library/Audio/Plug-Ins/VST`
-- Windows: eg. `C:\Programm Files\Steinberg\VstPlugins`
-- Linux: `/usr/lib/lxvst` or `/usr/local/lib/lxvst`
+    - MacOSX: `/Library/Audio/Plug-Ins/VST`
+    - Windows: `C:\Program Files\Steinberg\VstPlugins`, `C:\Program Files\Common Files\VST2`, or `C:\Program Files\VSTPlugins`
+    - Linux: `~/.vst/`, `/usr/lib/lxvst` or `/usr/local/lib/lxvst`
+
+## Build Parameters
+
+- **``NUM_CHANNELS``** - Number of input/output channels for each plugin. Default is 36.
+- **``MAX_DELAYTIME_S``** - Maximum delay time for mcfx_delay in seconds. Default is 0.5s.
+- **``BUILD_STANDALONE``** - Build standalone applications. Default is OFF.
+- **``BUILD_VST``** - Build VST2 plugins. Default is ON.
+- **``BUILD_LV2``** - Build LV2 plugins. Default is ON.
+- **``VST2SDKPATH``** - Path to the VST2 SDK. Default is "~/SDKs/vstsdk2.4"
+- **``WITH_ZITA_CONVOLVER``** - Build with zita-convolver (better performance under Linux). Default is OFF.
+---
+- **``FFTW3F_LIBRARY``** - Path to the FFTW3F library file (Note the final **f**!).  
+    - On Linux this should point to the `.so` shared library file, e.g., `/usr/lib/x86_64-linux-gnu/libfftw3f-3.so`.
+    - On Windows with Visual Studio, this should point to the `.lib` file generated in a [previous step](#prerequisites-for-building), e.g., `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.lib`.
+    - On Windows with MinGW, this should point to the `.dll` dynamic library file, e.g., `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.dll`.
+- **``FFTW3F_INCLUDE_DIR``** - Path to the FFTW3F include directory, e.g., `/usr/include`.
+- [**``FFTW3F_THREADS_LIBRARY``**] - If present (e.g., on Linux), this should point to the `.so` file for the FFTW3F threads library, e.g., `/usr/lib/x86_64-linux-gnu/libfftw3f_threads.so`.
 
 plug-ins explained:
 ==============
