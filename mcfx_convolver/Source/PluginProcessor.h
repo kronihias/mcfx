@@ -38,7 +38,8 @@
 class Mcfx_convolverAudioProcessor  : public AudioProcessor,
                                       public ChangeBroadcaster,
                                       public Thread,
-                                      private OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>
+                                      private OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>,
+                                      private AudioProcessorValueTreeState::Listener
 {
 public:
     //==============================================================================
@@ -60,6 +61,9 @@ public:
     //==============================================================================
     const String getName() const override;
 
+    //==============================================================================
+    // Deprecated host passthrough parameters
+    /*
     int getNumParameters() override;
 
     float getParameter (int index) override;
@@ -67,6 +71,18 @@ public:
 
     const String getParameterName (int index) override;
     const String getParameterText (int index) override;
+    */
+
+    // =========================================================================
+    /**  Plug-in parameters  */
+    AudioProcessorValueTreeState valueTreeState; //!< Value tree state containing the plug-in parameters
+    AudioProcessorValueTreeState::ParameterLayout createParameters();   //!< Create the parameters of the plug-in
+    
+    /// Callback for AudioProcessorValueTreeState::Listener
+    void parameterChanged(const String& parameterID, float newValue) override;
+    float _previous_master_gain;                    //!< Previous RAW value of the master gain, used for interpolation
+    std::atomic<float>* _master_gain_raw = nullptr; //!< Pointer to the RAW master gain parameter value
+    // =========================================================================
 
     const String getInputChannelName (int channelIndex) const override;
     const String getOutputChannelName (int channelIndex) const override;

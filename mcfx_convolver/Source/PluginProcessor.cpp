@@ -51,8 +51,13 @@ Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
     _skippedCycles(0),
     safemode_(false),
     _osc_in_port(7200),
-    _osc_in(false)
+    _osc_in(false),
+    valueTreeState(*this, nullptr, "PARAMETERS", createParameters())
 {
+
+    _master_gain_raw = valueTreeState.getRawParameterValue ("MASTERGAIN"); // get raw parameter value for master gain
+    valueTreeState.addParameterListener("RELOAD", this);                    
+
     _SampleRate = getSampleRate();
     _BufferSize = getBlockSize();
     _ConvBufferSize = getBlockSize();
@@ -93,6 +98,8 @@ const String Mcfx_convolverAudioProcessor::getName() const
     return JucePlugin_Name;
 }
 
+/* deprecated host passthrough parameters
+
 int Mcfx_convolverAudioProcessor::getNumParameters()
 {
     return 1;
@@ -123,7 +130,7 @@ const String Mcfx_convolverAudioProcessor::getParameterText (int index)
         return "Reload";
     else
         return "";
-}
+}*/
 
 const String Mcfx_convolverAudioProcessor::getInputChannelName (int channelIndex) const
 {
@@ -219,6 +226,7 @@ void Mcfx_convolverAudioProcessor::prepareToPlay (double sampleRate, int samples
         // mtxconv_.Reset();
     }
 
+    _previous_master_gain = *_master_gain_raw; // update previous master gain for interpolation
 }
 
 void Mcfx_convolverAudioProcessor::releaseResources()
@@ -268,6 +276,15 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
         _skippedCycles.set(mtxconv_.getSkipCount());
 #endif
 
+        float currentGain = *_master_gain_raw;
+        if (currentGain == _previous_master_gain) // If gain was not changed, apply gain directly to the entire buffer
+            buffer.applyGain (juce::Decibels::decibelsToGain(currentGain));
+        else    // If gain was changed, apply gain ramp interpolation
+        {
+            buffer.applyGainRamp (0, buffer.getNumSamples(),  juce::Decibels::decibelsToGain(_previous_master_gain), juce::Decibels::decibelsToGain(currentGain));
+            _previous_master_gain = currentGain;
+        }
+
         _isProcessing = false;
 
     } else { // config loaded
@@ -282,6 +299,7 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 void Mcfx_convolverAudioProcessor::run()
 {
     LoadConfiguration(_desConfigFile);
+    valueTreeState.getParameter("RELOAD")->setValueNotifyingHost(false); // "Recoil" action on the reload parameter, so that it goes back to 0 after the configuration is loaded, and it can then be used again to reload the configuration.
 }
 
 void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile)
@@ -1162,7 +1180,7 @@ bool Mcfx_convolverAudioProcessor::hasEditor() const
 
 AudioProcessorEditor* Mcfx_convolverAudioProcessor::createEditor()
 {
-    return new Mcfx_convolverAudioProcessorEditor (this);
+    return new Mcfx_convolverAudioProcessorEditor (*this);
 }
 
 //==============================================================================
@@ -1275,3 +1293,33 @@ AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new Mcfx_convolverAudioProcessor();
 }
+
+
+//==============================================================================
+//
+AudioProcessorValueTreeState::ParameterLayout Mcfx_convolverAudioProcessor::createParameters()
+{
+    AudioProcessorValueTreeState::ParameterLayout layout;
+
+    layout.add (std::make_unique<AudioParameterBool>    (   "RELOAD", "ReloadConfig", false));
+    layout.add (std::make_unique<AudioParameterFloat>   (   "MASTERGAIN"
+                                                         ,  "Master gain"
+                                                         ,  NormalisableRange<float> ( -100.0f,   // minimum value
+                                                                                      40.0f,   // maximum value
+                                                                                      0.1f)
+                                                         ,  0.0f
+                                                         ));
+          
+    return layout;
+}
+
+void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, float newValue)
+{
+    if ( parameterID == "RELOAD" )
+    {
+        if (newValue == true)
+            ReloadConfiguration();
+    }
+}
+
+//==============================================================================

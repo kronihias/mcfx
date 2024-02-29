@@ -35,8 +35,9 @@ class Mcfx_convolverAudioProcessorEditor  : public AudioProcessorEditor,
                                             public TextEditor::Listener,
                                             public FileDragAndDropTarget
 {
+    Mcfx_convolverAudioProcessor& processor; //<! Reference to the processor object
 public:
-    Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter);
+    Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor& ownerFilter);
     ~Mcfx_convolverAudioProcessorEditor();
 
     //==============================================================================
@@ -117,6 +118,21 @@ private:
     TextEditor txt_rcv_port;
     ToggleButton tgl_rcv_active;
     ToggleButton tgl_save_preset;
+
+    struct SnappingSlider  : public Slider
+    {
+        double snapValue (double attemptedValue, DragMode dragMode)
+        {
+            if (attemptedValue > -1.5 && attemptedValue < 1.5)
+                return 0.0;
+            return attemptedValue;
+        }
+    };
+
+    SnappingSlider sld_master_gain;
+    Label lbl_master_gain;
+
+    std::unique_ptr<AudioProcessorValueTreeState::SliderAttachment> atc_master_gain;
 
     int window_width = 450,
         window_height = 330;  // Current window height, to support resizing of debug window

@@ -26,6 +26,7 @@
 //==============================================================================
 Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter)
     : AudioProcessorEditor (ownerFilter),
+processor(ownerFilter),
 label ("new label", "Input channels: "),
 txt_preset("new text editor"),
 label5 ("new label", "Preset"),
@@ -184,19 +185,34 @@ box_maxpart("new combobox")
     tgl_save_preset.setToggleState(true, dontSendNotification);
     tgl_save_preset.setColour(ToggleButton::textColourId, Colours::white);
 
-    // setResizable (true,true);                                    // Uncomment to make resizable
-    // setResizeLimits(window_width, window_height, 1200, 1200);    // Uncomment to make resizable
+    lbl_master_gain.setJustificationType (Justification::centred);
+    lbl_master_gain.setText("Master gain", dontSendNotification);
+    lbl_master_gain.setColour(Label::textColourId, Colours::white);
+    addAndMakeVisible (lbl_master_gain);
+    
+    sld_master_gain.setSliderStyle (Slider::RotaryVerticalDrag);
+    sld_master_gain.setRange(-100, 40);
+    sld_master_gain.setValue(0);
+    sld_master_gain.setDoubleClickReturnValue(true, 0);
+    sld_master_gain.setColour(Slider::rotarySliderFillColourId, Colours::white);
+    sld_master_gain.setTextBoxStyle (Slider::TextBoxBelow, false, 70, 20);
+    sld_master_gain.setTextValueSuffix (" dB");
+    sld_master_gain.setMouseDragSensitivity(125);
+    addAndMakeVisible(sld_master_gain);
+
     setSize (window_width, window_height);
 
     UpdateText();
 
     UpdatePresets();
 
-    txt_preset.setText(ownerFilter->box_preset_str);
+    txt_preset.setText(ownerFilter.box_preset_str);
     txt_preset.setCaretPosition(txt_preset.getTotalNumChars()-1);
     txt_preset.setTooltip(txt_preset.getText());
 
-    ownerFilter->addChangeListener(this); // listen to changes of processor
+    ownerFilter.addChangeListener(this); // listen to changes of processor
+
+    atc_master_gain = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.valueTreeState, "MASTERGAIN", sld_master_gain);
 
     timerCallback();
 
@@ -245,7 +261,7 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
                 fromRight(150), 104, 135, 30,
                 Justification::centredRight, true);
     g.drawText ("Maximum Partition Size",
-              fromRight(150), 145, 135, 30,
+              fromRight(140), 145, 125, 30,
               Justification::centredRight, true);
 
 
@@ -255,7 +271,7 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     g.drawText (version_string,
-                getWidth()-51, getHeight()-11, 50, 10,
+                fromRight(71), fromBottom(11), 50, 10,
                 Justification::bottomRight, true);
 }
 
@@ -269,13 +285,13 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     txt_preset.setBounds (72, 50, fromRight(150), 24);
     label5.setBounds (8, 50, 56, 24);
     // txt_debug.setBounds (16, 214, 320, 96); // Original size
-    txt_debug.setBounds (16, 214, fromRight(30), frombottom(234)); //resizeable compliant
+    txt_debug.setBounds (16, 214, fromRight(30), fromBottom(234)); //resizeable compliant
 
     btn_open.setBounds (fromRight(70), 50, 56, 24);
     label2.setBounds (16, 158, 140, 24);
     label3.setBounds (16, 182, 140, 24);
-    label4.setBounds (24, frombottom(20), 64, 16);
-    lbl_skippedcycles.setBounds(110, frombottom(20), 150, 16);
+    label4.setBounds (24, fromBottom(20), 64, 16);
+    lbl_skippedcycles.setBounds(110, fromBottom(20), 150, 16);
     num_ch.setBounds (150, 134, 40, 24);
     num_spk.setBounds (150, 158, 40, 24);
     num_hrtf.setBounds (150, 182, 40, 24);
@@ -288,6 +304,13 @@ void Mcfx_convolverAudioProcessorEditor::resized()
 
     txt_rcv_port.setBounds(146, 108, 40, 18);
     tgl_rcv_active.setBounds(16, 105, 130, 24);
+
+    size_t sld_master_gainSize = 72;
+    size_t leftmostFreePixel = 190+18;
+    jassert((fromRight(150)-leftmostFreePixel)>0); // If this fails, window width is too small
+    size_t xPosGain = (fromRight(150)-leftmostFreePixel)/2-(sld_master_gainSize/2)+leftmostFreePixel;  //
+    sld_master_gain.setBounds(xPosGain, 134, sld_master_gainSize, sld_master_gainSize);
+    lbl_master_gain.setBounds(xPosGain, 110, sld_master_gainSize, 24);
 
     repaint();
 }
