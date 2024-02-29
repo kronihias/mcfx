@@ -129,7 +129,7 @@ private:
     TextButton btn_open;
     Label label2;
     Label label3;
-    Label label4;
+    TextButton btn_clear_debug;
     Label lbl_skippedcycles;
     Label num_ch;
     Label num_spk;

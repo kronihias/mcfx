@@ -34,7 +34,7 @@ txt_debug ("new text editor"),
 btn_open ("new button"),
 label2 ("new label", "Output channels: "),
 label3 ("new label", "Impulse responses: "),
-label4 ("new label", "debug window"),
+btn_clear_debug ("new button"),
 lbl_skippedcycles ("new label", "skipped cycles: "),
 num_ch ("new label", "0"),
 num_spk ("new label", "0"),
@@ -68,7 +68,7 @@ box_maxpart("new combobox")
     label5.setColour (TextEditor::backgroundColourId, Colour (0x0));
 
     addAndMakeVisible (txt_debug);
-    txt_debug.setMultiLine (true);
+    txt_debug.setMultiLine (true,false); // shouldWordWrap = false to disable wrapping and allow horizontal scroll
     txt_debug.setReturnKeyStartsNewLine (false);
     txt_debug.setReadOnly (true);
     txt_debug.setScrollbarsShown (true);
@@ -100,13 +100,14 @@ box_maxpart("new combobox")
     label3.setColour (TextEditor::textColourId, Colours::black);
     label3.setColour (TextEditor::backgroundColourId, Colour (0x0));
 
-    addAndMakeVisible (label4);
-    label4.setFont (Font (10.0000f, Font::plain));
-    label4.setJustificationType (Justification::centredLeft);
-    label4.setEditable (false, false, false);
-    label4.setColour (Label::textColourId, Colours::white);
-    label4.setColour (TextEditor::textColourId, Colours::black);
-    label4.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (btn_clear_debug);
+    btn_clear_debug.setButtonText ("Clear log");
+    btn_clear_debug.setTooltip ("Clear the debug log window");
+    btn_clear_debug.addListener (this);
+    btn_clear_debug.setColour (TextButton::buttonColourId, juce::Colour(0x00000000));
+    btn_clear_debug.setColour (TextButton::buttonOnColourId, juce::Colour(0x00000000));
+    btn_clear_debug.setColour (TextButton::textColourOffId, juce::Colour::fromHSV (0.0f, 0.42f, 1.0f, 1.0f));
+    btn_clear_debug.setColour (TextButton::textColourOnId, juce::Colour::fromHSV (0.0f, 0.42f, 1.0f, 1.0f));
 
     addAndMakeVisible(lbl_skippedcycles);
     lbl_skippedcycles.setFont(Font(10.0000f, Font::plain));
@@ -198,8 +199,13 @@ box_maxpart("new combobox")
     sld_master_gain.setTextBoxStyle (Slider::TextBoxBelow, false, 70, 20);
     sld_master_gain.setTextValueSuffix (" dB");
     sld_master_gain.setMouseDragSensitivity(125);
+    sld_master_gain.setTooltip("Master gain for all channels (Double click to reset)");
+    sld_master_gain.setColour(Slider::textBoxBackgroundColourId,juce::Colour(0x00000000)); // Transparent background
+    sld_master_gain.setColour(Slider::textBoxTextColourId,juce::Colours::white);
     addAndMakeVisible(sld_master_gain);
 
+    // setResizable (true,true);                                    // Uncomment to make resizable
+    // setResizeLimits(window_width, window_height, 1200, 1200);    // Uncomment to make resizable
     setSize (window_width, window_height);
 
     UpdateText();
@@ -273,6 +279,13 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.drawText (version_string,
                 fromRight(71), fromBottom(11), 50, 10,
                 Justification::bottomRight, true);
+
+    // Draw text channels
+    g.setColour (Colours::white);
+    g.setFont (Font (12.4000f, Font::plain));
+    g.drawText (String(NUM_CHANNELS)+"x"+String(NUM_CHANNELS)+"ch.",
+                fromRight(130), fromBottom(btn_clear_debug.getHeight()), 60, btn_clear_debug.getHeight(),
+                Justification::centredRight, true);
 }
 
 void Mcfx_convolverAudioProcessorEditor::resized()
@@ -285,13 +298,16 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     txt_preset.setBounds (72, 50, fromRight(150), 24);
     label5.setBounds (8, 50, 56, 24);
     // txt_debug.setBounds (16, 214, 320, 96); // Original size
-    txt_debug.setBounds (16, 214, fromRight(30), fromBottom(234)); //resizeable compliant
+    txt_debug.setBounds (16, 214, fromRight(30), fromBottom(238)); //resizeable compliant
 
     btn_open.setBounds (fromRight(70), 50, 56, 24);
     label2.setBounds (16, 158, 140, 24);
     label3.setBounds (16, 182, 140, 24);
-    label4.setBounds (24, fromBottom(20), 64, 16);
-    lbl_skippedcycles.setBounds(110, fromBottom(20), 150, 16);
+    int clearBtnHeight = 24;
+    btn_clear_debug.setBounds (16, fromBottom(clearBtnHeight), btn_clear_debug.getBestWidthForHeight(clearBtnHeight), clearBtnHeight);
+    lbl_skippedcycles.setFont(MyLookAndFeel.getTextButtonFont(btn_clear_debug, clearBtnHeight));
+    
+    lbl_skippedcycles.setBounds(110, fromBottom(clearBtnHeight), 150, clearBtnHeight);
     num_ch.setBounds (150, 134, 40, 24);
     num_spk.setBounds (150, 158, 40, 24);
     num_hrtf.setBounds (150, 182, 40, 24);
@@ -586,6 +602,11 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     else if (buttonThatWasClicked == &tgl_save_preset)
     {
         ourProcessor->_storeConfigDataInProject = tgl_save_preset.getToggleState();
+    }
+    else if (buttonThatWasClicked == &btn_clear_debug)
+    {
+        ourProcessor->DebugClear();
+        timerCallback();
     }
 
 }
