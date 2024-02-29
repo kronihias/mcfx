@@ -74,6 +74,20 @@ private:
 
     void loadWavFile(File wavFile);
 
+    /**
+     * @brief Calback function for when the AlertWindow with manual inChannels entry is closed
+     * If the user loads a wav file with no inputChannel number in the metadata, an alert window is shown,
+     * promping the user to enter the number of input channels manually, the nature of the matrix (diagonal or dense) and whether the channel count
+     * should be stored in the wav file.
+     * This callback function is called when the alert window is closed, and it gets the user choices and sets the flags accordingly.
+     * 
+     * If save is chosen, save flags are set to true and the number of input channels is temporarily stored in a member variable of the processor.
+     * The wav overwrite is performed after a completed load, and only if successful.
+     * 
+     * @param result        Code for the button pressed in the alert window
+     * @param dropped_file  Wav file that did not contain metadata for automatic load
+     * @param ourEditor     Pointer to the editor
+     */
     static void InputChannelCallback(int result, File dropped_file, Mcfx_convolverAudioProcessorEditor* ourEditor)
     {
         auto& aw = *ourEditor->asyncAlertWindow;
@@ -89,10 +103,18 @@ private:
 
         auto isDiagonal = aw.getComboBoxComponent ("isDiagonal")->getSelectedItemIndex();
         auto inputChannelsTextField = aw.getTextEditorContents ("numInChannels").getIntValue();
-
+        auto doSaveMetadata = aw.getComboBoxComponent ("saveMetadata")->getSelectedItemIndex();
         int numInChannels = (isDiagonal == 1) ? -1 : inputChannelsTextField;
 
         auto ourProcessor = ourEditor->getProcessor();
+        // ourProcessor->DebugPrint("InputChannelCallback: isDiagonal: " + String(isDiagonal) + ", inputChannelsTextField: " + String(inputChannelsTextField) + ", doSaveMetadata: " + String(doSaveMetadata));
+
+        // Set the flag to store the number of input channels into the wav file
+        // The channel count will only be stored if the load is successful
+        // If not (e.g. the input channel is not valid, or not a multiple the length) the flag will be ignored and an error message will be displayed
+        ourProcessor->storeNumInputsIntoWav.set(doSaveMetadata==1); // Set the flag to store the number of input channels into the wav file
+        ourProcessor->numInputChannels = numInChannels;
+        // Load the Wav file containing the impulse responses
         ourProcessor->LoadWavFile(dropped_file, numInChannels);
     }
 
@@ -138,7 +160,7 @@ private:
         window_height = 330;  // Current window height, to support resizing of debug window
     // Lambdas to simplify measuring from the right and bottom of the plugin window
     std::function<int(int)> fromRight = [this](int c) { jassert(window_width>=0); return window_width-c; };
-    std::function<int(int)> frombottom = [this](int c) { jassert(window_height>=0); return window_height-c; };
+    std::function<int(int)> fromBottom = [this](int c) { jassert(window_height>=0); return window_height-c; };
     
     std::unique_ptr<AlertWindow> asyncAlertWindow;
 

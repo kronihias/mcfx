@@ -164,19 +164,47 @@ public:
     int _min_in_ch;
     int _min_out_ch;
 
+    /// State of the preset load, used to communicate with the GUI. After "Loaded" is consumed by the gui. It will be set to "None"
+    enum class PresetLoadState
+    {
+        None = -1,
+        Failed = 0,
+        Loaded = 1
+    };
+    std::atomic<PresetLoadState> _presetLoadState {PresetLoadState::None}; //!< State of the preset load, used to communicate with the GUI. After "Loaded" is consumed by the gui. It will be set to "None"
+    /// Error message of the preset load, used to communicate with the GUI in the case that presetLoadState is "Failed"_
+    enum class PresetLoadError
+    {
+        None = 0,                                   //!< No error
+        CHANNEL_ASSIGNMENT_NOT_FEASIBLE,            //!< The channel assignment is not feasible
+        NOT_LOADED,                                 //!< Generic error, from original plugin debug messages
+        NUMBER_INPUT_CHANNELS_NOT_FEASIBLE,         //!< The number of input channels is not feasible
+        WAV_LENGTH_NOT_MULTIPLE_INCHANNELS_IRLEN,   //!< The length of the wav file is not a multiple of the number of input channels specified manually
+        FILE_DOES_NOT_EXIST,                        //!< The file does not exist
+        CANT_READ_IR,                               //!< The IR file can't be read
+        ZERO_SAMPLES,                               //!< The IR file has zero samples
+        NOT_ENOUGH_CHANNELS                         //!< The Wav file has less channels than required
+
+    };
+    std::atomic<PresetLoadError> _presetLoadErrorMessage{ PresetLoadError::None};
+    String presetWavFilename = "";
 
     int _num_conv;
 
     File _configFile;
 
 
-private:
-
-    void DeleteTemporaryFiles();
+    //==============================================================================
+    // Saving the manually specified input channels into wav metadata
+    Atomic<bool>    storeNumInputsIntoWav;
+    int numInputChannels;
+    //==============================================================================
 
     void DebugClear();
     void DebugPrint(const String& debugText);
 
+private:
+    void DeleteTemporaryFiles();
 
 
     String _DebugText;

@@ -24,7 +24,7 @@
 #define QUOTE(x) Q(x)
 
 //==============================================================================
-Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter)
+Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor& ownerFilter)
     : AudioProcessorEditor (ownerFilter),
 processor(ownerFilter),
 label ("new label", "Input channels: "),
@@ -324,6 +324,55 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
     lbl_skippedcycles.setText(text, dontSendNotification);
 
     txt_debug.setText(ourProcessor->getDebugString(), true);
+
+    // processor.DebugPrint(ourProcessor->box_preset_str);
+
+    // If ourProcessor->_presetLoadState = Failed, empty the preset string
+    if (ourProcessor->_presetLoadState == Mcfx_convolverAudioProcessor::PresetLoadState::Failed)
+    {
+        // processor.DebugPrint("Load Failed");
+        String errorMessage = "";
+        switch (ourProcessor->_presetLoadErrorMessage)
+        {
+            case Mcfx_convolverAudioProcessor::PresetLoadError::None:
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::CHANNEL_ASSIGNMENT_NOT_FEASIBLE:
+                errorMessage = "ERROR: channel assignment not feasible";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::NOT_LOADED:
+                errorMessage = "ERROR: not loaded";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::NUMBER_INPUT_CHANNELS_NOT_FEASIBLE:
+                errorMessage = "ERROR: Number of input channels not feasible";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::WAV_LENGTH_NOT_MULTIPLE_INCHANNELS_IRLEN:
+                errorMessage = "ERROR: length of wav file is not multiple of irLength*numinchannels!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::FILE_DOES_NOT_EXIST:
+                errorMessage = "ERROR: file does not exist!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::CANT_READ_IR:
+                errorMessage = "ERROR: could not read impulse response file!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::ZERO_SAMPLES:
+                errorMessage = "ERROR: zero samples in impulse response file!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::NOT_ENOUGH_CHANNELS:
+                errorMessage = "ERROR: wav file doesn't have enough channels";
+                break;
+        }
+
+        txt_preset.setText(errorMessage, dontSendNotification);
+        ourProcessor->_presetLoadState = Mcfx_convolverAudioProcessor::PresetLoadState::None;
+    } else if (ourProcessor->_presetLoadState == Mcfx_convolverAudioProcessor::PresetLoadState::None)
+    {
+        // processor.DebugPrint("Load: state none");
+    } else if (ourProcessor->_presetLoadState == Mcfx_convolverAudioProcessor::PresetLoadState::Loaded)
+    {        
+        // processor.DebugPrint("Load Successfull");
+        txt_preset.setText(ourProcessor->box_preset_str, dontSendNotification);
+        ourProcessor->_presetLoadState = Mcfx_convolverAudioProcessor::PresetLoadState::None;
+    }
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
@@ -611,6 +660,10 @@ void Mcfx_convolverAudioProcessorEditor::loadWavFile(File wavFile)
 
     asyncAlertWindow->addTextEditor ("numInChannels", "1", "If it's a dense matrix, enter the number of input channels:");
     asyncAlertWindow->getTextEditor("numInChannels")->setInputRestrictions(6, "1234567890");
+
+    // Combobox to opt to save the metadata inside the original wav file, with a warning that this will modify the file
+    asyncAlertWindow->addComboBox("saveMetadata", { "No", "Yes: save metadata inside the original .wav file" }, "Save the metadata inside the original .wav file?");
+    asyncAlertWindow->addTextBlock("Warning! Saving the channel number will modify the original .wav file!");
 
     asyncAlertWindow->addButton ("OK",     1, KeyPress (KeyPress::returnKey, 0, 0));
     asyncAlertWindow->addButton ("Cancel", 0, KeyPress (KeyPress::escapeKey, 0, 0));

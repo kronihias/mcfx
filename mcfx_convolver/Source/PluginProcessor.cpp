@@ -350,6 +350,7 @@ void Mcfx_convolverAudioProcessor::LoadWavFile(File wavFile, int numPassedInputC
         return;
     }
 
+    this->presetWavFilename = wavFile.getFullPathName();
     // conf file should be located in the same folder
     File confFile(wavFile.getParentDirectory().getChildFile(wavFile.getFileNameWithoutExtension() + ".conf"));
     // check for existing .conf file and try to load if we don't have a specific numPassedInputChannels
@@ -554,6 +555,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             if ( ( in_ch < 1 ) || ( in_ch > NUM_CHANNELS ) || ( out_ch < 1 ) || ( out_ch > NUM_CHANNELS ) )
             {
 
+                this->_presetLoadState = PresetLoadState::Failed;
+                this->_presetLoadErrorMessage = PresetLoadError::CHANNEL_ASSIGNMENT_NOT_FEASIBLE;
                 String debug;
                 debug << "ERROR: channel assignment not feasible: In: " << in_ch << " Out: " << out_ch;
                 DebugPrint(debug);
@@ -574,8 +577,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                     if (src_samplerate != _SampleRate)
                       debug << " (resampled to " << conv_data.getLength(conv_data.getNumIRs()-1) <<  " smpls)";
                     DebugPrint(debug);
+                    this->_presetLoadState = PresetLoadState::Loaded;
 
                 } else {
+                    this->_presetLoadState = PresetLoadState::Failed;
+                    this->_presetLoadErrorMessage = PresetLoadError::NOT_LOADED;
                     String debug;
                     debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
                     DebugPrint(debug);
@@ -652,6 +658,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
             if (inchannels < 1)
             {
+                this->_presetLoadState = PresetLoadState::Failed;
+                this->_presetLoadErrorMessage = PresetLoadError::NUMBER_INPUT_CHANNELS_NOT_FEASIBLE;
                 String debug;
                 debug << "ERROR: Number of input channels not feasible: " << inchannels;
                 DebugPrint(debug);
@@ -672,6 +680,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 {
                     String debug;
                     debug << "ERROR: length of wav file is not multiple of irLength*numinchannels!" << IrFilename.getFullPathName();
+                    this->_presetLoadState = PresetLoadState::Failed;
+                    this->_presetLoadErrorMessage = PresetLoadError::WAV_LENGTH_NOT_MULTIPLE_INCHANNELS_IRLEN;
                     DebugPrint(debug);
 
                     return;
@@ -708,8 +718,11 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
                 String debug;
                 debug << "loaded " << conv_data.getNumIRs() << " filters with: length " << length << ", input channels: " << inchannels << ", output channels: " << numOutChannels << ", filename: " << IrFilename.getFileName();
                 DebugPrint(debug);
+                this->_presetLoadState = PresetLoadState::Loaded;
 
             } else {
+                this->_presetLoadState = PresetLoadState::Failed;
+                this->_presetLoadErrorMessage = PresetLoadError::NOT_LOADED;
                 String debug;
                 debug << "ERROR: not loaded: " << IrFilename.getFullPathName();
                 DebugPrint(debug);
@@ -788,12 +801,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     _configFile = configFile;
 
 
-    debug.clear();
-    debug << "Configuration loaded, maximum filter length: " << String(conv_data.getMaxLengthInSeconds(), 2) << "[s], " << conv_data.getMaxLength() << " [smpls]";
-    DebugPrint(debug);
-    debug << "Plugin Latency: " << getLatencySamples() << " [smpls]";
-    DebugPrint(debug);
-
+    this->_presetLoadState = PresetLoadState::Loaded;
+    DebugPrint("Configuration loaded, maximum filter length: " + String(conv_data.getMaxLengthInSeconds(), 2) + "[s], " + String(conv_data.getMaxLength()) + " [smpls]");
+    DebugPrint("Plugin Latency: " + String(getLatencySamples()) + " [smpls]");
     sendChangeMessage(); // notify editor
 
 
@@ -832,12 +842,71 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
     setParameterNotifyingHost(0, getParameter(0)); // this is a hack to make some hosts save the plugin state!
     sendChangeMessage(); // notify editor again
+
+    // ====================================================================================================
+
+    // if presetWavFilename is not empty we loaded this preset from a .wav file
+    // If the user also manually entered the in channel number and asked to store the number in the wavfile metadata, we do it here
+    if (storeNumInputsIntoWav.get() && numInputChannels > 0 && presetWavFilename.isNotEmpty() && _presetLoadState != PresetLoadState::Failed)
+    {
+        DebugPrint("Storing number of input channels ("+String(numInputChannels)+") into the wavefile ("+presetWavFilename+") metadata...");
+
+        // We: (1) read the wav file, (2) write the number of input channels into the metadata, (3) write the wav file again, same filepath, overwriting the original
+                
+        AudioFormatManager formatManager;
+        formatManager.registerBasicFormats();
+        AudioFormatReader* reader = nullptr;
+        WavAudioFormat* wave = nullptr;
+        AudioFormatWriter* writer = nullptr;
+        try
+        {
+            File wavFile = File(presetWavFilename);
+            reader = formatManager.createReaderFor(wavFile);
+            
+            AudioSampleBuffer ReadBuffer(reader->numChannels, reader->lengthInSamples); // create buffer
+            reader->read(&ReadBuffer, 0, reader->lengthInSamples, 0, true, true);            
+
+            reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)this->numInputChannels);
+            FileOutputStream* outStream = new FileOutputStream(wavFile);
+            if (outStream->openedOk())
+            {
+                outStream->setPosition (0);
+                outStream->truncate();
+
+            }
+            wave = new WavAudioFormat();
+            writer = wave->createWriterFor(outStream,
+                                           reader->sampleRate,
+                                           reader->getChannelLayout(),
+                                           reader->bitsPerSample,
+                                           reader->metadataValues,
+                                           0
+                                           );
+            delete wave; wave = nullptr;
+            writer->writeFromAudioSampleBuffer(ReadBuffer, 0, ReadBuffer.getNumSamples());
+            delete writer; writer = nullptr;
+            delete reader; reader = nullptr;
+
+            DebugPrint("Successfully stored number of input channels into the wavefile metadata ("+String(wavFile.getFullPathName())+").");
+            storeNumInputsIntoWav = false; // reset the flag
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << e.what() << '\n';
+            DebugPrint("Error: "+String(e.what()));
+            if (reader) delete reader;
+            if (writer) delete writer;
+            if (wave)   delete wave;
+        }
+    }
 }
 
 bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const File& audioFile, int channel, double &samplerate, float gain, int offset, int length)
 {
     if (!audioFile.existsAsFile())
     {
+        this->_presetLoadState = PresetLoadState::Failed;
+        this->_presetLoadErrorMessage = PresetLoadError::FILE_DOES_NOT_EXIST;
         String debug;
         debug << "ERROR: file does not exist!";
         DebugPrint(debug);
@@ -852,6 +921,8 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     AudioFormatReader* reader = formatManager.createReaderFor(audioFile);
 
     if (!reader) {
+        this->_presetLoadState = PresetLoadState::Failed;
+        this->_presetLoadErrorMessage = PresetLoadError::CANT_READ_IR;
         String debug;
         debug << "ERROR: could not read impulse response file!";
         DebugPrint(debug);
@@ -867,6 +938,8 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
         length = wav_length - offset;
 
     if (wav_length <= 0) {
+        this->_presetLoadState = PresetLoadState::Failed;
+        this->_presetLoadErrorMessage = PresetLoadError::ZERO_SAMPLES;
         String debug;
         debug << "ERROR: zero samples in impulse response file!";
         DebugPrint(debug);
@@ -882,6 +955,8 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     }
 
     if ((int)reader->numChannels <= channel) {
+        this->_presetLoadState = PresetLoadState::Failed;        
+        this->_presetLoadErrorMessage = PresetLoadError::NOT_ENOUGH_CHANNELS;
         String debug;
         debug << "ERROR: wav file doesn't have enough channels: " << String(reader->numChannels);
         DebugPrint(debug);
@@ -920,9 +995,30 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
 
     // std::cout << "ReadRMS: " << IRBuffer->getRMSLevel(0, 0, ir_length) << std::endl;
 
+    // #define RESET_METADATA_INCHANNELS // Enable this to reset the metadata in the input channels of the wav file (useful for testing, but not for production)
+    #ifdef RESET_METADATA_INCHANNELS
+        reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, "");
+        FileOutputStream* outStream = new FileOutputStream(audioFile);
+        if (outStream->openedOk())
+        {
+            outStream->setPosition (0);
+            outStream->truncate();
+        }
+        WavAudioFormat* wave = new WavAudioFormat();
+        AudioFormatWriter* writer = wave->createWriterFor(outStream,
+                                                            reader->sampleRate,
+                                                            reader->getChannelLayout(),
+                                                            reader->bitsPerSample,
+                                                            reader->metadataValues,
+                                                            0
+                                                            );
+        delete wave;
+        writer->writeFromAudioSampleBuffer(ReadBuffer, 0, ReadBuffer.getNumSamples());
+        delete writer;
+        DebugPrint("-------------> Metadata resetted");
+    #endif
+
     delete reader;
-
-
     return true;
 }
 
