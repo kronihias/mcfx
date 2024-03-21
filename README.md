@@ -1,4 +1,4 @@
-mcfx - multichannel cross plattform audio plug-in suite
+mcfx - multichannel cross platform audio plug-in suite
 ==============
 
 - mcfx is a suite of multichannel vst plug-ins or standalone applications (standalone currently meter and convolver only)
@@ -161,6 +161,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.6.4 (2024-03-20) - mcfx_convolver: add master gain parameter and rotary control, add mechanism to save channel count in wav IR files, fix debug window. Add build and installer creation scripts.
+
 - 0.6.3 (2023-12-21) - mcfx_filter: fix parameter smoothing to avoid instabilities and glitches while changing filter parameters, performance optimizations.
 
 - 0.6.2 (2023-12-11) - add 128 channel version of all plugins - since REAPER does allow for 128 channels per track, adjust mcfx_meter and mcfx_gain_delay GUI to display 128 channels properly
