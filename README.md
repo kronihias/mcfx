@@ -92,7 +92,8 @@ Use **cmake gui** or **cmake/ccmake** from terminal to configure the build.
 - **``NUM_CHANNELS``** - Number of input/output channels for each plugin. Default is 36.
 - **``MAX_DELAYTIME_S``** - Maximum delay time for mcfx_delay in seconds. Default is 0.5s.
 - **``BUILD_STANDALONE``** - Build standalone applications. Default is OFF.
-- **``BUILD_VST``** - Build VST2 plugins. Default is ON.
+- **``BUILD_VST2``** - Build VST2 plugins. Default is OFF.
+- **``BUILD_VST3``** - Build VST3 plugins. Default is ON.
 - **``BUILD_LV2``** - Build LV2 plugins. Default is ON.
 - **``VST2SDKPATH``** - Path to the VST2 SDK. Default is "~/SDKs/vstsdk2.4"
 - **``WITH_ZITA_CONVOLVER``** - Build with zita-convolver (better performance under Linux). Default is OFF.
