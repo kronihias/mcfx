@@ -12,14 +12,14 @@ Name "mcfx_v${VERSION}_win64"
 
 ; The file to write
 !system 'mkdir "../_WIN_RELEASE" 2> NUL'
-!define OUTFILE "../_WIN_RELEASE/mcfx_v${VERSION}_win64.exe"
+!define OUTFILE "../_WIN_RELEASE/mcfx_v${VERSION}_VST3_win64.exe"
 OutFile ${OUTFILE}
 
 ; Build Unicode installer
 Unicode True
 
 ; The default installation directory
-InstallDir $PROGRAMFILES64\Steinberg\VSTPlugins\mcfx_v${VERSION}_win64\"
+InstallDir "$PROGRAMFILES64\Common Files\VST3\mcfx_v${VERSION}_win64\"
 
 ; Request application privileges for Windows Vista
 RequestExecutionLevel admin
@@ -48,43 +48,43 @@ FunctionEnd
 
 
 ; mcfx_convolver
-Section "MCFX Convolver VST2" mcfx_convolver
+Section "MCFX Convolver VST3" mcfx_convolver
     SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst\*.dll"
-    File /r "..\build-VSC++-windows-x86_64\vst\mcfx_convolver*.dll"
+    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
+    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_convolver*.vst3"
     ${DisableX64FSRedirection}
 SectionEnd
 
 
 ; mcfx_delay
-Section "MCFX Delay VST2" mcfx_delay
+Section "MCFX Delay VST3" mcfx_delay
     SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst\*.dll"
-    File /r "..\build-VSC++-windows-x86_64\vst\mcfx_delay*.dll"
+    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
+    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_delay*.vst3"
     ${DisableX64FSRedirection}
 SectionEnd
 
 ; mcfx_filter
-Section "MCFX Filter VST2" mcfx_filter
+Section "MCFX Filter VST3" mcfx_filter
     SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst\*.dll"
-    File /r "..\build-VSC++-windows-x86_64\vst\mcfx_filter*.dll"
+    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
+    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_filter*.vst3"
     ${DisableX64FSRedirection}
 SectionEnd
 
 ; mcfx_gain_delay
-Section "MCFX Gain Delay VST2" mcfx_gain_delay
+Section "MCFX Gain Delay VST3" mcfx_gain_delay
     SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst\*.dll"
-    File /r "..\build-VSC++-windows-x86_64\vst\mcfx_gain_delay*.dll"
+    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
+    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_gain_delay*.vst3"
     ${DisableX64FSRedirection}
 SectionEnd
 
 ; mcfx_meter
-Section "MCFX Meter VST2" mcfx_meter
+Section "MCFX Meter VST3" mcfx_meter
     SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst\*.dll"
-    File /r "..\build-VSC++-windows-x86_64\vst\mcfx_meter*.dll"
+    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
+    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_meter*.vst3"
     ${DisableX64FSRedirection}
 SectionEnd
 
