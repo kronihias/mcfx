@@ -1,11 +1,11 @@
-mcfx - multichannel cross plattform audio plug-in suite
+mcfx - multichannel cross platform audio plug-in suite
 ==============
 
 - mcfx is a suite of multichannel vst plug-ins or standalone applications (standalone currently meter and convolver only)
 
 - channel count is configurable with compile time flag
 
-- cross plattform VST for MacOSX, Windows and Linux
+- cross platform VST for MacOSX, Windows and Linux
 
 - uses the JUCE framework (www.juce.com, GPLv3), libsoxr (LGPL, http://soxr.sourceforge.net)
 
@@ -78,22 +78,27 @@ Use **cmake gui** or **cmake/ccmake** from terminal to configure the build.
     make -j$(nproc) config=Release
     ```
     `-j$(nproc)` will instruct make to use all available cores for the build.
-5. After a successful build, find the binaries in `BUILD/_bin/` or `BUILD/vst/` and copy to system VST folder  
+5. After a successful build, find the binaries in `BUILD/_bin/`,`BUILD/vst/` or `BUILD/vst3` and copy to system VST folder  
 
-    **VST installation folders:**
-
+    **VST2 installation folders:**
 
     - MacOSX: `/Library/Audio/Plug-Ins/VST`
     - Windows: `C:\Program Files\Steinberg\VstPlugins`, `C:\Program Files\Common Files\VST2`, or `C:\Program Files\VSTPlugins`
     - Linux: `~/.vst/`, `/usr/lib/lxvst` or `/usr/local/lib/lxvst`
+
+    **VST3 installation folders:**
+    - MacOSX: `/Library/Audio/Plug-Ins/VST3`
+    - Windows: `C:\Program Files\Common Files\VST3`
+    - Linux: `/usr/lib/vst3/`
 
 ## Build Parameters
 
 - **``NUM_CHANNELS``** - Number of input/output channels for each plugin. Default is 36.
 - **``MAX_DELAYTIME_S``** - Maximum delay time for mcfx_delay in seconds. Default is 0.5s.
 - **``BUILD_STANDALONE``** - Build standalone applications. Default is OFF.
-- **``BUILD_VST``** - Build VST2 plugins. Default is ON.
-- **``BUILD_LV2``** - Build LV2 plugins. Default is ON.
+- **``BUILD_VST3``** - Build VST3 plugins. Default is **ON**.
+- **``BUILD_VST2``** - Build VST2 plugins. Default is OFF.
+- **``BUILD_LV2``** - Build LV2 plugins. Default is OFF.
 - **``VST2SDKPATH``** - Path to the VST2 SDK. Default is "~/SDKs/vstsdk2.4"
 - **``WITH_ZITA_CONVOLVER``** - Build with zita-convolver (better performance under Linux). Default is OFF.
 ---
@@ -101,7 +106,7 @@ Use **cmake gui** or **cmake/ccmake** from terminal to configure the build.
     - On Linux this should point to the `.so` shared library file, e.g., `/usr/lib/x86_64-linux-gnu/libfftw3f-3.so`.
     - On Windows with Visual Studio, this should point to the `.lib` file generated in a [previous step](#prerequisites-for-building), e.g., `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.lib`.
     - On Windows with MinGW, this should point to the `.dll` dynamic library file, e.g., `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.dll`.
-- **``FFTW3F_INCLUDE_DIR``** - Path to the FFTW3F include directory, e.g., `/usr/include`.
+- **``FFTW3_INCLUDE_DIR``** - Path to the FFTW3 include directory, e.g., `/usr/include`.
 - [**``FFTW3F_THREADS_LIBRARY``**] - If present (e.g., on Linux), this should point to the `.so` file for the FFTW3F threads library, e.g., `/usr/lib/x86_64-linux-gnu/libfftw3f_threads.so`.
 
 plug-ins explained:
@@ -161,6 +166,8 @@ multichannel level meter with RMS, peak and peak hold
 
 changelog:
 ==============
+- 0.6.4 (2024-03-20) - mcfx_convolver: add master gain parameter and rotary control, add mechanism to save channel count in wav IR files, fix debug window. Add build and installer creation scripts.
+
 - 0.6.3 (2023-12-21) - mcfx_filter: fix parameter smoothing to avoid instabilities and glitches while changing filter parameters, performance optimizations.
 
 - 0.6.2 (2023-12-11) - add 128 channel version of all plugins - since REAPER does allow for 128 channels per track, adjust mcfx_meter and mcfx_gain_delay GUI to display 128 channels properly

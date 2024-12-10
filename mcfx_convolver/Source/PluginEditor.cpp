@@ -24,8 +24,9 @@
 #define QUOTE(x) Q(x)
 
 //==============================================================================
-Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor* ownerFilter)
+Mcfx_convolverAudioProcessorEditor::Mcfx_convolverAudioProcessorEditor (Mcfx_convolverAudioProcessor& ownerFilter)
     : AudioProcessorEditor (ownerFilter),
+processor(ownerFilter),
 label ("new label", "Input channels: "),
 txt_preset("new text editor"),
 label5 ("new label", "Preset"),
@@ -33,7 +34,7 @@ txt_debug ("new text editor"),
 btn_open ("new button"),
 label2 ("new label", "Output channels: "),
 label3 ("new label", "Impulse responses: "),
-label4 ("new label", "debug window"),
+btn_clear_debug ("new button"),
 lbl_skippedcycles ("new label", "skipped cycles: "),
 num_ch ("new label", "0"),
 num_spk ("new label", "0"),
@@ -67,7 +68,7 @@ box_maxpart("new combobox")
     label5.setColour (TextEditor::backgroundColourId, Colour (0x0));
 
     addAndMakeVisible (txt_debug);
-    txt_debug.setMultiLine (true);
+    txt_debug.setMultiLine (true,false); // shouldWordWrap = false to disable wrapping and allow horizontal scroll
     txt_debug.setReturnKeyStartsNewLine (false);
     txt_debug.setReadOnly (true);
     txt_debug.setScrollbarsShown (true);
@@ -99,13 +100,14 @@ box_maxpart("new combobox")
     label3.setColour (TextEditor::textColourId, Colours::black);
     label3.setColour (TextEditor::backgroundColourId, Colour (0x0));
 
-    addAndMakeVisible (label4);
-    label4.setFont (Font (10.0000f, Font::plain));
-    label4.setJustificationType (Justification::centredLeft);
-    label4.setEditable (false, false, false);
-    label4.setColour (Label::textColourId, Colours::white);
-    label4.setColour (TextEditor::textColourId, Colours::black);
-    label4.setColour (TextEditor::backgroundColourId, Colour (0x0));
+    addAndMakeVisible (btn_clear_debug);
+    btn_clear_debug.setButtonText ("Clear log");
+    btn_clear_debug.setTooltip ("Clear the debug log window");
+    btn_clear_debug.addListener (this);
+    btn_clear_debug.setColour (TextButton::buttonColourId, juce::Colour(0x00000000));
+    btn_clear_debug.setColour (TextButton::buttonOnColourId, juce::Colour(0x00000000));
+    btn_clear_debug.setColour (TextButton::textColourOffId, juce::Colour::fromHSV (0.0f, 0.42f, 1.0f, 1.0f));
+    btn_clear_debug.setColour (TextButton::textColourOnId, juce::Colour::fromHSV (0.0f, 0.42f, 1.0f, 1.0f));
 
     addAndMakeVisible(lbl_skippedcycles);
     lbl_skippedcycles.setFont(Font(10.0000f, Font::plain));
@@ -184,17 +186,39 @@ box_maxpart("new combobox")
     tgl_save_preset.setToggleState(true, dontSendNotification);
     tgl_save_preset.setColour(ToggleButton::textColourId, Colours::white);
 
-    setSize (350, 330);
+    lbl_master_gain.setJustificationType (Justification::centred);
+    lbl_master_gain.setText("Master gain", dontSendNotification);
+    lbl_master_gain.setColour(Label::textColourId, Colours::white);
+    addAndMakeVisible (lbl_master_gain);
+    
+    sld_master_gain.setSliderStyle (Slider::RotaryVerticalDrag);
+    sld_master_gain.setRange(-100, 40);
+    sld_master_gain.setValue(0);
+    sld_master_gain.setDoubleClickReturnValue(true, 0);
+    sld_master_gain.setColour(Slider::rotarySliderFillColourId, Colours::white);
+    sld_master_gain.setTextBoxStyle (Slider::TextBoxBelow, false, 70, 20);
+    sld_master_gain.setTextValueSuffix (" dB");
+    sld_master_gain.setMouseDragSensitivity(125);
+    sld_master_gain.setTooltip("Master gain for all channels (Double click to reset)");
+    sld_master_gain.setColour(Slider::textBoxBackgroundColourId,juce::Colour(0x00000000)); // Transparent background
+    sld_master_gain.setColour(Slider::textBoxTextColourId,juce::Colours::white);
+    addAndMakeVisible(sld_master_gain);
+
+    // setResizable (true,true);                                    // Uncomment to make resizable
+    // setResizeLimits(window_width, window_height, 1200, 1200);    // Uncomment to make resizable
+    setSize (window_width, window_height);
 
     UpdateText();
 
     UpdatePresets();
 
-    txt_preset.setText(ownerFilter->box_preset_str);
+    txt_preset.setText(ownerFilter.box_preset_str);
     txt_preset.setCaretPosition(txt_preset.getTotalNumChars()-1);
     txt_preset.setTooltip(txt_preset.getText());
 
-    ownerFilter->addChangeListener(this); // listen to changes of processor
+    ownerFilter.addChangeListener(this); // listen to changes of processor
+
+    atc_master_gain = std::make_unique<AudioProcessorValueTreeState::SliderAttachment>(processor.valueTreeState, "MASTERGAIN", sld_master_gain);
 
     timerCallback();
 
@@ -218,10 +242,10 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
                                        Colours::black,
                                        (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
                                        true));
-    g.fillRect (0, 0, 350, 330);
+    g.fillRect (0, 0, window_width, window_height);
 
     g.setColour (Colours::black);
-    g.drawRect (0, 0, 350, 330, 1);
+    g.drawRect (0, 0, window_width, window_height, 1);
 
     g.setColour (Colour (0x410000ff));
     g.fillRoundedRectangle (18.0f, 132.0f, 190.0f, 77.0f, 10.0000f);
@@ -230,20 +254,20 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.setFont (Font (17.2000f, Font::bold));
 
     g.drawText ("MCFX-CONVOLVER",
-                1, 3, 343, 25,
+                1, 3, fromRight(7), 25,
                 Justification::centred, true);
 
     g.setFont (Font (12.4000f, Font::plain));
     g.drawText ("multichannel non-equal partioned convolution matrix",
-                1, 23, 343, 25,
+                1, 23, fromRight(7), 25,
                 Justification::centred, true);
 
     g.setFont (Font (12.4000f, Font::plain));
     g.drawText ("First Partition Size",
-                200, 104, 135, 30,
+                fromRight(150), 104, 135, 30,
                 Justification::centredRight, true);
     g.drawText ("Maximum Partition Size",
-              200, 145, 135, 30,
+              fromRight(140), 145, 125, 30,
               Justification::centredRight, true);
 
 
@@ -253,33 +277,58 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     g.drawText (version_string,
-                getWidth()-51, getHeight()-11, 50, 10,
+                fromRight(71), fromBottom(11), 50, 10,
                 Justification::bottomRight, true);
+
+    // Draw text channels
+    g.setColour (Colours::white);
+    g.setFont (Font (12.4000f, Font::plain));
+    g.drawText (String(NUM_CHANNELS)+"x"+String(NUM_CHANNELS)+"ch.",
+                fromRight(130), fromBottom(btn_clear_debug.getHeight()), 60, btn_clear_debug.getHeight(),
+                Justification::centredRight, true);
 }
 
 void Mcfx_convolverAudioProcessorEditor::resized()
 {
+    auto area = getLocalBounds();
+    window_height = area.getHeight();
+    window_width = area.getWidth();
+
     label.setBounds (16, 134, 140, 24);
-    txt_preset.setBounds (72, 50, 200, 24);
+    txt_preset.setBounds (72, 50, fromRight(150), 24);
     label5.setBounds (8, 50, 56, 24);
-    txt_debug.setBounds (16, 214, 320, 96);
-    btn_open.setBounds (280, 50, 56, 24);
+    // txt_debug.setBounds (16, 214, 320, 96); // Original size
+    txt_debug.setBounds (16, 214, fromRight(30), fromBottom(238)); //resizeable compliant
+
+    btn_open.setBounds (fromRight(70), 50, 56, 24);
     label2.setBounds (16, 158, 140, 24);
     label3.setBounds (16, 182, 140, 24);
-    label4.setBounds (24, 310, 64, 16);
-    lbl_skippedcycles.setBounds(110, 310, 150, 16);
+    int clearBtnHeight = 24;
+    btn_clear_debug.setBounds (16, fromBottom(clearBtnHeight), btn_clear_debug.getBestWidthForHeight(clearBtnHeight), clearBtnHeight);
+    lbl_skippedcycles.setFont(MyLookAndFeel.getTextButtonFont(btn_clear_debug, clearBtnHeight));
+    
+    lbl_skippedcycles.setBounds(110, fromBottom(clearBtnHeight), 150, clearBtnHeight);
     num_ch.setBounds (150, 134, 40, 24);
     num_spk.setBounds (150, 158, 40, 24);
     num_hrtf.setBounds (150, 182, 40, 24);
-    btn_preset_folder.setBounds (245, 80, 94, 24);
+    btn_preset_folder.setBounds (fromRight(105), 80, 94, 24);
 
-    box_conv_buffer.setBounds (270, 126, 67, 20);
-    box_maxpart.setBounds (270, 169, 65, 20);
+    box_conv_buffer.setBounds (fromRight(80), 126, 67, 20);
+    box_maxpart.setBounds (fromRight(80), 169, 65, 20);
 
     tgl_save_preset.setBounds(16, 79, 200, 24);
 
     txt_rcv_port.setBounds(146, 108, 40, 18);
     tgl_rcv_active.setBounds(16, 105, 130, 24);
+
+    size_t sld_master_gainSize = 72;
+    size_t leftmostFreePixel = 190+18;
+    jassert((fromRight(150)-leftmostFreePixel)>0); // If this fails, window width is too small
+    size_t xPosGain = (fromRight(150)-leftmostFreePixel)/2-(sld_master_gainSize/2)+leftmostFreePixel;  //
+    sld_master_gain.setBounds(xPosGain, 134, sld_master_gainSize, sld_master_gainSize);
+    lbl_master_gain.setBounds(xPosGain, 110, sld_master_gainSize, 24);
+
+    repaint();
 }
 
 void Mcfx_convolverAudioProcessorEditor::timerCallback()
@@ -291,6 +340,55 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
     lbl_skippedcycles.setText(text, dontSendNotification);
 
     txt_debug.setText(ourProcessor->getDebugString(), true);
+
+    // processor.DebugPrint(ourProcessor->box_preset_str);
+
+    // If ourProcessor->_presetLoadState = Failed, empty the preset string
+    if (ourProcessor->_presetLoadState == Mcfx_convolverAudioProcessor::PresetLoadState::Failed)
+    {
+        // processor.DebugPrint("Load Failed");
+        String errorMessage = "";
+        switch (ourProcessor->_presetLoadErrorMessage)
+        {
+            case Mcfx_convolverAudioProcessor::PresetLoadError::None:
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::CHANNEL_ASSIGNMENT_NOT_FEASIBLE:
+                errorMessage = "ERROR: channel assignment not feasible";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::NOT_LOADED:
+                errorMessage = "ERROR: not loaded";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::NUMBER_INPUT_CHANNELS_NOT_FEASIBLE:
+                errorMessage = "ERROR: Number of input channels not feasible";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::WAV_LENGTH_NOT_MULTIPLE_INCHANNELS_IRLEN:
+                errorMessage = "ERROR: length of wav file is not multiple of irLength*numinchannels!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::FILE_DOES_NOT_EXIST:
+                errorMessage = "ERROR: file does not exist!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::CANT_READ_IR:
+                errorMessage = "ERROR: could not read impulse response file!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::ZERO_SAMPLES:
+                errorMessage = "ERROR: zero samples in impulse response file!";
+                break;
+            case Mcfx_convolverAudioProcessor::PresetLoadError::NOT_ENOUGH_CHANNELS:
+                errorMessage = "ERROR: wav file doesn't have enough channels";
+                break;
+        }
+
+        txt_preset.setText(errorMessage, dontSendNotification);
+        ourProcessor->_presetLoadState = Mcfx_convolverAudioProcessor::PresetLoadState::None;
+    } else if (ourProcessor->_presetLoadState == Mcfx_convolverAudioProcessor::PresetLoadState::None)
+    {
+        // processor.DebugPrint("Load: state none");
+    } else if (ourProcessor->_presetLoadState == Mcfx_convolverAudioProcessor::PresetLoadState::Loaded)
+    {        
+        // processor.DebugPrint("Load Successfull");
+        txt_preset.setText(ourProcessor->box_preset_str, dontSendNotification);
+        ourProcessor->_presetLoadState = Mcfx_convolverAudioProcessor::PresetLoadState::None;
+    }
 }
 
 void Mcfx_convolverAudioProcessorEditor::UpdateText()
@@ -505,6 +603,11 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     {
         ourProcessor->_storeConfigDataInProject = tgl_save_preset.getToggleState();
     }
+    else if (buttonThatWasClicked == &btn_clear_debug)
+    {
+        ourProcessor->DebugClear();
+        timerCallback();
+    }
 
 }
 
@@ -578,6 +681,10 @@ void Mcfx_convolverAudioProcessorEditor::loadWavFile(File wavFile)
 
     asyncAlertWindow->addTextEditor ("numInChannels", "1", "If it's a dense matrix, enter the number of input channels:");
     asyncAlertWindow->getTextEditor("numInChannels")->setInputRestrictions(6, "1234567890");
+
+    // Combobox to opt to save the metadata inside the original wav file, with a warning that this will modify the file
+    asyncAlertWindow->addComboBox("saveMetadata", { "No", "Yes: save metadata inside the original .wav file" }, "Save the metadata inside the original .wav file?");
+    asyncAlertWindow->addTextBlock("Warning! Saving the channel number will modify the original .wav file!");
 
     asyncAlertWindow->addButton ("OK",     1, KeyPress (KeyPress::returnKey, 0, 0));
     asyncAlertWindow->addButton ("Cancel", 0, KeyPress (KeyPress::escapeKey, 0, 0));
