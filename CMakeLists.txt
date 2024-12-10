@@ -15,8 +15,8 @@ ADD_DEFINITIONS(-DVERSION=${VERSION})
 SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
 SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 
-SET(BUILD_VST3 TRUE CACHE BOOL "build VST3 plugins")
-SET(BUILD_VST FALSE CACHE BOOL "build VST2 plugins")
+SET(BUILD_VST3 FALSE CACHE BOOL "build VST3 plugins")
+SET(BUILD_VST TRUE CACHE BOOL "build VST2 plugins")
 SET(BUILD_STANDALONE FALSE CACHE BOOL "build standalone application (for those with editor)")
 SET(BUILD_LV2 FALSE CACHE BOOL "build LV2 plugins")
 
