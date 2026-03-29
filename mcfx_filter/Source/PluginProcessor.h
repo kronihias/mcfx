@@ -176,6 +176,15 @@ public:
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+  // JUCE 8 removed AudioProcessor::setParameterNotifyingHost;
+  // re-implement via the legacy wrapper parameters.
+  void setParameterNotifyingHost(int parameterIndex, float newValue)
+  {
+      auto& params = getParameters();
+      if (parameterIndex < params.size())
+          params[parameterIndex]->setValueNotifyingHost(newValue);
+  }
+
   enum Parameters
 	{
     LCOnParam,

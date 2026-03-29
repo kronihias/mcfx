@@ -65,6 +65,12 @@ public:
 
     void setSiggenForAllChannels(bool active); // activate/deactivate the signal generator for all channels
 
+    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
+    void setParameterNotifyingHost(int parameterIndex, float newValue)
+    {
+        setParameter(parameterIndex, newValue);
+    }
+
     const String getParameterName (int index) override;
     const String getParameterText (int index) override;
 

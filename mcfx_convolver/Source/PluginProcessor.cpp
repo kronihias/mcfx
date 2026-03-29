@@ -840,7 +840,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
       */
     }
 
-    setParameterNotifyingHost(0, getParameter(0)); // this is a hack to make some hosts save the plugin state!
+    updateHostDisplay(AudioProcessorListener::ChangeDetails().withParameterInfoChanged(true)); // notify host to save plugin state
     sendChangeMessage(); // notify editor again
 
     // ====================================================================================================
@@ -852,7 +852,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         DebugPrint("Storing number of input channels ("+String(numInputChannels)+") into the wavefile ("+presetWavFilename+") metadata...");
 
         // We: (1) read the wav file, (2) write the number of input channels into the metadata, (3) write the wav file again, same filepath, overwriting the original
-                
+
         AudioFormatManager formatManager;
         formatManager.registerBasicFormats();
         AudioFormatReader* reader = nullptr;
@@ -862,9 +862,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         {
             File wavFile = File(presetWavFilename);
             reader = formatManager.createReaderFor(wavFile);
-            
+
             AudioSampleBuffer ReadBuffer(reader->numChannels, reader->lengthInSamples); // create buffer
-            reader->read(&ReadBuffer, 0, reader->lengthInSamples, 0, true, true);            
+            reader->read(&ReadBuffer, 0, reader->lengthInSamples, 0, true, true);
 
             reader->metadataValues.set(WavAudioFormat::riffInfoKeywords, (String)this->numInputChannels);
             FileOutputStream* outStream = new FileOutputStream(wavFile);
@@ -955,7 +955,7 @@ bool Mcfx_convolverAudioProcessor::loadIr(AudioSampleBuffer* IRBuffer, const Fil
     }
 
     if ((int)reader->numChannels <= channel) {
-        this->_presetLoadState = PresetLoadState::Failed;        
+        this->_presetLoadState = PresetLoadState::Failed;
         this->_presetLoadErrorMessage = PresetLoadError::NOT_ENOUGH_CHANNELS;
         String debug;
         debug << "ERROR: wav file doesn't have enough channels: " << String(reader->numChannels);
@@ -1199,7 +1199,7 @@ void Mcfx_convolverAudioProcessor::DebugClear()
  */
 void Mcfx_convolverAudioProcessor::DebugPrint(const String& debugText)
 {
-    
+
     ScopedLock lock(_DebugTextMutex);
     String temp;
 
@@ -1405,7 +1405,7 @@ AudioProcessorValueTreeState::ParameterLayout Mcfx_convolverAudioProcessor::crea
                                                                                       0.1f)
                                                          ,  0.0f
                                                          ));
-          
+
     return layout;
 }
 

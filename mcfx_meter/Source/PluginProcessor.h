@@ -86,6 +86,12 @@ public:
     bool _pk_hold;
     float _offset;
 
+    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
+    void setParameterNotifyingHost(int parameterIndex, float newValue)
+    {
+        setParameter(parameterIndex, newValue);
+    }
+
     enum Parameters
 	{
 		HoldParam,
