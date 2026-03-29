@@ -84,6 +84,12 @@ public:
     int getDelayInSmpls();
     float getDelayInMs();
 
+    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
+    void setParameterNotifyingHost(int parameterIndex, float newValue)
+    {
+        setParameter(parameterIndex, newValue);
+    }
+
     enum Parameters
 	{
         delayMSParam, // 0....2000ms

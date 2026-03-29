@@ -482,15 +482,22 @@ void MtxConvSlave::SetBufsize(int inbufsize, int outbufsize, int blocksize)
 
 void MtxConvSlave::StartProc()
 {
-    int priority = 8 + priority_;
-    priority = jmax(priority,0);
+    // map partition priority to JUCE Thread::Priority
+    // priority_ is 0 for first partition, decreasing for later ones
+    // all partitions stay high — this is real-time audio, just differentiate
+    // between the most urgent (first) and later partitions
+    Thread::Priority threadPriority;
+    if (priority_ >= 0)
+        threadPriority = Thread::Priority::highest;
+    else
+        threadPriority = Thread::Priority::high;
 
     // start a thread for each partitionsize
 #if GARDNER_SCHEME
     if (offset_ >= partitionsize_ )
-        startThread(priority);
+        startThread(threadPriority);
 #else
-    startThread(priority);
+    startThread(threadPriority);
 #endif
 }
 

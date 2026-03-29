@@ -99,7 +99,7 @@ class FilterGraph    :  public Component,
     friend class AnalyzerComponent;
     
 public:
-    FilterGraph (FilterInfo* filterinfo, AudioProcessor* processor);
+    FilterGraph (FilterInfo* filterinfo, LowhighpassAudioProcessor* processor);
     ~FilterGraph();
     
     void paint (Graphics& g);
@@ -167,7 +167,7 @@ private:
     bool changed_; // if values have changed -> redraw...
     // void mouseMove (const MouseEvent &event);
     
-    AudioProcessor* myprocessor_; // this is used for changing parameters
+    LowhighpassAudioProcessor* myprocessor_; // this is used for changing parameters
     
     TooltipWindow tooltipWindow;
     

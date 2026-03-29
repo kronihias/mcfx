@@ -20,7 +20,7 @@
 #include "FilterGraph.h"
 
 
-FilterGraph::FilterGraph(FilterInfo* filterinfo, AudioProcessor* processor) :    minf_(20.f),
+FilterGraph::FilterGraph(FilterInfo* filterinfo, LowhighpassAudioProcessor* processor) :    minf_(20.f),
                                 maxf_(20000.f),
                                 mindb_(-18.f),
                                 maxdb_(18.f),

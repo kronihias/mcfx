@@ -55,6 +55,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
     sld_del_ms.setVelocityBasedMode(true);
     sld_del_ms.setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
     sld_del_ms.setColour (Slider::rotarySliderFillColourId, Colours::red);
+    sld_del_ms.setDoubleClickReturnValue(true, 0.0);
     sld_del_ms.addListener (this);
 
     addAndMakeVisible (label3);
@@ -82,6 +83,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
     sld_del_smpl.setVelocityBasedMode(true);
     sld_del_smpl.setTextBoxStyle (Slider::TextBoxLeft, false, 60, 18);
     sld_del_smpl.setColour (Slider::rotarySliderFillColourId, Colours::red);
+    sld_del_smpl.setDoubleClickReturnValue(true, 0.0);
     sld_del_smpl.addListener (this);
 
     addAndMakeVisible (label4);
