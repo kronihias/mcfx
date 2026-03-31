@@ -305,12 +305,53 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     btn_analyzer.setClickingTogglesState(true);
     btn_analyzer.setToggleState(ownerFilter->_freqanalysis, dontSendNotification);
 
+    // channel selector combobox
+    addAndMakeVisible (box_analyzer_ch);
+    box_analyzer_ch.addItem("all", 1);
+    for (int i = 1; i <= NUM_CHANNELS; i++)
+        box_analyzer_ch.addItem(String(i), i + 1);
+    box_analyzer_ch.setSelectedId(ownerFilter->_analyzerChannel + 1, dontSendNotification);
+    box_analyzer_ch.addListener(this);
+    box_analyzer_ch.setTooltip("analyzer channel");
 
+    // auto-scale toggle
+    addAndMakeVisible (btn_analyzer_auto);
+    btn_analyzer_auto.setButtonText("auto-normalize");
+    btn_analyzer_auto.setToggleState(ownerFilter->_analyzerAutoScale, dontSendNotification);
+    btn_analyzer_auto.addListener(this);
+    btn_analyzer_auto.setTooltip("auto-normalize to 0dB peak");
+    btn_analyzer_auto.setColour(ToggleButton::textColourId, Colours::white);
+    btn_analyzer_auto.setColour(ToggleButton::tickColourId, Colours::orange);
+
+    // analyzer offset slider
+    addAndMakeVisible (sld_analyzer_offset);
+    sld_analyzer_offset.setRange(-80.0, 80.0, 0.5);
+    sld_analyzer_offset.setValue(ownerFilter->_analyzerOffset, dontSendNotification);
+    sld_analyzer_offset.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_analyzer_offset.setTextBoxStyle(Slider::TextBoxRight, false, 45, 18);
+    sld_analyzer_offset.setColour(Slider::rotarySliderFillColourId, Colours::grey);
+    sld_analyzer_offset.setColour(Slider::rotarySliderOutlineColourId, Colours::grey);
+    sld_analyzer_offset.addListener(this);
+    sld_analyzer_offset.setTooltip("analyzer offset (dB)");
+    sld_analyzer_offset.setDoubleClickReturnValue(true, 0.0);
+    sld_analyzer_offset.setEnabled(!ownerFilter->_analyzerAutoScale);
+
+    // analyzer scale slider
+    addAndMakeVisible (sld_analyzer_scale);
+    sld_analyzer_scale.setRange(0.25, 4.0, 0.05);
+    sld_analyzer_scale.setValue(ownerFilter->_analyzerScale, dontSendNotification);
+    sld_analyzer_scale.setSliderStyle(Slider::RotaryHorizontalVerticalDrag);
+    sld_analyzer_scale.setTextBoxStyle(Slider::TextBoxRight, false, 40, 18);
+    sld_analyzer_scale.setColour(Slider::rotarySliderFillColourId, Colours::grey);
+    sld_analyzer_scale.setColour(Slider::rotarySliderOutlineColourId, Colours::grey);
+    sld_analyzer_scale.addListener(this);
+    sld_analyzer_scale.setTooltip("analyzer scale");
+    sld_analyzer_scale.setDoubleClickReturnValue(true, 0.5);
 
     //[UserPreSize]
     //[/UserPreSize]
 
-    setSize (630, 300);
+    setSize (630, 325);
 
     ownerFilter->_editorOpen = true;
 
@@ -440,6 +481,12 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
                 getWidth()-51, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);
 
+    // analyzer settings row labels
+    g.setColour (Colours::grey);
+    g.setFont (Font (10.00f, Font::plain));
+    g.drawText (TRANS("offset"), 260, 293, 80, 12, Justification::centred, true);
+    g.drawText (TRANS("scale"),  345, 293, 75, 12, Justification::centred, true);
+
     //[UserPaint] Add your own custom painting code here..
     //[/UserPaint]
 }
@@ -469,7 +516,11 @@ void LowhighpassAudioProcessorEditor::resized()
     sld_ls_g.setBounds (109, 241, 75, 24);
     sld_ls_q.setBounds (109, 217, 70, 24);
     filtergraph->setBounds (26, 21, 580, 170);
-    btn_analyzer.setBounds (27, 193, 58, 20);
+    btn_analyzer.setBounds (27, 302, 58, 22);
+    box_analyzer_ch.setBounds (87, 304, 55, 20);
+    btn_analyzer_auto.setBounds (148, 302, 110, 22);
+    sld_analyzer_offset.setBounds (260, 302, 80, 24);
+    sld_analyzer_scale.setBounds (345, 302, 75, 24);
     //[UserResized] Add your own custom resize handling here..
     //[/UserResized]
 }
@@ -569,6 +620,13 @@ void LowhighpassAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicke
         getProcessor()->freqanalysis(btn_analyzer.getToggleState());
         filtergraph->analyzeron_ = btn_analyzer.getToggleState();
     }
+    else if (buttonThatWasClicked == &btn_analyzer_auto)
+    {
+        bool autoOn = btn_analyzer_auto.getToggleState();
+        getProcessor()->_analyzerAutoScale = autoOn;
+        filtergraph->analyzerAutoScale_ = autoOn;
+        sld_analyzer_offset.setEnabled(!autoOn);
+    }
 
     //[UserbuttonClicked_Post]
     //[/UserbuttonClicked_Post]
@@ -634,11 +692,29 @@ void LowhighpassAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasM
     {
         ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LSQParam, q2param(sld_ls_q.getValue()));
     }
+    else if (sliderThatWasMoved == &sld_analyzer_offset)
+    {
+        ourProcessor->_analyzerOffset = (float)sld_analyzer_offset.getValue();
+        filtergraph->analyzerOffset_ = ourProcessor->_analyzerOffset;
+    }
+    else if (sliderThatWasMoved == &sld_analyzer_scale)
+    {
+        ourProcessor->_analyzerScale = (float)sld_analyzer_scale.getValue();
+        filtergraph->analyzerScale_ = ourProcessor->_analyzerScale;
+    }
 
     //[UsersliderValueChanged_Post]
     //[/UsersliderValueChanged_Post]
 }
 
+void LowhighpassAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
+{
+    if (comboBoxThatHasChanged == &box_analyzer_ch)
+    {
+        // id 1 = "all" (channel 0), id 2 = channel 1, etc.
+        getProcessor()->setAnalyzerChannel(box_analyzer_ch.getSelectedId() - 1);
+    }
+}
 
 
 //==============================================================================

@@ -176,13 +176,13 @@ public:
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-  // JUCE 8 removed AudioProcessor::setParameterNotifyingHost;
-  // re-implement via the legacy wrapper parameters.
+  // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
+  // This shim calls setParameter() directly, which updates internal state,
+  // recalculates filter coefficients, and sends change messages to the editor.
+  // Note: host automation recording requires migrating to managed parameters.
   void setParameterNotifyingHost(int parameterIndex, float newValue)
   {
-      auto& params = getParameters();
-      if (parameterIndex < params.size())
-          params[parameterIndex]->setValueNotifyingHost(newValue);
+      setParameter(parameterIndex, newValue);
   }
 
   enum Parameters
@@ -217,6 +217,14 @@ public:
     bool _freqanalysis; // compute the spectrum of the summed input/output signals
     bool _editorOpen; // editor is open
 
+    // analyzer settings
+    int _analyzerChannel; // 0 = all (magnitude averaged), 1..N = specific channel
+    bool _analyzerAutoScale; // true = normalize to 0dB peak (legacy), false = use offset/scale
+    float _analyzerOffset; // dB offset for display (when auto is off)
+    float _analyzerScale; // scale multiplier for dB display (when auto is off)
+
+    void setAnalyzerChannel(int ch) { _analyzerChannel = ch; }
+
 private:
 
     void resetFilters(double sampleRate);
@@ -245,11 +253,14 @@ private:
     SmoothIIRFilter<LOW_SHELF, NUM_CHANNELS> _LS_IIR;
     SmoothIIRFilter<HIGH_SHELF, NUM_CHANNELS> _HS_IIR;
 
-    AudioSampleBuffer _analysis_inbuf, _analysis_outbuf;
+    AudioSampleBuffer _analysis_inbuf, _analysis_outbuf; // multi-channel circular buffers
     float *_in_mag, *_out_mag; // magnitude frequency
+    float *_tmp_mag; // temporary buffer for magnitude averaging across channels
     float *_w; // window function
+    float _windowCoherentGain; // sum of window / FFT_LENGTH, for proper scaling
 
     int _bufpos;
+    float _smoothAlpha; // sample-rate-aware temporal smoothing coefficient
 
     float               *fft_t_;             // time data for fft/ifft -> 2*N
 

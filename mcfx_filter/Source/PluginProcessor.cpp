@@ -31,6 +31,10 @@ LowhighpassAudioProcessor::LowhighpassAudioProcessor() :
     ),
     _freqanalysis(false),
     _editorOpen(false),
+    _analyzerChannel(0),
+    _analyzerAutoScale(true),
+    _analyzerOffset(0.f),
+    _analyzerScale(0.5f),
     _lc_on_param(0.f),
     _lc_freq_param(0.1f),
     _lc_order_param(1.f),
@@ -49,9 +53,10 @@ LowhighpassAudioProcessor::LowhighpassAudioProcessor() :
     _hs_gain_param(0.5f),
     _hs_freq_param(0.7f),
     _hs_q_param(0.27f), // Q=0.7
-    _analysis_inbuf(1, FFT_LENGTH),
-    _analysis_outbuf(1, FFT_LENGTH),
-    _bufpos(0)
+    _analysis_inbuf(NUM_CHANNELS, FFT_LENGTH),
+    _analysis_outbuf(NUM_CHANNELS, FFT_LENGTH),
+    _bufpos(0),
+    _smoothAlpha(0.8f)
 {
 
     // initiate and allocate fft
@@ -99,8 +104,15 @@ LowhighpassAudioProcessor::LowhighpassAudioProcessor() :
         _w[i] = 0.35875f - 0.48829*cosf(2.f*M_PI*i/(FFT_LENGTH-1)) + 0.14128*cosf(4.f*M_PI*i/(FFT_LENGTH-1)) - 0.01168*cosf(6.f*M_PI*i/(FFT_LENGTH-1));
     }
 
+    // compute window coherent gain for proper FFT scaling
+    float windowSum = 0.f;
+    for (int i=0; i<FFT_LENGTH; i++)
+        windowSum += _w[i];
+    _windowCoherentGain = windowSum / (float)FFT_LENGTH;
+
     _in_mag = reinterpret_cast<float*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(float), 16 ) );
     _out_mag = reinterpret_cast<float*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(float), 16 ) );
+    _tmp_mag = reinterpret_cast<float*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(float), 16 ) );
 
     FloatVectorOperations::clear(_in_mag, FFT_LENGTH/2+1);
     FloatVectorOperations::clear(_out_mag, FFT_LENGTH/2+1);
@@ -127,6 +139,7 @@ LowhighpassAudioProcessor::~LowhighpassAudioProcessor()
 
     aligned_free(_in_mag);
     aligned_free(_out_mag);
+    aligned_free(_tmp_mag);
     aligned_free(_w);
 
 }
@@ -475,6 +488,12 @@ void LowhighpassAudioProcessor::prepareToPlay (double sampleRate, int samplesPer
     _analysis_inbuf.clear();
     _analysis_outbuf.clear();
 
+    // compute sample-rate-aware smoothing coefficient
+    // target ~100ms decay time, with 50% overlap (hop = FFT_LENGTH/2)
+    float hopSize = FFT_LENGTH / 2.f;
+    float fps = (float)sampleRate / hopSize; // FFT frames per second
+    float targetDecayMs = 100.f;
+    _smoothAlpha = expf(-1000.f / (targetDecayMs * fps));
 }
 
 void LowhighpassAudioProcessor::releaseResources()
@@ -665,12 +684,20 @@ freqResponse LowhighpassAudioProcessor::getResponse(double f)
 
 float LowhighpassAudioProcessor::inMagnitude(double f)
 {
-    return _in_mag[(int)floor( (f / getSampleRate()*(double)FFT_LENGTH) + 0.5f)];
+    float bin = (float)(f / getSampleRate() * (double)FFT_LENGTH);
+    int b0 = jlimit(0, FFT_LENGTH/2 - 1, (int)bin);
+    int b1 = jmin(b0 + 1, FFT_LENGTH/2);
+    float frac = bin - (float)b0;
+    return _in_mag[b0] + frac * (_in_mag[b1] - _in_mag[b0]);
 }
 
 float LowhighpassAudioProcessor::outMagnitude(double f)
 {
-    return _out_mag[(int)floor( (f / getSampleRate()*(double)FFT_LENGTH)  + 0.5f)];
+    float bin = (float)(f / getSampleRate() * (double)FFT_LENGTH);
+    int b0 = jlimit(0, FFT_LENGTH/2 - 1, (int)bin);
+    int b1 = jmin(b0 + 1, FFT_LENGTH/2);
+    float frac = bin - (float)b0;
+    return _out_mag[b0] + frac * (_out_mag[b1] - _out_mag[b0]);
 }
 
 void LowhighpassAudioProcessor::freqanalysis(bool activate)
@@ -694,30 +721,25 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
     int x1 = numSamples;
     int x2 = 0;
 
-    // if we want to analyse the signal sum all channels
+    // copy per-channel data into analysis ring buffers (before filtering)
     if (_freqanalysis && _editorOpen)
     {
-        AudioSampleBuffer tempBuffer(1,numSamples);
-        tempBuffer.clear();
-        for (int i=0; i<numChannels; i++) {
-            tempBuffer.addFrom(0, 0, buffer, i, 0, numSamples);
-        }
+        int x1in = numSamples;
+        int x2in = 0;
 
-        if (_bufpos+x1 > FFT_LENGTH)
+        if (_bufpos + x1in > FFT_LENGTH)
         {
-            x1 = FFT_LENGTH - _bufpos;
-            x2 = numSamples - x1;
+            x1in = FFT_LENGTH - _bufpos;
+            x2in = numSamples - x1in;
         }
 
-        _analysis_inbuf.copyFrom(0, _bufpos, tempBuffer, 0, 0, x1);
-
-        if (x2 > 0)
+        for (int ch = 0; ch < numChannels; ch++)
         {
-            _analysis_inbuf.copyFrom(0, 0, tempBuffer, 0, x1, x2);
+            _analysis_inbuf.copyFrom(ch, _bufpos, buffer, ch, 0, x1in);
+            if (x2in > 0)
+                _analysis_inbuf.copyFrom(ch, 0, buffer, ch, x1in, x2in);
         }
-
     }
-
 
 
     // LOW CUT - bypass is not clickfree
@@ -746,118 +768,123 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
     _HS_IIR.processBlock(buffer);
 
 
-    // if we want to analyse the signal sum all channels
+    // copy per-channel data into analysis ring buffers (after filtering)
     if (_freqanalysis && _editorOpen)
     {
-        AudioSampleBuffer tempBuffer(1,numSamples);
-        tempBuffer.clear();
-        for (int i=0; i<numChannels; i++) {
-            tempBuffer.addFrom(0, 0, buffer, i, 0, numSamples);
+        int x1out = numSamples;
+        int x2out = 0;
+
+        if (_bufpos + x1out > FFT_LENGTH)
+        {
+            x1out = FFT_LENGTH - _bufpos;
+            x2out = numSamples - x1out;
         }
 
-        if (_bufpos+x1 > FFT_LENGTH)
+        for (int ch = 0; ch < numChannels; ch++)
         {
-            x1 = FFT_LENGTH - _bufpos;
-            x2 = numSamples - x1;
-        }
-
-        _analysis_outbuf.copyFrom(0, _bufpos, tempBuffer, 0, 0, x1);
-
-        if (x2 > 0)
-        {
-            _analysis_outbuf.copyFrom(0, 0, tempBuffer, 0, x1, x2);
+            _analysis_outbuf.copyFrom(ch, _bufpos, buffer, ch, 0, x1out);
+            if (x2out > 0)
+                _analysis_outbuf.copyFrom(ch, 0, buffer, ch, x1out, x2out);
         }
 
         _bufpos += numSamples;
 
         if (_bufpos >= FFT_LENGTH)
         {
-            // do fft if buffer is full
+            // FFT buffer is full — compute spectrum
 
-            // first the input signal
-            FloatVectorOperations::copy(fft_t_, _analysis_inbuf.getReadPointer(0), FFT_LENGTH);
+            const float alpha = _smoothAlpha;
+            const float oneMinusAlpha = 1.f - alpha;
+            const int analyzerCh = _analyzerChannel;
+            const int specLen = FFT_LENGTH / 2 + 1;
 
-            // windowing
-            FloatVectorOperations::multiply(fft_t_, _w, FFT_LENGTH);
-
-            // do "correct" scaling
-            // FloatVectorOperations::multiply(fft_t_, 1.f/FFT_LENGTH, FFT_LENGTH);
-
-#if SPLIT_COMPLEX
-
-            vDSP_ctoz(reinterpret_cast<const COMPLEX*>(fft_t_), 2, &splitcomplex_, 1, FFT_LENGTH/2);
-            vDSP_fft_zrip(vdsp_fft_setup_, &splitcomplex_, 1, vdsp_log2_, FFT_FORWARD);
-
-            fft_re_[FFT_LENGTH/2] = fft_im_[0];
-            fft_im_[0] = 0.f;
-            fft_im_[FFT_LENGTH/2] = 0.f;
-
-            // get magnitude
-            for (int i=0; i<FFT_LENGTH/2+1; i++) {
-                _in_mag[i] = 0.8f * _in_mag[i] + 0.2f * (sqrtf(fft_re_[i]*fft_re_[i]+fft_im_[i]*fft_im_[i]));
-            }
-
-#else
-            if (fftwf_plan_r2c_)
-                fftwf_execute_dft_r2c (fftwf_plan_r2c_, fft_t_, fft_c_);
-
-            // get magnitude
-            for (int i=0; i<FFT_LENGTH/2+1; i++) {
-                _in_mag[i] = 0.8f * _in_mag[i] + 0.2f * (sqrtf(fft_c_[i][0]*fft_c_[i][0]+fft_c_[i][1]*fft_c_[i][1]));
-            }
-#endif
-
-
-
-
-
-            // scale for the maximum to be 0 dB
-
-            float max = FloatVectorOperations::findMaximum(_in_mag, FFT_LENGTH/2+1);
-            float scale = (max == 0.f) ? 1.f : 1.f / max;
-
-            FloatVectorOperations::multiply(_in_mag, scale, FFT_LENGTH/2+1);
-
-
-            // do the output
-
-            FloatVectorOperations::copy(fft_t_, _analysis_outbuf.getReadPointer(0), FFT_LENGTH);
-
-            // windowing
-            FloatVectorOperations::multiply(fft_t_, _w, FFT_LENGTH);
-
-            // do scaling
-            // FloatVectorOperations::multiply(fft_t_, 1.f/FFT_LENGTH, FFT_LENGTH);
-
-            // FloatVectorOperations::clear(&fft_c_[0][0], 2*(FFT_LENGTH/2+1));
+            // --- helper lambda: FFT one channel buffer, store magnitude in _tmp_mag ---
+            auto computeMagnitude = [&](const AudioSampleBuffer& buf, int ch)
+            {
+                FloatVectorOperations::copy(fft_t_, buf.getReadPointer(ch), FFT_LENGTH);
+                FloatVectorOperations::multiply(fft_t_, _w, FFT_LENGTH);
 
 #if SPLIT_COMPLEX
+                vDSP_ctoz(reinterpret_cast<const COMPLEX*>(fft_t_), 2, &splitcomplex_, 1, FFT_LENGTH/2);
+                vDSP_fft_zrip(vdsp_fft_setup_, &splitcomplex_, 1, vdsp_log2_, FFT_FORWARD);
+                fft_re_[FFT_LENGTH/2] = fft_im_[0];
+                fft_im_[0] = 0.f;
+                fft_im_[FFT_LENGTH/2] = 0.f;
 
-            vDSP_ctoz(reinterpret_cast<const COMPLEX*>(fft_t_), 2, &splitcomplex_, 1, FFT_LENGTH/2);
-            vDSP_fft_zrip(vdsp_fft_setup_, &splitcomplex_, 1, vdsp_log2_, FFT_FORWARD);
-
-            fft_re_[FFT_LENGTH/2] = fft_im_[0];
-            fft_im_[0] = 0.f;
-            fft_im_[FFT_LENGTH/2] = 0.f;
-
-            // get magnitude
-            for (int i=0; i<FFT_LENGTH/2+1; i++) {
-                _out_mag[i] = 0.8f * _out_mag[i] + 0.2f * (sqrtf(fft_re_[i]*fft_re_[i]+fft_im_[i]*fft_im_[i]));
-            }
-
+                for (int i = 0; i < specLen; i++)
+                    _tmp_mag[i] = sqrtf(fft_re_[i]*fft_re_[i] + fft_im_[i]*fft_im_[i]);
 #else
-            fftwf_execute_dft_r2c (fftwf_plan_r2c_, fft_t_, fft_c_);
+                if (fftwf_plan_r2c_)
+                    fftwf_execute_dft_r2c(fftwf_plan_r2c_, fft_t_, fft_c_);
 
-            // get magnitude
-            for (int i=0; i<FFT_LENGTH/2+1; i++) {
-                _out_mag[i] = 0.8f * _out_mag[i] + 0.2f * (sqrtf(fft_c_[i][0]*fft_c_[i][0]+fft_c_[i][1]*fft_c_[i][1]));
-            }
+                for (int i = 0; i < specLen; i++)
+                    _tmp_mag[i] = sqrtf(fft_c_[i][0]*fft_c_[i][0] + fft_c_[i][1]*fft_c_[i][1]);
 #endif
+            };
 
-            FloatVectorOperations::multiply(_out_mag, scale, FFT_LENGTH/2+1);
+            // proper FFT scaling factor for absolute magnitudes
+            const float fftScale = _analyzerAutoScale ? 1.f
+                : 1.f / (_windowCoherentGain * (float)FFT_LENGTH);
 
+            // --- helper lambda: compute spectrum for a buffer, smooth into mag array ---
+            auto analyzeSignal = [&](const AudioSampleBuffer& buf, float* mag)
+            {
+                if (analyzerCh > 0 && analyzerCh <= numChannels)
+                {
+                    // single channel
+                    computeMagnitude(buf, analyzerCh - 1);
+                    // apply FFT scaling to raw magnitude before smoothing
+                    FloatVectorOperations::multiply(_tmp_mag, fftScale, specLen);
+                    for (int i = 0; i < specLen; i++)
+                        mag[i] = alpha * mag[i] + oneMinusAlpha * _tmp_mag[i];
+                }
+                else
+                {
+                    // all channels: average magnitudes (no comb filtering)
+                    float accum[FFT_LENGTH/2+1];
+                    FloatVectorOperations::clear(accum, specLen);
 
-            _bufpos -= FFT_LENGTH;
+                    for (int ch = 0; ch < numChannels; ch++)
+                    {
+                        computeMagnitude(buf, ch);
+                        FloatVectorOperations::add(accum, _tmp_mag, specLen);
+                    }
+
+                    // average and apply FFT scaling
+                    FloatVectorOperations::multiply(accum, fftScale / (float)numChannels, specLen);
+
+                    for (int i = 0; i < specLen; i++)
+                        mag[i] = alpha * mag[i] + oneMinusAlpha * accum[i];
+                }
+            };
+
+            // analyze input and output
+            analyzeSignal(_analysis_inbuf, _in_mag);
+            analyzeSignal(_analysis_outbuf, _out_mag);
+
+            // auto-scale: normalize to 0dB peak (legacy behavior)
+            if (_analyzerAutoScale)
+            {
+                float max = FloatVectorOperations::findMaximum(_in_mag, specLen);
+                float scale = (max == 0.f) ? 1.f : 1.f / max;
+                FloatVectorOperations::multiply(_in_mag, scale, specLen);
+                FloatVectorOperations::multiply(_out_mag, scale, specLen);
+            }
+
+            // 50% overlap: shift buffer back by half
+            for (int ch = 0; ch < numChannels; ch++)
+            {
+                // copy second half to first half
+                FloatVectorOperations::copy(
+                    _analysis_inbuf.getWritePointer(ch),
+                    _analysis_inbuf.getReadPointer(ch, FFT_LENGTH/2),
+                    FFT_LENGTH/2);
+                FloatVectorOperations::copy(
+                    _analysis_outbuf.getWritePointer(ch),
+                    _analysis_outbuf.getReadPointer(ch, FFT_LENGTH/2),
+                    FFT_LENGTH/2);
+            }
+            _bufpos -= FFT_LENGTH / 2; // hop = FFT_LENGTH/2
         }
 
     }
@@ -893,6 +920,10 @@ void LowhighpassAudioProcessor::getStateInformation (MemoryBlock& destData)
     }
 
     xml.setAttribute("freqanalysis", _freqanalysis);
+    xml.setAttribute("analyzerChannel", _analyzerChannel);
+    xml.setAttribute("analyzerAutoScale", _analyzerAutoScale);
+    xml.setAttribute("analyzerOffset", (double)_analyzerOffset);
+    xml.setAttribute("analyzerScale", (double)_analyzerScale);
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -913,6 +944,10 @@ void LowhighpassAudioProcessor::setStateInformation (const void* data, int sizeI
                 setParameter(i, xmlState->getDoubleAttribute(String(i)));
             }
             _freqanalysis = xmlState->getBoolAttribute("freqanalysis");
+            _analyzerChannel = xmlState->getIntAttribute("analyzerChannel", 0);
+            _analyzerAutoScale = xmlState->getBoolAttribute("analyzerAutoScale", true);
+            _analyzerOffset = (float)xmlState->getDoubleAttribute("analyzerOffset", 0.0);
+            _analyzerScale = (float)xmlState->getDoubleAttribute("analyzerScale", 1.0);
         }
 
     }

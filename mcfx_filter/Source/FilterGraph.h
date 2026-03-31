@@ -37,14 +37,14 @@ public:
     
     void paint (Graphics& g)
     {
-        Colour traceColour = Colour (0xffffff7f);
-        g.setColour (traceColour);
-        g.strokePath (path_in_mag_, PathStrokeType (0.5f));
-        // g.fillPath(path_in_mag_);
-        traceColour = Colour (0xefff3c7f);
-        g.setColour (traceColour);
-        g.strokePath (path_out_mag_, PathStrokeType (1.0f));
-        
+        // pre-EQ input: semi-transparent white, thin
+        g.setColour (Colour (0x99ffffff));
+        g.strokePath (path_in_mag_, PathStrokeType (0.75f));
+
+        // post-EQ output: bright yellow, thicker — easy to distinguish
+        g.setColour (Colour (0xddffdd00));
+        g.strokePath (path_out_mag_, PathStrokeType (1.5f));
+
     };
     
     void resized(){};
@@ -117,6 +117,9 @@ public:
     void timerCallback();
     
     bool analyzeron_; // analyzer is on/off
+    float analyzerOffset_;
+    float analyzerScale_;
+    bool analyzerAutoScale_;
     
     // Binary resources:
     static const char* drag_off_png;
@@ -166,7 +169,7 @@ private:
     
     bool changed_; // if values have changed -> redraw...
     // void mouseMove (const MouseEvent &event);
-    
+
     LowhighpassAudioProcessor* myprocessor_; // this is used for changing parameters
     
     TooltipWindow tooltipWindow;
