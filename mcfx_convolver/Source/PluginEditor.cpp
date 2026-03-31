@@ -190,18 +190,21 @@ box_maxpart("new combobox")
     lbl_master_gain.setText("Master gain", dontSendNotification);
     lbl_master_gain.setColour(Label::textColourId, Colours::white);
     addAndMakeVisible (lbl_master_gain);
-    
+
     sld_master_gain.setSliderStyle (Slider::RotaryVerticalDrag);
     sld_master_gain.setRange(-100, 40);
     sld_master_gain.setValue(0);
     sld_master_gain.setDoubleClickReturnValue(true, 0);
     sld_master_gain.setColour(Slider::rotarySliderFillColourId, Colours::white);
+    sld_master_gain.setColour(Slider::rotarySliderOutlineColourId, Colour(0xff555555));
     sld_master_gain.setTextBoxStyle (Slider::TextBoxBelow, false, 70, 20);
     sld_master_gain.setTextValueSuffix (" dB");
     sld_master_gain.setMouseDragSensitivity(125);
     sld_master_gain.setTooltip("Master gain for all channels (Double click to reset)");
-    sld_master_gain.setColour(Slider::textBoxBackgroundColourId,juce::Colour(0x00000000)); // Transparent background
-    sld_master_gain.setColour(Slider::textBoxTextColourId,juce::Colours::white);
+    sld_master_gain.setColour(Slider::textBoxBackgroundColourId, Colour(0xff333333));
+    sld_master_gain.setColour(Slider::textBoxTextColourId, Colours::white);
+    sld_master_gain.setColour(Slider::textBoxOutlineColourId, Colour(0xff555555));
+    sld_master_gain.setColour(Slider::textBoxHighlightColourId, Colour(0xff666699));
     addAndMakeVisible(sld_master_gain);
 
     // setResizable (true,true);                                    // Uncomment to make resizable
@@ -306,7 +309,7 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     int clearBtnHeight = 24;
     btn_clear_debug.setBounds (16, fromBottom(clearBtnHeight), btn_clear_debug.getBestWidthForHeight(clearBtnHeight), clearBtnHeight);
     lbl_skippedcycles.setFont(MyLookAndFeel.getTextButtonFont(btn_clear_debug, clearBtnHeight));
-    
+
     lbl_skippedcycles.setBounds(110, fromBottom(clearBtnHeight), 150, clearBtnHeight);
     num_ch.setBounds (150, 134, 40, 24);
     num_spk.setBounds (150, 158, 40, 24);
@@ -384,7 +387,7 @@ void Mcfx_convolverAudioProcessorEditor::timerCallback()
     {
         // processor.DebugPrint("Load: state none");
     } else if (ourProcessor->_presetLoadState == Mcfx_convolverAudioProcessor::PresetLoadState::Loaded)
-    {        
+    {
         // processor.DebugPrint("Load Successfull");
         txt_preset.setText(ourProcessor->box_preset_str, dontSendNotification);
         ourProcessor->_presetLoadState = Mcfx_convolverAudioProcessor::PresetLoadState::None;
