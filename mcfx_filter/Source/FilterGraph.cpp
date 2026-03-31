@@ -27,7 +27,10 @@ FilterGraph::FilterGraph(FilterInfo* filterinfo, LowhighpassAudioProcessor* proc
                                 grid_div(6.f),
 								xmargin(35.f),
 								ymargin(12.f),
-                                changed_(true)
+                                changed_(true),
+                                analyzerOffset_(0.f),
+                                analyzerScale_(1.f),
+                                analyzerAutoScale_(true)
 {
 
     tooltipWindow.setMillisecondsBeforeTipAppears (200); // tooltip delay
@@ -206,35 +209,33 @@ void FilterGraph::calcPathMagPhase()
 void  FilterGraph::calcPathAnalyzer()
 {
     int width = getWidth();
-    // different scaling for the analyzer!
-    float logscale = 10.f; // instead of 20...
 
-    float y = dbtoypos( logscale*log10f(filterinfo_->inMagnitude(xpostohz(xmargin))) );
+    float scale = analyzerScale_;
+    float offset = analyzerAutoScale_ ? (maxdb_ - 5.f) : analyzerOffset_;
 
-    float interp = 0.8f;
+    // magnitude floor to prevent log10(0) = -inf creating invalid paths
+    const float magFloor = 1e-10f;
 
-    float offset = maxdb_ - 5.f;
-
-    // plot input magnitude
+    // plot input magnitude — no spatial smoothing (temporal smoothing is sufficient)
     path_in_mag_.clear();
 
+    float y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz(xmargin)), magFloor))) );
     path_in_mag_.startNewSubPath(xmargin, y);
 
     for (int xPos=xmargin+1; xPos<width; xPos++) {
-        y = interp*y + (1.f-interp)*dbtoypos( offset+logscale*log10f(filterinfo_->inMagnitude(xpostohz(xPos))) );
-        path_in_mag_.lineTo(xPos, y);
+        y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz(xPos)), magFloor))) );
+        path_in_mag_.lineTo((float)xPos, y);
     }
-
-    y = dbtoypos( logscale*log10f(filterinfo_->outMagnitude(xpostohz(xmargin))) );
 
     // plot output magnitude
     path_out_mag_.clear();
 
+    y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz(xmargin)), magFloor))) );
     path_out_mag_.startNewSubPath(xmargin, y);
 
     for (int xPos=xmargin+1; xPos<width; xPos++) {
-        y = interp*y + (1.f-interp)*dbtoypos( offset+logscale*log10f(filterinfo_->outMagnitude(xpostohz(xPos))) );
-        path_out_mag_.lineTo(xPos, y);
+        y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz(xPos)), magFloor))) );
+        path_out_mag_.lineTo((float)xPos, y);
     }
 
 }

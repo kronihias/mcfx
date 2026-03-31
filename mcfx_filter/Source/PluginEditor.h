@@ -39,6 +39,7 @@
 class LowhighpassAudioProcessorEditor  : public AudioProcessorEditor,
                                          public Button::Listener,
                                          public Slider::Listener,
+                                         public ComboBox::Listener,
                                          public ChangeListener,
                                          public Timer
 {
@@ -55,6 +56,7 @@ public:
     void resized();
     void buttonClicked (Button* buttonThatWasClicked);
     void sliderValueChanged (Slider* sliderThatWasMoved);
+    void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
 
     void changeListenerCallback (ChangeBroadcaster *source);
 
@@ -113,6 +115,10 @@ private:
     Slider sld_ls_q;
     std::unique_ptr<FilterGraph> filtergraph;
     ImageButton btn_analyzer;
+    ComboBox box_analyzer_ch;
+    ToggleButton btn_analyzer_auto;
+    Slider sld_analyzer_offset;
+    Slider sld_analyzer_scale;
 
     LookAndFeel_V3 MyLookAndFeel;
 
