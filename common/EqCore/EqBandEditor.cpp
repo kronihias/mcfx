@@ -107,11 +107,12 @@ EqBandEditor::EqBandEditor()
     btnEnable_.setTooltip("Enable/disable this band (shortcut: E in graph)");
     btnEnable_.addListener(this);
 
-    // FIR load button
+    // FIR load button and plot
     addAndMakeVisible(btnLoadFIR_);
     btnLoadFIR_.setTooltip("Load FIR coefficients from a text file");
     btnLoadFIR_.addListener(this);
     addAndMakeVisible(lblFIRInfo_);
+    addAndMakeVisible(firPlot_);
 
     // Set label styles
     for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_ })
@@ -198,9 +199,11 @@ void EqBandEditor::updateFromBand()
     }
     else if (type == EqBandType::FIR)
     {
+        auto& coeffs = band_->getFIRCoefficients();
         String info;
-        info << band_->getFIRCoefficients().size() << " taps";
+        info << coeffs.size() << " taps";
         lblFIRInfo_.setText(info, dontSendNotification);
+        firPlot_.setCoefficients(coeffs);
     }
 
     btnEnable_.setToggleState(band_->isEnabled(), dontSendNotification);
@@ -287,6 +290,7 @@ void EqBandEditor::showControlsForType(EqBandType type)
 
     btnLoadFIR_.setVisible(isFIR);
     lblFIRInfo_.setVisible(isFIR);
+    firPlot_.setVisible(isFIR);
 
     resized(); // re-layout based on new visibility
 }
@@ -366,6 +370,14 @@ void EqBandEditor::resized()
     // FIR (shares same y as delay since they're mutually exclusive)
     btnLoadFIR_.setBounds(x + lblW + 4, y, 100, rowH);
     lblFIRInfo_.setBounds(x + lblW + 110, y, 100, rowH);
+    if (btnLoadFIR_.isVisible()) y += rowH + gap;
+
+    // FIR impulse response plot — fills remaining space
+    if (firPlot_.isVisible())
+    {
+        int plotH = jmax(60, getHeight() - y - 4);
+        firPlot_.setBounds(x, y, w, plotH);
+    }
 }
 
 void EqBandEditor::sliderValueChanged(Slider* s)
@@ -504,6 +516,7 @@ void EqBandEditor::buttonClicked(Button* b)
                 String info;
                 info << coeffs.size() << " taps";
                 lblFIRInfo_.setText(info, dontSendNotification);
+                firPlot_.setCoefficients(coeffs);
                 if (listener_ != nullptr)
                     listener_->bandParameterChanged(bandIndex_);
             }
