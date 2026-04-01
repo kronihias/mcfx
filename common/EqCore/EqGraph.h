@@ -37,6 +37,7 @@ public:
         virtual void eqBandQChanged(int bandIndex, float newQ) = 0;
         virtual void eqBandSelected(int bandIndex) = 0;
         virtual void eqBandEnableToggled(int bandIndex) = 0;
+        virtual void eqBandDoubleClicked(float freqHz, float gainDB) = 0;
     };
 
     EqGraph();
@@ -46,11 +47,14 @@ public:
     void setListener(Listener* l) { listener_ = l; }
     void setSelectedBand(int idx) { selectedBand_ = idx; repaint(); }
 
+    static Colour getBandColour(int bandIndex);
+
     void paint(Graphics& g) override;
     void resized() override;
     void timerCallback() override;
 
     void mouseDown(const MouseEvent& e) override;
+    void mouseDoubleClick(const MouseEvent& e) override;
     void mouseDrag(const MouseEvent& e) override;
     void mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel) override;
     bool keyPressed(const KeyPress& key) override;
@@ -85,8 +89,6 @@ private:
     std::vector<Path> bandFills_;     // filled areas for individual bands
     Path pathGrid_;
     Path pathGridW_;
-
-    static Colour getBandColour(int bandIndex);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqGraph)
 };

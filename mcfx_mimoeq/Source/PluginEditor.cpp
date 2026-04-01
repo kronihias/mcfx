@@ -34,6 +34,14 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 {
     setLookAndFeel(&lookAndFeel_);
 
+    addAndMakeVisible(statusBar_);
+    statusBar_.setFont(Font(11.f, Font::plain));
+    statusBar_.setColour(Label::textColourId, Colours::white.withAlpha(0.8f));
+    statusBar_.setColour(Label::backgroundColourId, Colour(0xff111111));
+    statusBar_.setJustificationType(Justification::centredLeft);
+    statusBar_.setBorderSize(BorderSize<int>(2, 6, 2, 6));
+    statusBar_.setMinimumHorizontalScale(1.0f);
+
     addAndMakeVisible(lblTitle_);
     lblTitle_.setText("mcfx_mimoeq", dontSendNotification);
     lblTitle_.setFont(Font(15.f, Font::plain));
@@ -73,12 +81,13 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     addAndMakeVisible(graph_);
     graph_.setListener(this);
-    graph_.setTooltip("Drag handles to adjust frequency/gain. Mouse wheel to adjust Q. Press E to toggle band enable.");
+    graph_.setTooltip("Drag handles to adjust frequency/gain. Mouse wheel to adjust Q.\nDouble-click to add a band. Double-click a handle to toggle enable. Press E to toggle enable.\nDrop a .json file to load configuration.");
 
     addAndMakeVisible(bandEditor_);
     bandEditor_.setListener(this);
 
     addAndMakeVisible(tabs_);
+    tabs_.setLookAndFeel(&tabLookAndFeel_);
 
     addAndMakeVisible(btnAdd_);
     btnAdd_.addListener(this);
@@ -102,6 +111,9 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
 
+    // Listen for mouse enter/exit on all child components for status bar
+    addMouseListener(this, true);
+
     setResizable(true, true);
     setResizeLimits(450, 400, 1200, 800);
     setSize(650, 500);
@@ -110,6 +122,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
 {
     getProcessor()->removeChangeListener(this);
+    tabs_.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr);
 }
 
@@ -123,11 +136,13 @@ void Mcfx_mimoeqAudioProcessorEditor::paint(Graphics& g)
                                       true));
     g.fillRect(getLocalBounds());
 
-    g.setColour(Colours::white);
+    // Version drawn just above the status bar
+    int statusH = 42;
+    g.setColour(Colours::white.withAlpha(0.35f));
     g.setFont(Font(10.f, Font::plain));
     String version;
     version << "v" << QUOTE(VERSION);
-    g.drawText(version, getWidth() - 51, getHeight() - 11, 50, 10, Justification::bottomRight, true);
+    g.drawText(version, getWidth() - 55, getHeight() - statusH - 13, 50, 12, Justification::centredRight, true);
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::resized()
@@ -160,9 +175,13 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     btnAdd_.setBounds(tabW + 8, tabY, 30, 28);
     btnRemove_.setBounds(tabW + 42, tabY, 30, 28);
 
+    // Status bar at bottom
+    int statusH = 42;
+    statusBar_.setBounds(0, h - statusH, w, statusH);
+
     // Band editor
     int editorY = tabY + 32;
-    bandEditor_.setBounds(4, editorY, w - 8, h - editorY - 14);
+    bandEditor_.setBounds(4, editorY, w - 8, h - editorY - statusH);
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::updatePathSelector()
@@ -224,8 +243,7 @@ void Mcfx_mimoeqAudioProcessorEditor::refreshTabs()
     for (int i = 0; i < chain->getNumBands(); ++i)
     {
         String name = "Band " + String(i + 1);
-        // Selected tab gets a bright orange tint, unselected stays dark
-        Colour tabColour = (i == selectedBand_) ? Colour(0xffff6600) : Colour(0xff333344);
+        Colour tabColour = EqGraph::getBandColour(i);
         tabs_.addTab(name, tabColour, i);
     }
 
@@ -322,6 +340,44 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandEnableToggled(int bandIndex)
     }
 }
 
+void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float gainDB)
+{
+    EqChain* chain = nullptr;
+
+    if (diagonalMode_)
+    {
+        chain = &getProcessor()->getDiagonalChain();
+    }
+    else
+    {
+        int inCh = cbInputCh_.getSelectedId();
+        int outCh = cbOutputCh_.getSelectedId();
+        chain = getProcessor()->getOrCreateChainForPath(inCh, outCh);
+        graph_.setChain(chain);
+    }
+
+    auto* band = chain->addBand();
+    band->setType(EqBandType::IIR);
+    band->setIIRSubType(IIRSubType::Peak);
+    band->setFrequency(freqHz);
+    band->setGainDB(gainDB);
+    band->setQ(1.5f);
+
+    if (diagonalMode_)
+        band->setDiagonal(true);
+    else
+    {
+        band->setDiagonal(false);
+        band->setInputChannel(cbInputCh_.getSelectedId());
+        band->setOutputChannel(cbOutputCh_.getSelectedId());
+    }
+    band->prepare(getProcessor()->getSampleRate_(), 512);
+
+    refreshTabs();
+    selectBand(chain->getNumBands() - 1);
+    notifyChainChanged();
+}
+
 void Mcfx_mimoeqAudioProcessorEditor::bandParameterChanged(int)
 {
     notifyChainChanged();
@@ -413,4 +469,50 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             getProcessor()->saveConfigToFile(chooser.getResult());
         }
     }
+}
+
+bool Mcfx_mimoeqAudioProcessorEditor::isInterestedInFileDrag(const StringArray& files)
+{
+    for (auto& f : files)
+        if (f.endsWithIgnoreCase(".json"))
+            return true;
+    return false;
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::filesDropped(const StringArray& files, int, int)
+{
+    for (auto& f : files)
+    {
+        if (f.endsWithIgnoreCase(".json"))
+        {
+            getProcessor()->loadConfigFromFile(File(f));
+            auto* chain = getActiveChain();
+            graph_.setChain(chain);
+            refreshTabs();
+            if (chain != nullptr && chain->getNumBands() > 0)
+                selectBand(0);
+            else
+                selectBand(-1);
+            break;
+        }
+    }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::mouseEnter(const MouseEvent& e)
+{
+    if (auto* ttc = dynamic_cast<TooltipClient*>(e.eventComponent))
+    {
+        auto tip = ttc->getTooltip();
+        if (tip.isNotEmpty())
+        {
+            statusBar_.setText(tip, dontSendNotification);
+            return;
+        }
+    }
+    statusBar_.setText("", dontSendNotification);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::mouseExit(const MouseEvent&)
+{
+    statusBar_.setText("", dontSendNotification);
 }

@@ -62,6 +62,35 @@ void EqBand::setGainDB(float db)
         updateIIRCoefficients();
 }
 
+bool EqBand::usesCascade() const
+{
+    return iirSubType_ == IIRSubType::ButterworthLP
+        || iirSubType_ == IIRSubType::ButterworthHP
+        || iirSubType_ == IIRSubType::CrossoverLP
+        || iirSubType_ == IIRSubType::CrossoverHP
+        || iirSubType_ == IIRSubType::CrossoverAP;
+}
+
+void EqBand::setButterworthOrder(int order)
+{
+    butterworthOrder_ = jlimit(1, 8, order);
+    if (type_ == EqBandType::IIR && !hasRawCoeffs_
+        && (iirSubType_ == IIRSubType::ButterworthLP || iirSubType_ == IIRSubType::ButterworthHP))
+        updateIIRCoefficients();
+}
+
+void EqBand::setCrossoverOrder(int lrOrder)
+{
+    // Clamp to nearest even in [2,16]
+    lrOrder = jlimit(2, 16, lrOrder);
+    if (lrOrder % 2 != 0) lrOrder += 1;
+    crossoverOrder_ = lrOrder;
+    if (type_ == EqBandType::IIR && !hasRawCoeffs_
+        && (iirSubType_ == IIRSubType::CrossoverLP || iirSubType_ == IIRSubType::CrossoverHP
+            || iirSubType_ == IIRSubType::CrossoverAP))
+        updateIIRCoefficients();
+}
+
 void EqBand::setFIRCoefficients(const std::vector<float>& coeffs)
 {
     firCoeffs_ = coeffs;
@@ -133,6 +162,8 @@ void EqBand::reset()
 {
     iirState_[0] = 0.f;
     iirState_[1] = 0.f;
+    for (auto& st : cascadeState_)
+        st = { 0.f, 0.f };
     std::fill(firState_.begin(), firState_.end(), 0.f);
     std::fill(delayBuffer_.begin(), delayBuffer_.end(), 0.f);
     delayWritePos_ = 0;
@@ -169,11 +200,144 @@ void EqBand::updateIIRCoefficients()
         case IIRSubType::Peak:
             iirCoeffs_ = IIRCoefficients::makePeakFilter(sampleRate_, f, q_, gain);
             break;
+
+        case IIRSubType::ButterworthLP:
+        {
+            auto sections = juce::dsp::FilterDesign<float>::designIIRLowpassHighOrderButterworthMethod(f, sampleRate_, butterworthOrder_);
+            cascadeCoeffs_.resize(sections.size());
+            cascadeState_.resize(sections.size());
+            for (int i = 0; i < (int)sections.size(); ++i)
+            {
+                auto* c = sections[i]->getRawCoefficients();
+                auto order = sections[i]->getFilterOrder();
+                // dsp::IIR::Coefficients stores already-normalized coefficients (a0 divided out):
+                // 1st order: [b0, b1, a1] (3 elements)
+                // 2nd order: [b0, b1, b2, a1, a2] (5 elements)
+                if (order == 1)
+                    cascadeCoeffs_[i] = { c[0], c[1], 0.f, c[2], 0.f };
+                else // order == 2
+                    cascadeCoeffs_[i] = { c[0], c[1], c[2], c[3], c[4] };
+                cascadeState_[i] = { 0.f, 0.f };
+            }
+            break;
+        }
+
+        case IIRSubType::ButterworthHP:
+        {
+            auto sections = juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(f, sampleRate_, butterworthOrder_);
+            cascadeCoeffs_.resize(sections.size());
+            cascadeState_.resize(sections.size());
+            for (int i = 0; i < (int)sections.size(); ++i)
+            {
+                auto* c = sections[i]->getRawCoefficients();
+                auto order = sections[i]->getFilterOrder();
+                if (order == 1)
+                    cascadeCoeffs_[i] = { c[0], c[1], 0.f, c[2], 0.f };
+                else // order == 2
+                    cascadeCoeffs_[i] = { c[0], c[1], c[2], c[3], c[4] };
+                cascadeState_[i] = { 0.f, 0.f };
+            }
+            break;
+        }
+
+        case IIRSubType::CrossoverLP:
+        {
+            // LR-N LP = 2x cascaded BW-(N/2) lowpass
+            int bwOrder = crossoverOrder_ / 2;
+            auto sections = juce::dsp::FilterDesign<float>::designIIRLowpassHighOrderButterworthMethod(f, sampleRate_, bwOrder);
+            int n = (int)sections.size();
+            cascadeCoeffs_.resize(n * 2);
+            cascadeState_.resize(n * 2);
+            for (int i = 0; i < n; ++i)
+            {
+                auto* c = sections[i]->getRawCoefficients();
+                auto order = sections[i]->getFilterOrder();
+                std::array<float, 5> sec;
+                if (order == 1)
+                    sec = { c[0], c[1], 0.f, c[2], 0.f };
+                else
+                    sec = { c[0], c[1], c[2], c[3], c[4] };
+                cascadeCoeffs_[i] = sec;
+                cascadeCoeffs_[i + n] = sec;  // duplicate for 2x cascade
+                cascadeState_[i] = { 0.f, 0.f };
+                cascadeState_[i + n] = { 0.f, 0.f };
+            }
+            break;
+        }
+
+        case IIRSubType::CrossoverHP:
+        {
+            // LR-N HP = 2x cascaded BW-(N/2) highpass
+            int bwOrder = crossoverOrder_ / 2;
+            auto sections = juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(f, sampleRate_, bwOrder);
+            int n = (int)sections.size();
+            cascadeCoeffs_.resize(n * 2);
+            cascadeState_.resize(n * 2);
+            for (int i = 0; i < n; ++i)
+            {
+                auto* c = sections[i]->getRawCoefficients();
+                auto order = sections[i]->getFilterOrder();
+                std::array<float, 5> sec;
+                if (order == 1)
+                    sec = { c[0], c[1], 0.f, c[2], 0.f };
+                else
+                    sec = { c[0], c[1], c[2], c[3], c[4] };
+                cascadeCoeffs_[i] = sec;
+                cascadeCoeffs_[i + n] = sec;
+                cascadeState_[i] = { 0.f, 0.f };
+                cascadeState_[i + n] = { 0.f, 0.f };
+            }
+            // LR2, LR6, etc. (odd BW half-order): HP is 180° out of phase
+            // with LP at crossover — invert HP to sum flat
+            if (bwOrder % 2 != 0)
+            {
+                cascadeCoeffs_[0][0] = -cascadeCoeffs_[0][0];
+                cascadeCoeffs_[0][1] = -cascadeCoeffs_[0][1];
+                cascadeCoeffs_[0][2] = -cascadeCoeffs_[0][2];
+            }
+            break;
+        }
+
+        case IIRSubType::CrossoverAP:
+        {
+            // LR-N AP = 1x BW-(N/2) HP sections converted to allpass
+            // Allpass: flip numerator of each HP section
+            // 2nd order [b0,b1,b2,a1,a2] → [a2, a1, 1.0, a1, a2]
+            // 1st order [b0,b1,0,a1,0]   → [a1, 1.0, 0, a1, 0]
+            int bwOrder = crossoverOrder_ / 2;
+            auto sections = juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(f, sampleRate_, bwOrder);
+            int n = (int)sections.size();
+            cascadeCoeffs_.resize(n);
+            cascadeState_.resize(n);
+            for (int i = 0; i < n; ++i)
+            {
+                auto* c = sections[i]->getRawCoefficients();
+                auto order = sections[i]->getFilterOrder();
+                if (order == 1)
+                {
+                    float a1 = c[2];
+                    cascadeCoeffs_[i] = { a1, 1.0f, 0.f, a1, 0.f };
+                }
+                else
+                {
+                    float a1 = c[3], a2 = c[4];
+                    cascadeCoeffs_[i] = { a2, a1, 1.0f, a1, a2 };
+                }
+                cascadeState_[i] = { 0.f, 0.f };
+            }
+            break;
+        }
     }
 }
 
 void EqBand::applyIIR(float* data, int numSamples)
 {
+    if (usesCascade())
+    {
+        applyCascadeIIR(data, numSamples);
+        return;
+    }
+
     auto* c = iirCoeffs_.coefficients; // b0, b1, b2, a1, a2
     float b0 = c[0], b1 = c[1], b2 = c[2], a1 = c[3], a2 = c[4];
 
@@ -184,6 +348,24 @@ void EqBand::applyIIR(float* data, int numSamples)
         iirState_[0] = b1 * x - a1 * y + iirState_[1];
         iirState_[1] = b2 * x - a2 * y;
         data[i] = y;
+    }
+}
+
+void EqBand::applyCascadeIIR(float* data, int numSamples)
+{
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float x = data[i];
+        for (int s = 0; s < (int)cascadeCoeffs_.size(); ++s)
+        {
+            auto& c = cascadeCoeffs_[s];
+            auto& st = cascadeState_[s];
+            float y = c[0] * x + st[0];
+            st[0] = c[1] * x - c[3] * y + st[1];
+            st[1] = c[2] * x - c[4] * y;
+            x = y;
+        }
+        data[i] = x;
     }
 }
 
@@ -232,22 +414,35 @@ void EqBand::applyDelay(float* data, int numSamples)
     }
 }
 
-std::complex<float> EqBand::getFrequencyResponse(double freqHz) const
+std::complex<float> EqBand::getFrequencyResponse(double freqHz, bool alwaysCompute) const
 {
-    if (!enabled_)
+    if (!enabled_ && !alwaysCompute)
         return std::complex<float>(1.f, 0.f);
 
     switch (type_)
     {
         case EqBandType::IIR:
         {
-            // H(z) = (b0 + b1*z^-1 + b2*z^-2) / (1 + a1*z^-1 + a2*z^-2)
-            auto* c = iirCoeffs_.coefficients;
-            float b0 = c[0], b1 = c[1], b2 = c[2], a1 = c[3], a2 = c[4];
-
             double omega = 2.0 * MathConstants<double>::pi * freqHz / sampleRate_;
             std::complex<double> z_inv(cos(-omega), sin(-omega));
             std::complex<double> z_inv2 = z_inv * z_inv;
+
+            if (usesCascade())
+            {
+                // Cascade: product of all sections' H(z)
+                std::complex<double> result(1.0, 0.0);
+                for (auto& sec : cascadeCoeffs_)
+                {
+                    std::complex<double> num = (double)sec[0] + (double)sec[1] * z_inv + (double)sec[2] * z_inv2;
+                    std::complex<double> den = 1.0 + (double)sec[3] * z_inv + (double)sec[4] * z_inv2;
+                    result *= num / den;
+                }
+                return std::complex<float>((float)result.real(), (float)result.imag());
+            }
+
+            // Single biquad: H(z) = (b0 + b1*z^-1 + b2*z^-2) / (1 + a1*z^-1 + a2*z^-2)
+            auto* c = iirCoeffs_.coefficients;
+            float b0 = c[0], b1 = c[1], b2 = c[2], a1 = c[3], a2 = c[4];
 
             std::complex<double> num = (double)b0 + (double)b1 * z_inv + (double)b2 * z_inv2;
             std::complex<double> den = 1.0 + (double)a1 * z_inv + (double)a2 * z_inv2;
@@ -295,8 +490,13 @@ static String iirSubTypeToString(IIRSubType st)
         case IIRSubType::Notch:     return "notch";
         case IIRSubType::AllPass:   return "all_pass";
         case IIRSubType::LowShelf:  return "low_shelf";
-        case IIRSubType::HighShelf: return "high_shelf";
-        case IIRSubType::Peak:      return "peak";
+        case IIRSubType::HighShelf:     return "high_shelf";
+        case IIRSubType::Peak:          return "peak";
+        case IIRSubType::ButterworthLP: return "butterworth_lp";
+        case IIRSubType::ButterworthHP: return "butterworth_hp";
+        case IIRSubType::CrossoverLP:   return "crossover_lp";
+        case IIRSubType::CrossoverHP:   return "crossover_hp";
+        case IIRSubType::CrossoverAP:   return "crossover_ap";
     }
     return "peak";
 }
@@ -308,8 +508,13 @@ static IIRSubType stringToIIRSubType(const String& s)
     if (s == "band_pass")  return IIRSubType::BandPass;
     if (s == "notch")      return IIRSubType::Notch;
     if (s == "all_pass")   return IIRSubType::AllPass;
-    if (s == "low_shelf")  return IIRSubType::LowShelf;
-    if (s == "high_shelf") return IIRSubType::HighShelf;
+    if (s == "low_shelf")      return IIRSubType::LowShelf;
+    if (s == "high_shelf")     return IIRSubType::HighShelf;
+    if (s == "butterworth_lp") return IIRSubType::ButterworthLP;
+    if (s == "butterworth_hp") return IIRSubType::ButterworthHP;
+    if (s == "crossover_lp")  return IIRSubType::CrossoverLP;
+    if (s == "crossover_hp")  return IIRSubType::CrossoverHP;
+    if (s == "crossover_ap")  return IIRSubType::CrossoverAP;
     return IIRSubType::Peak;
 }
 
@@ -344,8 +549,16 @@ var EqBand::toJson() const
             case EqBandType::IIR:
                 params->setProperty("type", iirSubTypeToString(iirSubType_));
                 params->setProperty("f_Hz", frequency_);
-                params->setProperty("Q", q_);
-                params->setProperty("gain_db", gainDB_);
+                if (iirSubType_ == IIRSubType::ButterworthLP || iirSubType_ == IIRSubType::ButterworthHP)
+                    params->setProperty("order", butterworthOrder_);
+                else if (iirSubType_ == IIRSubType::CrossoverLP || iirSubType_ == IIRSubType::CrossoverHP
+                         || iirSubType_ == IIRSubType::CrossoverAP)
+                    params->setProperty("order", crossoverOrder_);
+                else
+                {
+                    params->setProperty("Q", q_);
+                    params->setProperty("gain_db", gainDB_);
+                }
                 break;
             case EqBandType::FIR:
             {
@@ -438,10 +651,19 @@ EqBand* EqBand::fromJson(const var& json)
         {
             // IIR parameterized
             band->setType(EqBandType::IIR);
-            band->setIIRSubType(stringToIIRSubType(type));
+            auto subType = stringToIIRSubType(type);
+            band->setIIRSubType(subType);
             band->setFrequency((float)params.getProperty("f_Hz", 1000.0));
-            band->setQ((float)params.getProperty("Q", 0.707));
-            band->setGainDB((float)params.getProperty("gain_db", 0.0));
+            if (subType == IIRSubType::ButterworthLP || subType == IIRSubType::ButterworthHP)
+                band->setButterworthOrder((int)params.getProperty("order", 2));
+            else if (subType == IIRSubType::CrossoverLP || subType == IIRSubType::CrossoverHP
+                     || subType == IIRSubType::CrossoverAP)
+                band->setCrossoverOrder((int)params.getProperty("order", 4));
+            else
+            {
+                band->setQ((float)params.getProperty("Q", 0.707));
+                band->setGainDB((float)params.getProperty("gain_db", 0.0));
+            }
         }
     }
 

@@ -45,6 +45,7 @@ public:
     void setListener(Listener* l) { listener_ = l; }
     void updateFromBand();
 
+    void paint(Graphics& g) override;
     void resized() override;
     void sliderValueChanged(Slider* s) override;
     void comboBoxChanged(ComboBox* cb) override;
@@ -52,6 +53,7 @@ public:
 
 private:
     void showControlsForType(EqBandType type);
+    void populateOrderCombo(bool isCrossover, bool isAP = false);
 
     EqBand* band_ = nullptr;
     int bandIndex_ = -1;
@@ -59,6 +61,7 @@ private:
 
     ComboBox cbBandType_;       // IIR, FIR, Gain, Delay
     ComboBox cbIIRSubType_;     // low_pass, high_pass, etc.
+    ComboBox cbOrder_;          // Butterworth order (1-8)
 
     Slider sldFreq_;
     Slider sldQ_;
@@ -69,6 +72,7 @@ private:
     Label lblSubType_ { {}, "Filter:" };
     Label lblFreq_    { {}, "Freq:" };
     Label lblQ_       { {}, "Q:" };
+    Label lblOrder_   { {}, "Order:" };
     Label lblGain_    { {}, "Gain:" };
     Label lblDelay_   { {}, "Delay:" };
     Label lblHz_      { {}, "Hz" };

@@ -21,6 +21,7 @@
 #define EQBAND_H_INCLUDED
 
 #include "JuceHeader.h"
+#include <array>
 #include <complex>
 #include <vector>
 
@@ -41,7 +42,12 @@ enum class IIRSubType
     AllPass,
     LowShelf,
     HighShelf,
-    Peak
+    Peak,
+    ButterworthLP,
+    ButterworthHP,
+    CrossoverLP,
+    CrossoverHP,
+    CrossoverAP
 };
 
 class EqBand
@@ -66,6 +72,12 @@ public:
 
     float getGainDB() const { return gainDB_; }
     void setGainDB(float db);
+
+    int getButterworthOrder() const { return butterworthOrder_; }
+    void setButterworthOrder(int order);
+
+    int getCrossoverOrder() const { return crossoverOrder_; }
+    void setCrossoverOrder(int lrOrder);
 
     // --- FIR ---
     const std::vector<float>& getFIRCoefficients() const { return firCoeffs_; }
@@ -100,15 +112,19 @@ public:
 
     // --- Frequency response ---
     // Returns complex response at frequency f (Hz) for magnitude+phase
-    std::complex<float> getFrequencyResponse(double freqHz) const;
+    // If alwaysCompute is true, returns the response even when disabled
+    std::complex<float> getFrequencyResponse(double freqHz, bool alwaysCompute = false) const;
 
     // --- JSON ---
     var toJson() const;
     static EqBand* fromJson(const var& json);
 
+    bool usesCascade() const;
+
 private:
     void updateIIRCoefficients();
     void applyIIR(float* data, int numSamples);
+    void applyCascadeIIR(float* data, int numSamples);
     void applyFIR(float* data, int numSamples);
     void applyGain(float* data, int numSamples);
     void applyDelay(float* data, int numSamples);
@@ -123,6 +139,10 @@ private:
     float gainDB_ = 0.f;
     bool hasRawCoeffs_ = false;
     BiquadCoeffs rawCoeffs_ = { 1.f, 0.f, 0.f, 1.f, 0.f, 0.f };
+    int butterworthOrder_ = 2;
+    int crossoverOrder_ = 4;  // LR order: 2, 4, 6, 8
+    std::vector<std::array<float, 5>> cascadeCoeffs_;  // [b0,b1,b2,a1,a2] per section
+    std::vector<std::array<float, 2>> cascadeState_;    // [z1,z2] per section
 
     // Biquad state (transposed direct form II)
     IIRCoefficients iirCoeffs_;

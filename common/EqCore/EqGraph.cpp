@@ -95,12 +95,16 @@ void EqGraph::paint(Graphics& g)
         for (int i = 0; i < (int)bandFills_.size(); ++i)
         {
             auto* band = chain_->getBand(i);
-            if (band == nullptr || !band->isEnabled())
+            if (band == nullptr)
                 continue;
 
             Colour bandCol = getBandColour(i);
-            // Brighter fill for selected band
-            float alpha = (i == selectedBand_) ? 0.25f : 0.10f;
+            bool enabled = band->isEnabled();
+            float alpha;
+            if (!enabled)
+                alpha = (i == selectedBand_) ? 0.12f : 0.05f;
+            else
+                alpha = (i == selectedBand_) ? 0.25f : 0.10f;
             g.setColour(bandCol.withAlpha(alpha));
             g.fillPath(bandFills_[i]);
         }
@@ -109,13 +113,19 @@ void EqGraph::paint(Graphics& g)
         for (int i = 0; i < (int)bandPaths_.size(); ++i)
         {
             auto* band = chain_->getBand(i);
-            if (band == nullptr || !band->isEnabled())
+            if (band == nullptr)
                 continue;
 
             Colour bandCol = getBandColour(i);
-            float lineAlpha = (i == selectedBand_) ? 0.7f : 0.3f;
+            bool enabled = band->isEnabled();
+            float lineAlpha;
+            if (!enabled)
+                lineAlpha = (i == selectedBand_) ? 0.35f : 0.12f;
+            else
+                lineAlpha = (i == selectedBand_) ? 0.7f : 0.3f;
             g.setColour(bandCol.withAlpha(lineAlpha));
-            g.strokePath(bandPaths_[i], PathStrokeType(1.0f));
+            float lineWidth = enabled ? 1.0f : 0.75f;
+            g.strokePath(bandPaths_[i], PathStrokeType(lineWidth));
         }
 
         // Draw combined response line (white)
@@ -184,13 +194,13 @@ void EqGraph::drawBandHandles(Graphics& g)
         if (type == EqBandType::IIR && !band->hasRawCoefficients())
         {
             handleX = (float)hztoxpos(band->getFrequency());
-            handleY = (float)dbtoypos(enabled ? band->getGainDB() : 0.f);
+            handleY = (float)dbtoypos(band->getGainDB());
             showHandle = true;
         }
         else if (type == EqBandType::Gain)
         {
             handleX = (float)(getWidth() / 2);
-            handleY = (float)dbtoypos(enabled ? band->getGainDB() : 0.f);
+            handleY = (float)dbtoypos(band->getGainDB());
             showHandle = true;
         }
 
@@ -258,14 +268,14 @@ void EqGraph::calcPaths()
     float db = (mag > 0.f) ? 20.f * log10f(mag) : mindb_;
     pathMag_.startNewSubPath((float)startX, (float)dbtoypos(db));
 
-    // Per-band starts
+    // Per-band starts (compute for all bands, including disabled)
     for (int b = 0; b < numBands; ++b)
     {
         auto* band = chain_->getBand(b);
-        if (band == nullptr || !band->isEnabled())
+        if (band == nullptr)
             continue;
 
-        auto bandResp = band->getFrequencyResponse(startHz);
+        auto bandResp = band->getFrequencyResponse(startHz, true);
         float bandMag = std::abs(bandResp);
         float bandDb = (bandMag > 0.f) ? 20.f * log10f(bandMag) : 0.f;
         float y = (float)dbtoypos(bandDb);
@@ -285,14 +295,14 @@ void EqGraph::calcPaths()
         db = (mag > 0.f) ? 20.f * log10f(mag) : mindb_;
         pathMag_.lineTo((float)xPos, (float)dbtoypos(db));
 
-        // Per-band
+        // Per-band (always compute, even disabled)
         for (int b = 0; b < numBands; ++b)
         {
             auto* band = chain_->getBand(b);
-            if (band == nullptr || !band->isEnabled())
+            if (band == nullptr)
                 continue;
 
-            auto bandResp = band->getFrequencyResponse(hz);
+            auto bandResp = band->getFrequencyResponse(hz, true);
             float bandMag = std::abs(bandResp);
             float bandDb = (bandMag > 0.f) ? 20.f * log10f(bandMag) : 0.f;
             float y = (float)dbtoypos(bandDb);
@@ -305,7 +315,7 @@ void EqGraph::calcPaths()
     for (int b = 0; b < numBands; ++b)
     {
         auto* band = chain_->getBand(b);
-        if (band == nullptr || !band->isEnabled())
+        if (band == nullptr)
             continue;
 
         bandFills_[b].lineTo((float)(width - 1), zeroY);
@@ -383,13 +393,13 @@ int EqGraph::findBandAtPosition(Point<int> pos) const
         if (band->getType() == EqBandType::IIR && !band->hasRawCoefficients())
         {
             handleX = (float)hztoxpos(band->getFrequency());
-            handleY = (float)dbtoypos(enabled ? band->getGainDB() : 0.f);
+            handleY = (float)dbtoypos(band->getGainDB());
             hasHandle = true;
         }
         else if (band->getType() == EqBandType::Gain)
         {
             handleX = (float)(getWidth() / 2);
-            handleY = (float)dbtoypos(enabled ? band->getGainDB() : 0.f);
+            handleY = (float)dbtoypos(band->getGainDB());
             hasHandle = true;
         }
 
@@ -426,6 +436,25 @@ bool EqGraph::keyPressed(const KeyPress& key)
         }
     }
     return false;
+}
+
+void EqGraph::mouseDoubleClick(const MouseEvent& e)
+{
+    if (listener_ == nullptr)
+        return;
+
+    int bandAtPos = findBandAtPosition(e.getPosition());
+    if (bandAtPos >= 0)
+    {
+        // Double-click on existing handle: toggle enable/disable
+        listener_->eqBandEnableToggled(bandAtPos);
+        return;
+    }
+
+    // Double-click on empty area: add new band at position
+    float freq = jlimit(minf_, maxf_, xpostohz(e.getPosition().getX()));
+    float gain = jlimit(mindb_, maxdb_, ypostodb(e.getPosition().getY()));
+    listener_->eqBandDoubleClicked(freq, gain);
 }
 
 void EqGraph::mouseDrag(const MouseEvent& e)
