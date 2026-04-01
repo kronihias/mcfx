@@ -25,6 +25,35 @@
 #include <complex>
 #include <vector>
 
+//==============================================================================
+/** Modified Transposed Direct-Form II biquad section.
+    Pre-computes c1 = b1 - a1*b0, c2 = b2 - a2*b0 to reduce operations
+    in the state update (same form as SmoothIIRFilter). */
+struct BiquadSection
+{
+    float b0 = 1.f, a1 = 0.f, a2 = 0.f, c1 = 0.f, c2 = 0.f;
+    float v1 = 0.f, v2 = 0.f;
+
+    void setFromStandard(float sb0, float sb1, float sb2, float sa1, float sa2)
+    {
+        b0 = sb0; a1 = sa1; a2 = sa2;
+        c1 = sb1 - sa1 * sb0;
+        c2 = sb2 - sa2 * sb0;
+    }
+
+    inline float process(float x) noexcept
+    {
+        float y  = b0 * x + v1;
+        float t1 = c1 * x + v2;
+        float t0 = -a2 * v1;
+        v1 = -a1 * v1 + t1;
+        v2 = c2 * x + t0;
+        return y;
+    }
+
+    void resetState() { v1 = 0.f; v2 = 0.f; }
+};
+
 enum class EqBandType
 {
     IIR,
@@ -110,6 +139,10 @@ public:
     void processBlock(float* data, int numSamples);
     void reset();
 
+    /** Copy parameters from source without resetting filter state.
+        Triggers smooth coefficient transition for click-free updates. */
+    void syncParametersFrom(const EqBand& source);
+
     // --- Frequency response ---
     // Returns complex response at frequency f (Hz) for magnitude+phase
     // If alwaysCompute is true, returns the response even when disabled
@@ -128,6 +161,8 @@ private:
     void applyFIR(float* data, int numSamples);
     void applyGain(float* data, int numSamples);
     void applyDelay(float* data, int numSamples);
+    void startSmoothing();       // set up smoothing after updateIIRCoefficients
+    void recalcWorkingCoeffs();  // per-sample coeff recalc from smoothed params (single biquad)
 
     EqBandType type_ = EqBandType::IIR;
     bool enabled_ = true;
@@ -141,13 +176,27 @@ private:
     BiquadCoeffs rawCoeffs_ = { 1.f, 0.f, 0.f, 1.f, 0.f, 0.f };
     int butterworthOrder_ = 2;
     int crossoverOrder_ = 4;  // LR order: 2, 4, 6, 8
-    std::vector<std::array<float, 5>> cascadeCoeffs_;  // [b0,b1,b2,a1,a2] per section
-    std::vector<std::array<float, 2>> cascadeState_;    // [z1,z2] per section
+    std::vector<std::array<float, 5>> cascadeCoeffs_;  // [b0,b1,b2,a1,a2] per section (for freq response)
 
-    // Biquad state (transposed direct form II)
+    // Standard-form coefficients (for frequency response display)
     IIRCoefficients iirCoeffs_;
-    float iirState_[2] = { 0.f, 0.f }; // z^-1 states
     double sampleRate_ = 48000.0;
+
+    // Modified TDF-II working state (for processing)
+    BiquadSection iirWork_;                        // single biquad: current working coeffs + state
+    std::vector<BiquadSection> cascadeWork_;        // cascade: current working sections + state
+    std::vector<BiquadSection> cascadeTarget_;      // cascade: target coefficients
+
+    // Parameter smoothing for single biquad types (same approach as SmoothIIRFilter)
+    SmoothedValue<float, ValueSmoothingTypes::Linear> smoothFreq_;
+    SmoothedValue<float, ValueSmoothingTypes::Linear> smoothQ_;
+    SmoothedValue<float, ValueSmoothingTypes::Linear> smoothGainLin_; // linear gain
+
+    // Coefficient smoothing for cascade types (parameter recomputation too expensive)
+    int smoothSamplesLeft_ = 0;
+    static constexpr int kSmoothRampSamples = 128;  // ~2.7ms at 48kHz
+
+    bool prepared_ = false;
 
     // FIR
     std::vector<float> firCoeffs_;

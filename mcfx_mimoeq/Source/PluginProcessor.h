@@ -81,6 +81,10 @@ public:
     void rebuildProcessingChains();
     void requestRebuild() { needsRebuild_.store(true); }
 
+    /** Lightweight parameter sync: propagates parameter changes to per-channel
+        copies without rebuilding (preserves filter state for click-free updates). */
+    void requestParameterSync() { needsParamSync_.store(true); }
+
 private:
     void doRebuildIfNeeded();
     // Diagonal bands: applied to all channels
@@ -99,6 +103,8 @@ private:
     AudioSampleBuffer workBuffer_;
 
     std::atomic<bool> needsRebuild_ { false };
+    std::atomic<bool> needsParamSync_ { false };
+    void doParamSyncIfNeeded();
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Mcfx_mimoeqAudioProcessor)
 };

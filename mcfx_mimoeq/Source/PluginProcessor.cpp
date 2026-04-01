@@ -146,13 +146,27 @@ EqChain* Mcfx_mimoeqAudioProcessor::getOrCreateChainForPath(int inCh, int outCh)
 void Mcfx_mimoeqAudioProcessor::doRebuildIfNeeded()
 {
     if (needsRebuild_.exchange(false))
+    {
+        needsParamSync_.store(false); // rebuild supersedes sync
         rebuildProcessingChains();
+    }
+}
+
+void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
+{
+    if (needsParamSync_.exchange(false))
+    {
+        // Sync diagonal chain parameters to per-channel copies
+        for (int ch = 0; ch < diagChannelChains_.size(); ++ch)
+            diagChannelChains_[ch]->syncParametersFrom(diagonalChain_);
+    }
 }
 
 void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuffer&)
 {
-    // Rebuild on the audio thread if requested — this is the only safe place
+    // Rebuild or sync on the audio thread — this is the only safe place
     doRebuildIfNeeded();
+    doParamSyncIfNeeded();
 
     int numChannels = buffer.getNumChannels();
     int numSamples = buffer.getNumSamples();

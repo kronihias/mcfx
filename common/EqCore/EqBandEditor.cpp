@@ -403,6 +403,8 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
     if (updating_ || band_ == nullptr)
         return;
 
+    bool isStructuralChange = false;
+
     if (cb == &cbBandType_)
     {
         int sel = cbBandType_.getSelectedId();
@@ -414,6 +416,7 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
             case 4: band_->setType(EqBandType::Delay); break;
         }
         updateFromBand();
+        isStructuralChange = true;
     }
     else if (cb == &cbIIRSubType_)
     {
@@ -444,12 +447,9 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
         {
             bool isAP = st == IIRSubType::CrossoverAP;
             populateOrderCombo(true, isAP);
-            // If switching to AP and current order is LR2 or LR6, bump to LR4
             int curOrder = band_->getCrossoverOrder();
             if (isAP && (curOrder == 2 || curOrder == 6))
-            {
                 band_->setCrossoverOrder(4);
-            }
             cbOrder_.setSelectedId(band_->getCrossoverOrder(), dontSendNotification);
         }
         else if (isBW)
@@ -459,6 +459,7 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
         }
 
         showControlsForType(band_->getType());
+        isStructuralChange = true;
     }
     else if (cb == &cbOrder_)
     {
@@ -468,10 +469,16 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
             band_->setCrossoverOrder(cbOrder_.getSelectedId());
         else
             band_->setButterworthOrder(cbOrder_.getSelectedId());
+        isStructuralChange = true; // order changes cascade section count
     }
 
     if (listener_ != nullptr)
-        listener_->bandParameterChanged(bandIndex_);
+    {
+        if (isStructuralChange)
+            listener_->bandStructureChanged(bandIndex_);
+        else
+            listener_->bandParameterChanged(bandIndex_);
+    }
 }
 
 void EqBandEditor::buttonClicked(Button* b)
