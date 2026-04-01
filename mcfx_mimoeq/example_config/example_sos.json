@@ -1,0 +1,62 @@
+{
+  "sample_rate": 48000.0,
+  "sos": [
+    {
+      "input_channel": 1,
+      "output_channel": 1,
+      "coefficients": {
+        "b0": 1.0,
+        "b1": 0.0,
+        "b2": 0.0,
+        "a0": 1.0,
+        "a1": 0.0,
+        "a2": 0.0
+      }
+    },
+    {
+      "input_channel": 2,
+      "output_channel": 2,
+      "coefficients": {
+        "b0": 1.0,
+        "b1": 0.0,
+        "b2": 0.0,
+        "a0": 1.0,
+        "a1": 0.0,
+        "a2": 0.0
+      }
+    },
+    {
+      "input_channel": 3,
+      "output_channel": 3,
+      "parameters": {
+        "type": "gain",
+        "gain_db": -1.0
+      }
+    },
+    {
+      "input_channel": 4,
+      "output_channel": 4,
+      "parameters": {
+        "type": "delay",
+        "delay_samples": 20
+      }
+    },
+    {
+      "diagonal": true,
+      "parameters": {
+        "type": "high_shelf",
+        "gain_db": 0.0,
+        "Q": 0.707,
+        "f_Hz": 1000.0
+      }
+    },
+    {
+      "input_channel": 5,
+      "output_channel": 5,
+      "parameters": {
+        "type": "fir",
+        "coefficients": [0.0, 1.0, 0.0]
+      }
+    }
+  ]
+}

@@ -145,6 +145,7 @@ INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/Ressources )
 INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/SphericalHarmonic )
 INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/SphFilter )
 INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/LegendreU )
+INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/EqCore )
 
 
 ################################################
@@ -178,3 +179,4 @@ ADD_SUBDIRECTORY ( mcfx_delay )
 ADD_SUBDIRECTORY ( mcfx_filter )
 ADD_SUBDIRECTORY ( mcfx_gain_delay )
 ADD_SUBDIRECTORY ( mcfx_meter )
+ADD_SUBDIRECTORY ( mcfx_mimoeq )
