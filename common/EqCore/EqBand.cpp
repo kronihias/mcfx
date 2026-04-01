@@ -113,6 +113,7 @@ void EqBand::setRawCoefficients(float b0, float b1, float b2, float a0, float a1
     }
     iirCoeffs_ = IIRCoefficients(rawCoeffs_.b0, rawCoeffs_.b1, rawCoeffs_.b2,
                                   1.f, rawCoeffs_.a1, rawCoeffs_.a2);
+    startSmoothing();
 }
 
 void EqBand::setDelaySamples(int samples)
@@ -128,6 +129,16 @@ void EqBand::setDelaySamples(int samples)
 void EqBand::prepare(double sampleRate, int maxBlockSize)
 {
     sampleRate_ = sampleRate;
+    prepared_ = false; // suppress smoothing during initial coefficient calc
+
+    // Initialize parameter smoothing (same approach as SmoothIIRFilter)
+    const double rampSeconds = 0.005; // 5ms ramp
+    smoothFreq_.reset(sampleRate, rampSeconds);
+    smoothQ_.reset(sampleRate, rampSeconds);
+    smoothGainLin_.reset(sampleRate, rampSeconds);
+    smoothFreq_.setCurrentAndTargetValue(frequency_);
+    smoothQ_.setCurrentAndTargetValue(q_);
+    smoothGainLin_.setCurrentAndTargetValue(Decibels::decibelsToGain(gainDB_));
 
     if (type_ == EqBandType::IIR && !hasRawCoeffs_)
         updateIIRCoefficients();
@@ -142,6 +153,83 @@ void EqBand::prepare(double sampleRate, int maxBlockSize)
     }
 
     reset();
+    prepared_ = true;
+}
+
+void EqBand::syncParametersFrom(const EqBand& source)
+{
+    // Copy all parameters from the source band
+    // but preserve our filter state and SmoothedValue ramp state
+    // so the transition is smooth (no click)
+
+    bool needsCoeffUpdate = false;
+
+    if (type_ != source.type_)
+    {
+        type_ = source.type_;
+        needsCoeffUpdate = true;
+    }
+
+    enabled_ = source.enabled_;
+
+    if (type_ == EqBandType::IIR)
+    {
+        if (iirSubType_ != source.iirSubType_)
+        {
+            iirSubType_ = source.iirSubType_;
+            hasRawCoeffs_ = source.hasRawCoeffs_;
+            needsCoeffUpdate = true;
+        }
+
+        if (source.hasRawCoeffs_)
+        {
+            rawCoeffs_ = source.rawCoeffs_;
+            iirCoeffs_ = source.iirCoeffs_;
+            startSmoothing();
+        }
+        else
+        {
+            // Copy parameter values — smoothing handles the transition
+            frequency_ = source.frequency_;
+            q_ = source.q_;
+            gainDB_ = source.gainDB_;
+            linearGain_ = source.linearGain_;
+            butterworthOrder_ = source.butterworthOrder_;
+            crossoverOrder_ = source.crossoverOrder_;
+
+            if (needsCoeffUpdate || usesCascade())
+            {
+                // Structural change or cascade type: recompute coefficients
+                // (cascade types use coefficient interpolation)
+                updateIIRCoefficients();
+            }
+            else
+            {
+                // Single biquad: update display coefficients and set SmoothedValue targets
+                // The audio processing loop will smoothly recalculate per-sample
+                updateIIRCoefficients();
+            }
+        }
+    }
+    else if (type_ == EqBandType::Gain)
+    {
+        gainDB_ = source.gainDB_;
+        linearGain_ = source.linearGain_;
+    }
+    else if (type_ == EqBandType::Delay)
+    {
+        delaySamples_ = source.delaySamples_;
+        if (delaySamples_ > 0 && (int)delayBuffer_.size() < delaySamples_)
+        {
+            delayBuffer_.resize(delaySamples_, 0.f);
+        }
+    }
+    else if (type_ == EqBandType::FIR)
+    {
+        firCoeffs_ = source.firCoeffs_;
+        if (firState_.size() != firCoeffs_.size())
+            firState_.resize(firCoeffs_.size(), 0.f);
+    }
 }
 
 void EqBand::processBlock(float* data, int numSamples)
@@ -160,10 +248,10 @@ void EqBand::processBlock(float* data, int numSamples)
 
 void EqBand::reset()
 {
-    iirState_[0] = 0.f;
-    iirState_[1] = 0.f;
-    for (auto& st : cascadeState_)
-        st = { 0.f, 0.f };
+    iirWork_.resetState();
+    for (auto& sec : cascadeWork_)
+        sec.resetState();
+    smoothSamplesLeft_ = 0;
     std::fill(firState_.begin(), firState_.end(), 0.f);
     std::fill(delayBuffer_.begin(), delayBuffer_.end(), 0.f);
     delayWritePos_ = 0;
@@ -205,19 +293,14 @@ void EqBand::updateIIRCoefficients()
         {
             auto sections = juce::dsp::FilterDesign<float>::designIIRLowpassHighOrderButterworthMethod(f, sampleRate_, butterworthOrder_);
             cascadeCoeffs_.resize(sections.size());
-            cascadeState_.resize(sections.size());
             for (int i = 0; i < (int)sections.size(); ++i)
             {
                 auto* c = sections[i]->getRawCoefficients();
                 auto order = sections[i]->getFilterOrder();
-                // dsp::IIR::Coefficients stores already-normalized coefficients (a0 divided out):
-                // 1st order: [b0, b1, a1] (3 elements)
-                // 2nd order: [b0, b1, b2, a1, a2] (5 elements)
                 if (order == 1)
                     cascadeCoeffs_[i] = { c[0], c[1], 0.f, c[2], 0.f };
-                else // order == 2
+                else
                     cascadeCoeffs_[i] = { c[0], c[1], c[2], c[3], c[4] };
-                cascadeState_[i] = { 0.f, 0.f };
             }
             break;
         }
@@ -226,53 +309,24 @@ void EqBand::updateIIRCoefficients()
         {
             auto sections = juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(f, sampleRate_, butterworthOrder_);
             cascadeCoeffs_.resize(sections.size());
-            cascadeState_.resize(sections.size());
             for (int i = 0; i < (int)sections.size(); ++i)
             {
                 auto* c = sections[i]->getRawCoefficients();
                 auto order = sections[i]->getFilterOrder();
                 if (order == 1)
                     cascadeCoeffs_[i] = { c[0], c[1], 0.f, c[2], 0.f };
-                else // order == 2
+                else
                     cascadeCoeffs_[i] = { c[0], c[1], c[2], c[3], c[4] };
-                cascadeState_[i] = { 0.f, 0.f };
             }
             break;
         }
 
         case IIRSubType::CrossoverLP:
         {
-            // LR-N LP = 2x cascaded BW-(N/2) lowpass
             int bwOrder = crossoverOrder_ / 2;
             auto sections = juce::dsp::FilterDesign<float>::designIIRLowpassHighOrderButterworthMethod(f, sampleRate_, bwOrder);
             int n = (int)sections.size();
             cascadeCoeffs_.resize(n * 2);
-            cascadeState_.resize(n * 2);
-            for (int i = 0; i < n; ++i)
-            {
-                auto* c = sections[i]->getRawCoefficients();
-                auto order = sections[i]->getFilterOrder();
-                std::array<float, 5> sec;
-                if (order == 1)
-                    sec = { c[0], c[1], 0.f, c[2], 0.f };
-                else
-                    sec = { c[0], c[1], c[2], c[3], c[4] };
-                cascadeCoeffs_[i] = sec;
-                cascadeCoeffs_[i + n] = sec;  // duplicate for 2x cascade
-                cascadeState_[i] = { 0.f, 0.f };
-                cascadeState_[i + n] = { 0.f, 0.f };
-            }
-            break;
-        }
-
-        case IIRSubType::CrossoverHP:
-        {
-            // LR-N HP = 2x cascaded BW-(N/2) highpass
-            int bwOrder = crossoverOrder_ / 2;
-            auto sections = juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(f, sampleRate_, bwOrder);
-            int n = (int)sections.size();
-            cascadeCoeffs_.resize(n * 2);
-            cascadeState_.resize(n * 2);
             for (int i = 0; i < n; ++i)
             {
                 auto* c = sections[i]->getRawCoefficients();
@@ -284,11 +338,29 @@ void EqBand::updateIIRCoefficients()
                     sec = { c[0], c[1], c[2], c[3], c[4] };
                 cascadeCoeffs_[i] = sec;
                 cascadeCoeffs_[i + n] = sec;
-                cascadeState_[i] = { 0.f, 0.f };
-                cascadeState_[i + n] = { 0.f, 0.f };
             }
-            // LR2, LR6, etc. (odd BW half-order): HP is 180° out of phase
-            // with LP at crossover — invert HP to sum flat
+            break;
+        }
+
+        case IIRSubType::CrossoverHP:
+        {
+            int bwOrder = crossoverOrder_ / 2;
+            auto sections = juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(f, sampleRate_, bwOrder);
+            int n = (int)sections.size();
+            cascadeCoeffs_.resize(n * 2);
+            for (int i = 0; i < n; ++i)
+            {
+                auto* c = sections[i]->getRawCoefficients();
+                auto order = sections[i]->getFilterOrder();
+                std::array<float, 5> sec;
+                if (order == 1)
+                    sec = { c[0], c[1], 0.f, c[2], 0.f };
+                else
+                    sec = { c[0], c[1], c[2], c[3], c[4] };
+                cascadeCoeffs_[i] = sec;
+                cascadeCoeffs_[i + n] = sec;
+            }
+            // LR2, LR6, etc. (odd BW half-order): invert HP to sum flat
             if (bwOrder % 2 != 0)
             {
                 cascadeCoeffs_[0][0] = -cascadeCoeffs_[0][0];
@@ -300,15 +372,10 @@ void EqBand::updateIIRCoefficients()
 
         case IIRSubType::CrossoverAP:
         {
-            // LR-N AP = 1x BW-(N/2) HP sections converted to allpass
-            // Allpass: flip numerator of each HP section
-            // 2nd order [b0,b1,b2,a1,a2] → [a2, a1, 1.0, a1, a2]
-            // 1st order [b0,b1,0,a1,0]   → [a1, 1.0, 0, a1, 0]
             int bwOrder = crossoverOrder_ / 2;
             auto sections = juce::dsp::FilterDesign<float>::designIIRHighpassHighOrderButterworthMethod(f, sampleRate_, bwOrder);
             int n = (int)sections.size();
             cascadeCoeffs_.resize(n);
-            cascadeState_.resize(n);
             for (int i = 0; i < n; ++i)
             {
                 auto* c = sections[i]->getRawCoefficients();
@@ -323,11 +390,92 @@ void EqBand::updateIIRCoefficients()
                     float a1 = c[3], a2 = c[4];
                     cascadeCoeffs_[i] = { a2, a1, 1.0f, a1, a2 };
                 }
-                cascadeState_[i] = { 0.f, 0.f };
             }
             break;
         }
     }
+
+    startSmoothing();
+}
+
+void EqBand::startSmoothing()
+{
+    if (usesCascade())
+    {
+        // Cascade types: coefficient interpolation (recomputing FilterDesign per-sample
+        // is too expensive, so we linearly ramp the modified TDF-II coefficients)
+        int newSize = (int)cascadeCoeffs_.size();
+        cascadeTarget_.resize(newSize);
+        for (int i = 0; i < newSize; ++i)
+        {
+            auto& s = cascadeCoeffs_[i];
+            cascadeTarget_[i].setFromStandard(s[0], s[1], s[2], s[3], s[4]);
+        }
+
+        if ((int)cascadeWork_.size() != newSize || !prepared_)
+        {
+            // Section count changed or first init — snap immediately, reset state
+            cascadeWork_.resize(newSize);
+            for (int i = 0; i < newSize; ++i)
+            {
+                cascadeWork_[i] = cascadeTarget_[i];
+                cascadeWork_[i].resetState();
+            }
+            smoothSamplesLeft_ = 0;
+        }
+        else
+        {
+            // Same topology — smoothly ramp coefficients
+            smoothSamplesLeft_ = kSmoothRampSamples;
+        }
+    }
+    else
+    {
+        // Single biquad types: parameter smoothing via SmoothedValue
+        // (same approach as SmoothIIRFilter — smooth parameters, recalculate
+        // coefficients each sample from smoothed values)
+        if (!prepared_)
+        {
+            // First init — snap immediately
+            smoothFreq_.setCurrentAndTargetValue(frequency_);
+            smoothQ_.setCurrentAndTargetValue(q_);
+            smoothGainLin_.setCurrentAndTargetValue(Decibels::decibelsToGain(gainDB_));
+            recalcWorkingCoeffs();
+        }
+        else
+        {
+            // Set targets — SmoothedValues will ramp during processing
+            smoothFreq_.setTargetValue(frequency_);
+            smoothQ_.setTargetValue(q_);
+            smoothGainLin_.setTargetValue(Decibels::decibelsToGain(gainDB_));
+        }
+    }
+}
+
+void EqBand::recalcWorkingCoeffs()
+{
+    // Read current (possibly smoothed) parameter values and compute
+    // modified TDF-II coefficients — called per-sample during smoothing
+    float f = smoothFreq_.getNextValue();
+    float q = smoothQ_.getNextValue();
+    float g = smoothGainLin_.getNextValue();
+    f = jlimit(20.f, (float)(sampleRate_ * 0.499), f);
+
+    IIRCoefficients c;
+    switch (iirSubType_)
+    {
+        case IIRSubType::LowPass:   c = IIRCoefficients::makeLowPass(sampleRate_, f, q); break;
+        case IIRSubType::HighPass:  c = IIRCoefficients::makeHighPass(sampleRate_, f, q); break;
+        case IIRSubType::BandPass:  c = IIRCoefficients::makeBandPass(sampleRate_, f, q); break;
+        case IIRSubType::Notch:     c = IIRCoefficients::makeNotchFilter(sampleRate_, f, q); break;
+        case IIRSubType::AllPass:   c = IIRCoefficients::makeAllPass(sampleRate_, f, q); break;
+        case IIRSubType::LowShelf:  c = IIRCoefficients::makeLowShelf(sampleRate_, f, q, g); break;
+        case IIRSubType::HighShelf: c = IIRCoefficients::makeHighShelf(sampleRate_, f, q, g); break;
+        case IIRSubType::Peak:      c = IIRCoefficients::makePeakFilter(sampleRate_, f, q, g); break;
+        default: return; // cascade types handled separately
+    }
+    iirWork_.setFromStandard(c.coefficients[0], c.coefficients[1], c.coefficients[2],
+                              c.coefficients[3], c.coefficients[4]);
 }
 
 void EqBand::applyIIR(float* data, int numSamples)
@@ -338,33 +486,44 @@ void EqBand::applyIIR(float* data, int numSamples)
         return;
     }
 
-    auto* c = iirCoeffs_.coefficients; // b0, b1, b2, a1, a2
-    float b0 = c[0], b1 = c[1], b2 = c[2], a1 = c[3], a2 = c[4];
-
+    // Modified TDF-II processing with per-sample parameter smoothing
+    // (same approach as SmoothIIRFilter: smooth params, recalc coefficients each sample)
     for (int i = 0; i < numSamples; ++i)
     {
-        float x = data[i];
-        float y = b0 * x + iirState_[0];
-        iirState_[0] = b1 * x - a1 * y + iirState_[1];
-        iirState_[1] = b2 * x - a2 * y;
-        data[i] = y;
+        if (smoothFreq_.isSmoothing() || smoothQ_.isSmoothing() || smoothGainLin_.isSmoothing())
+            recalcWorkingCoeffs();
+
+        data[i] = iirWork_.process(data[i]);
     }
 }
 
 void EqBand::applyCascadeIIR(float* data, int numSamples)
 {
+    int nSections = (int)cascadeWork_.size();
+
     for (int i = 0; i < numSamples; ++i)
     {
-        float x = data[i];
-        for (int s = 0; s < (int)cascadeCoeffs_.size(); ++s)
+        // Per-sample coefficient smoothing
+        if (smoothSamplesLeft_ > 0)
         {
-            auto& c = cascadeCoeffs_[s];
-            auto& st = cascadeState_[s];
-            float y = c[0] * x + st[0];
-            st[0] = c[1] * x - c[3] * y + st[1];
-            st[1] = c[2] * x - c[4] * y;
-            x = y;
+            float t = 1.f / (float)smoothSamplesLeft_;
+            for (int s = 0; s < nSections; ++s)
+            {
+                auto& w = cascadeWork_[s];
+                auto& tgt = cascadeTarget_[s];
+                w.b0 += (tgt.b0 - w.b0) * t;
+                w.a1 += (tgt.a1 - w.a1) * t;
+                w.a2 += (tgt.a2 - w.a2) * t;
+                w.c1 += (tgt.c1 - w.c1) * t;
+                w.c2 += (tgt.c2 - w.c2) * t;
+            }
+            --smoothSamplesLeft_;
         }
+
+        // Process through cascade
+        float x = data[i];
+        for (int s = 0; s < nSections; ++s)
+            x = cascadeWork_[s].process(x);
         data[i] = x;
     }
 }

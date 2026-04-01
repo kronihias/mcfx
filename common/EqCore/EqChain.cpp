@@ -78,6 +78,16 @@ void EqChain::reset()
         band->reset();
 }
 
+void EqChain::syncParametersFrom(const EqChain& source)
+{
+    // Only sync if band count matches — otherwise a full rebuild is needed
+    if (bands_.size() != source.bands_.size())
+        return;
+
+    for (int i = 0; i < bands_.size(); ++i)
+        bands_[i]->syncParametersFrom(*source.bands_[i]);
+}
+
 std::complex<float> EqChain::getFrequencyResponse(double freqHz) const
 {
     std::complex<float> combined(1.f, 0.f);

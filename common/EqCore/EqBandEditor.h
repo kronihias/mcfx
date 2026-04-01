@@ -217,6 +217,8 @@ public:
         virtual ~Listener() = default;
         virtual void bandParameterChanged(int bandIndex) = 0;
         virtual void bandEnableChanged(int bandIndex, bool enabled) = 0;
+        /** Called when band type, subtype, or order changes (structural — requires rebuild). */
+        virtual void bandStructureChanged(int bandIndex) = 0;
     };
 
     EqBandEditor();

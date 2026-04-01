@@ -40,6 +40,10 @@ public:
     void processBlock(float* data, int numSamples);
     void reset();
 
+    /** Sync parameters from source chain (same number of bands required).
+        Preserves filter state for click-free parameter updates. */
+    void syncParametersFrom(const EqChain& source);
+
     // Frequency response — combined response of all enabled bands
     std::complex<float> getFrequencyResponse(double freqHz) const;
 

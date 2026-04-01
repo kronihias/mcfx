@@ -277,7 +277,14 @@ void Mcfx_mimoeqAudioProcessorEditor::selectBand(int index)
 void Mcfx_mimoeqAudioProcessorEditor::notifyChainChanged()
 {
     auto* proc = getProcessor();
-    proc->requestRebuild();  // deferred to audio thread to avoid race condition
+    proc->requestRebuild();  // full rebuild: deferred to audio thread
+    proc->sendChangeMessage();
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::notifyParameterChanged()
+{
+    auto* proc = getProcessor();
+    proc->requestParameterSync();  // lightweight: sync params to channel copies
     proc->sendChangeMessage();
 }
 
@@ -302,7 +309,7 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDragged(int bandIndex, float newFreq
     }
 
     bandEditor_.updateFromBand();
-    notifyChainChanged();
+    notifyParameterChanged();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::eqBandQChanged(int bandIndex, float newQ)
@@ -316,7 +323,7 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandQChanged(int bandIndex, float newQ)
     {
         band->setQ(newQ);
         bandEditor_.updateFromBand();
-        notifyChainChanged();
+        notifyParameterChanged();
     }
 }
 
@@ -336,7 +343,7 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandEnableToggled(int bandIndex)
     {
         band->setEnabled(!band->isEnabled());
         bandEditor_.updateFromBand();
-        notifyChainChanged();
+        notifyParameterChanged();
     }
 }
 
@@ -380,10 +387,15 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float ga
 
 void Mcfx_mimoeqAudioProcessorEditor::bandParameterChanged(int)
 {
-    notifyChainChanged();
+    notifyParameterChanged();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::bandEnableChanged(int, bool)
+{
+    notifyParameterChanged();
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::bandStructureChanged(int)
 {
     notifyChainChanged();
 }

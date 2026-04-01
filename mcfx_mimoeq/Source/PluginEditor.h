@@ -66,6 +66,7 @@ public:
     // EqBandEditor::Listener
     void bandParameterChanged(int bandIndex) override;
     void bandEnableChanged(int bandIndex, bool enabled) override;
+    void bandStructureChanged(int bandIndex) override;
 
     // Button::Listener
     void buttonClicked(Button* b) override;
@@ -83,7 +84,8 @@ private:
     EqChain* getActiveChain();
     void refreshTabs();
     void selectBand(int index);
-    void notifyChainChanged();
+    void notifyChainChanged();       // full rebuild (structural changes: add/remove band, type change)
+    void notifyParameterChanged();   // lightweight sync (freq/Q/gain/enable changes)
     void updatePathSelector();
 
     // Path selection
