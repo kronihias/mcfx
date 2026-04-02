@@ -435,6 +435,15 @@ bool EqGraph::keyPressed(const KeyPress& key)
             return true;
         }
     }
+    if (key.getTextCharacter() == 'd' || key.getTextCharacter() == 'D'
+        || key.isKeyCode(KeyPress::deleteKey) || key.isKeyCode(KeyPress::backspaceKey))
+    {
+        if (selectedBand_ >= 0 && listener_ != nullptr)
+        {
+            listener_->eqBandDeleteRequested(selectedBand_);
+            return true;
+        }
+    }
     return false;
 }
 

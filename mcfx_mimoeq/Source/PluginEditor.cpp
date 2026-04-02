@@ -91,10 +91,10 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     addAndMakeVisible(btnAdd_);
     btnAdd_.addListener(this);
-    btnAdd_.setTooltip("Add a new EQ band");
+    btnAdd_.setTooltip("Add a new EQ band (or double-click graph to add Peak at position)");
     addAndMakeVisible(btnRemove_);
     btnRemove_.addListener(this);
-    btnRemove_.setTooltip("Remove the selected EQ band");
+    btnRemove_.setTooltip("Remove the selected EQ band (shortcut: D or Delete in graph)");
     addAndMakeVisible(btnLoad_);
     btnLoad_.addListener(this);
     btnLoad_.setTooltip("Load EQ configuration from JSON file");
@@ -344,6 +344,19 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandEnableToggled(int bandIndex)
         band->setEnabled(!band->isEnabled());
         bandEditor_.updateFromBand();
         notifyParameterChanged();
+    }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::eqBandDeleteRequested(int bandIndex)
+{
+    auto* chain = getActiveChain();
+    if (chain != nullptr && bandIndex >= 0 && bandIndex < chain->getNumBands())
+    {
+        chain->removeBand(bandIndex);
+        int newSel = jmin(bandIndex, chain->getNumBands() - 1);
+        refreshTabs();
+        selectBand(newSel);
+        notifyChainChanged();
     }
 }
 

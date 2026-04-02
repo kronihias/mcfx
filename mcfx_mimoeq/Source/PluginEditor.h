@@ -61,6 +61,7 @@ public:
     void eqBandQChanged(int bandIndex, float newQ) override;
     void eqBandSelected(int bandIndex) override;
     void eqBandEnableToggled(int bandIndex) override;
+    void eqBandDeleteRequested(int bandIndex) override;
     void eqBandDoubleClicked(float freqHz, float gainDB) override;
 
     // EqBandEditor::Listener
