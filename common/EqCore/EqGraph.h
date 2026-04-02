@@ -37,6 +37,7 @@ public:
         virtual void eqBandQChanged(int bandIndex, float newQ) = 0;
         virtual void eqBandSelected(int bandIndex) = 0;
         virtual void eqBandEnableToggled(int bandIndex) = 0;
+        virtual void eqBandDeleteRequested(int bandIndex) = 0;
         virtual void eqBandDoubleClicked(float freqHz, float gainDB) = 0;
     };
 
