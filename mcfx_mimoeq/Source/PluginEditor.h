@@ -63,6 +63,8 @@ public:
     void eqBandEnableToggled(int bandIndex) override;
     void eqBandDeleteRequested(int bandIndex) override;
     void eqBandDoubleClicked(float freqHz, float gainDB) override;
+    void eqUndoRequested() override;
+    void eqRedoRequested() override;
 
     // EqBandEditor::Listener
     void bandParameterChanged(int bandIndex) override;
@@ -103,6 +105,8 @@ private:
 
     TextButton btnAdd_ { "+" };
     TextButton btnRemove_ { "-" };
+    TextButton btnUndo_ { "Undo" };
+    TextButton btnRedo_ { "Redo" };
     TextButton btnLoad_ { "Load" };
     TextButton btnSave_ { "Save" };
 
@@ -111,6 +115,11 @@ private:
     int selectedBand_ = -1;
     bool diagonalMode_ = true; // true = editing diagonal chain
     bool refreshingTabs_ = false; // reentrance guard
+    bool dragUndoPushed_ = false; // coalescing: only push undo once per drag gesture
+
+    void performUndo();
+    void performRedo();
+    void updateUndoRedoButtons();
 
     struct TabLookAndFeel : public LookAndFeel_V4
     {
