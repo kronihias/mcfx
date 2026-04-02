@@ -129,6 +129,10 @@ private:
     std::atomic<bool> needsParamSync_ { false };
     void doParamSyncIfNeeded();
 
+    // Click-free undo/redo helpers
+    bool canSyncRestore(const String& targetState) const;
+    void syncRestoreState(const String& targetState);
+
     // Undo/redo stacks (JSON strings)
     std::vector<String> undoStack_;
     std::vector<String> redoStack_;

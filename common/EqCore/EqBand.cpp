@@ -132,7 +132,7 @@ void EqBand::prepare(double sampleRate, int maxBlockSize)
     prepared_ = false; // suppress smoothing during initial coefficient calc
 
     // Initialize parameter smoothing (same approach as SmoothIIRFilter)
-    const double rampSeconds = 0.005; // 5ms ramp
+    const double rampSeconds = 0.020; // 20ms ramp
     smoothFreq_.reset(sampleRate, rampSeconds);
     smoothQ_.reset(sampleRate, rampSeconds);
     smoothGainLin_.reset(sampleRate, rampSeconds);
