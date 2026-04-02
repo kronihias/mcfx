@@ -36,8 +36,16 @@ void EqBand::setType(EqBandType t)
 void EqBand::setIIRSubType(IIRSubType st)
 {
     iirSubType_ = st;
-    hasRawCoeffs_ = false;
-    updateIIRCoefficients();
+    if (st == IIRSubType::RawBiquad)
+    {
+        hasRawCoeffs_ = true;
+        // Don't call updateIIRCoefficients — raw coeffs are set externally
+    }
+    else
+    {
+        hasRawCoeffs_ = false;
+        updateIIRCoefficients();
+    }
 }
 
 void EqBand::setFrequency(float f)
@@ -102,6 +110,31 @@ bool EqBand::usesCascade() const
         || iirSubType_ == IIRSubType::CrossoverAP;
 }
 
+bool EqBand::isBiquadStable(float a1, float a2)
+{
+    // For a normalized biquad (a0=1), stability requires both poles inside the unit circle.
+    // The Jury stability criterion for z^2 + a1*z + a2 = 0 gives:
+    //   |a2| < 1
+    //   a2 + a1 > -1   (i.e. 1 + a1 + a2 > 0)
+    //   a2 - a1 > -1   (i.e. 1 - a1 + a2 > 0)
+    // Also reject NaN/Inf.
+    if (std::isnan(a1) || std::isnan(a2) || std::isinf(a1) || std::isinf(a2))
+        return false;
+    if (std::abs(a2) >= 1.f)
+        return false;
+    if (1.f + a1 + a2 <= 0.f)
+        return false;
+    if (1.f - a1 + a2 <= 0.f)
+        return false;
+    return true;
+}
+
+bool EqBand::isRawCoeffsStable() const
+{
+    if (!hasRawCoeffs_) return true;
+    return isBiquadStable(rawCoeffs_.a1, rawCoeffs_.a2);
+}
+
 void EqBand::setButterworthOrder(int order)
 {
     butterworthOrder_ = jlimit(1, 8, order);
@@ -132,9 +165,15 @@ void EqBand::setRawCoefficients(float b0, float b1, float b2, float a0, float a1
 {
     hasRawCoeffs_ = true;
     rawCoeffs_ = { b0, b1, b2, a0, a1, a2 };
-    // Normalize by a0
-    if (a0 != 0.f && a0 != 1.f)
+
+    // Reject zero or NaN a0
+    if (a0 == 0.f || std::isnan(a0) || std::isinf(a0))
     {
+        rawCoeffs_ = { b0, b1, b2, 1.f, a1, a2 };
+    }
+    else if (a0 != 1.f)
+    {
+        // Normalize by a0
         rawCoeffs_.b0 /= a0;
         rawCoeffs_.b1 /= a0;
         rawCoeffs_.b2 /= a0;
@@ -142,9 +181,15 @@ void EqBand::setRawCoefficients(float b0, float b1, float b2, float a0, float a1
         rawCoeffs_.a2 /= a0;
         rawCoeffs_.a0 = 1.f;
     }
-    iirCoeffs_ = IIRCoefficients(rawCoeffs_.b0, rawCoeffs_.b1, rawCoeffs_.b2,
-                                  1.f, rawCoeffs_.a1, rawCoeffs_.a2);
-    startSmoothing();
+
+    // Only set up processing coefficients if stable
+    if (isBiquadStable(rawCoeffs_.a1, rawCoeffs_.a2))
+    {
+        iirCoeffs_ = IIRCoefficients(rawCoeffs_.b0, rawCoeffs_.b1, rawCoeffs_.b2,
+                                      1.f, rawCoeffs_.a1, rawCoeffs_.a2);
+        startSmoothing();
+    }
+    // If unstable, coefficients are stored but not applied to processing
 }
 
 void EqBand::setDelaySamples(int samples)
@@ -426,6 +471,10 @@ void EqBand::updateIIRCoefficients()
             }
             break;
         }
+
+        case IIRSubType::RawBiquad:
+            // Raw biquad coefficients are set externally via setRawCoefficients()
+            return;
     }
 
     startSmoothing();
@@ -505,7 +554,7 @@ void EqBand::recalcWorkingCoeffs()
         case IIRSubType::LowShelf:  c = IIRCoefficients::makeLowShelf(sampleRate_, f, q, g); break;
         case IIRSubType::HighShelf: c = IIRCoefficients::makeHighShelf(sampleRate_, f, q, g); break;
         case IIRSubType::Peak:      c = IIRCoefficients::makePeakFilter(sampleRate_, f, q, g); break;
-        default: return; // cascade types handled separately
+        default: return; // cascade types and raw biquad handled separately
     }
     iirWork_.setFromStandard(c.coefficients[0], c.coefficients[1], c.coefficients[2],
                               c.coefficients[3], c.coefficients[4]);
@@ -513,6 +562,10 @@ void EqBand::recalcWorkingCoeffs()
 
 void EqBand::applyIIR(float* data, int numSamples)
 {
+    // Skip processing for unstable raw coefficients (passthrough)
+    if (hasRawCoeffs_ && !isBiquadStable(rawCoeffs_.a1, rawCoeffs_.a2))
+        return;
+
     if (usesCascade())
     {
         applyCascadeIIR(data, numSamples);
@@ -689,6 +742,7 @@ static String iirSubTypeToString(IIRSubType st)
         case IIRSubType::CrossoverLP:   return "crossover_lp";
         case IIRSubType::CrossoverHP:   return "crossover_hp";
         case IIRSubType::CrossoverAP:   return "crossover_ap";
+        case IIRSubType::RawBiquad:     return "raw_biquad";
     }
     return "peak";
 }
@@ -707,6 +761,7 @@ static IIRSubType stringToIIRSubType(const String& s)
     if (s == "crossover_lp")  return IIRSubType::CrossoverLP;
     if (s == "crossover_hp")  return IIRSubType::CrossoverHP;
     if (s == "crossover_ap")  return IIRSubType::CrossoverAP;
+    if (s == "raw_biquad")   return IIRSubType::RawBiquad;
     return IIRSubType::Peak;
 }
 
@@ -722,34 +777,34 @@ var EqBand::toJson() const
         obj->setProperty("output_channel", outputChannel_);
     }
 
-    if (type_ == EqBandType::IIR && hasRawCoeffs_)
-    {
-        auto* coeffObj = new DynamicObject();
-        coeffObj->setProperty("b0", rawCoeffs_.b0);
-        coeffObj->setProperty("b1", rawCoeffs_.b1);
-        coeffObj->setProperty("b2", rawCoeffs_.b2);
-        coeffObj->setProperty("a0", rawCoeffs_.a0);
-        coeffObj->setProperty("a1", rawCoeffs_.a1);
-        coeffObj->setProperty("a2", rawCoeffs_.a2);
-        obj->setProperty("coefficients", var(coeffObj));
-    }
-    else
     {
         auto* params = new DynamicObject();
         switch (type_)
         {
             case EqBandType::IIR:
                 params->setProperty("type", iirSubTypeToString(iirSubType_));
-                params->setProperty("f_Hz", frequency_);
-                if (iirSubType_ == IIRSubType::ButterworthLP || iirSubType_ == IIRSubType::ButterworthHP)
-                    params->setProperty("order", butterworthOrder_);
-                else if (iirSubType_ == IIRSubType::CrossoverLP || iirSubType_ == IIRSubType::CrossoverHP
-                         || iirSubType_ == IIRSubType::CrossoverAP)
-                    params->setProperty("order", crossoverOrder_);
+                if (iirSubType_ == IIRSubType::RawBiquad)
+                {
+                    params->setProperty("b0", rawCoeffs_.b0);
+                    params->setProperty("b1", rawCoeffs_.b1);
+                    params->setProperty("b2", rawCoeffs_.b2);
+                    params->setProperty("a0", rawCoeffs_.a0);
+                    params->setProperty("a1", rawCoeffs_.a1);
+                    params->setProperty("a2", rawCoeffs_.a2);
+                }
                 else
                 {
-                    params->setProperty("Q", q_);
-                    params->setProperty("gain_db", gainDB_);
+                    params->setProperty("f_Hz", frequency_);
+                    if (iirSubType_ == IIRSubType::ButterworthLP || iirSubType_ == IIRSubType::ButterworthHP)
+                        params->setProperty("order", butterworthOrder_);
+                    else if (iirSubType_ == IIRSubType::CrossoverLP || iirSubType_ == IIRSubType::CrossoverHP
+                             || iirSubType_ == IIRSubType::CrossoverAP)
+                        params->setProperty("order", crossoverOrder_);
+                    else
+                    {
+                        params->setProperty("Q", q_);
+                        params->setProperty("gain_db", gainDB_);
+                    }
                 }
                 break;
             case EqBandType::FIR:
@@ -865,16 +920,30 @@ EqBand* EqBand::fromJson(const var& json)
             band->setType(EqBandType::IIR);
             auto subType = stringToIIRSubType(type);
             band->setIIRSubType(subType);
-            band->setFrequency((float)params.getProperty("f_Hz", 1000.0));
-            if (subType == IIRSubType::ButterworthLP || subType == IIRSubType::ButterworthHP)
-                band->setButterworthOrder((int)params.getProperty("order", 2));
-            else if (subType == IIRSubType::CrossoverLP || subType == IIRSubType::CrossoverHP
-                     || subType == IIRSubType::CrossoverAP)
-                band->setCrossoverOrder((int)params.getProperty("order", 4));
+            if (subType == IIRSubType::RawBiquad)
+            {
+                band->setRawCoefficients(
+                    (float)params.getProperty("b0", 1.0),
+                    (float)params.getProperty("b1", 0.0),
+                    (float)params.getProperty("b2", 0.0),
+                    (float)params.getProperty("a0", 1.0),
+                    (float)params.getProperty("a1", 0.0),
+                    (float)params.getProperty("a2", 0.0)
+                );
+            }
             else
             {
-                band->setQ((float)params.getProperty("Q", 0.707));
-                band->setGainDB((float)params.getProperty("gain_db", 0.0));
+                band->setFrequency((float)params.getProperty("f_Hz", 1000.0));
+                if (subType == IIRSubType::ButterworthLP || subType == IIRSubType::ButterworthHP)
+                    band->setButterworthOrder((int)params.getProperty("order", 2));
+                else if (subType == IIRSubType::CrossoverLP || subType == IIRSubType::CrossoverHP
+                         || subType == IIRSubType::CrossoverAP)
+                    band->setCrossoverOrder((int)params.getProperty("order", 4));
+                else
+                {
+                    band->setQ((float)params.getProperty("Q", 0.707));
+                    band->setGainDB((float)params.getProperty("gain_db", 0.0));
+                }
             }
         }
     }

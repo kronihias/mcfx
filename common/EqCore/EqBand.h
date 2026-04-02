@@ -76,7 +76,8 @@ enum class IIRSubType
     ButterworthHP,
     CrossoverLP,
     CrossoverHP,
-    CrossoverAP
+    CrossoverAP,
+    RawBiquad
 };
 
 class EqBand
@@ -117,6 +118,13 @@ public:
     bool hasRawCoefficients() const { return hasRawCoeffs_; }
     BiquadCoeffs getRawCoefficients() const { return rawCoeffs_; }
     void setRawCoefficients(float b0, float b1, float b2, float a0, float a1, float a2);
+
+    /** Check if biquad denominator coefficients are stable (poles inside unit circle).
+        Expects normalized form (a0 = 1). */
+    static bool isBiquadStable(float a1, float a2);
+
+    /** Returns true if current raw coefficients are stable (or if not in raw mode). */
+    bool isRawCoeffsStable() const;
 
     // --- Gain band mode ---
     bool getUseLinearGain() const { return useLinearGain_; }

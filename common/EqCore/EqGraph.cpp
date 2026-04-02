@@ -455,6 +455,63 @@ bool EqGraph::keyPressed(const KeyPress& key)
             return true;
         }
     }
+    if (key.isKeyCode(KeyPress::upKey) || key.isKeyCode(KeyPress::downKey))
+    {
+        if (selectedBand_ >= 0 && chain_ != nullptr && listener_ != nullptr)
+        {
+            auto* band = chain_->getBand(selectedBand_);
+            if (band != nullptr)
+            {
+                float step = key.getModifiers().isShiftDown() ? 1.0f : 0.25f;
+                float delta = key.isKeyCode(KeyPress::upKey) ? step : -step;
+                float newGain = jlimit(mindb_, maxdb_, band->getGainDB() + delta);
+                listener_->eqBandDragged(selectedBand_, band->getFrequency(), newGain);
+                return true;
+            }
+        }
+    }
+    if (key.isKeyCode(KeyPress::leftKey) || key.isKeyCode(KeyPress::rightKey))
+    {
+        if (key.getModifiers().isAltDown())
+        {
+            // Option + Left/Right: switch between bands
+            if (chain_ != nullptr && listener_ != nullptr)
+            {
+                int numBands = chain_->getNumBands();
+                if (numBands > 0)
+                {
+                    int newIndex;
+                    if (key.isKeyCode(KeyPress::leftKey))
+                        newIndex = (selectedBand_ <= 0) ? numBands - 1 : selectedBand_ - 1;
+                    else
+                        newIndex = (selectedBand_ < 0 || selectedBand_ >= numBands - 1) ? 0 : selectedBand_ + 1;
+                    listener_->eqBandSelected(newIndex);
+                    return true;
+                }
+            }
+        }
+        else
+        {
+            // Left/Right: adjust frequency
+            if (selectedBand_ >= 0 && chain_ != nullptr && listener_ != nullptr)
+            {
+                auto* band = chain_->getBand(selectedBand_);
+                if (band != nullptr)
+                {
+                    float freq = band->getFrequency();
+                    // Logarithmic step: multiply/divide by a small factor
+                    float factor = key.getModifiers().isShiftDown() ? 1.02f : 1.005f;
+                    if (key.isKeyCode(KeyPress::leftKey))
+                        freq /= factor;
+                    else
+                        freq *= factor;
+                    freq = jlimit(20.f, 20000.f, freq);
+                    listener_->eqBandDragged(selectedBand_, freq, band->getGainDB());
+                    return true;
+                }
+            }
+        }
+    }
     return false;
 }
 

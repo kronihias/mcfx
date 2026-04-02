@@ -60,6 +60,12 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     btnModeDiag_.setTooltip("Diagonal: apply the same EQ chain to all channels independently");
     btnModeMIMO_.setTooltip("MIMO: configure individual EQ paths between input/output channels");
 
+    // Diagonal channel selector
+    addAndMakeVisible(btnDiagChans_);
+    btnDiagChans_.addListener(this);
+    btnDiagChans_.setTooltip("Select which channels the diagonal EQ applies to");
+    updateDiagChannelButton();
+
     // MIMO path controls
     addAndMakeVisible(cbPathSelector_);
     cbPathSelector_.addListener(this);
@@ -112,11 +118,23 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     processor->addChangeListener(this);
 
+    // Restore editor view state from processor
+    diagonalMode_ = processor->editorDiagonalMode;
+    selectedPath_ = processor->editorSelectedPath;
+    btnModeDiag_.setToggleState(diagonalMode_, dontSendNotification);
+    btnModeMIMO_.setToggleState(!diagonalMode_, dontSendNotification);
+    updatePathSelector();
+    if (!diagonalMode_)
+        rebuildPathDropdown();
+
     // Point graph at the active chain
     auto* chain = getActiveChain();
     graph_.setChain(chain);
     refreshTabs();
-    if (chain != nullptr && chain->getNumBands() > 0)
+    int restoredBand = processor->editorSelectedBand;
+    if (chain != nullptr && restoredBand >= 0 && restoredBand < chain->getNumBands())
+        selectBand(restoredBand);
+    else if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
 
     // Listen for mouse enter/exit on all child components for status bar
@@ -129,7 +147,13 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
 Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
 {
-    getProcessor()->removeChangeListener(this);
+    // Save editor view state to processor for next GUI open
+    auto* proc = getProcessor();
+    proc->editorDiagonalMode = diagonalMode_;
+    proc->editorSelectedPath = selectedPath_;
+    proc->editorSelectedBand = selectedBand_;
+
+    proc->removeChangeListener(this);
     tabs_.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr);
 }
@@ -167,11 +191,12 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     // Mode & path selector row
     int pathY = 26;
     btnModeDiag_.setBounds(4, pathY, 75, 22);
-    btnModeMIMO_.setBounds(83, pathY, 55, 22);
-    cbPathSelector_.setBounds(145, pathY, 150, 22);
-    btnAddPath_.setBounds(300, pathY, 70, 22);
-    btnRemovePath_.setBounds(374, pathY, 85, 22);
-    btnRouting_.setBounds(464, pathY, 65, 22);
+    btnDiagChans_.setBounds(83, pathY, 65, 22);
+    btnModeMIMO_.setBounds(160, pathY, 55, 22);
+    cbPathSelector_.setBounds(222, pathY, 150, 22);
+    btnAddPath_.setBounds(377, pathY, 70, 22);
+    btnRemovePath_.setBounds(451, pathY, 85, 22);
+    btnRouting_.setBounds(541, pathY, 65, 22);
 
     // Graph
     int graphTop = pathY + 28;
@@ -198,6 +223,7 @@ void Mcfx_mimoeqAudioProcessorEditor::updatePathSelector()
 {
     diagonalMode_ = btnModeDiag_.getToggleState();
     bool mimo = !diagonalMode_;
+    btnDiagChans_.setVisible(diagonalMode_);
     cbPathSelector_.setVisible(mimo);
     btnAddPath_.setVisible(mimo);
     btnRemovePath_.setVisible(mimo);
@@ -261,6 +287,7 @@ void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
         bandEditor_.updateFromBand();
     graph_.repaint();
     updateUndoRedoButtons();
+    updateDiagChannelButton();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
@@ -517,6 +544,12 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         return;
     }
 
+    if (b == &btnDiagChans_)
+    {
+        showDiagChannelPopup();
+        return;
+    }
+
     if (b == &btnAddPath_)
     {
         showAddPathPopup();
@@ -728,7 +761,16 @@ void Mcfx_mimoeqAudioProcessorEditor::showRoutingOverview()
     int numCh = jmax(1, getProcessor()->getNumChannels_());
     bool hasDiag = getProcessor()->getDiagonalChain().getNumBands() > 0;
 
-    auto* overview = new RoutingOverviewComponent(keys, numCh, hasDiag, this);
+    // Build band count map for each path
+    std::map<PathKey, int> bandCounts;
+    for (auto& key : keys)
+    {
+        auto* chain = getProcessor()->getChainForPath(key.first, key.second);
+        if (chain != nullptr)
+            bandCounts[key] = chain->getNumBands();
+    }
+
+    auto* overview = new RoutingOverviewComponent(keys, bandCounts, numCh, hasDiag, this);
     auto& box = CallOutBox::launchAsynchronously(std::unique_ptr<Component>(overview),
                                                   btnRouting_.getScreenBounds(),
                                                   nullptr);
@@ -754,6 +796,115 @@ void Mcfx_mimoeqAudioProcessorEditor::routingPathSelected(int inCh, int outCh)
         selectBand(0);
     else
         selectBand(-1);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::routingPathCreated(int inCh, int outCh)
+{
+    // Create the new path
+    getProcessor()->pushUndoState();
+    updateUndoRedoButtons();
+
+    getProcessor()->getOrCreateChainForPath(inCh, outCh);
+
+    // Switch to MIMO mode if in diagonal
+    if (diagonalMode_)
+    {
+        btnModeMIMO_.setToggleState(true, dontSendNotification);
+        updatePathSelector();
+    }
+
+    selectedPath_ = { inCh, outCh };
+    rebuildPathDropdown();
+    notifyChainChanged();
+
+    auto* chain = getActiveChain();
+    graph_.setChain(chain);
+    refreshTabs();
+    selectBand(-1);
+
+    // Update the routing overview in-place so the new wire appears immediately
+    // The RoutingOverviewComponent is the source of this callback, so find it
+    // by walking Component parents isn't needed — use dynamic_cast on sender.
+    // Instead, rebuild paths and push to any visible overview.
+    auto keys = getProcessor()->getPathKeys();
+    std::map<PathKey, int> bandCounts;
+    for (auto& key : keys)
+    {
+        auto* c = getProcessor()->getChainForPath(key.first, key.second);
+        if (c != nullptr)
+            bandCounts[key] = c->getNumBands();
+    }
+    // Find the RoutingOverviewComponent inside any visible CallOutBox
+    for (int i = 0; i < Desktop::getInstance().getNumComponents(); ++i)
+    {
+        auto* comp = Desktop::getInstance().getComponent(i);
+        if (auto* callout = dynamic_cast<CallOutBox*>(comp))
+        {
+            for (int c = 0; c < callout->getNumChildComponents(); ++c)
+            {
+                if (auto* overview = dynamic_cast<RoutingOverviewComponent*>(callout->getChildComponent(c)))
+                {
+                    overview->updatePaths(keys, bandCounts);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::updateDiagChannelButton()
+{
+    auto& mask = getProcessor()->getDiagChannelMask();
+    int numCh = jmax(1, getProcessor()->getNumChannels_());
+
+    if (mask.empty())
+    {
+        btnDiagChans_.setButtonText("Ch: All");
+        return;
+    }
+
+    // Count valid channels (ignore sentinel 0)
+    int validCount = 0;
+    for (int ch : mask)
+        if (ch >= 1 && ch <= numCh) validCount++;
+
+    if (validCount == 0)
+        btnDiagChans_.setButtonText("Ch: None");
+    else if (validCount == numCh)
+        btnDiagChans_.setButtonText("Ch: All");
+    else if (validCount <= 3)
+    {
+        String txt = "Ch:";
+        for (int ch : mask)
+            if (ch >= 1) txt << " " << ch;
+        btnDiagChans_.setButtonText(txt);
+    }
+    else
+        btnDiagChans_.setButtonText("Ch: " + String(validCount) + "/" + String(numCh));
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::showDiagChannelPopup()
+{
+    int numCh = jmax(1, getProcessor()->getNumChannels_());
+    auto& mask = getProcessor()->getDiagChannelMask();
+
+    auto* selector = new ChannelSelectorComponent(numCh, mask, this);
+    CallOutBox::launchAsynchronously(std::unique_ptr<Component>(selector),
+                                     btnDiagChans_.getScreenBounds(),
+                                     nullptr);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::diagChannelMaskChanged(const std::set<int>& mask)
+{
+    auto& current = getProcessor()->getDiagChannelMask();
+    if (mask != current)
+    {
+        getProcessor()->pushUndoState();
+        updateUndoRedoButtons();
+        getProcessor()->setDiagChannelMask(mask);
+        updateDiagChannelButton();
+        notifyChainChanged();
+    }
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::eqUndoRequested()
