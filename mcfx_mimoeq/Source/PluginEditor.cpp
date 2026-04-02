@@ -47,35 +47,35 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     lblTitle_.setFont(Font(15.f, Font::plain));
     lblTitle_.setColour(Label::textColourId, Colours::aquamarine);
 
-    // Path selector
-    addAndMakeVisible(btnDiagonal_);
-    btnDiagonal_.setToggleState(true, dontSendNotification);
-    btnDiagonal_.addListener(this);
-    btnDiagonal_.setTooltip("Diagonal: apply the same EQ chain to all channels independently");
+    // Mode selector (radio group)
+    addAndMakeVisible(btnModeDiag_);
+    addAndMakeVisible(btnModeMIMO_);
+    btnModeDiag_.setRadioGroupId(1001);
+    btnModeMIMO_.setRadioGroupId(1001);
+    btnModeDiag_.setClickingTogglesState(true);
+    btnModeMIMO_.setClickingTogglesState(true);
+    btnModeDiag_.setToggleState(true, dontSendNotification);
+    btnModeDiag_.addListener(this);
+    btnModeMIMO_.addListener(this);
+    btnModeDiag_.setTooltip("Diagonal: apply the same EQ chain to all channels independently");
+    btnModeMIMO_.setTooltip("MIMO: configure individual EQ paths between input/output channels");
 
-    addAndMakeVisible(lblInput_);
-    addAndMakeVisible(lblOutput_);
-    addAndMakeVisible(lblArrow_);
-    lblInput_.setColour(Label::textColourId, Colours::white);
-    lblOutput_.setColour(Label::textColourId, Colours::white);
-    lblArrow_.setColour(Label::textColourId, Colours::white);
-    lblArrow_.setFont(Font(16.f, Font::plain));
+    // MIMO path controls
+    addAndMakeVisible(cbPathSelector_);
+    cbPathSelector_.addListener(this);
+    cbPathSelector_.setTooltip("Select an EQ path to edit");
 
-    addAndMakeVisible(cbInputCh_);
-    addAndMakeVisible(cbOutputCh_);
-    cbInputCh_.addListener(this);
-    cbOutputCh_.addListener(this);
-    cbInputCh_.setTooltip("Input channel for this EQ path");
-    cbOutputCh_.setTooltip("Output channel for this EQ path");
+    addAndMakeVisible(btnAddPath_);
+    btnAddPath_.addListener(this);
+    btnAddPath_.setTooltip("Add a new EQ path between input and output channels");
 
-    int numCh = jmax(1, processor->getNumChannels_());
-    for (int i = 1; i <= numCh; ++i)
-    {
-        cbInputCh_.addItem(String(i), i);
-        cbOutputCh_.addItem(String(i), i);
-    }
-    cbInputCh_.setSelectedId(1, dontSendNotification);
-    cbOutputCh_.setSelectedId(1, dontSendNotification);
+    addAndMakeVisible(btnRemovePath_);
+    btnRemovePath_.addListener(this);
+    btnRemovePath_.setTooltip("Remove the currently selected path");
+
+    addAndMakeVisible(btnRouting_);
+    btnRouting_.addListener(this);
+    btnRouting_.setTooltip("Show routing overview with all input/output connections");
 
     updatePathSelector();
 
@@ -164,14 +164,14 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     btnLoad_.setBounds(w - 115, 2, 55, 20);
     btnSave_.setBounds(w - 58, 2, 55, 20);
 
-    // Path selector row
+    // Mode & path selector row
     int pathY = 26;
-    btnDiagonal_.setBounds(4, pathY, 85, 22);
-    lblInput_.setBounds(100, pathY, 25, 22);
-    cbInputCh_.setBounds(125, pathY, 55, 22);
-    lblArrow_.setBounds(185, pathY, 20, 22);
-    lblOutput_.setBounds(210, pathY, 30, 22);
-    cbOutputCh_.setBounds(240, pathY, 55, 22);
+    btnModeDiag_.setBounds(4, pathY, 75, 22);
+    btnModeMIMO_.setBounds(83, pathY, 55, 22);
+    cbPathSelector_.setBounds(145, pathY, 150, 22);
+    btnAddPath_.setBounds(300, pathY, 70, 22);
+    btnRemovePath_.setBounds(374, pathY, 85, 22);
+    btnRouting_.setBounds(464, pathY, 65, 22);
 
     // Graph
     int graphTop = pathY + 28;
@@ -196,13 +196,41 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
 
 void Mcfx_mimoeqAudioProcessorEditor::updatePathSelector()
 {
-    bool isDiag = btnDiagonal_.getToggleState();
-    cbInputCh_.setEnabled(!isDiag);
-    cbOutputCh_.setEnabled(!isDiag);
-    lblInput_.setEnabled(!isDiag);
-    lblOutput_.setEnabled(!isDiag);
-    lblArrow_.setEnabled(!isDiag);
-    diagonalMode_ = isDiag;
+    diagonalMode_ = btnModeDiag_.getToggleState();
+    bool mimo = !diagonalMode_;
+    cbPathSelector_.setVisible(mimo);
+    btnAddPath_.setVisible(mimo);
+    btnRemovePath_.setVisible(mimo);
+    btnRouting_.setVisible(mimo);
+    if (mimo)
+        rebuildPathDropdown();
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::rebuildPathDropdown()
+{
+    cbPathSelector_.clear(dontSendNotification);
+
+    auto keys = getProcessor()->getPathKeys();
+    int selIdx = -1;
+    for (int i = 0; i < (int)keys.size(); ++i)
+    {
+        String label = "In " + String(keys[i].first) + " "
+                      + String(CharPointer_UTF8("\xe2\x86\x92")) + " Out "
+                      + String(keys[i].second);
+        cbPathSelector_.addItem(label, i + 1);
+        if (keys[i] == selectedPath_)
+            selIdx = i;
+    }
+
+    if (selIdx >= 0)
+        cbPathSelector_.setSelectedId(selIdx + 1, dontSendNotification);
+    else if (!keys.empty())
+    {
+        selectedPath_ = keys[0];
+        cbPathSelector_.setSelectedId(1, dontSendNotification);
+    }
+
+    btnRemovePath_.setEnabled(!keys.empty());
 }
 
 EqChain* Mcfx_mimoeqAudioProcessorEditor::getActiveChain()
@@ -210,13 +238,22 @@ EqChain* Mcfx_mimoeqAudioProcessorEditor::getActiveChain()
     if (diagonalMode_)
         return &getProcessor()->getDiagonalChain();
 
-    int inCh = cbInputCh_.getSelectedId();
-    int outCh = cbOutputCh_.getSelectedId();
-    return getProcessor()->getChainForPath(inCh, outCh);
+    return getProcessor()->getChainForPath(selectedPath_.first, selectedPath_.second);
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
 {
+    if (!diagonalMode_)
+    {
+        rebuildPathDropdown();
+        // If the selected path was removed (e.g. by undo), fall back
+        if (getProcessor()->getChainForPath(selectedPath_.first, selectedPath_.second) == nullptr)
+        {
+            auto keys = getProcessor()->getPathKeys();
+            if (!keys.empty())
+                selectedPath_ = keys[0];
+        }
+    }
     auto* chain = getActiveChain();
     graph_.setChain(chain);
     refreshTabs();
@@ -226,8 +263,16 @@ void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
     updateUndoRedoButtons();
 }
 
-void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox*)
+void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
 {
+    if (cb == &cbPathSelector_)
+    {
+        int sel = cbPathSelector_.getSelectedId() - 1; // 0-based index
+        auto keys = getProcessor()->getPathKeys();
+        if (sel >= 0 && sel < (int)keys.size())
+            selectedPath_ = keys[sel];
+    }
+
     auto* chain = getActiveChain();
     graph_.setChain(chain);
     refreshTabs();
@@ -405,9 +450,7 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float ga
     }
     else
     {
-        int inCh = cbInputCh_.getSelectedId();
-        int outCh = cbOutputCh_.getSelectedId();
-        chain = getProcessor()->getOrCreateChainForPath(inCh, outCh);
+        chain = getProcessor()->getOrCreateChainForPath(selectedPath_.first, selectedPath_.second);
         graph_.setChain(chain);
     }
 
@@ -423,8 +466,8 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float ga
     else
     {
         band->setDiagonal(false);
-        band->setInputChannel(cbInputCh_.getSelectedId());
-        band->setOutputChannel(cbOutputCh_.getSelectedId());
+        band->setInputChannel(selectedPath_.first);
+        band->setOutputChannel(selectedPath_.second);
     }
     band->prepare(getProcessor()->getSampleRate_(), 512);
 
@@ -461,7 +504,7 @@ void Mcfx_mimoeqAudioProcessorEditor::bandStructureChanged(int)
 
 void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
 {
-    if (b == &btnDiagonal_)
+    if (b == &btnModeDiag_ || b == &btnModeMIMO_)
     {
         updatePathSelector();
         auto* chain = getActiveChain();
@@ -471,6 +514,45 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             selectBand(0);
         else
             selectBand(-1);
+        return;
+    }
+
+    if (b == &btnAddPath_)
+    {
+        showAddPathPopup();
+        return;
+    }
+
+    if (b == &btnRemovePath_)
+    {
+        if (getProcessor()->getChainForPath(selectedPath_.first, selectedPath_.second) != nullptr)
+        {
+            dragUndoPushed_ = false;
+            getProcessor()->pushUndoState();
+            updateUndoRedoButtons();
+            getProcessor()->removePathChain(selectedPath_.first, selectedPath_.second);
+
+            auto keys = getProcessor()->getPathKeys();
+            if (!keys.empty())
+                selectedPath_ = keys[0];
+
+            rebuildPathDropdown();
+            notifyChainChanged();
+
+            auto* chain = getActiveChain();
+            graph_.setChain(chain);
+            refreshTabs();
+            if (chain != nullptr && chain->getNumBands() > 0)
+                selectBand(0);
+            else
+                selectBand(-1);
+        }
+        return;
+    }
+
+    if (b == &btnRouting_)
+    {
+        showRoutingOverview();
         return;
     }
 
@@ -500,9 +582,7 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         }
         else
         {
-            int inCh = cbInputCh_.getSelectedId();
-            int outCh = cbOutputCh_.getSelectedId();
-            chain = getProcessor()->getOrCreateChainForPath(inCh, outCh);
+            chain = getProcessor()->getOrCreateChainForPath(selectedPath_.first, selectedPath_.second);
             graph_.setChain(chain);
         }
 
@@ -512,8 +592,8 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         else
         {
             band->setDiagonal(false);
-            band->setInputChannel(cbInputCh_.getSelectedId());
-            band->setOutputChannel(cbOutputCh_.getSelectedId());
+            band->setInputChannel(selectedPath_.first);
+            band->setOutputChannel(selectedPath_.second);
         }
         band->prepare(getProcessor()->getSampleRate_(), 512);
 
@@ -594,6 +674,88 @@ void Mcfx_mimoeqAudioProcessorEditor::filesDropped(const StringArray& files, int
     }
 }
 
+void Mcfx_mimoeqAudioProcessorEditor::showAddPathPopup()
+{
+    int numCh = jmax(1, getProcessor()->getNumChannels_());
+    auto existingKeys = getProcessor()->getPathKeys();
+    std::set<PathKey> existing(existingKeys.begin(), existingKeys.end());
+
+    PopupMenu menu;
+    for (int inCh = 1; inCh <= numCh; ++inCh)
+    {
+        PopupMenu subMenu;
+        bool hasItems = false;
+        for (int outCh = 1; outCh <= numCh; ++outCh)
+        {
+            if (existing.count({inCh, outCh}) == 0)
+            {
+                int itemId = (inCh - 1) * numCh + (outCh - 1) + 1;
+                subMenu.addItem(itemId, "Out " + String(outCh));
+                hasItems = true;
+            }
+        }
+        if (hasItems)
+            menu.addSubMenu("In " + String(inCh), subMenu);
+    }
+
+    menu.showMenuAsync(PopupMenu::Options().withTargetComponent(&btnAddPath_),
+        [this, numCh](int result)
+        {
+            if (result <= 0) return;
+            int idx = result - 1;
+            int inCh  = idx / numCh + 1;
+            int outCh = idx % numCh + 1;
+
+            dragUndoPushed_ = false;
+            getProcessor()->pushUndoState();
+            updateUndoRedoButtons();
+
+            getProcessor()->getOrCreateChainForPath(inCh, outCh);
+            selectedPath_ = { inCh, outCh };
+            rebuildPathDropdown();
+            notifyChainChanged();
+
+            auto* chain = getActiveChain();
+            graph_.setChain(chain);
+            refreshTabs();
+            selectBand(-1); // new path has no bands yet
+        });
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::showRoutingOverview()
+{
+    auto keys = getProcessor()->getPathKeys();
+    int numCh = jmax(1, getProcessor()->getNumChannels_());
+    bool hasDiag = getProcessor()->getDiagonalChain().getNumBands() > 0;
+
+    auto* overview = new RoutingOverviewComponent(keys, numCh, hasDiag, this);
+    auto& box = CallOutBox::launchAsynchronously(std::unique_ptr<Component>(overview),
+                                                  btnRouting_.getScreenBounds(),
+                                                  nullptr);
+    (void)box;
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::routingPathSelected(int inCh, int outCh)
+{
+    // Switch to MIMO mode if in diagonal
+    if (diagonalMode_)
+    {
+        btnModeMIMO_.setToggleState(true, dontSendNotification);
+        updatePathSelector();
+    }
+
+    selectedPath_ = { inCh, outCh };
+    rebuildPathDropdown();
+
+    auto* chain = getActiveChain();
+    graph_.setChain(chain);
+    refreshTabs();
+    if (chain != nullptr && chain->getNumBands() > 0)
+        selectBand(0);
+    else
+        selectBand(-1);
+}
+
 void Mcfx_mimoeqAudioProcessorEditor::eqUndoRequested()
 {
     performUndo();
@@ -609,6 +771,16 @@ void Mcfx_mimoeqAudioProcessorEditor::performUndo()
     dragUndoPushed_ = false;
     if (getProcessor()->undo())
     {
+        if (!diagonalMode_)
+        {
+            rebuildPathDropdown();
+            if (getProcessor()->getChainForPath(selectedPath_.first, selectedPath_.second) == nullptr)
+            {
+                auto keys = getProcessor()->getPathKeys();
+                if (!keys.empty())
+                    selectedPath_ = keys[0];
+            }
+        }
         auto* chain = getActiveChain();
         graph_.setChain(chain);
         refreshTabs();
@@ -625,6 +797,16 @@ void Mcfx_mimoeqAudioProcessorEditor::performRedo()
     dragUndoPushed_ = false;
     if (getProcessor()->redo())
     {
+        if (!diagonalMode_)
+        {
+            rebuildPathDropdown();
+            if (getProcessor()->getChainForPath(selectedPath_.first, selectedPath_.second) == nullptr)
+            {
+                auto keys = getProcessor()->getPathKeys();
+                if (!keys.empty())
+                    selectedPath_ = keys[0];
+            }
+        }
         auto* chain = getActiveChain();
         graph_.setChain(chain);
         refreshTabs();

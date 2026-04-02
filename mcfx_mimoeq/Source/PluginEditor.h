@@ -24,6 +24,7 @@
 #include "PluginProcessor.h"
 #include "EqGraph.h"
 #include "EqBandEditor.h"
+#include "RoutingOverview.h"
 
 class Mcfx_mimoeqAudioProcessorEditor;
 
@@ -43,7 +44,8 @@ class Mcfx_mimoeqAudioProcessorEditor : public AudioProcessorEditor,
                                           public EqGraph::Listener,
                                           public EqBandEditor::Listener,
                                           public Button::Listener,
-                                          public FileDragAndDropTarget
+                                          public FileDragAndDropTarget,
+                                          public RoutingOverviewComponent::Listener
 {
     friend class EqTabBar;
 public:
@@ -78,6 +80,9 @@ public:
     bool isInterestedInFileDrag(const StringArray& files) override;
     void filesDropped(const StringArray& files, int x, int y) override;
 
+    // RoutingOverviewComponent::Listener
+    void routingPathSelected(int inCh, int outCh) override;
+
 private:
     Mcfx_mimoeqAudioProcessor* getProcessor() const
     {
@@ -91,13 +96,18 @@ private:
     void notifyParameterChanged();   // lightweight sync (freq/Q/gain/enable changes)
     void updatePathSelector();
 
-    // Path selection
-    ComboBox cbInputCh_;
-    ComboBox cbOutputCh_;
-    ToggleButton btnDiagonal_ { "Diagonal" };
-    Label lblInput_ { {}, "In:" };
-    Label lblOutput_ { {}, "Out:" };
-    Label lblArrow_ { {}, String(CharPointer_UTF8("\xe2\x86\x92")) }; // →
+    // Mode & path selection
+    TextButton btnModeDiag_    { "Diagonal" };
+    TextButton btnModeMIMO_    { "MIMO" };
+    ComboBox   cbPathSelector_;
+    TextButton btnAddPath_     { "Add Path" };
+    TextButton btnRemovePath_  { "Remove Path" };
+    TextButton btnRouting_     { "Routing" };
+    PathKey    selectedPath_   { 1, 1 };
+
+    void rebuildPathDropdown();
+    void showAddPathPopup();
+    void showRoutingOverview();
 
     EqGraph graph_;
     EqBandEditor bandEditor_;
