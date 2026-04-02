@@ -84,6 +84,9 @@ Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
 
 Mcfx_mimoeqAudioProcessor::~Mcfx_mimoeqAudioProcessor()
 {
+    delete activeState_;
+    delete pendingState_.load(std::memory_order_acquire);
+    delete garbageState_.load(std::memory_order_acquire);
 }
 
 void Mcfx_mimoeqAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
@@ -91,7 +94,6 @@ void Mcfx_mimoeqAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     currentSampleRate_ = sampleRate;
     currentBlockSize_ = samplesPerBlock;
     workBuffer_.setSize(getTotalNumInputChannels(), samplesPerBlock);
-    needsRebuild_.store(false);
     rebuildProcessingChains();
 }
 
@@ -101,10 +103,13 @@ void Mcfx_mimoeqAudioProcessor::releaseResources()
 
 void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
 {
-    int numCh = getTotalNumInputChannels();
+    // Clean up garbage from previous swap (safe: called on GUI/host thread)
+    delete garbageState_.exchange(nullptr, std::memory_order_acquire);
 
-    // Rebuild diagonal chain copies per channel
-    diagChannelChains_.clear();
+    int numCh = getTotalNumInputChannels();
+    auto* newState = new ProcessingState();
+
+    // Build per-channel diagonal copies
     if (diagonalChain_.getNumBands() > 0)
     {
         var diagJson = diagonalChain_.toJson();
@@ -113,13 +118,28 @@ void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
             auto* chChain = new EqChain();
             chChain->fromJson(diagJson, currentSampleRate_);
             chChain->prepare(currentSampleRate_, currentBlockSize_);
-            diagChannelChains_.add(chChain);
+            newState->diagChannelChains.add(chChain);
         }
     }
 
-    // Prepare per-path chains
+    // Build per-path chain processing copies
     for (auto& kv : pathChains_)
-        kv.second->prepare(currentSampleRate_, currentBlockSize_);
+    {
+        auto* srcChain = kv.second;
+        if (srcChain->getNumBands() > 0)
+        {
+            var pathJson = srcChain->toJson();
+            auto* copy = new EqChain();
+            copy->fromJson(pathJson, currentSampleRate_);
+            copy->prepare(currentSampleRate_, currentBlockSize_);
+            newState->ownedPathChains.add(copy);
+            newState->pathChains[kv.first] = copy;
+        }
+    }
+
+    // Publish lock-free — audio thread will pick up on next buffer
+    auto* oldPending = pendingState_.exchange(newState, std::memory_order_release);
+    delete oldPending;  // discard unconsumed pending state (if any)
 }
 
 EqChain* Mcfx_mimoeqAudioProcessor::getChainForPath(int inCh, int outCh)
@@ -143,45 +163,49 @@ EqChain* Mcfx_mimoeqAudioProcessor::getOrCreateChainForPath(int inCh, int outCh)
     return chain;
 }
 
-void Mcfx_mimoeqAudioProcessor::doRebuildIfNeeded()
-{
-    if (needsRebuild_.exchange(false))
-    {
-        needsParamSync_.store(false); // rebuild supersedes sync
-        rebuildProcessingChains();
-    }
-}
-
 void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
 {
-    if (needsParamSync_.exchange(false))
+    if (needsParamSync_.exchange(false, std::memory_order_acquire))
     {
-        // Sync diagonal chain parameters to per-channel copies
-        for (int ch = 0; ch < diagChannelChains_.size(); ++ch)
-            diagChannelChains_[ch]->syncParametersFrom(diagonalChain_);
+        // Sync diagonal chain parameters to per-channel processing copies.
+        // Reads float parameters from diagonalChain_ (GUI-edited model) —
+        // individual float reads are safe on all modern architectures.
+        if (activeState_ != nullptr)
+        {
+            for (int ch = 0; ch < activeState_->diagChannelChains.size(); ++ch)
+                activeState_->diagChannelChains[ch]->syncParametersFrom(diagonalChain_);
+        }
     }
 }
 
 void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuffer&)
 {
-    // Rebuild or sync on the audio thread — this is the only safe place
-    doRebuildIfNeeded();
+    // Lock-free state swap: pick up new processing state if available
+    auto* pending = pendingState_.exchange(nullptr, std::memory_order_acquire);
+    if (pending != nullptr)
+    {
+        // Stash old state for GUI thread to delete (can't allocate/free on audio thread)
+        garbageState_.store(activeState_, std::memory_order_release);
+        activeState_ = pending;
+        needsParamSync_.store(false, std::memory_order_relaxed); // rebuild supersedes sync
+    }
+
     doParamSyncIfNeeded();
+
+    if (activeState_ == nullptr)
+        return;
 
     int numChannels = buffer.getNumChannels();
     int numSamples = buffer.getNumSamples();
 
     // Step 1: Apply diagonal chain (same processing on each channel)
-    if (diagChannelChains_.size() > 0)
-    {
-        for (int ch = 0; ch < numChannels && ch < diagChannelChains_.size(); ++ch)
-            diagChannelChains_[ch]->processBlock(buffer.getWritePointer(ch), numSamples);
-    }
+    auto& diagChains = activeState_->diagChannelChains;
+    for (int ch = 0; ch < numChannels && ch < diagChains.size(); ++ch)
+        diagChains[ch]->processBlock(buffer.getWritePointer(ch), numSamples);
 
     // Step 2: Apply per-path chains
-    // For diagonal paths (in==out), process in-place
-    // For cross-paths (in!=out), we need a work buffer
-    if (!pathChains_.empty())
+    auto& pathChains = activeState_->pathChains;
+    if (!pathChains.empty())
     {
         workBuffer_.setSize(numChannels, numSamples, false, false, true);
         workBuffer_.clear();
@@ -189,7 +213,7 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
         // Track which output channels have cross-path contributions
         std::set<int> crossOutputChannels;
 
-        for (auto& kv : pathChains_)
+        for (auto& kv : pathChains)
         {
             int inCh = kv.first.first - 1;  // 1-based to 0-based
             int outCh = kv.first.second - 1;
@@ -210,7 +234,6 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
             {
                 // Cross-path: copy input, process, add to work buffer
                 crossOutputChannels.insert(outCh);
-                // Use a temp buffer for this path
                 AudioSampleBuffer temp(1, numSamples);
                 temp.copyFrom(0, 0, buffer.getReadPointer(inCh), numSamples);
                 chain->processBlock(temp.getWritePointer(0), numSamples);
@@ -274,14 +297,14 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
     if (!sos.isArray())
         return;
 
-    // Clear everything
+    // Clear model
     diagonalChain_.fromJson(var(Array<var>()), sr);
     pathChains_.clear();
     ownedPathChains_.clear();
 
     // Separate bands into diagonal and per-path groups
     Array<var> diagBands;
-    std::map<PathKey, Array<var>> pathBands;
+    std::map<PathKey, Array<var>> pathBandMap;
 
     for (int i = 0; i < sos.size(); ++i)
     {
@@ -296,20 +319,22 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
         {
             int inCh = (int)bandJson.getProperty("input_channel", 1);
             int outCh = (int)bandJson.getProperty("output_channel", 1);
-            pathBands[{inCh, outCh}].add(bandJson);
+            pathBandMap[{inCh, outCh}].add(bandJson);
         }
     }
 
+    // Rebuild model
     diagonalChain_.fromJson(var(diagBands), sr);
     diagonalChain_.prepare(currentSampleRate_, currentBlockSize_);
 
-    for (auto& kv : pathBands)
+    for (auto& kv : pathBandMap)
     {
         auto* chain = getOrCreateChainForPath(kv.first.first, kv.first.second);
         chain->fromJson(var(kv.second), sr);
         chain->prepare(currentSampleRate_, currentBlockSize_);
     }
 
+    // Build and publish new processing state (lock-free)
     rebuildProcessingChains();
     sendChangeMessage();
 }
@@ -328,6 +353,51 @@ bool Mcfx_mimoeqAudioProcessor::saveConfigToFile(const File& file)
     getStateInformation(mb);
     String jsonStr = String::createStringFromData(mb.getData(), (int)mb.getSize());
     return file.replaceWithText(jsonStr);
+}
+
+// --- Undo / Redo ---
+
+String Mcfx_mimoeqAudioProcessor::captureState()
+{
+    MemoryBlock mb;
+    getStateInformation(mb);
+    return String::createStringFromData(mb.getData(), (int)mb.getSize());
+}
+
+void Mcfx_mimoeqAudioProcessor::restoreState(const String& s)
+{
+    auto data = s.toRawUTF8();
+    setStateInformation(data, (int)s.getNumBytesAsUTF8());
+}
+
+void Mcfx_mimoeqAudioProcessor::pushUndoState()
+{
+    undoStack_.push_back(captureState());
+    if ((int)undoStack_.size() > kMaxUndoSteps)
+        undoStack_.erase(undoStack_.begin());
+    redoStack_.clear();
+}
+
+bool Mcfx_mimoeqAudioProcessor::undo()
+{
+    if (undoStack_.empty())
+        return false;
+    redoStack_.push_back(captureState());
+    String state = undoStack_.back();
+    undoStack_.pop_back();
+    restoreState(state);
+    return true;
+}
+
+bool Mcfx_mimoeqAudioProcessor::redo()
+{
+    if (redoStack_.empty())
+        return false;
+    undoStack_.push_back(captureState());
+    String state = redoStack_.back();
+    redoStack_.pop_back();
+    restoreState(state);
+    return true;
 }
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()

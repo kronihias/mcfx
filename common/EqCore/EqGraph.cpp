@@ -444,6 +444,17 @@ bool EqGraph::keyPressed(const KeyPress& key)
             return true;
         }
     }
+    if (key.getModifiers().isCommandDown() && key.isKeyCode('Z'))
+    {
+        if (listener_ != nullptr)
+        {
+            if (key.getModifiers().isShiftDown())
+                listener_->eqRedoRequested();
+            else
+                listener_->eqUndoRequested();
+            return true;
+        }
+    }
     return false;
 }
 

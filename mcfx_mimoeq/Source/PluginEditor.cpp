@@ -95,6 +95,14 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     addAndMakeVisible(btnRemove_);
     btnRemove_.addListener(this);
     btnRemove_.setTooltip("Remove the selected EQ band (shortcut: D or Delete in graph)");
+    addAndMakeVisible(btnUndo_);
+    btnUndo_.addListener(this);
+    btnUndo_.setTooltip("Undo last change (Cmd+Z)");
+    btnUndo_.setEnabled(false);
+    addAndMakeVisible(btnRedo_);
+    btnRedo_.addListener(this);
+    btnRedo_.setTooltip("Redo (Cmd+Shift+Z)");
+    btnRedo_.setEnabled(false);
     addAndMakeVisible(btnLoad_);
     btnLoad_.addListener(this);
     btnLoad_.setTooltip("Load EQ configuration from JSON file");
@@ -151,8 +159,10 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     int h = getHeight();
 
     lblTitle_.setBounds(4, 2, 150, 20);
-    btnLoad_.setBounds(w - 120, 2, 55, 20);
-    btnSave_.setBounds(w - 60, 2, 55, 20);
+    btnUndo_.setBounds(w - 210, 2, 40, 20);
+    btnRedo_.setBounds(w - 168, 2, 40, 20);
+    btnLoad_.setBounds(w - 115, 2, 55, 20);
+    btnSave_.setBounds(w - 58, 2, 55, 20);
 
     // Path selector row
     int pathY = 26;
@@ -213,6 +223,7 @@ void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
     if (selectedBand_ >= 0 && chain != nullptr && selectedBand_ < chain->getNumBands())
         bandEditor_.updateFromBand();
     graph_.repaint();
+    updateUndoRedoButtons();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox*)
@@ -294,6 +305,13 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDragged(int bandIndex, float newFreq
     if (chain == nullptr)
         return;
 
+    if (!dragUndoPushed_)
+    {
+        getProcessor()->pushUndoState();
+        dragUndoPushed_ = true;
+        updateUndoRedoButtons();
+    }
+
     auto* band = chain->getBand(bandIndex);
     if (band == nullptr)
         return;
@@ -318,6 +336,13 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandQChanged(int bandIndex, float newQ)
     if (chain == nullptr)
         return;
 
+    if (!dragUndoPushed_)
+    {
+        getProcessor()->pushUndoState();
+        dragUndoPushed_ = true;
+        updateUndoRedoButtons();
+    }
+
     auto* band = chain->getBand(bandIndex);
     if (band != nullptr)
     {
@@ -329,6 +354,7 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandQChanged(int bandIndex, float newQ)
 
 void Mcfx_mimoeqAudioProcessorEditor::eqBandSelected(int bandIndex)
 {
+    dragUndoPushed_ = false;
     selectBand(bandIndex);
 }
 
@@ -341,6 +367,8 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandEnableToggled(int bandIndex)
     auto* band = chain->getBand(bandIndex);
     if (band != nullptr)
     {
+        getProcessor()->pushUndoState();
+        updateUndoRedoButtons();
         band->setEnabled(!band->isEnabled());
         bandEditor_.updateFromBand();
         notifyParameterChanged();
@@ -352,6 +380,9 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDeleteRequested(int bandIndex)
     auto* chain = getActiveChain();
     if (chain != nullptr && bandIndex >= 0 && bandIndex < chain->getNumBands())
     {
+        dragUndoPushed_ = false;
+        getProcessor()->pushUndoState();
+        updateUndoRedoButtons();
         chain->removeBand(bandIndex);
         int newSel = jmin(bandIndex, chain->getNumBands() - 1);
         refreshTabs();
@@ -362,6 +393,10 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDeleteRequested(int bandIndex)
 
 void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float gainDB)
 {
+    dragUndoPushed_ = false;
+    getProcessor()->pushUndoState();
+    updateUndoRedoButtons();
+
     EqChain* chain = nullptr;
 
     if (diagonalMode_)
@@ -400,16 +435,27 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float ga
 
 void Mcfx_mimoeqAudioProcessorEditor::bandParameterChanged(int)
 {
+    if (!dragUndoPushed_)
+    {
+        getProcessor()->pushUndoState();
+        dragUndoPushed_ = true;
+        updateUndoRedoButtons();
+    }
     notifyParameterChanged();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::bandEnableChanged(int, bool)
 {
+    getProcessor()->pushUndoState();
+    updateUndoRedoButtons();
     notifyParameterChanged();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::bandStructureChanged(int)
 {
+    dragUndoPushed_ = false;
+    getProcessor()->pushUndoState();
+    updateUndoRedoButtons();
     notifyChainChanged();
 }
 
@@ -428,8 +474,24 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         return;
     }
 
+    if (b == &btnUndo_)
+    {
+        performUndo();
+        return;
+    }
+
+    if (b == &btnRedo_)
+    {
+        performRedo();
+        return;
+    }
+
     if (b == &btnAdd_)
     {
+        dragUndoPushed_ = false;
+        getProcessor()->pushUndoState();
+        updateUndoRedoButtons();
+
         EqChain* chain = nullptr;
 
         if (diagonalMode_)
@@ -464,6 +526,9 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         auto* chain = getActiveChain();
         if (chain != nullptr && selectedBand_ >= 0)
         {
+            dragUndoPushed_ = false;
+            getProcessor()->pushUndoState();
+            updateUndoRedoButtons();
             chain->removeBand(selectedBand_);
             int newSel = jmin(selectedBand_, chain->getNumBands() - 1);
             refreshTabs();
@@ -476,6 +541,9 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         FileChooser chooser("Load EQ Config", File(), "*.json");
         if (chooser.browseForFileToOpen())
         {
+            dragUndoPushed_ = false;
+            getProcessor()->pushUndoState();
+            updateUndoRedoButtons();
             getProcessor()->loadConfigFromFile(chooser.getResult());
             auto* chain = getActiveChain();
             graph_.setChain(chain);
@@ -510,6 +578,9 @@ void Mcfx_mimoeqAudioProcessorEditor::filesDropped(const StringArray& files, int
     {
         if (f.endsWithIgnoreCase(".json"))
         {
+            dragUndoPushed_ = false;
+            getProcessor()->pushUndoState();
+            updateUndoRedoButtons();
             getProcessor()->loadConfigFromFile(File(f));
             auto* chain = getActiveChain();
             graph_.setChain(chain);
@@ -521,6 +592,54 @@ void Mcfx_mimoeqAudioProcessorEditor::filesDropped(const StringArray& files, int
             break;
         }
     }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::eqUndoRequested()
+{
+    performUndo();
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::eqRedoRequested()
+{
+    performRedo();
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::performUndo()
+{
+    dragUndoPushed_ = false;
+    if (getProcessor()->undo())
+    {
+        auto* chain = getActiveChain();
+        graph_.setChain(chain);
+        refreshTabs();
+        if (chain != nullptr && chain->getNumBands() > 0)
+            selectBand(jmin(selectedBand_, chain->getNumBands() - 1));
+        else
+            selectBand(-1);
+        updateUndoRedoButtons();
+    }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::performRedo()
+{
+    dragUndoPushed_ = false;
+    if (getProcessor()->redo())
+    {
+        auto* chain = getActiveChain();
+        graph_.setChain(chain);
+        refreshTabs();
+        if (chain != nullptr && chain->getNumBands() > 0)
+            selectBand(jmin(selectedBand_, chain->getNumBands() - 1));
+        else
+            selectBand(-1);
+        updateUndoRedoButtons();
+    }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::updateUndoRedoButtons()
+{
+    btnUndo_.setEnabled(getProcessor()->canUndo());
+    btnRedo_.setEnabled(getProcessor()->canRedo());
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::mouseEnter(const MouseEvent& e)
