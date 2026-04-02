@@ -163,6 +163,27 @@ EqChain* Mcfx_mimoeqAudioProcessor::getOrCreateChainForPath(int inCh, int outCh)
     return chain;
 }
 
+bool Mcfx_mimoeqAudioProcessor::removePathChain(int inCh, int outCh)
+{
+    auto it = pathChains_.find({inCh, outCh});
+    if (it == pathChains_.end())
+        return false;
+
+    EqChain* chain = it->second;
+    pathChains_.erase(it);
+    ownedPathChains_.removeObject(chain, true);
+    return true;
+}
+
+std::vector<PathKey> Mcfx_mimoeqAudioProcessor::getPathKeys() const
+{
+    std::vector<PathKey> keys;
+    keys.reserve(pathChains_.size());
+    for (auto& kv : pathChains_)
+        keys.push_back(kv.first);
+    return keys;
+}
+
 void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
 {
     if (needsParamSync_.exchange(false, std::memory_order_acquire))
@@ -509,8 +530,24 @@ void Mcfx_mimoeqAudioProcessor::syncRestoreState(const String& targetState)
                 band->setFrequency((float)params["f_Hz"]);
             if (params.hasProperty("Q"))
                 band->setQ((float)params["Q"]);
-            if (params.hasProperty("gain_db"))
-                band->setGainDB((float)params["gain_db"]);
+
+            // Gain band: handle dB vs linear mode
+            if (params.hasProperty("gain_linear"))
+            {
+                band->setUseLinearGain(true);
+                band->setLinearGain((float)(double)params["gain_linear"]);
+            }
+            else
+            {
+                if (band->getType() == EqBandType::Gain)
+                    band->setUseLinearGain(false);
+                if (params.hasProperty("gain_db"))
+                    band->setGainDB((float)params["gain_db"]);
+                if (params.hasProperty("invert"))
+                    band->setInvertGain((bool)params["invert"]);
+                else if (band->getType() == EqBandType::Gain)
+                    band->setInvertGain(false);
+            }
         }
 
         // enabled: absent means true, explicit false means disabled

@@ -57,9 +57,40 @@ void EqBand::setQ(float q)
 void EqBand::setGainDB(float db)
 {
     gainDB_ = db;
-    linearGain_ = Decibels::decibelsToGain(db);
+    if (!useLinearGain_)
+    {
+        float lin = Decibels::decibelsToGain(db);
+        linearGain_ = invertGain_ ? -lin : lin;
+    }
     if (type_ == EqBandType::IIR && !hasRawCoeffs_)
         updateIIRCoefficients();
+}
+
+void EqBand::setLinearGain(float g)
+{
+    linearGain_ = g;
+    gainDB_ = Decibels::gainToDecibels(std::abs(g));
+}
+
+void EqBand::setUseLinearGain(bool linear)
+{
+    useLinearGain_ = linear;
+    if (!linear)
+    {
+        // Switching to dB mode: recompute linearGain_ from gainDB_ + invert
+        float lin = Decibels::decibelsToGain(gainDB_);
+        linearGain_ = invertGain_ ? -lin : lin;
+    }
+}
+
+void EqBand::setInvertGain(bool inv)
+{
+    invertGain_ = inv;
+    if (!useLinearGain_)
+    {
+        float lin = Decibels::decibelsToGain(gainDB_);
+        linearGain_ = inv ? -lin : lin;
+    }
 }
 
 bool EqBand::usesCascade() const
@@ -215,6 +246,8 @@ void EqBand::syncParametersFrom(const EqBand& source)
     {
         gainDB_ = source.gainDB_;
         linearGain_ = source.linearGain_;
+        useLinearGain_ = source.useLinearGain_;
+        invertGain_ = source.invertGain_;
     }
     else if (type_ == EqBandType::Delay)
     {
@@ -730,7 +763,16 @@ var EqBand::toJson() const
             }
             case EqBandType::Gain:
                 params->setProperty("type", "gain");
-                params->setProperty("gain_db", gainDB_);
+                if (useLinearGain_)
+                {
+                    params->setProperty("gain_linear", (double)linearGain_);
+                }
+                else
+                {
+                    params->setProperty("gain_db", gainDB_);
+                    if (invertGain_)
+                        params->setProperty("invert", true);
+                }
                 break;
             case EqBandType::Delay:
                 params->setProperty("type", "delay");
@@ -787,7 +829,18 @@ EqBand* EqBand::fromJson(const var& json)
         if (type == "gain")
         {
             band->setType(EqBandType::Gain);
-            band->setGainDB((float)params.getProperty("gain_db", 0.0));
+            if (params.hasProperty("gain_linear"))
+            {
+                band->setUseLinearGain(true);
+                band->setLinearGain((float)(double)params["gain_linear"]);
+            }
+            else
+            {
+                band->setUseLinearGain(false);
+                band->setGainDB((float)params.getProperty("gain_db", 0.0));
+                if (params.hasProperty("invert") && (bool)params["invert"])
+                    band->setInvertGain(true);
+            }
         }
         else if (type == "delay")
         {

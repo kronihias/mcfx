@@ -249,6 +249,9 @@ private:
     Slider sldFreq_;
     Slider sldQ_;
     Slider sldGain_;
+    Slider sldLinearGain_;
+    ToggleButton btnGainLinear_ { "Linear" };
+    ToggleButton btnInvertGain_ { "Invert" };
     Slider sldDelay_;
 
     Label lblType_    { {}, "Type:" };

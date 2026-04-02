@@ -84,13 +84,34 @@ EqBandEditor::EqBandEditor()
     addAndMakeVisible(lblGain_);
     addAndMakeVisible(sldGain_);
     addAndMakeVisible(lblDb_);
-    sldGain_.setRange(-24.0, 24.0, 0.1);
+    sldGain_.setRange(-60.0, 30.0, 0.1);
     sldGain_.setNumDecimalPlacesToDisplay(1);
     sldGain_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
     sldGain_.setSliderStyle(Slider::LinearHorizontal);
     sldGain_.setDoubleClickReturnValue(true, 0.0);
+    sldGain_.setTextValueSuffix(" dB");
     sldGain_.setTooltip("Gain in dB. Double-click to reset to 0 dB");
     sldGain_.addListener(this);
+
+    // Linear gain slider (for Gain band in linear mode)
+    addAndMakeVisible(sldLinearGain_);
+    sldLinearGain_.setRange(-20.0, 20.0, 0.001);
+    sldLinearGain_.setNumDecimalPlacesToDisplay(3);
+    sldLinearGain_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldLinearGain_.setSliderStyle(Slider::LinearHorizontal);
+    sldLinearGain_.setDoubleClickReturnValue(true, 1.0);
+    sldLinearGain_.setTooltip("Linear gain factor. Double-click to reset to 1.0");
+    sldLinearGain_.addListener(this);
+
+    // Gain mode toggle (dB / Linear)
+    addAndMakeVisible(btnGainLinear_);
+    btnGainLinear_.setTooltip("Toggle between dB and linear gain mode");
+    btnGainLinear_.addListener(this);
+
+    // Invert toggle (dB mode only)
+    addAndMakeVisible(btnInvertGain_);
+    btnInvertGain_.setTooltip("Invert polarity (multiply by -1)");
+    btnInvertGain_.addListener(this);
 
     // Delay slider
     addAndMakeVisible(lblDelay_);
@@ -191,7 +212,12 @@ void EqBandEditor::updateFromBand()
     }
     else if (type == EqBandType::Gain)
     {
-        sldGain_.setValue(band_->getGainDB(), dontSendNotification);
+        btnGainLinear_.setToggleState(band_->getUseLinearGain(), dontSendNotification);
+        btnInvertGain_.setToggleState(band_->getInvertGain(), dontSendNotification);
+        if (band_->getUseLinearGain())
+            sldLinearGain_.setValue(band_->getLinearGain(), dontSendNotification);
+        else
+            sldGain_.setValue(band_->getGainDB(), dontSendNotification);
     }
     else if (type == EqBandType::Delay)
     {
@@ -280,9 +306,16 @@ void EqBandEditor::showControlsForType(EqBandType type)
     lblOrder_.setVisible(hasOrder);
     cbOrder_.setVisible(hasOrder);
 
+    bool gainIsLinear = isGain && band_ != nullptr && band_->getUseLinearGain();
+    bool gainIsDB = isGain && !gainIsLinear;
+
     lblGain_.setVisible(iirUsesGain || isGain);
-    sldGain_.setVisible(iirUsesGain || isGain);
-    lblDb_.setVisible(iirUsesGain || isGain);
+    sldGain_.setVisible(iirUsesGain || gainIsDB);
+    lblDb_.setVisible(false); // suffix is now inside the text box
+
+    sldLinearGain_.setVisible(gainIsLinear);
+    btnGainLinear_.setVisible(isGain);
+    btnInvertGain_.setVisible(gainIsDB);
 
     lblDelay_.setVisible(isDelay);
     sldDelay_.setVisible(isDelay);
@@ -356,11 +389,28 @@ void EqBandEditor::resized()
     sldQ_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
     if (sldQ_.isVisible()) y += rowH + gap;
 
-    // Gain
-    lblGain_.setBounds(x, y, lblW, rowH);
-    sldGain_.setBounds(x + lblW + 4, y, w - lblW - 35, rowH);
-    lblDb_.setBounds(getWidth() - 30, y, 25, rowH);
-    if (sldGain_.isVisible()) y += rowH + gap;
+    // Gain row: dB slider or linear slider (mutually exclusive)
+    if (sldGain_.isVisible())
+    {
+        lblGain_.setBounds(x, y, lblW, rowH);
+        sldGain_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
+        y += rowH + gap;
+    }
+    else if (sldLinearGain_.isVisible())
+    {
+        lblGain_.setBounds(x, y, lblW, rowH);
+        sldLinearGain_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
+        y += rowH + gap;
+    }
+
+    // Gain band: mode toggle (Linear) + invert toggle
+    if (btnGainLinear_.isVisible())
+    {
+        btnGainLinear_.setBounds(x, y, 70, rowH);
+        if (btnInvertGain_.isVisible())
+            btnInvertGain_.setBounds(x + 75, y, 70, rowH);
+        y += rowH + gap;
+    }
 
     // Delay
     lblDelay_.setBounds(x, y, lblW, rowH);
@@ -391,6 +441,8 @@ void EqBandEditor::sliderValueChanged(Slider* s)
         band_->setQ((float)sldQ_.getValue());
     else if (s == &sldGain_)
         band_->setGainDB((float)sldGain_.getValue());
+    else if (s == &sldLinearGain_)
+        band_->setLinearGain((float)sldLinearGain_.getValue());
     else if (s == &sldDelay_)
         band_->setDelaySamples((int)sldDelay_.getValue());
 
@@ -491,6 +543,19 @@ void EqBandEditor::buttonClicked(Button* b)
         band_->setEnabled(btnEnable_.getToggleState());
         if (listener_ != nullptr)
             listener_->bandEnableChanged(bandIndex_, band_->isEnabled());
+    }
+    else if (b == &btnGainLinear_)
+    {
+        band_->setUseLinearGain(btnGainLinear_.getToggleState());
+        updateFromBand();
+        if (listener_ != nullptr)
+            listener_->bandParameterChanged(bandIndex_);
+    }
+    else if (b == &btnInvertGain_)
+    {
+        band_->setInvertGain(btnInvertGain_.getToggleState());
+        if (listener_ != nullptr)
+            listener_->bandParameterChanged(bandIndex_);
     }
     else if (b == &btnLoadFIR_)
     {

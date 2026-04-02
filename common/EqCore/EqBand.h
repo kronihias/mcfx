@@ -118,6 +118,16 @@ public:
     BiquadCoeffs getRawCoefficients() const { return rawCoeffs_; }
     void setRawCoefficients(float b0, float b1, float b2, float a0, float a1, float a2);
 
+    // --- Gain band mode ---
+    bool getUseLinearGain() const { return useLinearGain_; }
+    void setUseLinearGain(bool linear);
+
+    float getLinearGain() const { return linearGain_; }
+    void setLinearGain(float g);
+
+    bool getInvertGain() const { return invertGain_; }
+    void setInvertGain(bool inv);
+
     // --- Delay ---
     int getDelaySamples() const { return delaySamples_; }
     void setDelaySamples(int samples);
@@ -204,6 +214,8 @@ private:
 
     // Gain
     float linearGain_ = 1.f;
+    bool useLinearGain_ = false;  // false = dB mode (default), true = linear mode
+    bool invertGain_ = false;     // polarity invert (dB mode only)
 
     // Delay
     int delaySamples_ = 0;

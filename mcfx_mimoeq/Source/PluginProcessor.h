@@ -77,6 +77,8 @@ public:
     EqChain* getChainForPath(int inCh, int outCh);
     EqChain* getOrCreateChainForPath(int inCh, int outCh);
     const std::map<PathKey, EqChain*>& getAllPaths() const { return pathChains_; }
+    bool removePathChain(int inCh, int outCh);
+    std::vector<PathKey> getPathKeys() const;
 
     // Diagonal chain model (GUI thread edits, audio thread reads parameters for sync)
     EqChain& getDiagonalChain() { return diagonalChain_; }
