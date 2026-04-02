@@ -45,7 +45,8 @@ class Mcfx_mimoeqAudioProcessorEditor : public AudioProcessorEditor,
                                           public EqBandEditor::Listener,
                                           public Button::Listener,
                                           public FileDragAndDropTarget,
-                                          public RoutingOverviewComponent::Listener
+                                          public RoutingOverviewComponent::Listener,
+                                          public ChannelSelectorComponent::Listener
 {
     friend class EqTabBar;
 public:
@@ -82,6 +83,10 @@ public:
 
     // RoutingOverviewComponent::Listener
     void routingPathSelected(int inCh, int outCh) override;
+    void routingPathCreated(int inCh, int outCh) override;
+
+    // ChannelSelectorComponent::Listener
+    void diagChannelMaskChanged(const std::set<int>& mask) override;
 
 private:
     Mcfx_mimoeqAudioProcessor* getProcessor() const
@@ -98,6 +103,7 @@ private:
 
     // Mode & path selection
     TextButton btnModeDiag_    { "Diagonal" };
+    TextButton btnDiagChans_   { "Ch: All" };
     TextButton btnModeMIMO_    { "MIMO" };
     ComboBox   cbPathSelector_;
     TextButton btnAddPath_     { "Add Path" };
@@ -108,6 +114,8 @@ private:
     void rebuildPathDropdown();
     void showAddPathPopup();
     void showRoutingOverview();
+    void showDiagChannelPopup();
+    void updateDiagChannelButton();
 
     EqGraph graph_;
     EqBandEditor bandEditor_;

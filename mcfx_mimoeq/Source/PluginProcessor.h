@@ -34,6 +34,7 @@ using PathKey = std::pair<int, int>;
 struct ProcessingState
 {
     OwnedArray<EqChain> diagChannelChains;            // per-channel diagonal copies
+    std::set<int> diagChannelMask;                     // empty = all; 1-based channel set
     std::map<PathKey, EqChain*> pathChains;            // raw ptrs into ownedPathChains
     OwnedArray<EqChain> ownedPathChains;               // owns the path chain objects
 };
@@ -83,12 +84,32 @@ public:
     // Diagonal chain model (GUI thread edits, audio thread reads parameters for sync)
     EqChain& getDiagonalChain() { return diagonalChain_; }
 
+    // Diagonal channel mask: empty = all channels, otherwise only listed channels (1-based)
+    const std::set<int>& getDiagChannelMask() const { return diagChannelMask_; }
+    void setDiagChannelMask(const std::set<int>& mask) { diagChannelMask_ = mask; }
+    bool isDiagChannelEnabled(int ch1based) const
+    {
+        return diagChannelMask_.empty() || diagChannelMask_.count(ch1based) > 0;
+    }
+
+    // Editor view state (persisted across GUI close/reopen)
+    bool editorDiagonalMode = true;
+    PathKey editorSelectedPath { 1, 1 };
+    int editorSelectedBand = -1;
+
     // Load/save
     bool loadConfigFromFile(const File& file);
     bool saveConfigToFile(const File& file);
 
     double getSampleRate_() const { return currentSampleRate_; }
-    int getNumChannels_() const { return getTotalNumInputChannels(); }
+    int getNumChannels_() const
+    {
+#ifdef NUM_CHANNELS
+        return NUM_CHANNELS;
+#else
+        return getTotalNumInputChannels();
+#endif
+    }
 
     /** Full rebuild: builds a new ProcessingState on the GUI thread and
         publishes it lock-free for the audio thread to pick up. */
@@ -113,6 +134,7 @@ public:
 private:
     // ---- Model data (GUI thread writes, audio thread reads floats for sync) ----
     EqChain diagonalChain_;
+    std::set<int> diagChannelMask_;   // empty = all channels; otherwise 1-based channel set
     std::map<PathKey, EqChain*> pathChains_;
     OwnedArray<EqChain> ownedPathChains_;
 
@@ -127,6 +149,7 @@ private:
     int currentBlockSize_ = 512;
 
     AudioSampleBuffer workBuffer_;
+    AudioSampleBuffer inputSnapshot_; // saved input for cross-path reads
 
     std::atomic<bool> needsParamSync_ { false };
     void doParamSyncIfNeeded();

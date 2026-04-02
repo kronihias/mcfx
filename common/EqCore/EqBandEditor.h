@@ -207,7 +207,8 @@ private:
 class EqBandEditor : public Component,
                      public Slider::Listener,
                      public ComboBox::Listener,
-                     public Button::Listener
+                     public Button::Listener,
+                     public Label::Listener
 {
 public:
 
@@ -233,6 +234,7 @@ public:
     void sliderValueChanged(Slider* s) override;
     void comboBoxChanged(ComboBox* cb) override;
     void buttonClicked(Button* b) override;
+    void labelTextChanged(Label* l) override;
 
 private:
     void showControlsForType(EqBandType type);
@@ -266,6 +268,26 @@ private:
     Label lblSamples_ { {}, "smpls" };
 
     ToggleButton btnEnable_ { "Enable" };
+
+    // Biquad coefficient editors
+    Label lblBiquad_  { {}, "Coefficients:" };
+    Label lblB0_      { {}, "b0:" };
+    Label lblB1_      { {}, "b1:" };
+    Label lblB2_      { {}, "b2:" };
+    Label lblA0_      { {}, "a0:" };
+    Label lblA1_      { {}, "a1:" };
+    Label lblA2_      { {}, "a2:" };
+    Label edB0_, edB1_, edB2_, edA0_, edA1_, edA2_;
+    Label lblStability_ { {}, "" };
+
+    void setupCoeffLabel(Label& ed, const String& tooltip);
+    void applyBiquadCoeffsFromUI();
+    void updateStabilityIndicator();
+    void copyBiquadCoeffsToClipboard();
+    void pasteBiquadCoeffsFromClipboard();
+
+    TextButton btnCopyCoeffs_  { "Copy" };
+    TextButton btnPasteCoeffs_ { "Paste" };
 
     TextButton btnLoadFIR_ { "Load FIR..." };
     Label lblFIRInfo_ { {}, "" };

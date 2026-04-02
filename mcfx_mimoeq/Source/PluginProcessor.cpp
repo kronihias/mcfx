@@ -108,6 +108,7 @@ void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
 
     int numCh = getTotalNumInputChannels();
     auto* newState = new ProcessingState();
+    newState->diagChannelMask = diagChannelMask_;
 
     // Build per-channel diagonal copies
     if (diagonalChain_.getNumBands() > 0)
@@ -122,19 +123,19 @@ void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
         }
     }
 
-    // Build per-path chain processing copies
+    // Build per-path chain processing copies (including empty paths for passthrough)
     for (auto& kv : pathChains_)
     {
         auto* srcChain = kv.second;
+        auto* copy = new EqChain();
         if (srcChain->getNumBands() > 0)
         {
             var pathJson = srcChain->toJson();
-            auto* copy = new EqChain();
             copy->fromJson(pathJson, currentSampleRate_);
-            copy->prepare(currentSampleRate_, currentBlockSize_);
-            newState->ownedPathChains.add(copy);
-            newState->pathChains[kv.first] = copy;
         }
+        copy->prepare(currentSampleRate_, currentBlockSize_);
+        newState->ownedPathChains.add(copy);
+        newState->pathChains[kv.first] = copy;
     }
 
     // Publish lock-free — audio thread will pick up on next buffer
@@ -188,13 +189,19 @@ void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
 {
     if (needsParamSync_.exchange(false, std::memory_order_acquire))
     {
-        // Sync diagonal chain parameters to per-channel processing copies.
-        // Reads float parameters from diagonalChain_ (GUI-edited model) —
-        // individual float reads are safe on all modern architectures.
         if (activeState_ != nullptr)
         {
+            // Sync diagonal chain parameters to per-channel processing copies.
             for (int ch = 0; ch < activeState_->diagChannelChains.size(); ++ch)
                 activeState_->diagChannelChains[ch]->syncParametersFrom(diagonalChain_);
+
+            // Sync MIMO path chain parameters to per-path processing copies.
+            for (auto& kv : activeState_->pathChains)
+            {
+                auto* modelChain = getChainForPath(kv.first.first, kv.first.second);
+                if (modelChain != nullptr)
+                    kv.second->syncParametersFrom(*modelChain);
+            }
         }
     }
 }
@@ -219,20 +226,44 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     int numChannels = buffer.getNumChannels();
     int numSamples = buffer.getNumSamples();
 
-    // Step 1: Apply diagonal chain (same processing on each channel)
     auto& diagChains = activeState_->diagChannelChains;
-    for (int ch = 0; ch < numChannels && ch < diagChains.size(); ++ch)
-        diagChains[ch]->processBlock(buffer.getWritePointer(ch), numSamples);
-
-    // Step 2: Apply per-path chains
+    auto& diagMask = activeState_->diagChannelMask;
     auto& pathChains = activeState_->pathChains;
-    if (!pathChains.empty())
+
+    // Save a copy of the raw input before any processing.
+    // MIMO paths always read from this snapshot so that diagonal muting
+    // and EQ don't interfere with MIMO input signals.
+    bool hasAnyMimoPaths = !pathChains.empty();
+    if (hasAnyMimoPaths)
+    {
+        inputSnapshot_.setSize(numChannels, numSamples, false, false, true);
+        for (int ch = 0; ch < numChannels; ++ch)
+            inputSnapshot_.copyFrom(ch, 0, buffer.getReadPointer(ch), numSamples);
+    }
+
+    // Step 1: Apply diagonal chain to channels in mask, mute excluded channels.
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        if (diagMask.empty() || diagMask.count(ch + 1) > 0)
+        {
+            if (ch < (int)diagChains.size())
+                diagChains[ch]->processBlock(buffer.getWritePointer(ch), numSamples);
+        }
+        else
+        {
+            buffer.clear(ch, 0, numSamples);
+        }
+    }
+
+    // Step 2: Apply per-path MIMO chains.
+    // All paths read from the saved input snapshot, process, and accumulate
+    // into the work buffer. The work buffer is then added to the output.
+    if (hasAnyMimoPaths)
     {
         workBuffer_.setSize(numChannels, numSamples, false, false, true);
         workBuffer_.clear();
 
-        // Track which output channels have cross-path contributions
-        std::set<int> crossOutputChannels;
+        std::set<int> mimoOutputChannels;
 
         for (auto& kv : pathChains)
         {
@@ -243,27 +274,18 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
             if (inCh < 0 || inCh >= numChannels || outCh < 0 || outCh >= numChannels)
                 continue;
 
-            if (chain->getNumBands() == 0)
-                continue;
+            mimoOutputChannels.insert(outCh);
 
-            if (inCh == outCh)
-            {
-                // Diagonal per-path: process in-place
-                chain->processBlock(buffer.getWritePointer(outCh), numSamples);
-            }
-            else
-            {
-                // Cross-path: copy input, process, add to work buffer
-                crossOutputChannels.insert(outCh);
-                AudioSampleBuffer temp(1, numSamples);
-                temp.copyFrom(0, 0, buffer.getReadPointer(inCh), numSamples);
+            // Read from snapshot, process (if bands exist), accumulate into work buffer
+            AudioSampleBuffer temp(1, numSamples);
+            temp.copyFrom(0, 0, inputSnapshot_.getReadPointer(inCh), numSamples);
+            if (chain->getNumBands() > 0)
                 chain->processBlock(temp.getWritePointer(0), numSamples);
-                workBuffer_.addFrom(outCh, 0, temp.getReadPointer(0), numSamples);
-            }
+            workBuffer_.addFrom(outCh, 0, temp.getReadPointer(0), numSamples);
         }
 
-        // Add cross-path contributions to output
-        for (int ch : crossOutputChannels)
+        // Add MIMO contributions to output
+        for (int ch : mimoOutputChannels)
             buffer.addFrom(ch, 0, workBuffer_.getReadPointer(ch), numSamples);
     }
 }
@@ -300,6 +322,15 @@ void Mcfx_mimoeqAudioProcessor::getStateInformation(MemoryBlock& destData)
 
     root->setProperty("sos", sosArray);
 
+    // Diagonal channel mask (omit if empty = all channels)
+    if (!diagChannelMask_.empty())
+    {
+        Array<var> maskArray;
+        for (int ch : diagChannelMask_)
+            maskArray.add(ch);
+        root->setProperty("diag_channels", maskArray);
+    }
+
     String jsonStr = JSON::toString(var(root));
     destData.append(jsonStr.toRawUTF8(), jsonStr.getNumBytesAsUTF8());
 }
@@ -317,6 +348,13 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
 
     if (!sos.isArray())
         return;
+
+    // Diagonal channel mask
+    diagChannelMask_.clear();
+    var diagCh = parsed["diag_channels"];
+    if (diagCh.isArray())
+        for (int i = 0; i < diagCh.size(); ++i)
+            diagChannelMask_.insert((int)diagCh[i]);
 
     // Clear model
     diagonalChain_.fromJson(var(Array<var>()), sr);
@@ -467,6 +505,15 @@ bool Mcfx_mimoeqAudioProcessor::canSyncRestore(const String& targetState) const
 {
     var parsed = JSON::parse(targetState);
     if (!parsed.isObject()) return false;
+
+    // Check if diagonal channel mask changed (structural — needs rebuild)
+    std::set<int> targetMask;
+    var diagCh = parsed["diag_channels"];
+    if (diagCh.isArray())
+        for (int i = 0; i < diagCh.size(); ++i)
+            targetMask.insert((int)diagCh[i]);
+    if (targetMask != diagChannelMask_)
+        return false;
 
     var sos = parsed["sos"];
     if (!sos.isArray()) return false;
