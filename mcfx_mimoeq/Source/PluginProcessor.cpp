@@ -364,10 +364,174 @@ String Mcfx_mimoeqAudioProcessor::captureState()
     return String::createStringFromData(mb.getData(), (int)mb.getSize());
 }
 
+// --- Click-free undo/redo helpers ---
+
+/** Returns true when the target state differs from the current model only
+    in diagonal-chain parameter values (freq/Q/gain/enabled) — no structural
+    changes (band count, type, subtype, order, routing, raw-coeff mode). */
+static bool bandStructureMatchesJson(const EqBand* band, const var& json)
+{
+    // Raw-coefficient IIR band?
+    bool targetRaw = json.hasProperty("coefficients") && !json.hasProperty("parameters");
+    if (targetRaw != band->hasRawCoefficients())
+        return false;
+    if (targetRaw)
+        return band->getType() == EqBandType::IIR; // raw coeff structure matches if both raw IIR
+
+    var params = json["parameters"];
+    if (!params.isObject())
+        return false;
+
+    String typeStr = params.getProperty("type", "").toString();
+
+    // Map type string → EqBandType + IIRSubType
+    if (typeStr == "fir")
+    {
+        if (band->getType() != EqBandType::FIR) return false;
+        // FIR tap count must match
+        var coeffs = params["coefficients"];
+        if (coeffs.isArray() && (int)coeffs.getArray()->size() != (int)band->getFIRCoefficients().size())
+            return false;
+        return true;
+    }
+    if (typeStr == "gain")
+        return band->getType() == EqBandType::Gain;
+    if (typeStr == "delay")
+    {
+        if (band->getType() != EqBandType::Delay) return false;
+        // Delay sample count is structural (buffer resize)
+        int targetSamples = (int)params.getProperty("delay_samples", 0);
+        return targetSamples == band->getDelaySamples();
+    }
+
+    // IIR subtypes
+    if (band->getType() != EqBandType::IIR) return false;
+
+    // Map string to IIRSubType
+    IIRSubType targetSub = IIRSubType::Peak; // default
+    if      (typeStr == "peak")           targetSub = IIRSubType::Peak;
+    else if (typeStr == "low_pass")       targetSub = IIRSubType::LowPass;
+    else if (typeStr == "high_pass")      targetSub = IIRSubType::HighPass;
+    else if (typeStr == "band_pass")      targetSub = IIRSubType::BandPass;
+    else if (typeStr == "notch")          targetSub = IIRSubType::Notch;
+    else if (typeStr == "all_pass")       targetSub = IIRSubType::AllPass;
+    else if (typeStr == "low_shelf")      targetSub = IIRSubType::LowShelf;
+    else if (typeStr == "high_shelf")     targetSub = IIRSubType::HighShelf;
+    else if (typeStr == "butterworth_lp") targetSub = IIRSubType::ButterworthLP;
+    else if (typeStr == "butterworth_hp") targetSub = IIRSubType::ButterworthHP;
+    else if (typeStr == "crossover_lp")   targetSub = IIRSubType::CrossoverLP;
+    else if (typeStr == "crossover_hp")   targetSub = IIRSubType::CrossoverHP;
+    else if (typeStr == "crossover_ap")   targetSub = IIRSubType::CrossoverAP;
+    else return false; // unknown type
+
+    if (targetSub != band->getIIRSubType()) return false;
+
+    // Butterworth/crossover order is structural (cascade section count)
+    if (targetSub == IIRSubType::ButterworthLP || targetSub == IIRSubType::ButterworthHP)
+    {
+        int targetOrder = (int)params.getProperty("order", 2);
+        if (targetOrder != band->getButterworthOrder()) return false;
+    }
+    else if (targetSub == IIRSubType::CrossoverLP || targetSub == IIRSubType::CrossoverHP
+             || targetSub == IIRSubType::CrossoverAP)
+    {
+        int targetOrder = (int)params.getProperty("order", 4);
+        if (targetOrder != band->getCrossoverOrder()) return false;
+    }
+
+    return true;
+}
+
+bool Mcfx_mimoeqAudioProcessor::canSyncRestore(const String& targetState) const
+{
+    var parsed = JSON::parse(targetState);
+    if (!parsed.isObject()) return false;
+
+    var sos = parsed["sos"];
+    if (!sos.isArray()) return false;
+
+    // Separate target bands into diagonal and path groups
+    Array<var> diagBands;
+    bool hasPathBands = false;
+
+    for (int i = 0; i < sos.size(); ++i)
+    {
+        auto bandJson = sos[i];
+        bool isDiag = bandJson.hasProperty("diagonal") && (bool)bandJson["diagonal"];
+        if (isDiag)
+            diagBands.add(bandJson);
+        else
+            hasPathBands = true;
+    }
+
+    // If target or current model has path chains → full rebuild (simplification)
+    if (hasPathBands || !pathChains_.empty())
+        return false;
+
+    // Diagonal band count must match
+    if (diagBands.size() != diagonalChain_.getNumBands())
+        return false;
+
+    // Each band must be structurally identical
+    for (int i = 0; i < diagBands.size(); ++i)
+    {
+        if (!bandStructureMatchesJson(diagonalChain_.getBand(i), diagBands[i]))
+            return false;
+    }
+
+    return true;
+}
+
+void Mcfx_mimoeqAudioProcessor::syncRestoreState(const String& targetState)
+{
+    var parsed = JSON::parse(targetState);
+    var sos = parsed["sos"];
+
+    // Collect diagonal bands (we already verified structure matches)
+    Array<var> diagBands;
+    for (int i = 0; i < sos.size(); ++i)
+    {
+        auto bandJson = sos[i];
+        if (bandJson.hasProperty("diagonal") && (bool)bandJson["diagonal"])
+            diagBands.add(bandJson);
+    }
+
+    // Apply parameter-only changes to the model diagonal chain
+    for (int i = 0; i < diagBands.size(); ++i)
+    {
+        auto* band = diagonalChain_.getBand(i);
+        auto bandJson = diagBands[i];
+        var params = bandJson["parameters"];
+
+        if (params.isObject())
+        {
+            if (params.hasProperty("f_Hz"))
+                band->setFrequency((float)params["f_Hz"]);
+            if (params.hasProperty("Q"))
+                band->setQ((float)params["Q"]);
+            if (params.hasProperty("gain_db"))
+                band->setGainDB((float)params["gain_db"]);
+        }
+
+        // enabled: absent means true, explicit false means disabled
+        bool enabled = !(bandJson.hasProperty("enabled") && !(bool)bandJson["enabled"]);
+        band->setEnabled(enabled);
+    }
+
+    // Lightweight sync: audio thread will pick up parameter changes via SmoothedValue
+    requestParameterSync();
+    sendChangeMessage();
+}
+
 void Mcfx_mimoeqAudioProcessor::restoreState(const String& s)
 {
-    auto data = s.toRawUTF8();
-    setStateInformation(data, (int)s.getNumBytesAsUTF8());
+    if (canSyncRestore(s))
+        syncRestoreState(s);
+    else
+    {
+        auto data = s.toRawUTF8();
+        setStateInformation(data, (int)s.getNumBytesAsUTF8());
+    }
 }
 
 void Mcfx_mimoeqAudioProcessor::pushUndoState()
