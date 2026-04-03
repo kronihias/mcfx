@@ -770,8 +770,10 @@ void Mcfx_mimoeqAudioProcessorEditor::showRoutingOverview()
             bandCounts[key] = chain->getNumBands();
     }
 
-    auto* overview = new RoutingOverviewComponent(keys, bandCounts, numCh, hasDiag, this);
-    auto& box = CallOutBox::launchAsynchronously(std::unique_ptr<Component>(overview),
+    auto* wrapper = new ScrollableRoutingOverview(keys, bandCounts, numCh, hasDiag, this);
+    if (!diagonalMode_)
+        wrapper->getOverview()->setSelectedPath(selectedPath_);
+    auto& box = CallOutBox::launchAsynchronously(std::unique_ptr<Component>(wrapper),
                                                   btnRouting_.getScreenBounds(),
                                                   nullptr);
     (void)box;
@@ -842,9 +844,9 @@ void Mcfx_mimoeqAudioProcessorEditor::routingPathCreated(int inCh, int outCh)
         {
             for (int c = 0; c < callout->getNumChildComponents(); ++c)
             {
-                if (auto* overview = dynamic_cast<RoutingOverviewComponent*>(callout->getChildComponent(c)))
+                if (auto* wrapper = dynamic_cast<ScrollableRoutingOverview*>(callout->getChildComponent(c)))
                 {
-                    overview->updatePaths(keys, bandCounts);
+                    wrapper->getOverview()->updatePaths(keys, bandCounts);
                     break;
                 }
             }

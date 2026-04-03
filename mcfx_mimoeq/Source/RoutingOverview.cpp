@@ -157,10 +157,12 @@ void RoutingOverviewComponent::paint(Graphics& g)
         auto wire = makeWirePath(paths_[i].first, paths_[i].second);
         bool isDiag = (paths_[i].first == paths_[i].second);
         bool isHovered = (i == hoveredWire_);
+        bool isSelected = (paths_[i] == selectedPath_);
 
-        Colour wireCol = isDiag ? Colours::aquamarine : Colours::orange;
-        float alpha = isHovered ? 1.0f : 0.6f;
-        float thickness = isHovered ? 3.0f : 1.8f;
+        Colour wireCol = isSelected ? Colours::white
+                       : isDiag ? Colours::aquamarine : Colours::orange;
+        float alpha = (isSelected || isHovered) ? 1.0f : 0.6f;
+        float thickness = isSelected ? 3.0f : (isHovered ? 2.5f : 1.8f);
 
         g.setColour(wireCol.withAlpha(alpha));
         g.strokePath(wire, PathStrokeType(thickness));
@@ -172,7 +174,7 @@ void RoutingOverviewComponent::paint(Graphics& g)
         {
             float wireLen = wire.getLength();
             int maxDots = jmin(numBands, 8); // cap at 8 dots to avoid clutter
-            float dotRadius = isHovered ? 3.5f : 2.5f;
+            float dotRadius = (isSelected || isHovered) ? 4.0f : 2.5f;
             float spacing = wireLen / (float)(maxDots + 1);
 
             g.setColour(wireCol.withAlpha(isHovered ? 1.0f : 0.85f));
@@ -281,10 +283,9 @@ void RoutingOverviewComponent::mouseDown(const MouseEvent& e)
     int idx = hitTestWire(e.position);
     if (idx >= 0 && idx < (int)paths_.size() && listener_ != nullptr)
     {
+        selectedPath_ = paths_[idx];
+        repaint();
         listener_->routingPathSelected(paths_[idx].first, paths_[idx].second);
-
-        if (auto* callout = findParentComponentOfClass<CallOutBox>())
-            callout->dismiss();
     }
 }
 
@@ -294,6 +295,28 @@ void RoutingOverviewComponent::mouseDrag(const MouseEvent& e)
 
     dragEndPoint_ = e.position;
     dragOverOutput_ = hitTestOutputPort(e.position);
+
+    // Auto-scroll the parent Viewport when dragging near edges
+    if (auto* vp = findParentComponentOfClass<Viewport>())
+    {
+        auto posInVp = e.getEventRelativeTo(vp).position;
+        int scrollMargin = 30;
+        int scrollStep = 12;
+        auto vpBounds = vp->getLocalBounds();
+
+        if (posInVp.y < scrollMargin)
+        {
+            int newY = jmax(0, vp->getViewPositionY() - scrollStep);
+            vp->setViewPosition(vp->getViewPositionX(), newY);
+        }
+        else if (posInVp.y > vpBounds.getHeight() - scrollMargin)
+        {
+            int maxY = getHeight() - vp->getViewHeight();
+            int newY = jmin(maxY, vp->getViewPositionY() + scrollStep);
+            vp->setViewPosition(vp->getViewPositionX(), newY);
+        }
+    }
+
     repaint();
 }
 
@@ -439,6 +462,7 @@ void ChannelSelectorComponent::mouseDown(const MouseEvent& e)
     if (getAllButtonRect().contains(pt))
     {
         mask_.clear(); // empty = all
+        dragging_ = false;
         repaint();
         if (listener_) listener_->diagChannelMaskChanged(mask_);
         return;
@@ -447,6 +471,7 @@ void ChannelSelectorComponent::mouseDown(const MouseEvent& e)
     if (getNoneButtonRect().contains(pt))
     {
         mask_ = { 0 }; // sentinel: no valid channels
+        dragging_ = false;
         repaint();
         if (listener_) listener_->diagChannelMaskChanged(mask_);
         return;
@@ -462,22 +487,70 @@ void ChannelSelectorComponent::mouseDown(const MouseEvent& e)
 
     mask_.erase(0); // remove sentinel
 
-    // Toggle
-    if (mask_.count(ch) > 0)
+    // Toggle first cell and determine drag paint mode
+    bool wasOn = mask_.count(ch) > 0;
+    if (wasOn)
         mask_.erase(ch);
     else
         mask_.insert(ch);
 
-    // Check how many valid channels remain
+    dragPaintOn_ = !wasOn; // dragging will paint cells to this state
+    dragging_ = true;
+    dragVisited_.clear();
+    dragVisited_.insert(ch);
+
+    // Normalize
     int validCount = 0;
     for (int c : mask_)
         if (c >= 1 && c <= numChannels_) validCount++;
 
     if (validCount == numChannels_)
-        mask_.clear();           // all on → empty = "all"
+        mask_.clear();
     else if (validCount == 0)
-        mask_ = { 0 };          // none on → sentinel {0}
+        mask_ = { 0 };
 
     repaint();
     if (listener_) listener_->diagChannelMaskChanged(mask_);
+}
+
+void ChannelSelectorComponent::mouseDrag(const MouseEvent& e)
+{
+    if (!dragging_) return;
+
+    int ch = hitTestCell(e.position.toInt());
+    if (ch < 1 || dragVisited_.count(ch) > 0) return;
+
+    dragVisited_.insert(ch);
+
+    // Expand "all" to explicit set if needed
+    if (mask_.empty())
+        for (int i = 1; i <= numChannels_; ++i)
+            mask_.insert(i);
+
+    mask_.erase(0);
+
+    // Set this cell to the drag paint mode
+    if (dragPaintOn_)
+        mask_.insert(ch);
+    else
+        mask_.erase(ch);
+
+    // Normalize
+    int validCount = 0;
+    for (int c : mask_)
+        if (c >= 1 && c <= numChannels_) validCount++;
+
+    if (validCount == numChannels_)
+        mask_.clear();
+    else if (validCount == 0)
+        mask_ = { 0 };
+
+    repaint();
+    if (listener_) listener_->diagChannelMaskChanged(mask_);
+}
+
+void ChannelSelectorComponent::mouseUp(const MouseEvent&)
+{
+    dragging_ = false;
+    dragVisited_.clear();
 }

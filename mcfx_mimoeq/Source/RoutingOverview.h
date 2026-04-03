@@ -34,6 +34,7 @@ public:
 
     void updatePaths(const std::vector<PathKey>& paths,
                      const std::map<PathKey, int>& bandCounts);
+    void setSelectedPath(PathKey path) { selectedPath_ = path; repaint(); }
 
     void paint(Graphics& g) override;
     void mouseMove(const MouseEvent& e) override;
@@ -56,6 +57,7 @@ private:
     bool hasDiagonalBands_;
     Listener* listener_;
     int hoveredWire_ = -1;      // index into paths_
+    PathKey selectedPath_ { -1, -1 };
     int dragFromInput_ = -1;     // 1-based input channel being dragged from, -1 = not dragging
     int dragOverOutput_ = -1;    // 1-based output channel cursor is over during drag
     Point<float> dragEndPoint_;  // current mouse position during drag
@@ -82,6 +84,46 @@ private:
 };
 
 //==============================================================================
+/** Scrollable wrapper for RoutingOverviewComponent.
+    Caps the height and adds a vertical scrollbar when needed. */
+class ScrollableRoutingOverview : public Component
+{
+public:
+    ScrollableRoutingOverview(const std::vector<PathKey>& paths,
+                              const std::map<PathKey, int>& bandCounts,
+                              int numChannels,
+                              bool hasDiagonalBands,
+                              RoutingOverviewComponent::Listener* listener)
+    {
+        overview_ = std::make_unique<RoutingOverviewComponent>(paths, bandCounts,
+                                                                numChannels, hasDiagonalBands, listener);
+        viewport_.setViewedComponent(overview_.get(), false);
+        viewport_.setScrollBarsShown(true, false); // vertical only
+        addAndMakeVisible(viewport_);
+
+        int fullH = RoutingOverviewComponent::getRecommendedHeight(numChannels);
+        int cappedH = jmin(fullH, kMaxHeight);
+        int w = RoutingOverviewComponent::kWidth + (fullH > kMaxHeight ? 14 : 0); // scrollbar width
+        setSize(w, cappedH);
+    }
+
+    void resized() override
+    {
+        viewport_.setBounds(getLocalBounds());
+    }
+
+    RoutingOverviewComponent* getOverview() { return overview_.get(); }
+
+    static constexpr int kMaxHeight = 600;
+
+private:
+    std::unique_ptr<RoutingOverviewComponent> overview_;
+    Viewport viewport_;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ScrollableRoutingOverview)
+};
+
+//==============================================================================
 /** Channel selector grid for diagonal EQ — visual popup with clickable channel
     boxes and All/None buttons. */
 class ChannelSelectorComponent : public Component
@@ -99,6 +141,8 @@ public:
 
     void paint(Graphics& g) override;
     void mouseDown(const MouseEvent& e) override;
+    void mouseDrag(const MouseEvent& e) override;
+    void mouseUp(const MouseEvent& e) override;
     void mouseMove(const MouseEvent& e) override;
 
     static constexpr int kCellSize = 32;
@@ -125,6 +169,9 @@ private:
     std::set<int> mask_;          // empty = all
     Listener* listener_;
     int hoveredCell_ = -1;        // 1-based channel, -1 = none, 0 = special buttons
+    bool dragging_ = false;        // true while drag-painting cells
+    bool dragPaintOn_ = false;     // whether drag paints cells on or off
+    std::set<int> dragVisited_;    // cells already toggled during this drag
 
     bool isChannelOn(int ch1) const;
     Rectangle<int> getCellRect(int ch1) const;
