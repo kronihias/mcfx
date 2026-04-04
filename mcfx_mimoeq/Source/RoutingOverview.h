@@ -24,6 +24,7 @@ public:
         virtual ~Listener() = default;
         virtual void routingPathSelected(int inCh, int outCh) = 0;
         virtual void routingPathCreated(int inCh, int outCh) = 0;
+        virtual void routingPathRemoved(int inCh, int outCh) = 0;
     };
 
     RoutingOverviewComponent(const std::vector<PathKey>& paths,
@@ -87,7 +88,8 @@ private:
 /** Matrix view for routing — inputs as rows, outputs as columns.
     Cells with existing paths show a coloured background and band count.
     Click to select existing paths or create new ones. */
-class RoutingMatrixComponent : public Component
+class RoutingMatrixComponent : public Component,
+                               public TooltipClient
 {
 public:
     RoutingMatrixComponent(const std::vector<PathKey>& paths,
@@ -103,7 +105,15 @@ public:
     void paint(Graphics& g) override;
     void mouseMove(const MouseEvent& e) override;
     void mouseDown(const MouseEvent& e) override;
+    void mouseDoubleClick(const MouseEvent& e) override;
     void mouseExit(const MouseEvent& e) override;
+
+    String getTooltip() override
+    {
+        if (hoveredCell_.first >= 1 && hoveredCell_.second >= 1)
+            return "In " + String(hoveredCell_.first) + ", Out " + String(hoveredCell_.second);
+        return {};
+    }
 
     static int getRecommendedWidth(int numChannels)
     {
@@ -123,6 +133,7 @@ private:
     RoutingOverviewComponent::Listener* listener_;
     PathKey selectedPath_ { -1, -1 };
     PathKey hoveredCell_ { -1, -1 };
+    TooltipWindow tooltipWindow_ { this, 200 };
 
     static constexpr int kCellSize = 28;
     static constexpr int kMarginLeft = 40;   // space for row labels
@@ -171,6 +182,11 @@ public:
         toggleBtn_.addListener(this);
         addAndMakeVisible(toggleBtn_);
 
+        constrainer_.setMinimumSize(200, 150);
+        constrainer_.setMaximumSize(1200, 900);
+        resizer_ = std::make_unique<ResizableCornerComponent>(this, &constrainer_);
+        addAndMakeVisible(resizer_.get());
+
         showingMatrix_ = false;
         updateSize();
     }
@@ -180,6 +196,13 @@ public:
         auto area = getLocalBounds();
         toggleBtn_.setBounds(area.removeFromTop(kToggleBarH).reduced(4, 2));
         viewport_.setBounds(area);
+
+        const int resizerSize = 16;
+        resizer_->setBounds(getWidth() - resizerSize, getHeight() - resizerSize,
+                            resizerSize, resizerSize);
+
+        if (onSizeChanged)
+            onSizeChanged(getWidth(), getHeight());
     }
 
     void buttonClicked(Button*) override
@@ -201,10 +224,35 @@ public:
 
         updateSize();
         repaint();
+        if (onViewChanged)
+            onViewChanged(showingMatrix_);
     }
 
     RoutingOverviewComponent* getOverview() { return overview_.get(); }
     RoutingMatrixComponent* getMatrix() { return matrix_.get(); }
+    bool isShowingMatrix() const { return showingMatrix_; }
+
+    std::function<void(bool)> onViewChanged;       // called with true=matrix, false=wires
+    std::function<void(int, int)> onSizeChanged;   // called with (width, height) on resize
+
+    void setShowMatrix(bool matrix)
+    {
+        if (matrix == showingMatrix_) return;
+        showingMatrix_ = matrix;
+        if (showingMatrix_)
+        {
+            toggleBtn_.setButtonText("Wires");
+            viewport_.setViewedComponent(matrix_.get(), false);
+            viewport_.setScrollBarsShown(true, true);
+        }
+        else
+        {
+            toggleBtn_.setButtonText("Matrix");
+            viewport_.setViewedComponent(overview_.get(), false);
+            viewport_.setScrollBarsShown(true, false);
+        }
+        updateSize();
+    }
 
     void updatePaths(const std::vector<PathKey>& paths,
                      const std::map<PathKey, int>& bandCounts)
@@ -256,6 +304,8 @@ private:
     std::unique_ptr<RoutingMatrixComponent> matrix_;
     Viewport viewport_;
     TextButton toggleBtn_;
+    ComponentBoundsConstrainer constrainer_;
+    std::unique_ptr<ResizableCornerComponent> resizer_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ScrollableRoutingOverview)
 };

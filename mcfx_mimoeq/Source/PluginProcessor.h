@@ -96,6 +96,9 @@ public:
     bool editorDiagonalMode = true;
     PathKey editorSelectedPath { 1, 1 };
     int editorSelectedBand = -1;
+    bool editorRoutingMatrixView = false; // true = matrix, false = wires
+    int editorRoutingPopupW = 0;  // 0 = use default
+    int editorRoutingPopupH = 0;
 
     // Load/save
     bool loadConfigFromFile(const File& file);
