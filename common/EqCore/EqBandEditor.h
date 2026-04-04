@@ -51,7 +51,7 @@ public:
         if (coeffs_.empty())
         {
             g.setColour(Colours::white.withAlpha(0.3f));
-            g.setFont(Font(12.f));
+            g.setFont(Font(FontOptions(12.f)));
             g.drawText("No FIR loaded", area, Justification::centred);
             return;
         }
@@ -105,7 +105,7 @@ public:
             else if (nTicks < 1.5f) tickStep = niceRange / 4.f;
         }
 
-        g.setFont(Font(9.f));
+        g.setFont(Font(FontOptions(9.f)));
 
         // Draw ticks from 0 up and down
         for (float v = 0.f; v <= niceRange * 1.01f; v += tickStep)
@@ -191,7 +191,7 @@ public:
 
         // Label: tap count
         g.setColour(Colours::white.withAlpha(0.35f));
-        g.setFont(Font(10.f));
+        g.setFont(Font(FontOptions(10.f)));
         g.drawText(String(n) + " taps",
                    (int)(x0), (int)(y0 + h - 14.f), (int)w - 4, 14,
                    Justification::bottomRight);

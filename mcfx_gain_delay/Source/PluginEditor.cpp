@@ -63,7 +63,7 @@ isStrgDown(false)
 
     addAndMakeVisible (lbl_gd);
     lbl_gd.setText("mcfx_gain_delay", dontSendNotification);
-    lbl_gd.setFont (Font (15.00f, Font::plain));
+    lbl_gd.setFont (Font (FontOptions (15.00f, Font::plain)));
     lbl_gd.setJustificationType (Justification::centredLeft);
     lbl_gd.setEditable (false, false, false);
     lbl_gd.setColour (Label::textColourId, Colours::aquamarine);
@@ -72,7 +72,7 @@ isStrgDown(false)
 
     addAndMakeVisible (label2);
     label2.setText("gain [dB]\n", dontSendNotification);
-    label2.setFont (Font (13.00f, Font::plain));
+    label2.setFont (Font (FontOptions (13.00f, Font::plain)));
     label2.setJustificationType (Justification::centredRight);
     label2.setEditable (false, false, false);
     label2.setColour (Label::textColourId, Colours::white);
@@ -81,7 +81,7 @@ isStrgDown(false)
 
     addAndMakeVisible (label3);
     label3.setText("delay [ms]\n", dontSendNotification);
-    label3.setFont (Font (13.00f, Font::plain));
+    label3.setFont (Font (FontOptions (13.00f, Font::plain)));
     label3.setJustificationType (Justification::centredRight);
     label3.setEditable (false, false, false);
     label3.setColour (Label::textColourId, Colours::white);
@@ -187,7 +187,7 @@ isStrgDown(false)
 
     addAndMakeVisible (label4);
     label4.setText("gain [dB]\n", dontSendNotification);
-    label4.setFont (Font (13.00f, Font::plain));
+    label4.setFont (Font (FontOptions (13.00f, Font::plain)));
     label4.setJustificationType (Justification::centredLeft);
     label4.setEditable (false, false, false);
     label4.setColour (Label::textColourId, Colours::white);
@@ -196,7 +196,7 @@ isStrgDown(false)
 
     addAndMakeVisible (label6);
     label6.setText("[Hz]", dontSendNotification);
-    label6.setFont (Font (13.00f, Font::plain));
+    label6.setFont (Font (FontOptions (13.00f, Font::plain)));
     label6.setJustificationType (Justification::centredLeft);
     label6.setEditable (false, false, false);
     label6.setColour (Label::textColourId, Colours::white);
@@ -205,7 +205,7 @@ isStrgDown(false)
 
     addAndMakeVisible (label7);
     label7.setText("[ms]", dontSendNotification);
-    label7.setFont (Font (13.00f, Font::plain));
+    label7.setFont (Font (FontOptions (13.00f, Font::plain)));
     label7.setJustificationType (Justification::centredLeft);
     label7.setEditable (false, false, false);
     label7.setColour (Label::textColourId, Colours::white);
@@ -321,7 +321,7 @@ isStrgDown(false)
             lbl_ch.add(LABEL);
             addChildComponent(lbl_ch.getUnchecked(i));
             lbl_ch.getUnchecked(i)->setVisible(true);
-            lbl_ch.getUnchecked(i)->setFont (Font (15.00f, Font::plain));
+            lbl_ch.getUnchecked(i)->setFont (Font (FontOptions (15.00f, Font::plain)));
             lbl_ch.getUnchecked(i)->setJustificationType (Justification::centredRight);
             lbl_ch.getUnchecked(i)->setEditable (false, false, false);
             lbl_ch.getUnchecked(i)->setColour (Label::textColourId, Colours::white);
@@ -514,7 +514,7 @@ void Mcfx_gain_delayAudioProcessorEditor::paint (Graphics& g)
     g.fillRoundedRectangle (9.0f, getHeight()-85.f, 279.0f, 77.0f, 10.000f);
 
     g.setColour (Colour (0xfff64e0a));
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText ("Signalgenerator",
                 16, getHeight()-84.f, 107, 24,
                 Justification::centredLeft, true);
@@ -522,7 +522,7 @@ void Mcfx_gain_delayAudioProcessorEditor::paint (Graphics& g)
 
     /* Version text */
     g.setColour (Colours::white);
-    g.setFont (Font (10.00f, Font::plain));
+    g.setFont (Font (FontOptions (10.00f, Font::plain)));
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     g.drawText (version_string,

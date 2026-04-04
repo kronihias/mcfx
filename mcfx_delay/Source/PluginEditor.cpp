@@ -39,7 +39,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
 
     addAndMakeVisible (lbl_g);
     lbl_g.setText("mcfx_delay", dontSendNotification);
-    lbl_g.setFont (Font (15.00f, Font::plain));
+    lbl_g.setFont (Font (FontOptions (15.00f, Font::plain)));
     lbl_g.setJustificationType (Justification::centredLeft);
     lbl_g.setEditable (false, false, false);
     lbl_g.setColour (Label::textColourId, Colours::aquamarine);
@@ -60,7 +60,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
 
     addAndMakeVisible (label3);
     label3.setText("delay all channels", dontSendNotification);
-    label3.setFont (Font (13.00f, Font::plain));
+    label3.setFont (Font (FontOptions (13.00f, Font::plain)));
     label3.setJustificationType (Justification::centredRight);
     label3.setEditable (false, false, false);
     label3.setColour (Label::textColourId, Colours::white);
@@ -69,7 +69,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
 
     addAndMakeVisible (label2);
     label2.setText("[ms]", dontSendNotification);
-    label2.setFont (Font (13.00f, Font::plain));
+    label2.setFont (Font (FontOptions (13.00f, Font::plain)));
     label2.setJustificationType (Justification::centredLeft);
     label2.setEditable (false, false, false);
     label2.setColour (Label::textColourId, Colours::white);
@@ -88,7 +88,7 @@ Mcfx_delayAudioProcessorEditor::Mcfx_delayAudioProcessorEditor (Mcfx_delayAudioP
 
     addAndMakeVisible (label4);
     label4.setText("[samples]", dontSendNotification);
-    label4.setFont (Font (13.00f, Font::plain));
+    label4.setFont (Font (FontOptions (13.00f, Font::plain)));
     label4.setJustificationType (Justification::centredLeft);
     label4.setEditable (false, false, false);
     label4.setColour (Label::textColourId, Colours::white);
@@ -135,7 +135,7 @@ void Mcfx_delayAudioProcessorEditor::paint (Graphics& g)
 
     /* Version text */
     g.setColour (Colours::white);
-    g.setFont (Font (10.00f, Font::plain));
+    g.setFont (Font (FontOptions (10.00f, Font::plain)));
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     g.drawText (version_string,

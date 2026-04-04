@@ -152,7 +152,7 @@ void EqGraph::drawGrid(Graphics& g)
 
         String axislabel = String((int)db_val);
         axislabel << "dB";
-        g.setFont(Font("Arial Rounded MT", 12.f, Font::plain));
+        g.setFont(Font(FontOptions("Arial Rounded MT", 12.f, Font::plain)));
         g.drawText(axislabel, 0, ypos - 6, 32, 12, Justification::right, false);
     }
 
@@ -163,7 +163,7 @@ void EqGraph::drawGrid(Graphics& g)
         if (f == 50 || f == 100 || f == 500 || f == 1000 || f == 5000 || f == 10000)
         {
             String axislabel = String((int)f);
-            g.setFont(Font("Arial Rounded MT", 12.f, Font::plain));
+            g.setFont(Font(FontOptions("Arial Rounded MT", 12.f, Font::plain)));
             g.drawText(axislabel, xpos, getHeight() - 12, 45, 12, Justification::left, false);
         }
     }
@@ -216,7 +216,7 @@ void EqGraph::drawBandHandles(Graphics& g)
                 Colour outlineCol = bandCol.withAlpha(i == selectedBand_ ? 0.6f : 0.25f);
                 g.setColour(outlineCol);
                 g.drawEllipse(handleX - radius, handleY - radius, radius * 2, radius * 2, 1.5f);
-                g.setFont(Font(radius * 1.4f, Font::bold));
+                g.setFont(Font(FontOptions(radius * 1.4f, Font::bold)));
                 g.drawText(String(i + 1), (int)(handleX - radius), (int)(handleY - radius),
                            (int)(radius * 2), (int)(radius * 2), Justification::centred, false);
             }
@@ -231,7 +231,7 @@ void EqGraph::drawBandHandles(Graphics& g)
 
                 // Draw band number centered on the handle
                 g.setColour(bandCol.getPerceivedBrightness() > 0.5f ? Colour(0xff1a1a1a) : Colours::white);
-                g.setFont(Font(radius * 1.4f, Font::bold));
+                g.setFont(Font(FontOptions(radius * 1.4f, Font::bold)));
                 g.drawText(String(i + 1), (int)(handleX - radius), (int)(handleY - radius),
                            (int)(radius * 2), (int)(radius * 2), Justification::centred, false);
             }

@@ -45,7 +45,7 @@ AudioProcessorEditor (ownerFilter)
 
     addAndMakeVisible (label);
     label.setText(label_text, dontSendNotification);
-    label.setFont (Font (15.0000f, Font::plain));
+    label.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label.setJustificationType (Justification::centredLeft);
     label.setEditable (false, false, false);
     label.setColour (Label::textColourId, Colours::aquamarine);
@@ -74,7 +74,7 @@ AudioProcessorEditor (ownerFilter)
 
     addAndMakeVisible (label2);
     label2.setText("hold [s]\n", dontSendNotification);
-    label2.setFont (Font (15.0000f, Font::plain));
+    label2.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label2.setJustificationType (Justification::centredLeft);
     label2.setEditable (false, false, false);
     label2.setColour (Label::textColourId, Colours::white);
@@ -83,7 +83,7 @@ AudioProcessorEditor (ownerFilter)
 
     addAndMakeVisible (label3);
     label3.setText("fall [dB/s]\n", dontSendNotification);
-    label3.setFont (Font (15.0000f, Font::plain));
+    label3.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label3.setJustificationType (Justification::centredLeft);
     label3.setEditable (false, false, false);
     label3.setColour (Label::textColourId, Colours::white);
@@ -123,7 +123,7 @@ AudioProcessorEditor (ownerFilter)
                 addChildComponent(_labels.getUnchecked(i));
                 _labels.getUnchecked(i)->setVisible(true);
                 const float font_size = (i < 99) ? 11.f : 9.f;
-                _labels.getUnchecked(i)->setFont (Font (font_size, Font::plain));
+                _labels.getUnchecked(i)->setFont (Font (FontOptions (font_size, Font::plain)));
                 _labels.getUnchecked(i)->setColour (Label::textColourId, Colours::white);
                 _labels.getUnchecked(i)->setJustificationType (Justification::centred);
             }
@@ -193,7 +193,7 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
 
     /* Version text */
     g.setColour (Colours::white);
-    g.setFont (Font (10.00f, Font::plain));
+    g.setFont (Font (FontOptions (10.00f, Font::plain)));
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     g.drawText (version_string,

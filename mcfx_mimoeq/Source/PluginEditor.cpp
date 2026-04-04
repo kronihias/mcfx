@@ -35,7 +35,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     setLookAndFeel(&lookAndFeel_);
 
     addAndMakeVisible(statusBar_);
-    statusBar_.setFont(Font(11.f, Font::plain));
+    statusBar_.setFont(Font(FontOptions(11.f, Font::plain)));
     statusBar_.setColour(Label::textColourId, Colours::white.withAlpha(0.8f));
     statusBar_.setColour(Label::backgroundColourId, Colour(0xff111111));
     statusBar_.setJustificationType(Justification::centredLeft);
@@ -44,7 +44,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     addAndMakeVisible(lblTitle_);
     lblTitle_.setText("mcfx_mimoeq", dontSendNotification);
-    lblTitle_.setFont(Font(15.f, Font::plain));
+    lblTitle_.setFont(Font(FontOptions(15.f, Font::plain)));
     lblTitle_.setColour(Label::textColourId, Colours::aquamarine);
 
     // Mode selector (radio group)

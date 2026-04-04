@@ -41,7 +41,7 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
 
     addAndMakeVisible (lbl_gd);
     lbl_gd.setText("mcfx_filter", dontSendNotification);
-    lbl_gd.setFont (Font (15.00f, Font::plain));
+    lbl_gd.setFont (Font (FontOptions (15.00f, Font::plain)));
     lbl_gd.setJustificationType (Justification::centredLeft);
     lbl_gd.setEditable (false, false, false);
     lbl_gd.setColour (Label::textColourId, Colours::aquamarine);
@@ -409,7 +409,7 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
     g.fillRoundedRectangle (107.0f, 195.0f, 95.0f, 96.0f, 10.000f);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("low shelf"),
                 120, 195, 70, 23,
                 Justification::centred, true);
@@ -424,49 +424,49 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
     g.fillRoundedRectangle (523.0f, 220.0f, 95.0f, 72.0f, 10.000f);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("peak1"),
                 221, 194, 70, 23,
                 Justification::centred, true);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("peak2"),
                 332, 194, 70, 23,
                 Justification::centred, true);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("high shelf"),
                 434, 195, 70, 23,
                 Justification::centred, true);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("f"),
                 306, 265, 15, 23,
                 Justification::centred, true);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("g"),
                 306, 238, 15, 23,
                 Justification::centred, true);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("Q"),
                 306, 213, 15, 23,
                 Justification::centred, true);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("low cut"),
                 19, 218, 70, 23,
                 Justification::centred, true);
 
     g.setColour (Colours::white);
-    g.setFont (Font (15.00f, Font::plain));
+    g.setFont (Font (FontOptions (15.00f, Font::plain)));
     g.drawText (TRANS("high cut"),
                 538, 219, 70, 23,
                 Justification::centred, true);
@@ -474,7 +474,7 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
 
     /* Version text */
     g.setColour (Colours::white);
-    g.setFont (Font (10.00f, Font::plain));
+    g.setFont (Font (FontOptions (10.00f, Font::plain)));
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     g.drawText (version_string,
@@ -483,7 +483,7 @@ void LowhighpassAudioProcessorEditor::paint (Graphics& g)
 
     // analyzer settings row labels
     g.setColour (Colours::grey);
-    g.setFont (Font (10.00f, Font::plain));
+    g.setFont (Font (FontOptions (10.00f, Font::plain)));
     g.drawText (TRANS("offset"), 260, 293, 80, 12, Justification::centred, true);
     g.drawText (TRANS("scale"),  345, 293, 75, 12, Justification::centred, true);
 

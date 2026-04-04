@@ -160,7 +160,7 @@ void FilterGraph::paint (Graphics& g)
         // text
         String axislabel = String((int)db_val);
         axislabel << "dB";
-        g.setFont (Font ("Arial Rounded MT", 12.0f, Font::plain));
+        g.setFont (Font (FontOptions ("Arial Rounded MT", 12.0f, Font::plain)));
         g.drawText (axislabel, 0, ypos-6, 32, 12, Justification::right, false);
     }
 
@@ -175,7 +175,7 @@ void FilterGraph::paint (Graphics& g)
         {
             // text
             String axislabel = String((int)f);
-            g.setFont (Font ("Arial Rounded MT", 12.0f, Font::plain));
+            g.setFont (Font (FontOptions ("Arial Rounded MT", 12.0f, Font::plain)));
             g.drawText (axislabel, xpos, getHeight()-12, 45, 12, Justification::left, false);
 
 
