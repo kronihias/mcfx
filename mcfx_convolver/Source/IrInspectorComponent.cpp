@@ -508,6 +508,222 @@ void IrMatrixComponent::mouseDown(const MouseEvent& e)
 }
 
 //==============================================================================
+// IrWireComponent
+//==============================================================================
+
+IrWireComponent::IrWireComponent()
+{
+    setMouseCursor(MouseCursor::PointingHandCursor);
+}
+
+void IrWireComponent::updateWires(ConvolverData& convData)
+{
+    numInputs_ = convData.getNumInputChannels();
+    numOutputs_ = convData.getNumOutputChannels();
+    wires_.clear();
+
+    for (int i = 0; i < convData.getNumIRs(); ++i)
+    {
+        WireInfo w;
+        w.inCh = convData.getInCh(i);
+        w.outCh = convData.getOutCh(i);
+        w.irIndex = i;
+        wires_.push_back(w);
+    }
+
+    setSize(kWidth, getRecommendedHeight(numInputs_, numOutputs_));
+    hoveredWire_ = -1;
+    repaint();
+}
+
+void IrWireComponent::setSelectedWire(int inCh, int outCh)
+{
+    selectedIn_ = inCh;
+    selectedOut_ = outCh;
+    repaint();
+}
+
+int IrWireComponent::getRecommendedHeight(int numInputs, int numOutputs)
+{
+    int maxCh = jmax(numInputs, numOutputs);
+    return jmax(180, maxCh * kPortSpacing + kMarginTop + 20);
+}
+
+Rectangle<float> IrWireComponent::getInputPortRect(int ch) const
+{
+    float y = (float)kMarginTop + (float)ch * (float)kPortSpacing;
+    return { (float)kMarginX, y, (float)kPortW, (float)kPortH };
+}
+
+Rectangle<float> IrWireComponent::getOutputPortRect(int ch) const
+{
+    float y = (float)kMarginTop + (float)ch * (float)kPortSpacing;
+    float x = (float)(getWidth() - kMarginX - kPortW);
+    return { x, y, (float)kPortW, (float)kPortH };
+}
+
+Point<float> IrWireComponent::getInputPortRight(int ch) const
+{
+    auto r = getInputPortRect(ch);
+    return { r.getRight(), r.getCentreY() };
+}
+
+Point<float> IrWireComponent::getOutputPortLeft(int ch) const
+{
+    auto r = getOutputPortRect(ch);
+    return { r.getX(), r.getCentreY() };
+}
+
+Path IrWireComponent::makeWirePath(int inCh, int outCh) const
+{
+    auto start = getInputPortRight(inCh);
+    auto end = getOutputPortLeft(outCh);
+    float dx = (end.x - start.x) * 0.4f;
+
+    Path p;
+    p.startNewSubPath(start);
+    p.cubicTo(start.x + dx, start.y,
+              end.x - dx, end.y,
+              end.x, end.y);
+    return p;
+}
+
+int IrWireComponent::hitTestWire(Point<float> pt) const
+{
+    float bestDist = 7.f;
+    int bestIdx = -1;
+
+    for (int i = 0; i < (int)wires_.size(); ++i)
+    {
+        auto wire = makeWirePath(wires_[i].inCh, wires_[i].outCh);
+        PathFlatteningIterator it(wire, AffineTransform(), 2.f);
+        while (it.next())
+        {
+            float ax = it.x2 - it.x1, ay = it.y2 - it.y1;
+            float bx = pt.x - it.x1, by = pt.y - it.y1;
+            float len2 = ax * ax + ay * ay;
+            float t = (len2 > 0.f) ? jlimit(0.f, 1.f, (bx * ax + by * ay) / len2) : 0.f;
+            float ddx = bx - t * ax, ddy = by - t * ay;
+            float dist = std::sqrt(ddx * ddx + ddy * ddy);
+            if (dist < bestDist)
+            {
+                bestDist = dist;
+                bestIdx = i;
+            }
+        }
+    }
+    return bestIdx;
+}
+
+String IrWireComponent::getTooltip()
+{
+    if (hoveredWire_ >= 0 && hoveredWire_ < (int)wires_.size())
+        return "In " + String(wires_[hoveredWire_].inCh + 1)
+             + ", Out " + String(wires_[hoveredWire_].outCh + 1);
+    return {};
+}
+
+void IrWireComponent::paint(Graphics& g)
+{
+    g.fillAll(Colour(0xff1a1a2e));
+
+    if (numInputs_ == 0 || numOutputs_ == 0)
+    {
+        g.setColour(Colours::grey);
+        g.setFont(12.f);
+        g.drawText("No IRs loaded", getLocalBounds(), Justification::centred);
+        return;
+    }
+
+    // Column labels
+    g.setFont(Font(FontOptions(9.f, Font::bold)));
+    g.setColour(Colours::aquamarine.withAlpha(0.6f));
+    g.drawText("IN", kMarginX, 4, kPortW, 14, Justification::centred);
+    g.setColour(Colours::orange.withAlpha(0.6f));
+    g.drawText("OUT", getWidth() - kMarginX - kPortW, 4, kPortW, 14, Justification::centred);
+
+    // Draw wires (behind ports)
+    for (int i = 0; i < (int)wires_.size(); ++i)
+    {
+        bool isSelected = (wires_[i].inCh == selectedIn_ && wires_[i].outCh == selectedOut_);
+        bool isHovered = (i == hoveredWire_);
+        bool isDiag = (wires_[i].inCh == wires_[i].outCh);
+
+        Colour wireCol;
+        if (isSelected)
+            wireCol = Colours::white;
+        else if (isDiag)
+            wireCol = Colours::aquamarine;
+        else
+            wireCol = Colours::orange;
+
+        float alpha = (isSelected || isHovered) ? 1.0f : 0.6f;
+        float thickness = isSelected ? 3.0f : (isHovered ? 2.5f : 1.8f);
+
+        g.setColour(wireCol.withAlpha(alpha));
+        auto wire = makeWirePath(wires_[i].inCh, wires_[i].outCh);
+        g.strokePath(wire, PathStrokeType(thickness));
+    }
+
+    // Draw input ports
+    g.setFont(Font(FontOptions(9.f)));
+    for (int ch = 0; ch < numInputs_; ++ch)
+    {
+        auto r = getInputPortRect(ch);
+        g.setColour(Colour(0xff3a3a3a));
+        g.fillRoundedRectangle(r, 4.f);
+        g.setColour(Colours::aquamarine.withAlpha(0.8f));
+        g.drawRoundedRectangle(r, 4.f, 1.f);
+        g.setColour(Colours::white);
+        g.drawText(String(ch + 1), r.toNearestInt(), Justification::centred);
+    }
+
+    // Draw output ports
+    for (int ch = 0; ch < numOutputs_; ++ch)
+    {
+        auto r = getOutputPortRect(ch);
+        g.setColour(Colour(0xff3a3a3a));
+        g.fillRoundedRectangle(r, 4.f);
+        g.setColour(Colours::orange.withAlpha(0.8f));
+        g.drawRoundedRectangle(r, 4.f, 1.f);
+        g.setColour(Colours::white);
+        g.drawText(String(ch + 1), r.toNearestInt(), Justification::centred);
+    }
+}
+
+void IrWireComponent::mouseMove(const MouseEvent& e)
+{
+    int idx = hitTestWire(e.position);
+    if (idx != hoveredWire_)
+    {
+        hoveredWire_ = idx;
+        repaint();
+    }
+}
+
+void IrWireComponent::mouseDown(const MouseEvent& e)
+{
+    int idx = hitTestWire(e.position);
+    if (idx >= 0 && idx < (int)wires_.size())
+    {
+        selectedIn_ = wires_[idx].inCh;
+        selectedOut_ = wires_[idx].outCh;
+        repaint();
+        if (onCellClicked)
+            onCellClicked(wires_[idx].inCh, wires_[idx].outCh);
+    }
+}
+
+void IrWireComponent::mouseExit(const MouseEvent&)
+{
+    if (hoveredWire_ >= 0)
+    {
+        hoveredWire_ = -1;
+        repaint();
+    }
+}
+
+//==============================================================================
 // IrInspectorComponent
 //==============================================================================
 
@@ -520,41 +736,56 @@ IrInspectorComponent::IrInspectorComponent(Mcfx_convolverAudioProcessor& proc)
     titleLabel_.setJustificationType(Justification::centredLeft);
     addAndMakeVisible(titleLabel_);
 
-    infoLabel_.setText("Click a green cell to inspect the impulse response", dontSendNotification);
+    infoLabel_.setText("Click a wire or cell to inspect the impulse response", dontSendNotification);
     infoLabel_.setFont(Font(FontOptions().withHeight(11.f)));
     infoLabel_.setColour(Label::textColourId, Colour(0xffaaaacc));
     infoLabel_.setJustificationType(Justification::centredLeft);
     addAndMakeVisible(infoLabel_);
 
-    matrixViewport_.setViewedComponent(&matrixComponent_, false);
-    matrixViewport_.setScrollBarsShown(true, true);
-    addAndMakeVisible(matrixViewport_);
+    // Set up both views with shared callback
+    matrixComponent_.onCellClicked = [this](int in, int out) { onIrSelected(in, out); };
+    wireComponent_.onCellClicked = [this](int in, int out) { onIrSelected(in, out); };
+
+    // Restore saved view preference
+    showingWires_ = processor_.irInspectorWireView;
+    if (showingWires_)
+    {
+        leftViewport_.setViewedComponent(&wireComponent_, false);
+        leftViewport_.setScrollBarsShown(true, false);
+    }
+    else
+    {
+        leftViewport_.setViewedComponent(&matrixComponent_, false);
+        leftViewport_.setScrollBarsShown(true, true);
+    }
+    addAndMakeVisible(leftViewport_);
 
     addAndMakeVisible(plotComponent_);
 
-    matrixComponent_.onCellClicked = [this](int inCh, int outCh)
+    // Toggle button
+    viewToggleBtn_.setButtonText(showingWires_ ? "Matrix View" : "Wire View");
+    viewToggleBtn_.setColour(TextButton::buttonColourId, Colour(0xff2a2a3a));
+    viewToggleBtn_.setColour(TextButton::textColourOffId, Colours::white.withAlpha(0.8f));
+    viewToggleBtn_.onClick = [this]()
     {
-        auto& convData = processor_.getConvolverData();
-        // find the IR for this in/out combination
-        for (int i = 0; i < convData.getNumIRs(); ++i)
+        showingWires_ = !showingWires_;
+        processor_.irInspectorWireView = showingWires_;
+        if (showingWires_)
         {
-            if (convData.getInCh(i) == inCh && convData.getOutCh(i) == outCh)
-            {
-                auto* irBuf = convData.getIR(i);
-                if (irBuf != nullptr)
-                {
-                    plotComponent_.setIR(irBuf, convData.getSampleRate(), inCh, outCh);
-                    int len = convData.getLength(i);
-                    double durMs = 1000.0 * len / convData.getSampleRate();
-                    infoLabel_.setText("In " + String(inCh + 1) + " -> Out " + String(outCh + 1)
-                                       + "  |  " + String(len) + " samples  |  "
-                                       + String(durMs, 1) + " ms",
-                                       dontSendNotification);
-                }
-                return;
-            }
+            viewToggleBtn_.setButtonText("Matrix View");
+            leftViewport_.setViewedComponent(&wireComponent_, false);
+            leftViewport_.setScrollBarsShown(true, false);
         }
+        else
+        {
+            viewToggleBtn_.setButtonText("Wire View");
+            leftViewport_.setViewedComponent(&matrixComponent_, false);
+            leftViewport_.setScrollBarsShown(true, true);
+        }
+        resized();
+        repaint();
     };
+    addAndMakeVisible(viewToggleBtn_);
 
     processor_.addChangeListener(this);
 
@@ -575,17 +806,28 @@ void IrInspectorComponent::resized()
 {
     auto area = getLocalBounds().reduced(8);
 
-    titleLabel_.setBounds(area.removeFromTop(24));
+    auto topRow = area.removeFromTop(24);
+    viewToggleBtn_.setBounds(topRow.removeFromRight(85));
+    topRow.removeFromRight(4);
+    titleLabel_.setBounds(topRow);
+
     infoLabel_.setBounds(area.removeFromTop(18));
     area.removeFromTop(4);
 
-    // matrix on the left, plots on the right
-    int matrixWidth = jmin(area.getWidth() / 3, matrixComponent_.getWidth() + 20);
-    matrixWidth = jmax(matrixWidth, 120);
-    int matrixHeight = jmin(area.getHeight(), matrixComponent_.getHeight() + 20);
+    int leftWidth;
+    if (showingWires_)
+    {
+        leftWidth = jmin(area.getWidth() / 3, IrWireComponent::kWidth + 20);
+        leftWidth = jmax(leftWidth, 200);
+    }
+    else
+    {
+        leftWidth = jmin(area.getWidth() / 3, matrixComponent_.getWidth() + 20);
+        leftWidth = jmax(leftWidth, 120);
+    }
 
-    auto leftArea = area.removeFromLeft(matrixWidth);
-    matrixViewport_.setBounds(leftArea.withHeight(matrixHeight));
+    auto leftArea = area.removeFromLeft(leftWidth);
+    leftViewport_.setBounds(leftArea);
 
     area.removeFromLeft(8);
     plotComponent_.setBounds(area);
@@ -600,11 +842,39 @@ void IrInspectorComponent::refresh()
 {
     auto& convData = processor_.getConvolverData();
     matrixComponent_.updateMatrix(convData);
+    wireComponent_.updateWires(convData);
     plotComponent_.clearIR();
     matrixComponent_.setSelectedCell(-1, -1);
-    infoLabel_.setText("Click a green cell to inspect the impulse response", dontSendNotification);
+    wireComponent_.setSelectedWire(-1, -1);
+    infoLabel_.setText("Click a wire or cell to inspect the impulse response", dontSendNotification);
     resized();
     repaint();
+}
+
+void IrInspectorComponent::onIrSelected(int inCh, int outCh)
+{
+    auto& convData = processor_.getConvolverData();
+    for (int i = 0; i < convData.getNumIRs(); ++i)
+    {
+        if (convData.getInCh(i) == inCh && convData.getOutCh(i) == outCh)
+        {
+            auto* irBuf = convData.getIR(i);
+            if (irBuf != nullptr)
+            {
+                plotComponent_.setIR(irBuf, convData.getSampleRate(), inCh, outCh);
+                int len = convData.getLength(i);
+                double durMs = 1000.0 * len / convData.getSampleRate();
+                infoLabel_.setText("In " + String(inCh + 1) + " -> Out " + String(outCh + 1)
+                                   + "  |  " + String(len) + " samples  |  "
+                                   + String(durMs, 1) + " ms",
+                                   dontSendNotification);
+            }
+            // Sync selection on both views
+            matrixComponent_.setSelectedCell(inCh, outCh);
+            wireComponent_.setSelectedWire(inCh, outCh);
+            return;
+        }
+    }
 }
 
 //==============================================================================
@@ -664,4 +934,14 @@ void IrInspectorWindow::saveBounds()
 {
     if (isVisible())
         processor_.irInspectorBounds = getBounds();
+}
+
+bool IrInspectorWindow::keyPressed(const KeyPress& key)
+{
+    if (key == KeyPress::escapeKey)
+    {
+        closeButtonPressed();
+        return true;
+    }
+    return DocumentWindow::keyPressed(key);
 }
