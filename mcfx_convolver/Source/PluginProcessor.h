@@ -206,8 +206,9 @@ public:
     ConvolverData& getConvolverData() { return conv_data; }
     double getSampleRate() const { return _SampleRate; }
 
-    // IR Inspector window bounds (persisted across open/close)
+    // IR Inspector window state (persisted across open/close)
     Rectangle<int> irInspectorBounds;  // empty = not yet set (center on first open)
+    bool irInspectorWireView = false;  // false = matrix (default), true = wire view
 
 private:
     void DeleteTemporaryFiles();

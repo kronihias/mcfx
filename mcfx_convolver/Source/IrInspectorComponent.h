@@ -107,7 +107,55 @@ private:
 };
 
 //==============================================================================
-// Main inspector component combining matrix + plots
+// Wire diagram view showing in/out connections
+class IrWireComponent : public Component,
+                        public TooltipClient
+{
+public:
+    IrWireComponent();
+
+    void updateWires(ConvolverData& convData);
+    void setSelectedWire(int inCh, int outCh);
+
+    std::function<void(int inCh, int outCh)> onCellClicked;
+
+    void paint(Graphics& g) override;
+    void mouseMove(const MouseEvent& e) override;
+    void mouseDown(const MouseEvent& e) override;
+    void mouseExit(const MouseEvent& e) override;
+
+    String getTooltip() override;
+
+    static int getRecommendedHeight(int numInputs, int numOutputs);
+    static constexpr int kWidth = 280;
+
+private:
+    struct WireInfo { int inCh, outCh, irIndex; };
+
+    int numInputs_ = 0;
+    int numOutputs_ = 0;
+    std::vector<WireInfo> wires_;
+    int selectedIn_ = -1, selectedOut_ = -1;
+    int hoveredWire_ = -1;
+
+    static constexpr int kPortW = 36;
+    static constexpr int kPortH = 22;
+    static constexpr int kPortSpacing = 28;
+    static constexpr int kMarginTop = 36;
+    static constexpr int kMarginX = 16;
+
+    Rectangle<float> getInputPortRect(int ch) const;
+    Rectangle<float> getOutputPortRect(int ch) const;
+    Point<float> getInputPortRight(int ch) const;
+    Point<float> getOutputPortLeft(int ch) const;
+    Path makeWirePath(int inCh, int outCh) const;
+    int hitTestWire(Point<float> pt) const;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IrWireComponent)
+};
+
+//==============================================================================
+// Main inspector component combining matrix/wire views + plots
 class IrInspectorComponent : public Component,
                              public ChangeListener
 {
@@ -126,10 +174,15 @@ private:
     Mcfx_convolverAudioProcessor& processor_;
 
     IrMatrixComponent matrixComponent_;
-    Viewport matrixViewport_;
+    IrWireComponent wireComponent_;
+    Viewport leftViewport_;
     IrPlotComponent plotComponent_;
     Label titleLabel_;
     Label infoLabel_;
+    TextButton viewToggleBtn_;
+    bool showingWires_ = false;
+
+    void onIrSelected(int inCh, int outCh);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IrInspectorComponent)
 };
@@ -145,6 +198,7 @@ public:
     void closeButtonPressed() override;
     void moved() override;
     void resized() override;
+    bool keyPressed(const KeyPress& key) override;
 
 private:
     Mcfx_convolverAudioProcessor& processor_;
