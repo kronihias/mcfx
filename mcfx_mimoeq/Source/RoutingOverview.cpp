@@ -106,7 +106,7 @@ void RoutingOverviewComponent::paint(Graphics& g)
 
     // Title
     g.setColour(Colours::white.withAlpha(0.9f));
-    g.setFont(Font(13.f, Font::bold));
+    g.setFont(Font(FontOptions(13.f, Font::bold)));
     g.drawText("Routing Overview", getLocalBounds().removeFromTop(28),
                Justification::centred, false);
 
@@ -114,13 +114,13 @@ void RoutingOverviewComponent::paint(Graphics& g)
     if (hasDiagonalBands_)
     {
         g.setColour(Colours::aquamarine.withAlpha(0.7f));
-        g.setFont(Font(10.f, Font::italic));
+        g.setFont(Font(FontOptions(10.f, Font::italic)));
         g.drawText("Diagonal EQ active on all channels",
                    4, 16, getWidth() - 8, 16, Justification::centred, false);
     }
 
     // Draw port labels
-    g.setFont(Font(12.f, Font::plain));
+    g.setFont(Font(FontOptions(12.f, Font::plain)));
     for (int ch = 1; ch <= numChannels_; ++ch)
     {
         auto inRect  = getInputPortRect(ch);
@@ -144,7 +144,7 @@ void RoutingOverviewComponent::paint(Graphics& g)
     }
 
     // Column labels
-    g.setFont(Font(10.f, Font::plain));
+    g.setFont(Font(FontOptions(10.f, Font::plain)));
     g.setColour(Colours::aquamarine.withAlpha(0.6f));
     g.drawText("IN", kMarginX, kMarginTop - 14, kPortW, 12, Justification::centred, false);
     g.setColour(Colours::orange.withAlpha(0.6f));
@@ -401,7 +401,7 @@ void RoutingMatrixComponent::paint(Graphics& g)
 
     // Title
     g.setColour(Colours::white.withAlpha(0.9f));
-    g.setFont(Font(13.f, Font::bold));
+    g.setFont(Font(FontOptions(13.f, Font::bold)));
     g.drawText("Routing Matrix", getLocalBounds().removeFromTop(28),
                Justification::centred, false);
 
@@ -409,16 +409,17 @@ void RoutingMatrixComponent::paint(Graphics& g)
     if (hasDiagonalBands_)
     {
         g.setColour(Colours::aquamarine.withAlpha(0.7f));
-        g.setFont(Font(10.f, Font::italic));
+        g.setFont(Font(FontOptions(10.f, Font::italic)));
         g.drawText("Diagonal EQ active on all channels",
                    4, 16, getWidth() - 8, 16, Justification::centred, false);
     }
 
     // Column labels (outputs)
-    g.setFont(Font(10.f, Font::plain));
-    g.setColour(Colours::orange.withAlpha(0.7f));
     for (int out = 1; out <= numChannels_; ++out)
     {
+        bool highlighted = (hoveredCell_.second == out);
+        g.setFont(Font(FontOptions(10.f, highlighted ? Font::bold : Font::plain)));
+        g.setColour(Colours::orange.withAlpha(highlighted ? 1.0f : 0.7f));
         auto cellR = getCellRect(1, out);
         g.drawText(String(out),
                    cellR.getX(), kMarginTop - 14, kCellSize, 12,
@@ -427,21 +428,22 @@ void RoutingMatrixComponent::paint(Graphics& g)
 
     // "OUT" label above columns
     g.setColour(Colours::orange.withAlpha(0.5f));
-    g.setFont(Font(9.f, Font::bold));
+    g.setFont(Font(FontOptions(9.f, Font::bold)));
     g.drawText("OUT", kMarginLeft, kMarginTop - 26, numChannels_ * kCellSize, 12,
                Justification::centred, false);
 
     // "IN" label to the left of rows
     g.setColour(Colours::aquamarine.withAlpha(0.5f));
-    g.setFont(Font(9.f, Font::bold));
+    g.setFont(Font(FontOptions(9.f, Font::bold)));
     g.drawText("IN", 2, kMarginTop, kMarginLeft - 4, numChannels_ * kCellSize,
                Justification::centredTop, false);
 
     // Row labels (inputs)
-    g.setFont(Font(10.f, Font::plain));
-    g.setColour(Colours::aquamarine.withAlpha(0.7f));
     for (int in = 1; in <= numChannels_; ++in)
     {
+        bool highlighted = (hoveredCell_.first == in);
+        g.setFont(Font(FontOptions(10.f, highlighted ? Font::bold : Font::plain)));
+        g.setColour(Colours::aquamarine.withAlpha(highlighted ? 1.0f : 0.7f));
         auto cellR = getCellRect(in, 1);
         g.drawText(String(in),
                    kMarginLeft - 18, cellR.getY(), 14, kCellSize,
@@ -449,7 +451,7 @@ void RoutingMatrixComponent::paint(Graphics& g)
     }
 
     // Draw cells
-    g.setFont(Font(10.f, Font::bold));
+    g.setFont(Font(FontOptions(10.f, Font::bold)));
     for (int in = 1; in <= numChannels_; ++in)
     {
         for (int out = 1; out <= numChannels_; ++out)
@@ -531,6 +533,18 @@ void RoutingMatrixComponent::mouseDown(const MouseEvent& e)
     }
 }
 
+void RoutingMatrixComponent::mouseDoubleClick(const MouseEvent& e)
+{
+    auto cell = hitTestCell(e.position.toInt());
+    if (cell.first < 1 || cell.second < 1) return;
+    if (listener_ == nullptr) return;
+
+    if (pathExists(cell.first, cell.second))
+    {
+        listener_->routingPathRemoved(cell.first, cell.second);
+    }
+}
+
 //==============================================================================
 // ChannelSelectorComponent
 //==============================================================================
@@ -585,7 +599,7 @@ void ChannelSelectorComponent::paint(Graphics& g)
 
     // Title
     g.setColour(Colours::white.withAlpha(0.9f));
-    g.setFont(Font(12.f, Font::bold));
+    g.setFont(Font(FontOptions(12.f, Font::bold)));
     g.drawText("Diagonal Channels", 0, 2, getWidth(), 18, Justification::centred, false);
 
     // All / None buttons
@@ -604,7 +618,7 @@ void ChannelSelectorComponent::paint(Graphics& g)
     g.fillRoundedRectangle(allRect.toFloat(), 3.f);
     g.setColour(allOn ? Colours::aquamarine : Colours::white.withAlpha(0.6f));
     g.drawRoundedRectangle(allRect.toFloat(), 3.f, 1.f);
-    g.setFont(Font(10.f, Font::bold));
+    g.setFont(Font(FontOptions(10.f, Font::bold)));
     g.drawText("All", allRect, Justification::centred, false);
 
     // None button
@@ -615,7 +629,7 @@ void ChannelSelectorComponent::paint(Graphics& g)
     g.drawText("None", noneRect, Justification::centred, false);
 
     // Channel grid
-    g.setFont(Font(11.f, Font::plain));
+    g.setFont(Font(FontOptions(11.f, Font::plain)));
     for (int ch = 1; ch <= numChannels_; ++ch)
     {
         auto rect = getCellRect(ch).toFloat();

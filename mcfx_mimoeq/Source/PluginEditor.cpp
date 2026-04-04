@@ -171,7 +171,7 @@ void Mcfx_mimoeqAudioProcessorEditor::paint(Graphics& g)
     // Version drawn just above the status bar
     int statusH = 42;
     g.setColour(Colours::white.withAlpha(0.35f));
-    g.setFont(Font(10.f, Font::plain));
+    g.setFont(Font(FontOptions(10.f, Font::plain)));
     String version;
     version << "v" << QUOTE(VERSION);
     g.drawText(version, getWidth() - 55, getHeight() - statusH - 13, 50, 12, Justification::centredRight, true);
@@ -771,11 +771,24 @@ void Mcfx_mimoeqAudioProcessorEditor::showRoutingOverview()
     }
 
     auto* wrapper = new ScrollableRoutingOverview(keys, bandCounts, numCh, hasDiag, this);
+    wrapper->setShowMatrix(getProcessor()->editorRoutingMatrixView);
+    wrapper->onViewChanged = [this](bool isMatrix) {
+        getProcessor()->editorRoutingMatrixView = isMatrix;
+    };
+    wrapper->onSizeChanged = [this](int w, int h) {
+        getProcessor()->editorRoutingPopupW = w;
+        getProcessor()->editorRoutingPopupH = h;
+    };
     if (!diagonalMode_)
     {
         wrapper->getOverview()->setSelectedPath(selectedPath_);
         wrapper->getMatrix()->setSelectedPath(selectedPath_);
     }
+
+    // Restore previously saved popup size
+    if (getProcessor()->editorRoutingPopupW > 0 && getProcessor()->editorRoutingPopupH > 0)
+        wrapper->setSize(getProcessor()->editorRoutingPopupW, getProcessor()->editorRoutingPopupH);
+
     auto& box = CallOutBox::launchAsynchronously(std::unique_ptr<Component>(wrapper),
                                                   btnRouting_.getScreenBounds(),
                                                   nullptr);
@@ -840,6 +853,55 @@ void Mcfx_mimoeqAudioProcessorEditor::routingPathCreated(int inCh, int outCh)
             bandCounts[key] = c->getNumBands();
     }
     // Find the RoutingOverviewComponent inside any visible CallOutBox
+    for (int i = 0; i < Desktop::getInstance().getNumComponents(); ++i)
+    {
+        auto* comp = Desktop::getInstance().getComponent(i);
+        if (auto* callout = dynamic_cast<CallOutBox*>(comp))
+        {
+            for (int c = 0; c < callout->getNumChildComponents(); ++c)
+            {
+                if (auto* wrapper = dynamic_cast<ScrollableRoutingOverview*>(callout->getChildComponent(c)))
+                {
+                    wrapper->updatePaths(keys, bandCounts);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::routingPathRemoved(int inCh, int outCh)
+{
+    if (getProcessor()->getChainForPath(inCh, outCh) == nullptr)
+        return;
+
+    getProcessor()->pushUndoState();
+    updateUndoRedoButtons();
+    getProcessor()->removePathChain(inCh, outCh);
+
+    auto keys = getProcessor()->getPathKeys();
+    if (!keys.empty())
+        selectedPath_ = keys[0];
+
+    rebuildPathDropdown();
+    notifyChainChanged();
+
+    auto* chain = getActiveChain();
+    graph_.setChain(chain);
+    refreshTabs();
+    if (chain != nullptr && chain->getNumBands() > 0)
+        selectBand(0);
+    else
+        selectBand(-1);
+
+    // Update the routing overview in-place
+    std::map<PathKey, int> bandCounts;
+    for (auto& key : keys)
+    {
+        auto* c = getProcessor()->getChainForPath(key.first, key.second);
+        if (c != nullptr)
+            bandCounts[key] = c->getNumBands();
+    }
     for (int i = 0; i < Desktop::getInstance().getNumComponents(); ++i)
     {
         auto* comp = Desktop::getInstance().getComponent(i);

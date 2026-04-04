@@ -84,6 +84,7 @@ public:
     // RoutingOverviewComponent::Listener
     void routingPathSelected(int inCh, int outCh) override;
     void routingPathCreated(int inCh, int outCh) override;
+    void routingPathRemoved(int inCh, int outCh) override;
 
     // ChannelSelectorComponent::Listener
     void diagChannelMaskChanged(const std::set<int>& mask) override;
