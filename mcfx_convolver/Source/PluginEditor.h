@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "PluginProcessor.h"
+#include "IrInspectorComponent.h"
 
 
 //==============================================================================
@@ -118,7 +119,7 @@ private:
         ourProcessor->LoadWavFile(dropped_file, numInChannels);
     }
 
-    TooltipWindow tooltipWindow;
+    TooltipWindow tooltipWindow { this, 500 };
 
     Label label;
     TextEditor txt_preset;
@@ -163,6 +164,9 @@ private:
     std::function<int(int)> fromBottom = [this](int c) { jassert(window_height>=0); return window_height-c; };
     
     std::unique_ptr<AlertWindow> asyncAlertWindow;
+
+    TextButton btn_inspect_irs;
+    std::unique_ptr<IrInspectorWindow> irInspectorWindow_;
 
     LookAndFeel_V3 MyLookAndFeel;
 };
