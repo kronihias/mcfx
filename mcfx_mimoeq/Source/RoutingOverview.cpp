@@ -338,6 +338,200 @@ void RoutingOverviewComponent::mouseUp(const MouseEvent& e)
 }
 
 //==============================================================================
+// RoutingMatrixComponent
+//==============================================================================
+
+RoutingMatrixComponent::RoutingMatrixComponent(const std::vector<PathKey>& paths,
+                                                 const std::map<PathKey, int>& bandCounts,
+                                                 int numChannels,
+                                                 bool hasDiagonalBands,
+                                                 RoutingOverviewComponent::Listener* listener)
+    : paths_(paths),
+      bandCounts_(bandCounts),
+      numChannels_(numChannels),
+      hasDiagonalBands_(hasDiagonalBands),
+      listener_(listener)
+{
+    setSize(getRecommendedWidth(numChannels), getRecommendedHeight(numChannels));
+    setMouseCursor(MouseCursor::PointingHandCursor);
+}
+
+void RoutingMatrixComponent::updatePaths(const std::vector<PathKey>& paths,
+                                          const std::map<PathKey, int>& bandCounts)
+{
+    paths_ = paths;
+    bandCounts_ = bandCounts;
+    hoveredCell_ = { -1, -1 };
+    repaint();
+}
+
+Rectangle<int> RoutingMatrixComponent::getCellRect(int inCh, int outCh) const
+{
+    int x = kMarginLeft + (outCh - 1) * kCellSize;
+    int y = kMarginTop + (inCh - 1) * kCellSize;
+    return { x, y, kCellSize, kCellSize };
+}
+
+PathKey RoutingMatrixComponent::hitTestCell(Point<int> pt) const
+{
+    for (int in = 1; in <= numChannels_; ++in)
+        for (int out = 1; out <= numChannels_; ++out)
+            if (getCellRect(in, out).contains(pt))
+                return { in, out };
+    return { -1, -1 };
+}
+
+bool RoutingMatrixComponent::pathExists(int inCh, int outCh) const
+{
+    PathKey key { inCh, outCh };
+    for (auto& p : paths_)
+        if (p == key) return true;
+    return false;
+}
+
+int RoutingMatrixComponent::getBandCount(int inCh, int outCh) const
+{
+    auto it = bandCounts_.find({ inCh, outCh });
+    return (it != bandCounts_.end()) ? it->second : 0;
+}
+
+void RoutingMatrixComponent::paint(Graphics& g)
+{
+    g.fillAll(Colour(0xff1e1e1e));
+
+    // Title
+    g.setColour(Colours::white.withAlpha(0.9f));
+    g.setFont(Font(13.f, Font::bold));
+    g.drawText("Routing Matrix", getLocalBounds().removeFromTop(28),
+               Justification::centred, false);
+
+    // Diagonal indicator
+    if (hasDiagonalBands_)
+    {
+        g.setColour(Colours::aquamarine.withAlpha(0.7f));
+        g.setFont(Font(10.f, Font::italic));
+        g.drawText("Diagonal EQ active on all channels",
+                   4, 16, getWidth() - 8, 16, Justification::centred, false);
+    }
+
+    // Column labels (outputs)
+    g.setFont(Font(10.f, Font::plain));
+    g.setColour(Colours::orange.withAlpha(0.7f));
+    for (int out = 1; out <= numChannels_; ++out)
+    {
+        auto cellR = getCellRect(1, out);
+        g.drawText(String(out),
+                   cellR.getX(), kMarginTop - 14, kCellSize, 12,
+                   Justification::centred, false);
+    }
+
+    // "OUT" label above columns
+    g.setColour(Colours::orange.withAlpha(0.5f));
+    g.setFont(Font(9.f, Font::bold));
+    g.drawText("OUT", kMarginLeft, kMarginTop - 26, numChannels_ * kCellSize, 12,
+               Justification::centred, false);
+
+    // "IN" label to the left of rows
+    g.setColour(Colours::aquamarine.withAlpha(0.5f));
+    g.setFont(Font(9.f, Font::bold));
+    g.drawText("IN", 2, kMarginTop, kMarginLeft - 4, numChannels_ * kCellSize,
+               Justification::centredTop, false);
+
+    // Row labels (inputs)
+    g.setFont(Font(10.f, Font::plain));
+    g.setColour(Colours::aquamarine.withAlpha(0.7f));
+    for (int in = 1; in <= numChannels_; ++in)
+    {
+        auto cellR = getCellRect(in, 1);
+        g.drawText(String(in),
+                   kMarginLeft - 18, cellR.getY(), 14, kCellSize,
+                   Justification::centredRight, false);
+    }
+
+    // Draw cells
+    g.setFont(Font(10.f, Font::bold));
+    for (int in = 1; in <= numChannels_; ++in)
+    {
+        for (int out = 1; out <= numChannels_; ++out)
+        {
+            auto rect = getCellRect(in, out).toFloat().reduced(1.f);
+            bool exists = pathExists(in, out);
+            bool isDiag = (in == out);
+            bool isHovered = (hoveredCell_.first == in && hoveredCell_.second == out);
+            bool isSelected = (selectedPath_.first == in && selectedPath_.second == out);
+            int bands = getBandCount(in, out);
+
+            // Cell background
+            if (exists)
+            {
+                Colour baseCol = isDiag ? Colours::aquamarine : Colours::orange;
+                float alpha = isSelected ? 0.55f : (isHovered ? 0.4f : 0.25f);
+                g.setColour(baseCol.withAlpha(alpha));
+            }
+            else
+            {
+                g.setColour(isHovered ? Colour(0xff3a3a3a) : Colour(0xff262626));
+            }
+            g.fillRoundedRectangle(rect, 3.f);
+
+            // Cell border
+            if (isSelected)
+                g.setColour(Colours::white.withAlpha(0.9f));
+            else if (exists)
+                g.setColour((isDiag ? Colours::aquamarine : Colours::orange).withAlpha(0.5f));
+            else
+                g.setColour(Colour(0xff3a3a3a));
+            g.drawRoundedRectangle(rect, 3.f, isSelected ? 1.5f : 0.8f);
+
+            // Band count text
+            if (exists && bands > 0)
+            {
+                g.setColour(isSelected ? Colours::white : Colours::white.withAlpha(0.85f));
+                g.drawText(String(bands), rect.toNearestInt(), Justification::centred, false);
+            }
+        }
+    }
+}
+
+void RoutingMatrixComponent::mouseMove(const MouseEvent& e)
+{
+    auto cell = hitTestCell(e.position.toInt());
+    if (cell != hoveredCell_)
+    {
+        hoveredCell_ = cell;
+        repaint();
+    }
+}
+
+void RoutingMatrixComponent::mouseExit(const MouseEvent&)
+{
+    if (hoveredCell_.first >= 0)
+    {
+        hoveredCell_ = { -1, -1 };
+        repaint();
+    }
+}
+
+void RoutingMatrixComponent::mouseDown(const MouseEvent& e)
+{
+    auto cell = hitTestCell(e.position.toInt());
+    if (cell.first < 1 || cell.second < 1) return;
+    if (listener_ == nullptr) return;
+
+    if (pathExists(cell.first, cell.second))
+    {
+        selectedPath_ = cell;
+        repaint();
+        listener_->routingPathSelected(cell.first, cell.second);
+    }
+    else
+    {
+        listener_->routingPathCreated(cell.first, cell.second);
+        selectedPath_ = cell;
+    }
+}
+
+//==============================================================================
 // ChannelSelectorComponent
 //==============================================================================
 
