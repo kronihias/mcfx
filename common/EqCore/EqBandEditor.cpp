@@ -132,7 +132,7 @@ EqBandEditor::EqBandEditor()
     // Raw biquad coefficient editors
     addAndMakeVisible(lblBiquad_);
     addAndMakeVisible(lblStability_);
-    lblStability_.setFont(Font(13.f, Font::bold));
+    lblStability_.setFont(Font(FontOptions(13.f, Font::bold)));
     setupCoeffLabel(edB0_, "Numerator coefficient b0");
     setupCoeffLabel(edB1_, "Numerator coefficient b1");
     setupCoeffLabel(edB2_, "Numerator coefficient b2");
@@ -142,7 +142,7 @@ EqBandEditor::EqBandEditor()
     for (auto* lbl : { &lblB0_, &lblB1_, &lblB2_, &lblA0_, &lblA1_, &lblA2_ })
     {
         addAndMakeVisible(lbl);
-        lbl->setFont(Font(12.f, Font::plain));
+        lbl->setFont(Font(FontOptions(12.f, Font::plain)));
         lbl->setColour(Label::textColourId, Colours::white.withAlpha(0.7f));
     }
 
@@ -163,7 +163,7 @@ EqBandEditor::EqBandEditor()
     // Set label styles
     for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_ })
     {
-        lbl->setFont(Font(13.f, Font::plain));
+        lbl->setFont(Font(FontOptions(13.f, Font::plain)));
         lbl->setColour(Label::textColourId, Colours::white);
     }
 }
@@ -226,6 +226,7 @@ void EqBandEditor::updateFromBand()
             case IIRSubType::CrossoverLP:   cbIIRSubType_.setSelectedId(11, dontSendNotification); break;
             case IIRSubType::CrossoverHP:   cbIIRSubType_.setSelectedId(12, dontSendNotification); break;
             case IIRSubType::CrossoverAP:   cbIIRSubType_.setSelectedId(13, dontSendNotification); break;
+            case IIRSubType::RawBiquad:    cbIIRSubType_.setSelectedId(14, dontSendNotification); break;
         }
         sldFreq_.setValue(band_->getFrequency(), dontSendNotification);
         sldQ_.setValue(band_->getQ(), dontSendNotification);
@@ -394,7 +395,7 @@ void EqBandEditor::paint(Graphics& g)
 
         // Band number
         g.setColour(bandCol.getPerceivedBrightness() > 0.5f ? Colour(0xff1a1a1a) : Colours::white);
-        g.setFont(Font(indicatorSize * 0.5f, Font::bold));
+        g.setFont(Font(FontOptions(indicatorSize * 0.5f, Font::bold)));
         g.drawText(String(bandIndex_ + 1),
                    (int)(cx - indicatorSize / 2.f), (int)(cy - indicatorSize / 2.f),
                    (int)indicatorSize, (int)indicatorSize,
@@ -709,7 +710,7 @@ void EqBandEditor::setupCoeffLabel(Label& ed, const String& tooltip)
 {
     addAndMakeVisible(ed);
     ed.setEditable(true, false, false); // single-click to edit
-    ed.setFont(Font(12.f, Font::plain));
+    ed.setFont(Font(FontOptions(12.f, Font::plain)));
     ed.setColour(Label::backgroundColourId, Colour(0xff2a2a2a));
     ed.setColour(Label::outlineColourId, Colour(0xff555555));
     ed.setColour(Label::textColourId, Colours::white);

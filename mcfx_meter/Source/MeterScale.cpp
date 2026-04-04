@@ -34,7 +34,7 @@ MeterScaleComponent::MeterScaleComponent (int size, bool alignLeft): _offset(0)
             addChildComponent(_scale_labels.getUnchecked(i));
             if (i != 5)
                 _scale_labels.getUnchecked(i)->setVisible(true); // don't show -50dB
-            _scale_labels.getUnchecked(i)->setFont (Font (11.0000f, Font::plain));
+            _scale_labels.getUnchecked(i)->setFont (Font (FontOptions (11.0000f, Font::plain)));
             _scale_labels.getUnchecked(i)->setColour (Label::textColourId, Colours::white);
             if (alignLeft)
                 _scale_labels.getUnchecked(i)->setJustificationType (Justification::topLeft);

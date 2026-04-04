@@ -48,7 +48,7 @@ box_maxpart("new combobox")
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
 
     addAndMakeVisible (label);
-    label.setFont (Font (15.0000f, Font::plain));
+    label.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label.setJustificationType (Justification::centredRight);
     label.setEditable (false, false, false);
     label.setColour (Label::textColourId, Colours::white);
@@ -60,7 +60,7 @@ box_maxpart("new combobox")
     txt_preset.setPopupMenuEnabled(false);
 
     addAndMakeVisible (label5);
-    label5.setFont (Font (15.0000f, Font::plain));
+    label5.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label5.setJustificationType (Justification::centredRight);
     label5.setEditable (false, false, false);
     label5.setColour (Label::textColourId, Colours::white);
@@ -75,7 +75,7 @@ box_maxpart("new combobox")
     txt_debug.setCaretVisible (false);
     txt_debug.setPopupMenuEnabled (true);
     txt_debug.setText ("debug window");
-    txt_debug.setFont(Font(10,1));
+    txt_debug.setFont(Font(FontOptions(10.f, Font::bold)));
 
     addAndMakeVisible (btn_open);
     btn_open.setTooltip ("browse presets or open from file");
@@ -85,7 +85,7 @@ box_maxpart("new combobox")
     btn_open.setColour (TextButton::buttonOnColourId, Colours::blue);
 
     addAndMakeVisible (label2);
-    label2.setFont (Font (15.0000f, Font::plain));
+    label2.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label2.setJustificationType (Justification::centredRight);
     label2.setEditable (false, false, false);
     label2.setColour (Label::textColourId, Colours::white);
@@ -93,7 +93,7 @@ box_maxpart("new combobox")
     label2.setColour (TextEditor::backgroundColourId, Colour (0x0));
 
     addAndMakeVisible (label3);
-    label3.setFont (Font (15.0000f, Font::plain));
+    label3.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label3.setJustificationType (Justification::centredRight);
     label3.setEditable (false, false, false);
     label3.setColour (Label::textColourId, Colours::white);
@@ -110,7 +110,7 @@ box_maxpart("new combobox")
     btn_clear_debug.setColour (TextButton::textColourOnId, juce::Colour::fromHSV (0.0f, 0.42f, 1.0f, 1.0f));
 
     addAndMakeVisible(lbl_skippedcycles);
-    lbl_skippedcycles.setFont(Font(10.0000f, Font::plain));
+    lbl_skippedcycles.setFont(Font(FontOptions(10.0000f, Font::plain)));
     lbl_skippedcycles.setJustificationType(Justification::centredLeft);
     lbl_skippedcycles.setEditable(false, false, false);
     lbl_skippedcycles.setColour(Label::textColourId, Colours::yellow);
@@ -118,7 +118,7 @@ box_maxpart("new combobox")
     lbl_skippedcycles.setColour(TextEditor::backgroundColourId, Colour(0x0));
 
     addAndMakeVisible (num_ch);
-    num_ch.setFont (Font (15.0000f, Font::plain));
+    num_ch.setFont (Font (FontOptions (15.0000f, Font::plain)));
     num_ch.setJustificationType (Justification::centredRight);
     num_ch.setEditable (false, false, false);
     num_ch.setColour (Label::textColourId, Colours::white);
@@ -126,7 +126,7 @@ box_maxpart("new combobox")
     num_ch.setColour (TextEditor::backgroundColourId, Colour (0x0));
 
     addAndMakeVisible (num_spk);
-    num_spk.setFont (Font (15.0000f, Font::plain));
+    num_spk.setFont (Font (FontOptions (15.0000f, Font::plain)));
     num_spk.setJustificationType (Justification::centredRight);
     num_spk.setEditable (false, false, false);
     num_spk.setColour (Label::textColourId, Colours::white);
@@ -134,7 +134,7 @@ box_maxpart("new combobox")
     num_spk.setColour (TextEditor::backgroundColourId, Colour (0x0));
 
     addAndMakeVisible (num_hrtf);
-    num_hrtf.setFont (Font (15.0000f, Font::plain));
+    num_hrtf.setFont (Font (FontOptions (15.0000f, Font::plain)));
     num_hrtf.setJustificationType (Justification::centredRight);
     num_hrtf.setEditable (false, false, false);
     num_hrtf.setColour (Label::textColourId, Colours::white);
@@ -254,18 +254,18 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
     g.fillRoundedRectangle (18.0f, 132.0f, 190.0f, 77.0f, 10.0000f);
 
     g.setColour (Colours::white);
-    g.setFont (Font (17.2000f, Font::bold));
+    g.setFont (Font (FontOptions (17.2000f, Font::bold)));
 
     g.drawText ("MCFX-CONVOLVER",
                 1, 3, fromRight(7), 25,
                 Justification::centred, true);
 
-    g.setFont (Font (12.4000f, Font::plain));
+    g.setFont (Font (FontOptions (12.4000f, Font::plain)));
     g.drawText ("multichannel non-equal partioned convolution matrix",
                 1, 23, fromRight(7), 25,
                 Justification::centred, true);
 
-    g.setFont (Font (12.4000f, Font::plain));
+    g.setFont (Font (FontOptions (12.4000f, Font::plain)));
     g.drawText ("First Partition Size",
                 fromRight(150), 104, 135, 30,
                 Justification::centredRight, true);
@@ -276,7 +276,7 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
     /* Version text */
     g.setColour (Colours::white);
-    g.setFont (Font (10.00f, Font::plain));
+    g.setFont (Font (FontOptions (10.00f, Font::plain)));
     String version_string;
     version_string << "v" << QUOTE(VERSION);
     g.drawText (version_string,
@@ -285,7 +285,7 @@ void Mcfx_convolverAudioProcessorEditor::paint (Graphics& g)
 
     // Draw text channels
     g.setColour (Colours::white);
-    g.setFont (Font (12.4000f, Font::plain));
+    g.setFont (Font (FontOptions (12.4000f, Font::plain)));
     g.drawText (String(NUM_CHANNELS)+"x"+String(NUM_CHANNELS)+"ch.",
                 fromRight(130), fromBottom(btn_clear_debug.getHeight()), 60, btn_clear_debug.getHeight(),
                 Justification::centredRight, true);

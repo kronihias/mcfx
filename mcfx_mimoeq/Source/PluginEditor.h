@@ -144,7 +144,7 @@ private:
     {
         Font getTabButtonFont(TabBarButton&, float height) override
         {
-            return Font(jmin(height * 0.6f, 14.f), Font::plain);
+            return Font(FontOptions(jmin(height * 0.6f, 14.f), Font::plain));
         }
 
         void drawTabButton(TabBarButton& button, Graphics& g,
@@ -166,7 +166,7 @@ private:
             // Text: band colour for selected (bold, bigger), white dimmed for unselected
             float fontSize = isFront ? jmin(area.getHeight() * 0.62f, 14.f)
                                      : jmin(area.getHeight() * 0.5f, 12.f);
-            g.setFont(Font(fontSize, isFront ? Font::bold : Font::plain));
+            g.setFont(Font(FontOptions(fontSize, isFront ? Font::bold : Font::plain)));
             g.setColour(isFront ? tabColour : Colours::white.withAlpha(0.6f));
             g.drawText(button.getButtonText(), area, Justification::centred, false);
         }
