@@ -84,9 +84,65 @@ private:
 };
 
 //==============================================================================
-/** Scrollable wrapper for RoutingOverviewComponent.
-    Caps the height and adds a vertical scrollbar when needed. */
-class ScrollableRoutingOverview : public Component
+/** Matrix view for routing — inputs as rows, outputs as columns.
+    Cells with existing paths show a coloured background and band count.
+    Click to select existing paths or create new ones. */
+class RoutingMatrixComponent : public Component
+{
+public:
+    RoutingMatrixComponent(const std::vector<PathKey>& paths,
+                           const std::map<PathKey, int>& bandCounts,
+                           int numChannels,
+                           bool hasDiagonalBands,
+                           RoutingOverviewComponent::Listener* listener);
+
+    void updatePaths(const std::vector<PathKey>& paths,
+                     const std::map<PathKey, int>& bandCounts);
+    void setSelectedPath(PathKey path) { selectedPath_ = path; repaint(); }
+
+    void paint(Graphics& g) override;
+    void mouseMove(const MouseEvent& e) override;
+    void mouseDown(const MouseEvent& e) override;
+    void mouseExit(const MouseEvent& e) override;
+
+    static int getRecommendedWidth(int numChannels)
+    {
+        return kMarginLeft + numChannels * kCellSize + kMarginRight;
+    }
+
+    static int getRecommendedHeight(int numChannels)
+    {
+        return kMarginTop + numChannels * kCellSize + kMarginBottom;
+    }
+
+private:
+    std::vector<PathKey> paths_;
+    std::map<PathKey, int> bandCounts_;
+    int numChannels_;
+    bool hasDiagonalBands_;
+    RoutingOverviewComponent::Listener* listener_;
+    PathKey selectedPath_ { -1, -1 };
+    PathKey hoveredCell_ { -1, -1 };
+
+    static constexpr int kCellSize = 28;
+    static constexpr int kMarginLeft = 40;   // space for row labels
+    static constexpr int kMarginTop = 50;    // space for title + col labels
+    static constexpr int kMarginRight = 8;
+    static constexpr int kMarginBottom = 8;
+
+    Rectangle<int> getCellRect(int inCh, int outCh) const;
+    PathKey hitTestCell(Point<int> pt) const;
+    bool pathExists(int inCh, int outCh) const;
+    int getBandCount(int inCh, int outCh) const;
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoutingMatrixComponent)
+};
+
+//==============================================================================
+/** Scrollable wrapper that holds both the wire view and matrix view
+    with a toggle button to switch between them. */
+class ScrollableRoutingOverview : public Component,
+                                   public Button::Listener
 {
 public:
     ScrollableRoutingOverview(const std::vector<PathKey>& paths,
@@ -94,31 +150,112 @@ public:
                               int numChannels,
                               bool hasDiagonalBands,
                               RoutingOverviewComponent::Listener* listener)
+        : numChannels_(numChannels),
+          paths_(paths),
+          bandCounts_(bandCounts),
+          hasDiagonalBands_(hasDiagonalBands),
+          listener_(listener)
     {
         overview_ = std::make_unique<RoutingOverviewComponent>(paths, bandCounts,
                                                                 numChannels, hasDiagonalBands, listener);
+        matrix_ = std::make_unique<RoutingMatrixComponent>(paths, bandCounts,
+                                                            numChannels, hasDiagonalBands, listener);
+
         viewport_.setViewedComponent(overview_.get(), false);
-        viewport_.setScrollBarsShown(true, false); // vertical only
+        viewport_.setScrollBarsShown(true, false);
         addAndMakeVisible(viewport_);
 
-        int fullH = RoutingOverviewComponent::getRecommendedHeight(numChannels);
-        int cappedH = jmin(fullH, kMaxHeight);
-        int w = RoutingOverviewComponent::kWidth + (fullH > kMaxHeight ? 14 : 0); // scrollbar width
-        setSize(w, cappedH);
+        toggleBtn_.setButtonText("Matrix");
+        toggleBtn_.setColour(TextButton::buttonColourId, Colour(0xff2a2a2a));
+        toggleBtn_.setColour(TextButton::textColourOffId, Colours::white.withAlpha(0.8f));
+        toggleBtn_.addListener(this);
+        addAndMakeVisible(toggleBtn_);
+
+        showingMatrix_ = false;
+        updateSize();
     }
 
     void resized() override
     {
-        viewport_.setBounds(getLocalBounds());
+        auto area = getLocalBounds();
+        toggleBtn_.setBounds(area.removeFromTop(kToggleBarH).reduced(4, 2));
+        viewport_.setBounds(area);
+    }
+
+    void buttonClicked(Button*) override
+    {
+        showingMatrix_ = !showingMatrix_;
+
+        if (showingMatrix_)
+        {
+            toggleBtn_.setButtonText("Wires");
+            viewport_.setViewedComponent(matrix_.get(), false);
+            viewport_.setScrollBarsShown(true, true);
+        }
+        else
+        {
+            toggleBtn_.setButtonText("Matrix");
+            viewport_.setViewedComponent(overview_.get(), false);
+            viewport_.setScrollBarsShown(true, false);
+        }
+
+        updateSize();
+        repaint();
     }
 
     RoutingOverviewComponent* getOverview() { return overview_.get(); }
+    RoutingMatrixComponent* getMatrix() { return matrix_.get(); }
+
+    void updatePaths(const std::vector<PathKey>& paths,
+                     const std::map<PathKey, int>& bandCounts)
+    {
+        paths_ = paths;
+        bandCounts_ = bandCounts;
+        overview_->updatePaths(paths, bandCounts);
+        matrix_->updatePaths(paths, bandCounts);
+    }
 
     static constexpr int kMaxHeight = 600;
 
 private:
+    static constexpr int kToggleBarH = 24;
+
+    void updateSize()
+    {
+        int contentW, contentH;
+
+        if (showingMatrix_)
+        {
+            contentW = RoutingMatrixComponent::getRecommendedWidth(numChannels_);
+            contentH = RoutingMatrixComponent::getRecommendedHeight(numChannels_);
+        }
+        else
+        {
+            contentW = RoutingOverviewComponent::kWidth;
+            contentH = RoutingOverviewComponent::getRecommendedHeight(numChannels_);
+        }
+
+        int cappedH = jmin(contentH, kMaxHeight);
+        bool needsVScroll = contentH > kMaxHeight;
+        bool needsHScroll = showingMatrix_ && contentW > kMaxWidth;
+        int w = jmin(contentW, kMaxWidth) + (needsVScroll ? 14 : 0);
+        int h = cappedH + kToggleBarH + (needsHScroll ? 14 : 0);
+        setSize(w, h);
+    }
+
+    static constexpr int kMaxWidth = 500;
+
+    int numChannels_;
+    std::vector<PathKey> paths_;
+    std::map<PathKey, int> bandCounts_;
+    bool hasDiagonalBands_;
+    RoutingOverviewComponent::Listener* listener_;
+    bool showingMatrix_ = false;
+
     std::unique_ptr<RoutingOverviewComponent> overview_;
+    std::unique_ptr<RoutingMatrixComponent> matrix_;
     Viewport viewport_;
+    TextButton toggleBtn_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ScrollableRoutingOverview)
 };
