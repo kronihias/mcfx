@@ -19,6 +19,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "IrInspectorComponent.h"
 
 #define Q(x) #x
 #define QUOTE(x) Q(x)
@@ -207,6 +208,13 @@ box_maxpart("new combobox")
     sld_master_gain.setColour(Slider::textBoxHighlightColourId, Colour(0xff666699));
     addAndMakeVisible(sld_master_gain);
 
+    addAndMakeVisible(btn_inspect_irs);
+    btn_inspect_irs.setButtonText("Inspect IRs");
+    btn_inspect_irs.setTooltip("Open a window to inspect individual impulse responses");
+    btn_inspect_irs.addListener(this);
+    btn_inspect_irs.setColour(TextButton::buttonColourId, Colours::white);
+    btn_inspect_irs.setColour(TextButton::buttonOnColourId, Colours::blue);
+
     // setResizable (true,true);                                    // Uncomment to make resizable
     // setResizeLimits(window_width, window_height, 1200, 1200);    // Uncomment to make resizable
     setSize (window_width, window_height);
@@ -319,6 +327,7 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     box_conv_buffer.setBounds (fromRight(80), 126, 67, 20);
     box_maxpart.setBounds (fromRight(80), 169, 65, 20);
 
+    btn_inspect_irs.setBounds(fromRight(210), 80, 94, 24);
     tgl_save_preset.setBounds(16, 79, 200, 24);
 
     txt_rcv_port.setBounds(146, 108, 40, 18);
@@ -605,6 +614,18 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
     else if (buttonThatWasClicked == &tgl_save_preset)
     {
         ourProcessor->_storeConfigDataInProject = tgl_save_preset.getToggleState();
+    }
+    else if (buttonThatWasClicked == &btn_inspect_irs)
+    {
+        if (irInspectorWindow_ == nullptr || !irInspectorWindow_->isVisible())
+        {
+            irInspectorWindow_ = std::make_unique<IrInspectorWindow>(*ourProcessor);
+            irInspectorWindow_->setTopLeftPosition(getScreenX() + getWidth() + 10, getScreenY());
+        }
+        else
+        {
+            irInspectorWindow_->toFront(true);
+        }
     }
     else if (buttonThatWasClicked == &btn_clear_debug)
     {

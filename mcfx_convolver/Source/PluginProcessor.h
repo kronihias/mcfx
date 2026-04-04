@@ -203,6 +203,12 @@ public:
     void DebugClear();
     void DebugPrint(const String& debugText);
 
+    ConvolverData& getConvolverData() { return conv_data; }
+    double getSampleRate() const { return _SampleRate; }
+
+    // IR Inspector window bounds (persisted across open/close)
+    Rectangle<int> irInspectorBounds;  // empty = not yet set (center on first open)
+
 private:
     void DeleteTemporaryFiles();
 
