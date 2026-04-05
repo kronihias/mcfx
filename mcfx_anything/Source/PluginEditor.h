@@ -52,13 +52,49 @@ public:
             _pluginEditor->setBounds (0, toolbar, getWidth(), getHeight() - toolbar);
     }
 
+    // Some plugins (notably Waves) render a blank/white custom GUI when their
+    // IPlugView::attached() happens before the host NSView is actually on
+    // screen — the plugin binds its GL/Metal context to a zero-sized parent
+    // and never recovers. Work around this by rebuilding the editor exactly
+    // once, asynchronously, after this component is really showing with a
+    // native peer. Users previously had to toggle Generic<->Custom to do
+    // this dance manually.
+    void parentHierarchyChanged() override
+    {
+        if (_didPostShowRebuild) return;
+        if (! (_hasCustomEditor && ! _useGenericEditor)) return;
+        if (! isShowing() || getPeer() == nullptr) return;
+
+        _didPostShowRebuild = true;
+
+        WeakReference<Component> safeThis (this);
+        MessageManager::callAsync ([safeThis]()
+        {
+            if (auto* c = dynamic_cast<InspectorContentComponent*> (safeThis.get()))
+                c->rebuildEditor();
+        });
+    }
+
 private:
     static constexpr int toolbarHeight = 28;
 
     void toggleEditorType()
     {
         _useGenericEditor = ! _useGenericEditor;
-        rebuildEditor();
+
+        // Defer the rebuild until the current mouse event has fully unwound.
+        // Some plugins (e.g. TDR Kotelnikov) crash inside IPlugView::removed()
+        // when torn down from a nested event dispatch stack.
+        _toggleButton.setEnabled (false);
+        WeakReference<Component> safeThis (this);
+        MessageManager::callAsync ([safeThis]()
+        {
+            if (auto* c = dynamic_cast<InspectorContentComponent*> (safeThis.get()))
+            {
+                c->rebuildEditor();
+                c->_toggleButton.setEnabled (true);
+            }
+        });
     }
 
     void rebuildEditor()
@@ -89,8 +125,11 @@ private:
     AudioPluginInstance* _instance;
     bool _hasCustomEditor;
     bool _useGenericEditor;
+    bool _didPostShowRebuild = false;
     std::unique_ptr<Component> _pluginEditor;
     TextButton _toggleButton;
+
+    JUCE_DECLARE_WEAK_REFERENCEABLE (InspectorContentComponent)
 };
 
 class InstanceInspectorWindow : public DocumentWindow
@@ -157,12 +196,21 @@ private:
     static constexpr int minWidth = 500;
     static constexpr int minHeight = 200;
 
+    // Called by the processor BEFORE tearing down plugin instances, so the
+    // hosted plugin editor (and all inspector popups) are destroyed while
+    // the plugin instances are still fully alive and operational.
+public:
+    void destroyHostedEditorsForUnload();
+
+private:
     void showPluginMenu();
     void showSettings();
     void showInstanceInspectorMenu();
+    void showSidechainRoutingMenu();
     void closeAllInspectorWindows();
     void updateHostedEditor();
     void updateSelectorButtonText();
+    void updateSidechainButton();
     void toggleMainEditorType();
 
     TextButton _pluginSelectorButton;
@@ -170,9 +218,22 @@ private:
     TextButton _unloadButton;
     TextButton _inspectButton;
     TextButton _genericToggleButton;
+    TextButton _sidechainButton;
     Label _instanceInfoLabel;
 
-    std::unique_ptr<Component> _hostedEditor;
+    // The currently visible editor. Raw pointer into either _hostedCustomEditor
+    // or _hostedGenericEditor — does NOT own.
+    Component* _hostedEditor = nullptr;
+
+    // The plugin's custom editor is cached and kept alive across Generic<->Custom
+    // toggles. Some VST3 plugins (e.g. TDR Kotelnikov) crash inside their own
+    // IPlugView::removed() when destroyed in a process that has multiple
+    // instances of the same plugin alive. Destroying it only on real
+    // plugin unload/reload (while all instances are still alive) avoids the
+    // crash for toggle operations, which are the common case.
+    std::unique_ptr<Component> _hostedCustomEditor;
+    std::unique_ptr<Component> _hostedGenericEditor;
+
     bool _useGenericEditor = false;
 
     Array<InstanceInspectorWindow*> _openInspectorWindows;
