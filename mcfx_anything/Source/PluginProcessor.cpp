@@ -21,6 +21,121 @@
 #include "PluginEditor.h"
 
 //==============================================================================
+// ForwardingParameter — exposes one slot of our fixed proxy pool to the DAW.
+
+static String makeForwardingParameterID (int index)
+{
+    return "p" + String (index).paddedLeft ('0', 3);
+}
+
+ForwardingParameter::ForwardingParameter (int index)
+    : _index (index), _stableId (makeForwardingParameterID (index))
+{
+}
+
+void ForwardingParameter::bind (AudioProcessorParameter* innerParam)
+{
+    jassert (MessageManager::getInstance()->isThisTheMessageThread());
+    _innerParam = innerParam;
+
+    // Seed the cached value from the freshly bound inner parameter so the
+    // host's next getValue() sees the right state (important after session
+    // restore, where the hosted plugin has just had its state applied).
+    if (_innerParam != nullptr)
+        _cachedValue.store (_innerParam->getValue(), std::memory_order_relaxed);
+
+    // Clear any stale pending write from a previous binding.
+    _pendingDirty.store (false, std::memory_order_release);
+}
+
+void ForwardingParameter::unbind()
+{
+    jassert (MessageManager::getInstance()->isThisTheMessageThread());
+    _innerParam = nullptr;
+    _pendingDirty.store (false, std::memory_order_release);
+}
+
+void ForwardingParameter::updateFromInner (float newValue)
+{
+    jassert (MessageManager::getInstance()->isThisTheMessageThread());
+    _cachedValue.store (newValue, std::memory_order_relaxed);
+    // Notify the host so the DAW sees GUI-driven parameter movement and can
+    // record automation against it.
+    sendValueChangedMessageToListeners (newValue);
+}
+
+bool ForwardingParameter::consumePending (float& out) noexcept
+{
+    if (! _pendingDirty.exchange (false, std::memory_order_acquire))
+        return false;
+    out = _pendingValue.load (std::memory_order_relaxed);
+    return true;
+}
+
+void ForwardingParameter::setValue (float newValue)
+{
+    _cachedValue.store (newValue, std::memory_order_relaxed);
+    _pendingValue.store (newValue, std::memory_order_relaxed);
+    _pendingDirty.store (true, std::memory_order_release);
+}
+
+float ForwardingParameter::getDefaultValue() const
+{
+    if (_innerParam != nullptr)
+        return _innerParam->getDefaultValue();
+    return 0.0f;
+}
+
+String ForwardingParameter::getName (int maximumStringLength) const
+{
+    if (_innerParam != nullptr)
+    {
+        auto n = _innerParam->getName (maximumStringLength);
+        if (n.isNotEmpty())
+            return n;
+    }
+    return ("Param " + String (_index + 1)).substring (0, maximumStringLength);
+}
+
+String ForwardingParameter::getLabel() const
+{
+    if (_innerParam != nullptr)
+        return _innerParam->getLabel();
+    return {};
+}
+
+String ForwardingParameter::getText (float value, int maximumStringLength) const
+{
+    if (_innerParam != nullptr)
+        return _innerParam->getText (value, maximumStringLength);
+    return String (value, 3);
+}
+
+float ForwardingParameter::getValueForText (const String& text) const
+{
+    if (_innerParam != nullptr)
+        return _innerParam->getValueForText (text);
+    return text.getFloatValue();
+}
+
+int ForwardingParameter::getNumSteps() const
+{
+    if (_innerParam != nullptr)
+        return _innerParam->getNumSteps();
+    return AudioProcessor::getDefaultNumParameterSteps();
+}
+
+bool ForwardingParameter::isDiscrete() const
+{
+    return _innerParam != nullptr && _innerParam->isDiscrete();
+}
+
+bool ForwardingParameter::isBoolean() const
+{
+    return _innerParam != nullptr && _innerParam->isBoolean();
+}
+
+//==============================================================================
 Mcfx_anythingAudioProcessor::Mcfx_anythingAudioProcessor()
     : AudioProcessor (BusesProperties()
                       .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
@@ -33,6 +148,18 @@ Mcfx_anythingAudioProcessor::Mcfx_anythingAudioProcessor()
 
     // Auto-save plugin list whenever it changes (e.g. after scanning)
     _knownPluginList.addChangeListener (&_pluginListChangeListener);
+
+    // Create fixed forwarding-parameter pool. The DAW sees kForwardingParameterCount
+    // generic parameters; they're bound to the currently loaded plugin's params
+    // on loadPlugin and unbound on unloadPlugin. Parameter count/identity must
+    // NEVER change after construction — DAWs crash or corrupt projects otherwise.
+    _forwardingParameters.ensureStorageAllocated (kForwardingParameterCount);
+    for (int i = 0; i < kForwardingParameterCount; ++i)
+    {
+        auto* fp = new ForwardingParameter (i);
+        _forwardingParameters.add (fp);
+        addParameter (fp);   // AudioProcessor takes ownership
+    }
 }
 
 Mcfx_anythingAudioProcessor::~Mcfx_anythingAudioProcessor()
@@ -47,30 +174,6 @@ Mcfx_anythingAudioProcessor::~Mcfx_anythingAudioProcessor()
 const String Mcfx_anythingAudioProcessor::getName() const
 {
     return JucePlugin_Name;
-}
-
-int Mcfx_anythingAudioProcessor::getNumParameters()
-{
-    return totalNumParams;
-}
-
-float Mcfx_anythingAudioProcessor::getParameter (int index)
-{
-    return 0.0f;
-}
-
-void Mcfx_anythingAudioProcessor::setParameter (int index, float newValue)
-{
-}
-
-const String Mcfx_anythingAudioProcessor::getParameterName (int index)
-{
-    return String();
-}
-
-const String Mcfx_anythingAudioProcessor::getParameterText (int index)
-{
-    return String();
 }
 
 const String Mcfx_anythingAudioProcessor::getInputChannelName (int channelIndex) const
@@ -152,6 +255,35 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
         return;
     }
 
+    // Apply any pending host-driven automation writes to ALL instances at the
+    // same block boundary. This runs under _pluginLock on the audio thread,
+    // so every instance sees the new parameter value at an identical sample
+    // position — no inter-instance drift, no comb-filtering on sweeps.
+    {
+        const int numSlots = _forwardingParameters.size();
+        const int numInstances = _pluginInstances.size();
+        for (int slot = 0; slot < numSlots; ++slot)
+        {
+            float v;
+            if (! _forwardingParameters.getUnchecked (slot)->consumePending (v))
+                continue;
+
+            for (int i = 0; i < numInstances; ++i)
+            {
+                auto* inst = _pluginInstances.getUnchecked (i);
+                auto params = inst->getParameters();
+                if (slot < params.size())
+                    params[slot]->setValue (v);
+            }
+
+            // Keep the change-detector snapshot in sync so the next sync
+            // timer tick does not mistake this host-driven write for a GUI
+            // change and re-notify the host (automation feedback loop).
+            if (slot < (int) _lastParameterValues.size())
+                _lastParameterValues[(size_t) slot] = v;
+        }
+    }
+
     const int totalChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
     const int mainBusCh = _channelsPerInstance;       // stride through our buffer
@@ -230,14 +362,16 @@ void Mcfx_anythingAudioProcessor::getStateInformation (MemoryBlock& destData)
     if (knownPluginsXml)
         xml->addChildElement (knownPluginsXml.release());
 
-    // Save current plugin description
+    // Save current plugin description. We wrap it in a CURRENT_PLUGIN parent
+    // element rather than renaming the <PLUGIN> tag, because
+    // PluginDescription::loadFromXml requires the tag to literally be "PLUGIN"
+    // and rejects anything else.
     if (_currentPluginDesc)
     {
-        auto descXml = _currentPluginDesc->createXml();
-        if (descXml)
+        if (auto descXml = _currentPluginDesc->createXml())
         {
-            descXml->setTagName ("CURRENT_PLUGIN");
-            xml->addChildElement (descXml.release());
+            auto* wrapper = xml->createNewChildElement ("CURRENT_PLUGIN");
+            wrapper->addChildElement (descXml.release());
         }
     }
 
@@ -271,24 +405,30 @@ void Mcfx_anythingAudioProcessor::setStateInformation (const void* data, int siz
     if (xml->hasAttribute ("sidechainSourceChannel"))
         _sidechainSourceChannel = xml->getIntAttribute ("sidechainSourceChannel", -1);
 
-    // Restore current plugin description and schedule deferred loading
-    if (auto* descXml = xml->getChildByName ("CURRENT_PLUGIN"))
+    // Restore current plugin description and schedule deferred loading.
+    // CURRENT_PLUGIN is a wrapper around a <PLUGIN> child — we can't just
+    // rename the PLUGIN tag to CURRENT_PLUGIN because PluginDescription::
+    // loadFromXml requires the tag to literally be "PLUGIN".
+    if (auto* wrapper = xml->getChildByName ("CURRENT_PLUGIN"))
     {
-        _pendingPluginDesc = std::make_unique<PluginDescription>();
-        if (_pendingPluginDesc->loadFromXml (*descXml))
+        if (auto* descXml = wrapper->getChildByName ("PLUGIN"))
         {
-            // Store the hosted plugin state for applying after load
-            if (auto* stateXml = xml->getChildByName ("PLUGIN_STATE"))
+            _pendingPluginDesc = std::make_unique<PluginDescription>();
+            if (_pendingPluginDesc->loadFromXml (*descXml))
             {
-                _pendingPluginState.reset();
-                _pendingPluginState.fromBase64Encoding (stateXml->getAllSubText());
-            }
+                // Store the hosted plugin state for applying after load
+                if (auto* stateXml = xml->getChildByName ("PLUGIN_STATE"))
+                {
+                    _pendingPluginState.reset();
+                    _pendingPluginState.fromBase64Encoding (stateXml->getAllSubText());
+                }
 
-            _deferredLoader.triggerAsyncUpdate();
-        }
-        else
-        {
-            _pendingPluginDesc.reset();
+                _deferredLoader.triggerAsyncUpdate();
+            }
+            else
+            {
+                _pendingPluginDesc.reset();
+            }
         }
     }
 }
@@ -662,11 +802,26 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
         for (int p = 0; p < masterParams.size(); ++p)
             _lastParameterValues[(size_t) p] = masterParams[p]->getValue();
 
+        // Bind the forwarding-parameter pool to the master plugin's parameters.
+        // Slots beyond the plugin's parameter count (or if the plugin has more
+        // parameters than our pool) are unbound. This all happens under the
+        // plugin lock, guaranteeing no concurrent consumePending() read.
+        for (int i = 0; i < _forwardingParameters.size(); ++i)
+        {
+            auto* inner = (i < masterParams.size()) ? masterParams[i] : nullptr;
+            _forwardingParameters.getUnchecked (i)->bind (inner);
+        }
+
         // NOTE: _pluginReady remains false here — the audio thread must NOT
         // process through the new instances until the editor has finished
         // creating the hosted plugin GUI (some plugins, e.g. Waves AU,
         // are not safe to process audio while their view is being created).
     }
+
+    // Tell the host that parameter info has changed so hosts that re-query
+    // (VST3, AUv3, most modern DAWs) pick up the new parameter names, ranges,
+    // and step counts from the freshly bound forwarding pool.
+    updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
 
     // Synchronous notification — the editor destroys its old hosted GUI and
     // creates the new one here, while oldInstances are still alive.
@@ -724,7 +879,16 @@ void Mcfx_anythingAudioProcessor::unloadPlugin()
         _packedReducedChannels = 0;
         _packedFullChannels = 0;
         _scratchBuffer.setSize (0, 0);
+
+        // Unbind all forwarding parameters — they persist as empty slots
+        // until a new plugin is loaded (or processor destruction).
+        for (auto* fp : _forwardingParameters)
+            fp->unbind();
     }
+
+    // Tell the host that parameter info has changed (slots are now unbound
+    // generic "Param N" parameters again).
+    updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
 
     // Step 4: Notify editor to refresh its UI ("No plugin loaded" state).
     // Hosted editor is already gone, so this is just a repaint trigger.
@@ -785,6 +949,21 @@ void Mcfx_anythingAudioProcessor::setSidechainSourceChannel (int channel)
             for (auto* instance : _pluginInstances)
                 instance->setStateInformation (savedState.getData(),
                                                (int) savedState.getSize());
+
+            // Re-seed forwarding proxies from the restored parameter values
+            // (same reason as in handleDeferredLoad).
+            if (_pluginInstances.size() > 0)
+            {
+                auto masterParams = _pluginInstances.getFirst()->getParameters();
+                for (int p = 0; p < masterParams.size(); ++p)
+                {
+                    const float v = masterParams[p]->getValue();
+                    if (p < (int) _lastParameterValues.size())
+                        _lastParameterValues[(size_t) p] = v;
+                    if (auto* fp = getForwardingParameter (p))
+                        fp->updateFromInner (v);
+                }
+            }
         }
     }
 }
@@ -795,13 +974,33 @@ void Mcfx_anythingAudioProcessor::handleDeferredLoad()
     {
         loadPlugin (*_pendingPluginDesc);
 
-        // Apply saved plugin state to all instances
+        // Apply saved plugin state to all instances. This restores the full
+        // hosted plugin state (every parameter value, preset, internal buffers)
+        // so the session reopens exactly where it was saved.
         if (_currentPluginDesc != nullptr && _pendingPluginState.getSize() > 0)
         {
             const ScopedLock lock (_pluginLock);
             for (auto* instance : _pluginInstances)
                 instance->setStateInformation (_pendingPluginState.getData(),
                                                (int) _pendingPluginState.getSize());
+
+            // Re-seed the forwarding proxies and the change-detector snapshot
+            // from the restored master parameter values. Without this, the
+            // proxies would still hold the pre-state values (seeded during
+            // bind()), and the sync timer would then notify the host of
+            // "changes" for every parameter on the next tick.
+            if (_pluginInstances.size() > 0)
+            {
+                auto masterParams = _pluginInstances.getFirst()->getParameters();
+                for (int p = 0; p < masterParams.size(); ++p)
+                {
+                    const float v = masterParams[p]->getValue();
+                    if (p < (int) _lastParameterValues.size())
+                        _lastParameterValues[(size_t) p] = v;
+                    if (auto* fp = getForwardingParameter (p))
+                        fp->updateFromInner (v);
+                }
+            }
         }
 
         _pendingPluginDesc.reset();
@@ -845,6 +1044,14 @@ void Mcfx_anythingAudioProcessor::syncParametersFromMaster()
                 if (p < slaveParams.size())
                     slaveParams[p]->setValue (currentValue);
             }
+
+            // Notify the host via the forwarding proxy so the DAW sees
+            // GUI-driven parameter movement and can record automation.
+            // updateFromInner does NOT set the dirty flag, so this does not
+            // feed the value back into the master instance on the next
+            // processBlock tick.
+            if (p < _forwardingParameters.size())
+                _forwardingParameters.getUnchecked (p)->updateFromInner (currentValue);
         }
     }
 }
