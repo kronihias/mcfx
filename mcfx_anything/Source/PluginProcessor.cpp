@@ -156,12 +156,10 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
     const int numSamples = buffer.getNumSamples();
     const int mainBusCh = _channelsPerInstance;       // stride through our buffer
     const int pluginTotalCh = _totalInstanceChannels; // what the plugin expects
+    const int scSourceCh = _sidechainSourceChannel;   // sidechain source (-1 = off)
+    const int scNumCh = _sidechainNumChannels;
 
     MidiBuffer emptyMidi;
-
-    // Clear scratch buffer (used for sidechain/aux channels)
-    if (_scratchBuffer.getNumChannels() > 0)
-        _scratchBuffer.clear (0, numSamples);
 
     // Track how many channels are actually processed by plugin instances
     int channelsProcessed = 0;
@@ -183,8 +181,20 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
         for (int ch = 0; ch < mainBusCh; ++ch)
             channelPtrs[ch] = buffer.getWritePointer (startChannel + ch);
 
+        // Clear scratch buffer for this instance (sidechain + any aux channels)
+        if (_scratchBuffer.getNumChannels() > 0)
+            _scratchBuffer.clear (0, numSamples);
+
         for (int ch = mainBusCh; ch < pluginTotalCh; ++ch)
             channelPtrs[ch] = _scratchBuffer.getWritePointer (ch - mainBusCh);
+
+        // Route sidechain: copy source channel data into sidechain channels
+        if (_hasSidechain && scSourceCh >= 0 && scSourceCh < totalChannels && scNumCh > 0)
+        {
+            const float* src = buffer.getReadPointer (scSourceCh);
+            for (int ch = 0; ch < scNumCh; ++ch)
+                FloatVectorOperations::copy (channelPtrs[mainBusCh + ch], src, numSamples);
+        }
 
         AudioBuffer<float> subBuffer (channelPtrs, pluginTotalCh, numSamples);
         instance->processBlock (subBuffer, emptyMidi);
@@ -231,6 +241,10 @@ void Mcfx_anythingAudioProcessor::getStateInformation (MemoryBlock& destData)
         }
     }
 
+    // Save sidechain routing
+    if (_hasSidechain && _sidechainSourceChannel >= 0)
+        xml->setAttribute ("sidechainSourceChannel", _sidechainSourceChannel);
+
     // Save hosted plugin state (from master instance)
     if (_currentPluginDesc != nullptr && _pluginInstances.size() > 0)
     {
@@ -252,6 +266,10 @@ void Mcfx_anythingAudioProcessor::setStateInformation (const void* data, int siz
     // Restore known plugin list
     if (auto* knownPluginsXml = xml->getChildByName ("KNOWNPLUGINS"))
         _knownPluginList.recreateFromXml (*knownPluginsXml);
+
+    // Restore sidechain routing (applied after plugin loads)
+    if (xml->hasAttribute ("sidechainSourceChannel"))
+        _sidechainSourceChannel = xml->getIntAttribute ("sidechainSourceChannel", -1);
 
     // Restore current plugin description and schedule deferred loading
     if (auto* descXml = xml->getChildByName ("CURRENT_PLUGIN"))
@@ -309,14 +327,18 @@ void Mcfx_anythingAudioProcessor::loadPluginListFromCache()
 
 void Mcfx_anythingAudioProcessor::disableNonMainBuses (AudioPluginInstance& instance)
 {
-    // Method 1: Try setting a complete layout with non-main buses disabled.
-    // This is more reliable than disabling individual buses.
+    // Method 1: Try setting a complete layout with non-main buses disabled,
+    // but keep the sidechain input bus (bus 1) enabled.
     {
         auto layout = instance.getBusesLayout();
         bool needsChange = false;
 
         for (int b = 1; b < layout.inputBuses.size(); ++b)
         {
+            // Keep input bus 1 (sidechain) enabled
+            if (b == 1)
+                continue;
+
             if (! layout.inputBuses.getReference (b).isDisabled())
             {
                 layout.inputBuses.getReference (b) = AudioChannelSet::disabled();
@@ -336,16 +358,20 @@ void Mcfx_anythingAudioProcessor::disableNonMainBuses (AudioPluginInstance& inst
         {
             if (instance.setBusesLayout (layout))
             {
-                fprintf (stderr, "  Successfully disabled non-main buses via setBusesLayout\n");
+                fprintf (stderr, "  Successfully disabled auxiliary buses via setBusesLayout (kept sidechain)\n");
                 return;
             }
             fprintf (stderr, "  setBusesLayout failed, trying individual bus disable\n");
         }
     }
 
-    // Method 2: Fallback — disable individual buses
+    // Method 2: Fallback — disable individual buses, skip input bus 1 (sidechain)
     for (int b = instance.getBusCount (true) - 1; b >= 1; --b)
     {
+        // Keep input bus 1 (sidechain) enabled
+        if (b == 1)
+            continue;
+
         if (auto* bus = instance.getBus (true, b))
         {
             bool ok = bus->enable (false);
@@ -365,6 +391,40 @@ void Mcfx_anythingAudioProcessor::disableNonMainBuses (AudioPluginInstance& inst
                      ok ? "OK" : "FAILED");
         }
     }
+}
+
+int Mcfx_anythingAudioProcessor::probeReducedMainBus (AudioPluginInstance& instance, int fullChannels)
+{
+    // Try progressively smaller main-bus sizes and see if the plugin accepts
+    // them. We try stereo first, then mono — these are the sizes Waves
+    // "packed sidechain" plugins typically expose as their non-sidechain
+    // layout.
+    for (int target : { 2, 1 })
+    {
+        if (target >= fullChannels)
+            continue;
+
+        auto layout = instance.getBusesLayout();
+        if (layout.inputBuses.size() > 0)
+            layout.inputBuses.getReference (0) = AudioChannelSet::canonicalChannelSet (target);
+        if (layout.outputBuses.size() > 0)
+            layout.outputBuses.getReference (0) = AudioChannelSet::canonicalChannelSet (target);
+
+        if (instance.checkBusesLayoutSupported (layout))
+            return target;
+    }
+    return 0;
+}
+
+bool Mcfx_anythingAudioProcessor::applyReducedMainBus (AudioPluginInstance& instance, int targetChannels)
+{
+    instance.releaseResources();
+    auto layout = instance.getBusesLayout();
+    if (layout.inputBuses.size() > 0)
+        layout.inputBuses.getReference (0) = AudioChannelSet::canonicalChannelSet (targetChannels);
+    if (layout.outputBuses.size() > 0)
+        layout.outputBuses.getReference (0) = AudioChannelSet::canonicalChannelSet (targetChannels);
+    return instance.setBusesLayout (layout);
 }
 
 void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
@@ -447,9 +507,79 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
     int totalOutputCh = firstInstance->getTotalNumOutputChannels();
     int totalInstanceChannels = jmax (totalInputCh, totalOutputCh);
 
+    // Detect sidechain: input bus 1 that is still enabled
+    bool hasSidechain = false;
+    int sidechainNumChannels = 0;
+    if (firstInstance->getBusCount (true) > 1)
+    {
+        if (auto* scBus = firstInstance->getBus (true, 1))
+        {
+            if (scBus->isEnabled() && scBus->getNumberOfChannels() > 0)
+            {
+                hasSidechain = true;
+                sidechainNumChannels = scBus->getNumberOfChannels();
+                fprintf (stderr, "  Sidechain detected: %d channels (%s)\n",
+                         sidechainNumChannels, scBus->getName().toRawUTF8());
+            }
+        }
+    }
+
+    // Packed-sidechain detection: plugins like Waves expose e.g. a 4ch main
+    // bus whose extra channels are an internal sidechain, and also support a
+    // reduced (e.g. 2ch) main-bus layout for plain operation. If no regular
+    // aux-bus sidechain was found and the main bus can be shrunk, treat the
+    // size delta as a packed sidechain.
+    bool packedCapable = false;
+    int  packedReduced = 0;
+    int  packedFull    = channelsPerInstance;
+    if (! hasSidechain && channelsPerInstance > 1)
+    {
+        packedReduced = probeReducedMainBus (*firstInstance, channelsPerInstance);
+        if (packedReduced > 0 && packedReduced < channelsPerInstance)
+        {
+            packedCapable        = true;
+            hasSidechain         = true;
+            sidechainNumChannels = packedFull - packedReduced;
+            fprintf (stderr, "  Packed sidechain detected: full=%dch, reduced=%dch, sc=%dch\n",
+                     packedFull, packedReduced, sidechainNumChannels);
+        }
+    }
+
+    // For packed plugins, decide the operating layout based on whether a
+    // sidechain source is currently selected. With no source we apply the
+    // reduced layout so the plugin runs as a plain N-channel effect.
+    const bool useReducedLayout = packedCapable && _sidechainSourceChannel < 0;
+    if (useReducedLayout)
+    {
+        if (applyReducedMainBus (*firstInstance, packedReduced))
+        {
+            firstInstance->prepareToPlay (_currentSampleRate, _currentBlockSize);
+            fprintf (stderr, "  Applied reduced main-bus layout (%dch, sidechain off)\n", packedReduced);
+
+            pluginInputCh  = firstInstance->getMainBusNumInputChannels();
+            pluginOutputCh = firstInstance->getMainBusNumOutputChannels();
+            totalInputCh   = firstInstance->getTotalNumInputChannels();
+            totalOutputCh  = firstInstance->getTotalNumOutputChannels();
+            totalInstanceChannels = jmax (totalInputCh, totalOutputCh);
+        }
+        else
+        {
+            fprintf (stderr, "  WARNING: failed to apply reduced main-bus layout\n");
+            firstInstance->prepareToPlay (_currentSampleRate, _currentBlockSize);
+        }
+    }
+
+    // For packed plugins the stride through the multichannel buffer is the
+    // *reduced* main-bus size regardless of the current layout. When the full
+    // layout is active, the extra channels are scratch/sidechain slots that
+    // the processBlock loop fills from the selected sidechain source.
+    if (packedCapable)
+        channelsPerInstance = packedReduced;
+
     fprintf (stderr, "=== Final configuration ===\n");
     fprintf (stderr, "  Stride (channelsPerInstance): %d\n", channelsPerInstance);
     fprintf (stderr, "  ProcessBlock buffer (totalInstanceChannels): %d\n", totalInstanceChannels);
+    fprintf (stderr, "  Sidechain: %s (%d ch)\n", hasSidechain ? "YES" : "no", sidechainNumChannels);
     fprintf (stderr, "  NUM_CHANNELS: %d\n", NUM_CHANNELS);
 
     if (channelsPerInstance == 0)
@@ -478,6 +608,8 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
             return;
         }
         disableNonMainBuses (*instance);
+        if (useReducedLayout)
+            applyReducedMainBus (*instance, packedReduced);
         instance->prepareToPlay (_currentSampleRate, _currentBlockSize);
         newInstances.add (instance.release());
     }
@@ -507,6 +639,14 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
         _totalInstanceChannels   = totalInstanceChannels;
         _numInstances            = _pluginInstances.size();
         _currentPluginDesc       = std::make_unique<PluginDescription> (desc);
+        _hasSidechain            = hasSidechain;
+        _sidechainNumChannels    = sidechainNumChannels;
+        _packedSidechainCapable  = packedCapable;
+        _packedReducedChannels   = packedReduced;
+        _packedFullChannels      = packedFull;
+        // Keep existing sidechain source if valid, otherwise reset
+        if (! hasSidechain)
+            _sidechainSourceChannel = -1;
 
         // Allocate scratch buffer for sidechain/aux channels that the plugin
         // expects in processBlock but don't map to our multichannel I/O
@@ -544,14 +684,30 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
 
 void Mcfx_anythingAudioProcessor::unloadPlugin()
 {
-    OwnedArray<AudioPluginInstance> oldInstances;
+    jassert (MessageManager::getInstance()->isThisTheMessageThread());
 
+    // Step 1: Stop audio processing through the plugin instances BEFORE
+    // destroying any editors. processBlock will now silence the output.
     {
         const ScopedLock lock (_pluginLock);
         _pluginReady.store (false);
         _paramSyncTimer.stopTimer();
+    }
 
-        // Move old instances out — keep alive until editor releases its GUI
+    // Step 2: Destroy hosted plugin editor(s) directly while instances are
+    // still fully alive and present in _pluginInstances. This avoids the
+    // deep recursive stack that sendSynchronousChangeMessage would create,
+    // which some plugins (e.g. TDR Kotelnikov) cannot handle safely during
+    // ~VST3PluginWindow -> IPlugView::removed().
+    if (auto* ed = dynamic_cast<Mcfx_anythingAudioProcessorEditor*> (getActiveEditor()))
+        ed->destroyHostedEditorsForUnload();
+
+    // Step 3: Now tear down the plugin instances. They are moved to a local
+    // OwnedArray so we can hold the processor lock only briefly.
+    OwnedArray<AudioPluginInstance> oldInstances;
+    {
+        const ScopedLock lock (_pluginLock);
+
         while (_pluginInstances.size() > 0)
             oldInstances.add (_pluginInstances.removeAndReturn (0));
 
@@ -561,13 +717,20 @@ void Mcfx_anythingAudioProcessor::unloadPlugin()
         _numInstances = 0;
         _pluginNumInputChannels = 0;
         _pluginNumOutputChannels = 0;
+        _hasSidechain = false;
+        _sidechainNumChannels = 0;
+        _sidechainSourceChannel = -1;
+        _packedSidechainCapable = false;
+        _packedReducedChannels = 0;
+        _packedFullChannels = 0;
         _scratchBuffer.setSize (0, 0);
     }
 
-    // Synchronous — editor destroys hosted GUI while old instances still exist
-    sendSynchronousChangeMessage();
+    // Step 4: Notify editor to refresh its UI ("No plugin loaded" state).
+    // Hosted editor is already gone, so this is just a repaint trigger.
+    sendChangeMessage();
 
-    // oldInstances destroyed here safely
+    // oldInstances destroyed here
 }
 
 AudioPluginInstance* Mcfx_anythingAudioProcessor::getMasterInstance() const
@@ -589,6 +752,41 @@ String Mcfx_anythingAudioProcessor::getLoadedPluginName() const
     if (_currentPluginDesc)
         return _currentPluginDesc->name;
     return String();
+}
+
+void Mcfx_anythingAudioProcessor::setSidechainSourceChannel (int channel)
+{
+    const int newValue = (channel >= 0 && channel < NUM_CHANNELS) ? channel : -1;
+    if (newValue == _sidechainSourceChannel)
+        return;
+
+    const bool wasOff   = _sidechainSourceChannel < 0;
+    const bool willBeOff = newValue < 0;
+    const bool crossing = (wasOff != willBeOff);
+
+    _sidechainSourceChannel = newValue;
+
+    // For packed-sidechain plugins, crossing the on/off boundary requires
+    // reloading the plugin with a different main-bus layout (reduced vs
+    // full). We save and restore the plugin state across the reload so the
+    // user doesn't lose parameter settings.
+    if (_packedSidechainCapable && crossing && _currentPluginDesc != nullptr)
+    {
+        MemoryBlock savedState;
+        if (_pluginInstances.size() > 0)
+            _pluginInstances.getUnchecked (0)->getStateInformation (savedState);
+
+        PluginDescription descCopy = *_currentPluginDesc;
+        loadPlugin (descCopy);
+
+        if (savedState.getSize() > 0)
+        {
+            const ScopedLock lock (_pluginLock);
+            for (auto* instance : _pluginInstances)
+                instance->setStateInformation (savedState.getData(),
+                                               (int) savedState.getSize());
+        }
+    }
 }
 
 void Mcfx_anythingAudioProcessor::handleDeferredLoad()

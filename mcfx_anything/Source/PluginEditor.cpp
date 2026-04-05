@@ -58,6 +58,12 @@ Mcfx_anythingAudioProcessorEditor::Mcfx_anythingAudioProcessorEditor (Mcfx_anyth
     _genericToggleButton.onClick = [this]() { toggleMainEditorType(); };
     addAndMakeVisible (_genericToggleButton);
 
+    // Sidechain routing button
+    _sidechainButton.setButtonText ("SC");
+    _sidechainButton.setTooltip ("Route an input channel to the sidechain input of each plugin instance");
+    _sidechainButton.onClick = [this]() { showSidechainRoutingMenu(); };
+    addAndMakeVisible (_sidechainButton);
+
     // Instance info label
     _instanceInfoLabel.setFont (FontOptions (12.0f));
     _instanceInfoLabel.setColour (Label::textColourId, Colours::lightgrey);
@@ -78,13 +84,21 @@ Mcfx_anythingAudioProcessorEditor::Mcfx_anythingAudioProcessorEditor (Mcfx_anyth
 Mcfx_anythingAudioProcessorEditor::~Mcfx_anythingAudioProcessorEditor()
 {
     setLookAndFeel (nullptr);
-    getProcessor()->removeChangeListener (this);
+    auto* proc = getProcessor();
+    proc->removeChangeListener (this);
+
+    // Protect editor teardown from concurrent audio processing
+    const ScopedLock audioLock (proc->getPluginLock());
 
     closeAllInspectorWindows();
 
     if (_hostedEditor)
+    {
         _hostedEditor->removeComponentListener (this);
-    _hostedEditor.reset();
+        _hostedEditor = nullptr;
+    }
+    _hostedCustomEditor.reset();
+    _hostedGenericEditor.reset();
 }
 
 //==============================================================================
@@ -151,6 +165,7 @@ void Mcfx_anythingAudioProcessorEditor::resized()
     const int buttonHeight = topBarHeight - 2 * margin;
     const int settingsWidth = 70;
     const int genericWidth = 80;
+    const int scWidth = 60;
     const int inspectWidth = 60;
     const int unloadWidth = 28;
     const int infoWidth = 120;
@@ -159,17 +174,45 @@ void Mcfx_anythingAudioProcessorEditor::resized()
     _settingsButton.setBounds (x, margin, settingsWidth, buttonHeight);
     x += settingsWidth + margin;
 
-    int rightWidth = genericWidth + margin + inspectWidth + margin + unloadWidth + margin + infoWidth + margin;
+    // Right-side buttons: info | generic | SC | inspect | X
+    // Only reserve space for buttons that are actually visible, so the
+    // plugin selector button gets maximum width (especially when no plugin
+    // is loaded and only the X button is shown on the right).
+    const bool loaded = getProcessor()->isPluginLoaded();
+    const bool showCustomToggle = loaded && _genericToggleButton.isVisible();
+    const bool hasSC = loaded && getProcessor()->hasSidechain();
+
+    int rightWidth = unloadWidth + margin;
+    if (loaded)
+    {
+        rightWidth += infoWidth + margin + inspectWidth + margin;
+        if (showCustomToggle) rightWidth += genericWidth + margin;
+        if (hasSC)            rightWidth += scWidth + margin;
+    }
+
     _pluginSelectorButton.setBounds (x, margin, getWidth() - x - rightWidth, buttonHeight);
 
-    _instanceInfoLabel.setBounds (getWidth() - margin - unloadWidth - margin - inspectWidth - margin - genericWidth - margin - infoWidth,
-                                  margin, infoWidth, buttonHeight);
-    _genericToggleButton.setBounds (getWidth() - margin - unloadWidth - margin - inspectWidth - margin - genericWidth,
-                                    margin, genericWidth, buttonHeight);
-    _inspectButton.setBounds (getWidth() - margin - unloadWidth - margin - inspectWidth, margin, inspectWidth, buttonHeight);
-    _unloadButton.setBounds (getWidth() - margin - unloadWidth, margin, unloadWidth, buttonHeight);
+    int rx = getWidth() - margin - unloadWidth;
+    _unloadButton.setBounds (rx, margin, unloadWidth, buttonHeight);
+    if (loaded)
+    {
+        rx -= margin + inspectWidth;
+        _inspectButton.setBounds (rx, margin, inspectWidth, buttonHeight);
+        if (hasSC)
+        {
+            rx -= margin + scWidth;
+            _sidechainButton.setBounds (rx, margin, scWidth, buttonHeight);
+        }
+        if (showCustomToggle)
+        {
+            rx -= margin + genericWidth;
+            _genericToggleButton.setBounds (rx, margin, genericWidth, buttonHeight);
+        }
+        rx -= margin + infoWidth;
+        _instanceInfoLabel.setBounds (rx, margin, infoWidth, buttonHeight);
+    }
 
-    if (_hostedEditor)
+    if (_hostedEditor != nullptr)
         _hostedEditor->setTopLeftPosition (0, topBarHeight);
 }
 
@@ -189,7 +232,7 @@ void Mcfx_anythingAudioProcessorEditor::changeListenerCallback (ChangeBroadcaste
 
 void Mcfx_anythingAudioProcessorEditor::componentMovedOrResized (Component& component, bool wasMoved, bool wasResized)
 {
-    if (&component == _hostedEditor.get() && wasResized)
+    if (&component == _hostedEditor && wasResized)
     {
         int w = jmax (minWidth, _hostedEditor->getWidth());
         int h = _hostedEditor->getHeight() + topBarHeight;
@@ -253,6 +296,30 @@ void Mcfx_anythingAudioProcessorEditor::showSettings()
     options.launchAsync();
 }
 
+void Mcfx_anythingAudioProcessorEditor::destroyHostedEditorsForUnload()
+{
+    auto* proc = getProcessor();
+
+    // Take the audio lock while destroying editors, so the audio thread can't
+    // be inside processAudio() while we tear down VST3PluginWindow/etc.
+    const ScopedLock audioLock (proc->getPluginLock());
+
+    // Destroy inspector popups first (they hold editors of slave instances).
+    closeAllInspectorWindows();
+
+    // Destroy the main hosted editor(s). Must happen while plugin instances
+    // are still fully alive so the editor's destructor (VST3PluginWindow::~,
+    // etc.) can safely call back into the plugin (e.g. IPlugView::removed()).
+    if (_hostedEditor)
+    {
+        _hostedEditor->removeComponentListener (this);
+        removeChildComponent (_hostedEditor);
+        _hostedEditor = nullptr;
+    }
+    _hostedCustomEditor.reset();
+    _hostedGenericEditor.reset();
+}
+
 void Mcfx_anythingAudioProcessorEditor::closeAllInspectorWindows()
 {
     // Delete all tracked inspector windows. Each window's onClose callback
@@ -299,12 +366,10 @@ void Mcfx_anythingAudioProcessorEditor::showInstanceInspectorMenu()
                 auto* instance = getProcessor()->getInstance (index);
                 if (instance)
                 {
-                    // Default to generic editor when the main window shows a custom GUI,
-                    // since some plugins (e.g. Waves) don't support multiple native
-                    // editor instances and show a white/blank GUI for the second one.
-                    bool masterCustomOpen = _hostedEditor != nullptr && ! _useGenericEditor;
-
-                    auto* window = new InstanceInspectorWindow (instance, index, chPerInst, masterCustomOpen,
+                    // Default to the custom UI for inspectors. If the plugin doesn't
+                    // support multiple native editor instances (e.g. some Waves plugins),
+                    // the user can toggle to the generic UI via the toolbar button.
+                    auto* window = new InstanceInspectorWindow (instance, index, chPerInst, /*startGeneric*/ false,
                         [this] (InstanceInspectorWindow* w) { _openInspectorWindows.removeFirstMatchingValue (w); });
 
                     _openInspectorWindows.add (window);
@@ -313,33 +378,164 @@ void Mcfx_anythingAudioProcessorEditor::showInstanceInspectorMenu()
         });
 }
 
+void Mcfx_anythingAudioProcessorEditor::showSidechainRoutingMenu()
+{
+    auto* proc = getProcessor();
+    if (! proc->hasSidechain())
+        return;
+
+    int currentSc = proc->getSidechainSourceChannel();
+    int scNumCh = proc->getSidechainNumChannels();
+
+    PopupMenu menu;
+
+    // Header info
+    String scInfo = "Sidechain: " + String (scNumCh) + " ch";
+    menu.addSectionHeader (scInfo);
+    menu.addSeparator();
+
+    // "Off" option
+    menu.addItem (1, "Off", true, currentSc < 0);
+
+    menu.addSeparator();
+
+    // Channel list
+    for (int ch = 0; ch < NUM_CHANNELS; ++ch)
+    {
+        String label = "Channel " + String (ch + 1);
+        menu.addItem (ch + 2, label, true, currentSc == ch);
+    }
+
+    menu.showMenuAsync (PopupMenu::Options().withTargetComponent (&_sidechainButton),
+        [this] (int result)
+        {
+            if (result == 1)
+            {
+                getProcessor()->setSidechainSourceChannel (-1);
+                updateSidechainButton();
+            }
+            else if (result >= 2)
+            {
+                getProcessor()->setSidechainSourceChannel (result - 2);
+                updateSidechainButton();
+            }
+        });
+}
+
+void Mcfx_anythingAudioProcessorEditor::updateSidechainButton()
+{
+    auto* proc = getProcessor();
+    bool hasSc = proc->hasSidechain() && proc->isPluginLoaded();
+    _sidechainButton.setVisible (hasSc);
+
+    if (hasSc)
+    {
+        int scCh = proc->getSidechainSourceChannel();
+        if (scCh >= 0)
+            _sidechainButton.setButtonText ("SC:" + String (scCh + 1));
+        else
+            _sidechainButton.setButtonText ("SC");
+    }
+}
+
 void Mcfx_anythingAudioProcessorEditor::toggleMainEditorType()
 {
     _useGenericEditor = ! _useGenericEditor;
-    updateHostedEditor();
+
+    // Defer the actual editor swap until the current mouse/click event has
+    // fully unwound. Some VST3 plugins (e.g. TDR Kotelnikov) crash inside
+    // their IPlugView::removed() teardown when it runs from a nested event
+    // dispatch stack. Disable the button briefly so users can't spam-click.
+    _genericToggleButton.setEnabled (false);
+
+    Component::SafePointer<Mcfx_anythingAudioProcessorEditor> safeThis (this);
+    MessageManager::callAsync ([safeThis]()
+    {
+        if (auto* self = safeThis.getComponent())
+        {
+            self->updateHostedEditor();
+            self->_genericToggleButton.setEnabled (true);
+        }
+    });
 }
 
 void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
 {
-    // Remove old editor
+    auto* proc = getProcessor();
+
+    // Pause audio processing while we destroy/create the hosted editor.
+    // Some plugins (e.g. TDR Kotelnikov) crash if their editor is torn down
+    // while their processAudio is concurrently running on the audio thread.
+    // We also take the plugin lock to ensure the audio thread's tryLock in
+    // processBlock will fail and the buffer will be silenced until we're done.
+    const bool wasReady = proc->isPluginReady();
+    proc->setPluginReady (false);
+    const ScopedLock audioLock (proc->getPluginLock());
+
+    auto* master = proc->getMasterInstance();
+
+    // If the master instance has changed (e.g. a different plugin was loaded),
+    // or there is no master anymore, drop any cached editors that belong to
+    // the old plugin. This must happen here rather than in updateHostedEditor's
+    // normal toggle path, because cached editors from an old plugin must not
+    // outlive their plugin instance.
+    auto editorBelongsToMaster = [master] (Component* ed) -> bool
+    {
+        if (ed == nullptr || master == nullptr) return false;
+        if (auto* ape = dynamic_cast<AudioProcessorEditor*> (ed))
+            return ape->getAudioProcessor() == master;
+        return false;
+    };
+
+    if (_hostedCustomEditor != nullptr && ! editorBelongsToMaster (_hostedCustomEditor.get()))
+    {
+        if (_hostedEditor == _hostedCustomEditor.get())
+        {
+            _hostedEditor->removeComponentListener (this);
+            removeChildComponent (_hostedEditor);
+            _hostedEditor = nullptr;
+        }
+        _hostedCustomEditor.reset();
+    }
+    if (_hostedGenericEditor != nullptr && ! editorBelongsToMaster (_hostedGenericEditor.get()))
+    {
+        if (_hostedEditor == _hostedGenericEditor.get())
+        {
+            _hostedEditor->removeComponentListener (this);
+            removeChildComponent (_hostedEditor);
+            _hostedEditor = nullptr;
+        }
+        _hostedGenericEditor.reset();
+    }
+
+    // Detach the currently visible editor (we'll re-attach the chosen one below).
     if (_hostedEditor)
     {
         _hostedEditor->removeComponentListener (this);
-        removeChildComponent (_hostedEditor.get());
-        _hostedEditor.reset();
+        removeChildComponent (_hostedEditor);
+        _hostedEditor = nullptr;
     }
 
-    auto* master = getProcessor()->getMasterInstance();
     if (master)
     {
-        if (_useGenericEditor || ! master->hasEditor())
-            _hostedEditor.reset (new GenericAudioProcessorEditor (*master));
+        const bool wantGeneric = _useGenericEditor || ! master->hasEditor();
+
+        if (wantGeneric)
+        {
+            if (! _hostedGenericEditor)
+                _hostedGenericEditor.reset (new GenericAudioProcessorEditor (*master));
+            _hostedEditor = _hostedGenericEditor.get();
+        }
         else
-            _hostedEditor.reset (master->createEditor());
+        {
+            if (! _hostedCustomEditor)
+                _hostedCustomEditor.reset (master->createEditor());
+            _hostedEditor = _hostedCustomEditor.get();
+        }
 
         if (_hostedEditor)
         {
-            addAndMakeVisible (_hostedEditor.get());
+            addAndMakeVisible (_hostedEditor);
             _hostedEditor->setTopLeftPosition (0, topBarHeight);
             _hostedEditor->addComponentListener (this);
 
@@ -353,6 +549,9 @@ void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
         setSize (minWidth, minHeight);
     }
 
+    // Resume audio processing if it was previously enabled
+    proc->setPluginReady (wasReady);
+
     // Update button text to reflect current mode
     bool hasCustomEditor = master != nullptr && master->hasEditor();
     _genericToggleButton.setButtonText (_useGenericEditor ? "Custom UI" : "Generic UI");
@@ -364,6 +563,7 @@ void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
     bool loaded = getProcessor()->isPluginLoaded();
     _inspectButton.setVisible (loaded);
     _genericToggleButton.setVisible (loaded && hasCustomEditor);
+    updateSidechainButton();
 
     if (loaded)
     {
@@ -378,6 +578,10 @@ void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
     {
         _instanceInfoLabel.setText ("", dontSendNotification);
     }
+
+    // Re-layout the top bar: button visibility changed, so the plugin
+    // selector button may need to expand/shrink to fill the new free space.
+    resized();
 }
 
 void Mcfx_anythingAudioProcessorEditor::updateSelectorButtonText()
