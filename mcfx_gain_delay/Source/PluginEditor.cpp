@@ -58,6 +58,11 @@ btn_solo_reset ("new drawablebutton", DrawableButton::ImageFitted),
 btn_sig_reset("new drawablebutton", DrawableButton::ImageFitted),
 isStrgDown(false)
 {
+    // Only create UI for the channels the host actually negotiated. In the
+    // per-channel VST2 build this is identical to NUM_CHANNELS; in the MC
+    // build the host may have asked for anything from 1..NUM_CHANNELS.
+    _numCh = jlimit (1, NUM_CHANNELS, ownerFilter->getTotalNumInputChannels());
+
     LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
     tooltipWindow.setMillisecondsBeforeTipAppears (700); // tooltip delay
 
@@ -313,8 +318,9 @@ isStrgDown(false)
     btn_phase_reset.setClickingTogglesState(true);
 
 
-    // create labels and knobs!
-    for (int i=0; i<NUM_CHANNELS; i++)
+#if 0
+    // (moved into rebuildChannelStrips())
+    for (int i=0; i<_numCh; i++)
     {
         if (Label* const LABEL = new Label ("new label", String (i+1)))
         {
@@ -467,14 +473,20 @@ isStrgDown(false)
 
     }
 
-    if (NUM_CHANNELS > 64) {
+    if (_numCh > 64) {
         setSize (540 + 555, 60+64/2*LINE_WIDTH + METER_GROUP_SPACE * 64/GROUP_CHANNELS/2 + 75);
-    } else if (NUM_CHANNELS > GROUP_CHANNELS) {
-        setSize (540, 60+NUM_CHANNELS/2*LINE_WIDTH + METER_GROUP_SPACE * NUM_CHANNELS/GROUP_CHANNELS/2 + 75); // 75... Siggenerator UI
+    } else if (_numCh > GROUP_CHANNELS) {
+        setSize (540, 60+_numCh/2*LINE_WIDTH + METER_GROUP_SPACE * _numCh/GROUP_CHANNELS/2 + 75); // 75... Siggenerator UI
     } else {
-        setSize (310, 60+NUM_CHANNELS*LINE_WIDTH + METER_GROUP_SPACE * NUM_CHANNELS/GROUP_CHANNELS/2 + 75);
+        setSize (310, 60+_numCh*LINE_WIDTH + METER_GROUP_SPACE * _numCh/GROUP_CHANNELS/2 + 75);
     }
+#endif
 
+    // Build all per-channel strips and set the editor size for the host's
+    // currently-negotiated channel count. Extracted into a helper so it can
+    // also be called from changeListenerCallback() when the host changes the
+    // track channel count live.
+    rebuildChannelStrips();
 
 
     // register as change listener (gui/dsp sync)
@@ -562,9 +574,9 @@ void Mcfx_gain_delayAudioProcessorEditor::resized()
     label7.setBounds (256, getHeight()+181-210, 35, 16);
     /*                */
 
-    int num_groups_first_col = jmin(jmax(1, (int)floorf((jmax(NUM_CHANNELS,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f)), 8);
+    int num_groups_first_col = jmin(jmax(1, (int)floorf((jmax(_numCh,GROUP_CHANNELS)/GROUP_CHANNELS)*0.5f)), 8);
 
-    for (int i = 0; i < NUM_CHANNELS; i++)
+    for (int i = 0; i < _numCh; i++)
     {
         int i_rel = i;
 
@@ -686,7 +698,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         {
             if (values.size() > 0)
             {
-                for (int i=0; i < jmin(NUM_CHANNELS, values.size()); i++) {
+                for (int i=0; i < jmin(_numCh, values.size()); i++) {
                     sld_gain.getUnchecked(i)->setValue(values.getUnchecked(i), sendNotification);
                 }
             }
@@ -696,7 +708,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         {
             if (values.size() > 0)
             {
-                for (int i=0; i < jmin(NUM_CHANNELS, values.size()); i++) {
+                for (int i=0; i < jmin(_numCh, values.size()); i++) {
                     sld_del.getUnchecked(i)->setValue(values.getUnchecked(i), sendNotification);
                 }
             }
@@ -711,7 +723,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         else
           btn_mute_reset.setTooltip("Mute all Channels");
 
-        for (int i=0; i < NUM_CHANNELS; i++)
+        for (int i=0; i < _numCh; i++)
         {
             btn_mute.getUnchecked(i)->setToggleState(state, sendNotification);
         }
@@ -721,7 +733,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
     } // end mute reset button
     else if (buttonThatWasClicked == &btn_solo_reset)
     {
-        for (int i=0; i < NUM_CHANNELS; i++)
+        for (int i=0; i < _numCh; i++)
         {
             btn_solo.getUnchecked(i)->setToggleState(false, sendNotification);
         }
@@ -733,7 +745,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
     {
         bool state = btn_phase_reset.getToggleState();
 
-        for (int i=0; i < NUM_CHANNELS; i++)
+        for (int i=0; i < _numCh; i++)
         {
             btn_phase.getUnchecked(i)->setToggleState(state, sendNotification);
         }
@@ -748,7 +760,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
         else
             btn_sig_reset.setTooltip ("Turn On Signal Generator for all Channels");
 
-        for (int i=0; i < NUM_CHANNELS; i++)
+        for (int i=0; i < _numCh; i++)
         {
             btn_sig.getUnchecked(i)->setToggleState(state, sendNotification);
         }
@@ -778,7 +790,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 2, val);
             else
             {
-              for (int i = 0; i < NUM_CHANNELS; i++)
+              for (int i = 0; i < _numCh; i++)
               {
                 if (ch_nr == i)
                   ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 2, 1.);
@@ -799,7 +811,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH+3, val);
             else
             {
-              for (int i = 0; i < NUM_CHANNELS; i++)
+              for (int i = 0; i < _numCh; i++)
               {
                 if (ch_nr == i)
                   ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 3, 1.);
@@ -820,7 +832,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 4, val);
             else
             {
-              for (int i = 0; i < NUM_CHANNELS; i++)
+              for (int i = 0; i < _numCh; i++)
               {
                 if (ch_nr == i)
                   ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 4, 1.);
@@ -840,7 +852,7 @@ void Mcfx_gain_delayAudioProcessorEditor::buttonClicked (Button* buttonThatWasCl
               ourProcessor->setParameterNotifyingHost(ch_nr*PARAMS_PER_CH + 5, val);
             else
             {
-              for (int i = 0; i < NUM_CHANNELS; i++)
+              for (int i = 0; i < _numCh; i++)
               {
                 if (ch_nr == i)
                   ourProcessor->setParameterNotifyingHost(i*PARAMS_PER_CH + 5, 1.);
@@ -870,9 +882,213 @@ void Mcfx_gain_delayAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxTha
 
 }
 
+void Mcfx_gain_delayAudioProcessorEditor::rebuildChannelStrips()
+{
+    Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
+
+    _numCh = jlimit (1, (int) NUM_CHANNELS, ourProcessor->getTotalNumInputChannels());
+
+    // Drop any existing per-channel widgets so the rebuild is idempotent
+    // (called from constructor and from changeListenerCallback when the
+    // host re-negotiates the bus layout).
+    lbl_ch.clear();
+    sld_del.clear();
+    sld_gain.clear();
+    btn_phase.clear();
+    btn_mute.clear();
+    btn_solo.clear();
+    btn_sig.clear();
+
+    // Local image assets — these are the same icons used by the reset
+    // buttons set up in the constructor, loaded again here because the
+    // DrawableButton::setImages API takes Drawable* and the constructor's
+    // locals are already out of scope when this runs from the callback.
+    DrawableImage phase_normal, phase_over, phase_inv;
+    phase_normal.setImage (ImageCache::getFromMemory (phase_symbol_png, phase_symbol_pngSize));
+    phase_over  .setImage (ImageCache::getFromMemory (phase_symbol_over_png, phase_symbol_over_pngSize));
+    phase_inv   .setImage (ImageCache::getFromMemory (phase_symbol_inv_png, phase_symbol_inv_pngSize));
+
+    DrawableImage mute_normal, mute_over, mute_act;
+    mute_normal.setImage (ImageCache::getFromMemory (mute_symbol_png, mute_symbol_pngSize));
+    mute_over  .setImage (ImageCache::getFromMemory (mute_symbol_over_png, mute_symbol_over_pngSize));
+    mute_act   .setImage (ImageCache::getFromMemory (mute_symbol_act_png, mute_symbol_act_pngSize));
+
+    DrawableImage solo_normal, solo_over, solo_act;
+    solo_normal.setImage (ImageCache::getFromMemory (solo_symbol_png, solo_symbol_pngSize));
+    solo_over  .setImage (ImageCache::getFromMemory (solo_symbol_over_png, solo_symbol_over_pngSize));
+    solo_act   .setImage (ImageCache::getFromMemory (solo_symbol_act_png, solo_symbol_act_pngSize));
+
+    DrawableImage sig_normal, sig_over, sig_act;
+    sig_normal.setImage (ImageCache::getFromMemory (sig_symbol_png, sig_symbol_pngSize));
+    sig_over  .setImage (ImageCache::getFromMemory (sig_symbol_over_png, sig_symbol_over_pngSize));
+    sig_act   .setImage (ImageCache::getFromMemory (sig_symbol_act_png, sig_symbol_act_pngSize));
+
+    for (int i = 0; i < _numCh; i++)
+    {
+        if (Label* const LABEL = new Label ("new label", String (i + 1)))
+        {
+            lbl_ch.add (LABEL);
+            addChildComponent (lbl_ch.getUnchecked (i));
+            lbl_ch.getUnchecked (i)->setVisible (true);
+            lbl_ch.getUnchecked (i)->setFont (Font (FontOptions (15.00f, Font::plain)));
+            lbl_ch.getUnchecked (i)->setJustificationType (Justification::centredRight);
+            lbl_ch.getUnchecked (i)->setEditable (false, false, false);
+            lbl_ch.getUnchecked (i)->setColour (Label::textColourId, Colours::white);
+            lbl_ch.getUnchecked (i)->setColour (TextEditor::textColourId, Colours::black);
+            lbl_ch.getUnchecked (i)->setColour (TextEditor::backgroundColourId, Colour (0x00000000));
+        }
+        if (Slider* const DELAY = new Slider (String (2 * i + 1)))
+        {
+            sld_del.add (DELAY);
+            addChildComponent (sld_del.getUnchecked (i));
+            sld_del.getUnchecked (i)->setVisible (true);
+
+            String tooltip = "delay ch";
+            tooltip.append (String (i + 1), 3);
+
+            sld_del.getUnchecked (i)->setTooltip (tooltip);
+
+            sld_del.getUnchecked (i)->setRange (0, MAX_DELAYTIME_S * 1000.f, 0.1);
+            sld_del.getUnchecked (i)->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+            sld_del.getUnchecked (i)->setVelocityBasedMode (true);
+            sld_del.getUnchecked (i)->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+            sld_del.getUnchecked (i)->setColour (Slider::rotarySliderFillColourId, Colours::red);
+            sld_del.getUnchecked (i)->addListener (this);
+            sld_del.getUnchecked (i)->setExplicitFocusOrder (NUM_CHANNELS + i);
+            sld_del.getUnchecked (i)->setDoubleClickReturnValue (true, 0.f);
+        }
+        if (Slider* const GAIN = new Slider (String (2 * i)))
+        {
+            sld_gain.add (GAIN);
+            addChildComponent (sld_gain.getUnchecked (i));
+            sld_gain.getUnchecked (i)->setVisible (true);
+
+            String tooltip = "gain ch";
+            tooltip.append (String (i + 1), 3);
+
+            sld_gain.getUnchecked (i)->setTooltip (tooltip);
+
+            sld_gain.getUnchecked (i)->setRange (-18, 18, 0.01);
+            sld_gain.getUnchecked (i)->setSliderStyle (Slider::RotaryHorizontalVerticalDrag);
+            sld_gain.getUnchecked (i)->setVelocityBasedMode (true);
+            sld_gain.getUnchecked (i)->setTextBoxStyle (Slider::TextBoxLeft, false, 50, 18);
+            sld_gain.getUnchecked (i)->setColour (Slider::rotarySliderFillColourId, Colours::yellow);
+            sld_gain.getUnchecked (i)->addListener (this);
+            sld_gain.getUnchecked (i)->setExplicitFocusOrder (i);
+            sld_gain.getUnchecked (i)->setDoubleClickReturnValue (true, 0.f);
+        }
+
+        if (DrawableButton* const PHASE = new DrawableButton (String (i), DrawableButton::ImageFitted))
+        {
+            btn_phase.add (PHASE);
+            addChildComponent (btn_phase.getUnchecked (i));
+            btn_phase.getUnchecked (i)->setVisible (true);
+            btn_phase.getUnchecked (i)->setTooltip ("phase normal");
+            btn_phase.getUnchecked (i)->addListener (this);
+
+            btn_phase.getUnchecked (i)->setImages (&phase_normal,
+                                                    &phase_over,
+                                                    &phase_inv,
+                                                    &phase_normal,
+                                                    &phase_inv,
+                                                    &phase_over,
+                                                    &phase_inv,
+                                                    &phase_inv);
+
+            btn_phase.getUnchecked (i)->setColour (DrawableButton::backgroundColourId,   Colours::transparentBlack);
+            btn_phase.getUnchecked (i)->setColour (DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+            btn_phase.getUnchecked (i)->setClickingTogglesState (true);
+        }
+
+        if (DrawableButton* const MUTE = new DrawableButton (String (NUM_CHANNELS + i), DrawableButton::ImageFitted))
+        {
+            btn_mute.add (MUTE);
+            addChildComponent (btn_mute.getUnchecked (i));
+            btn_mute.getUnchecked (i)->setVisible (true);
+            btn_mute.getUnchecked (i)->setTooltip ("Not muted");
+            btn_mute.getUnchecked (i)->addListener (this);
+
+            btn_mute.getUnchecked (i)->setImages (&mute_normal,
+                                                   &mute_over,
+                                                   &mute_act,
+                                                   &mute_normal,
+                                                   &mute_act,
+                                                   &mute_over,
+                                                   &mute_act,
+                                                   &mute_act);
+
+            btn_mute.getUnchecked (i)->setColour (DrawableButton::backgroundColourId,   Colours::transparentBlack);
+            btn_mute.getUnchecked (i)->setColour (DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+            btn_mute.getUnchecked (i)->setClickingTogglesState (true);
+        }
+
+        if (DrawableButton* const SOLO = new DrawableButton (String (2 * NUM_CHANNELS + i), DrawableButton::ImageFitted))
+        {
+            btn_solo.add (SOLO);
+            addChildComponent (btn_solo.getUnchecked (i));
+            btn_solo.getUnchecked (i)->setVisible (true);
+            btn_solo.getUnchecked (i)->setTooltip ("Not soloed");
+            btn_solo.getUnchecked (i)->addListener (this);
+
+            btn_solo.getUnchecked (i)->setImages (&solo_normal,
+                                                   &solo_over,
+                                                   &solo_act,
+                                                   &solo_normal,
+                                                   &solo_act,
+                                                   &solo_over,
+                                                   &solo_act,
+                                                   &solo_act);
+
+            btn_solo.getUnchecked (i)->setColour (DrawableButton::backgroundColourId,   Colours::transparentBlack);
+            btn_solo.getUnchecked (i)->setColour (DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+            btn_solo.getUnchecked (i)->setClickingTogglesState (true);
+        }
+
+        if (DrawableButton* const SIGGEN = new DrawableButton (String (3 * NUM_CHANNELS + i), DrawableButton::ImageFitted))
+        {
+            btn_sig.add (SIGGEN);
+            addChildComponent (btn_sig.getUnchecked (i));
+            btn_sig.getUnchecked (i)->setVisible (true);
+            btn_sig.getUnchecked (i)->setTooltip ("Signalgenerator Off");
+            btn_sig.getUnchecked (i)->addListener (this);
+
+            btn_sig.getUnchecked (i)->setImages (&sig_normal,
+                                                  &sig_over,
+                                                  &sig_act,
+                                                  &sig_normal,
+                                                  &sig_act,
+                                                  &sig_over,
+                                                  &sig_act,
+                                                  &sig_act);
+
+            btn_sig.getUnchecked (i)->setColour (DrawableButton::backgroundColourId,   Colours::transparentBlack);
+            btn_sig.getUnchecked (i)->setColour (DrawableButton::backgroundOnColourId, Colours::transparentBlack);
+            btn_sig.getUnchecked (i)->setClickingTogglesState (true);
+        }
+    }
+
+    if (_numCh > 64) {
+        setSize (540 + 555, 60 + 64 / 2 * LINE_WIDTH + METER_GROUP_SPACE * 64 / GROUP_CHANNELS / 2 + 75);
+    } else if (_numCh > GROUP_CHANNELS) {
+        setSize (540, 60 + _numCh / 2 * LINE_WIDTH + METER_GROUP_SPACE * _numCh / GROUP_CHANNELS / 2 + 75);
+    } else {
+        setSize (310, 60 + _numCh * LINE_WIDTH + METER_GROUP_SPACE * _numCh / GROUP_CHANNELS / 2 + 75);
+    }
+
+    resized();
+    repaint();
+}
+
 void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
     Mcfx_gain_delayAudioProcessor* ourProcessor = getProcessor();
+
+    // Rebuild the per-channel strips when the host re-negotiated the layout
+    // (e.g. Reaper track channel count changed). The subsequent parameter
+    // sync loop below then seeds the new widgets with current values.
+    const int hostCh = jlimit (1, (int) NUM_CHANNELS, ourProcessor->getTotalNumInputChannels());
+    if (hostCh != _numCh)
+        rebuildChannelStrips();
 
     sld_siggain.setValue(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+0), -99.f, 6.f), dontSendNotification);
 
@@ -888,7 +1104,7 @@ void Mcfx_gain_delayAudioProcessorEditor::changeListenerCallback (ChangeBroadcas
 
     // box_signal.setSelectedId( (int)floorf(jmap(ourProcessor->getParameter(PARAMS_PER_CH*NUM_CHANNELS+1), 0.f, (float)box_signal.getNumItems()-1.f) + 0.5f), dontSendNotification );
 
-    for (int i=0; i < NUM_CHANNELS; i++)
+    for (int i=0; i < _numCh; i++)
     {
         sld_del.getUnchecked(i)->setValue(ourProcessor->getParameter(PARAMS_PER_CH*i+1) * MAX_DELAYTIME_S*1000,dontSendNotification);
 

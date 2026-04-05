@@ -13,5 +13,8 @@ else()
 	SET(PLUGIN_CODE F${NUM_CHANNELS})
 endif()
 
+# Stable, distinct code for the single multichannel build (never collides
+# with per-channel VST2 codes).
+SET(MC_PLUGIN_CODE "Fmc0")
 
 INCLUDE(${SRC_DIR}/Subproject.cmake)

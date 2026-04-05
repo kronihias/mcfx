@@ -73,6 +73,16 @@ public:
         pluginHolder.reset (new StandalonePluginHolder (settingsToUse, takeOwnershipOfSettings,
                                                         preferredDefaultDeviceName, preferredSetupOptions,
                                                         constrainToConfiguration, autoOpenMidiDevices));
+
+       #if MCFX_MULTICHANNEL_BUILD
+        // JUCE's StandalonePluginHolder initialises the AudioDeviceManager
+        // with the processor's default bus layout channel count. In the MC
+        // build that default is stereo (required for VST3 compliance), so
+        // the standalone only opens 2-in/2-out. Re-open the device with
+        // NUM_CHANNELS (== MCFX_MAX_CHANNELS == 128) channels so the user
+        // can actually select multichannel devices like BlackHole 16ch.
+        reopenDeviceManagerForMaxChannels();
+       #endif
         
         /*modified code*/
         if (auto* props = pluginHolder->settings.get())
@@ -199,7 +209,7 @@ public:
         else if (menuItemID == 5)
             closeButtonPressed();
         else if (menuItemID == 6)
-            pluginHolder->showAudioSettingsDialog();
+            showAudioSettingsDialogMC();
         else if (menuItemID == 7)
         {
             if (auto* props = pluginHolder->settings.get())
@@ -246,7 +256,7 @@ public:
     {
         switch (result)
         {
-            case 1:  pluginHolder->showAudioSettingsDialog(); break;
+            case 1:  showAudioSettingsDialogMC(); break;
             case 2:  pluginHolder->askUserToSaveState(); break;
             case 3:  pluginHolder->askUserToLoadState(); break;
             case 4:  resetToDefaultState(); break;
@@ -271,6 +281,71 @@ public:
     }
 
     virtual StandalonePluginHolder* getPluginHolder()    { return pluginHolder.get(); }
+
+    //==============================================================================
+    /** Re-initialises the AudioDeviceManager with NUM_CHANNELS inputs/outputs
+        so the user can pick multichannel devices in the Audio Settings dialog.
+        JUCE's StandalonePluginHolder only opens as many channels as the
+        processor's default bus layout advertises (2 in the MC build). */
+    void reopenDeviceManagerForMaxChannels()
+    {
+       #if MCFX_MULTICHANNEL_BUILD
+        if (pluginHolder == nullptr)
+            return;
+
+        pluginHolder->stopPlaying();
+
+        std::unique_ptr<XmlElement> savedState;
+        if (auto* props = pluginHolder->settings.get())
+            savedState = props->getXmlValue ("audioSetup");
+
+        const int maxCh = (int) NUM_CHANNELS;  // == MCFX_MAX_CHANNELS
+
+        // Initialise the device manager with the full max channel count.
+        // Actual channel count opened on the device is still negotiated from
+        // the user's device choice; this just raises the ceiling.
+        pluginHolder->deviceManager.initialise (maxCh,        // numInputChannels
+                                                maxCh,        // numOutputChannels
+                                                savedState.get(),
+                                                true);        // selectDefaultDeviceOnFailure
+
+        pluginHolder->startPlaying();
+       #endif
+    }
+
+    /** Shows the Audio/MIDI settings dialog. In the MC build this uses an
+        AudioDeviceSelectorComponent configured with max = NUM_CHANNELS so
+        every channel of a multichannel device can be enabled. In the
+        per-channel VST2 build this simply forwards to JUCE's default. */
+    void showAudioSettingsDialogMC()
+    {
+       #if MCFX_MULTICHANNEL_BUILD
+        const int maxCh = (int) NUM_CHANNELS;
+
+        auto* selector = new AudioDeviceSelectorComponent (pluginHolder->deviceManager,
+                                                           0, maxCh,   // min/max inputs
+                                                           0, maxCh,   // min/max outputs
+                                                           true,       // show MIDI inputs
+                                                           getAudioProcessor() != nullptr
+                                                               && getAudioProcessor()->producesMidi(),
+                                                           true,       // show channels as stereo pairs = true
+                                                           false);     // hide advanced options
+        selector->setSize (500, 650);
+
+        DialogWindow::LaunchOptions o;
+        o.content.setOwned (selector);
+        o.dialogTitle                   = TRANS ("Audio/MIDI Settings");
+        o.dialogBackgroundColour        = o.content->getLookAndFeel()
+                                              .findColour (ResizableWindow::backgroundColourId);
+        o.escapeKeyTriggersCloseButton  = true;
+        o.useNativeTitleBar             = true;
+        o.resizable                     = true;
+
+        o.launchAsync();
+       #else
+        pluginHolder->showAudioSettingsDialog();
+       #endif
+    }
 
     std::unique_ptr<StandalonePluginHolder> pluginHolder;
 
@@ -417,7 +492,7 @@ private:
            #if JUCE_IOS || JUCE_ANDROID
             owner.pluginHolder->getMuteInputValue().setValue (false);
            #else
-            owner.pluginHolder->showAudioSettingsDialog();
+            owner.showAudioSettingsDialogMC();
            #endif
         }
 

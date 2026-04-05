@@ -153,6 +153,25 @@ Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
     proc->editorSelectedPath = selectedPath_;
     proc->editorSelectedBand = selectedBand_;
 
+    // Dismiss any still-open routing overview CallOutBox. It holds a raw
+    // Listener* pointing back at this editor, so if it outlives us a
+    // subsequent mouse click would crash inside routingPathSelected().
+    // setVisible(false) synchronously removes the desktop peer so no more
+    // OS mouse events can reach it; dismiss() schedules the
+    // ModalComponentManager to delete the wrapping callback (the CallOutBox
+    // is not directly heap-owned by us — launchAsynchronously wraps it in a
+    // CallOutBoxCallback that owns itself via the ModalComponentManager).
+    if (routingCallOut_ != nullptr)
+    {
+        routingCallOut_->setVisible(false);
+        routingCallOut_->dismiss();
+    }
+    if (diagChannelCallOut_ != nullptr)
+    {
+        diagChannelCallOut_->setVisible(false);
+        diagChannelCallOut_->dismiss();
+    }
+
     proc->removeChangeListener(this);
     tabs_.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr);
@@ -792,7 +811,7 @@ void Mcfx_mimoeqAudioProcessorEditor::showRoutingOverview()
     auto& box = CallOutBox::launchAsynchronously(std::unique_ptr<Component>(wrapper),
                                                   btnRouting_.getScreenBounds(),
                                                   nullptr);
-    (void)box;
+    routingCallOut_ = &box;
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::routingPathSelected(int inCh, int outCh)
@@ -956,9 +975,10 @@ void Mcfx_mimoeqAudioProcessorEditor::showDiagChannelPopup()
     auto& mask = getProcessor()->getDiagChannelMask();
 
     auto* selector = new ChannelSelectorComponent(numCh, mask, this);
-    CallOutBox::launchAsynchronously(std::unique_ptr<Component>(selector),
-                                     btnDiagChans_.getScreenBounds(),
-                                     nullptr);
+    auto& box = CallOutBox::launchAsynchronously(std::unique_ptr<Component>(selector),
+                                                  btnDiagChans_.getScreenBounds(),
+                                                  nullptr);
+    diagChannelCallOut_ = &box;
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::diagChannelMaskChanged(const std::set<int>& mask)

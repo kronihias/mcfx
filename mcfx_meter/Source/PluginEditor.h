@@ -79,6 +79,13 @@ private:
 
     OwnedArray<MeterScaleComponent> _scales;
 
+    // Rebuild / (re)layout the per-channel meter strips, scales and the
+    // editor's overall size to match the host's currently-negotiated
+    // channel count. Called from the constructor and from
+    // changeListenerCallback() when the host re-negotiates the layout.
+    void rebuildChannelStrips();
+    int _cachedNumCh = 0;
+
     int _width;
     int _height;
 

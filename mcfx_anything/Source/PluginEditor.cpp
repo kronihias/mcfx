@@ -228,7 +228,7 @@ Mcfx_anythingAudioProcessorEditor::Mcfx_anythingAudioProcessorEditor (Mcfx_anyth
 
     // Plugin selector button
     _pluginSelectorButton.setButtonText ("Select Plugin...");
-    _pluginSelectorButton.setTooltip ("Choose a plugin to load - multiple instances will be created to cover all " + String (NUM_CHANNELS) + " channels");
+    _pluginSelectorButton.setTooltip ("Choose a plugin to load - multiple instances will be created to cover all " + String (getProcessor()->getTotalNumInputChannels()) + " channels");
     _pluginSelectorButton.onClick = [this]() { showPluginMenu(); };
     addAndMakeVisible (_pluginSelectorButton);
 
@@ -603,8 +603,9 @@ void Mcfx_anythingAudioProcessorEditor::showSidechainRoutingMenu()
 
     menu.addSeparator();
 
-    // Channel list
-    for (int ch = 0; ch < NUM_CHANNELS; ++ch)
+    // Channel list — only show channels the host actually provides
+    const int numCh = getProcessor()->getTotalNumInputChannels();
+    for (int ch = 0; ch < numCh; ++ch)
     {
         String label = "Channel " + String (ch + 1);
         menu.addItem (ch + 2, label, true, currentSc == ch);

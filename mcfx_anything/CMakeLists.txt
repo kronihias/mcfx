@@ -8,23 +8,22 @@ else()
     SET(PLUGIN_CODE E${NUM_CHANNELS})
 endif()
 
-INCLUDE(${SRC_DIR}/Subproject.cmake)
+SET(MC_PLUGIN_CODE "Amc0")
 
-# Enable plugin hosting capabilities
-target_compile_definitions(${SUBPROJECT_NAME} PRIVATE
-    JUCE_PLUGINHOST_VST3=1
-)
+# Plugin hosting defines — need to be applied to both variants, so feed them
+# through MCFX_EXTRA_DEFS (consumed inside Subproject.cmake).
+SET(MCFX_EXTRA_DEFS JUCE_PLUGINHOST_VST3=1)
 
 IF(APPLE)
-    target_compile_definitions(${SUBPROJECT_NAME} PRIVATE
-        JUCE_PLUGINHOST_AU=1
-    )
+    LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_AU=1)
 ENDIF(APPLE)
 
 # Enable VST2 hosting if the VST2 SDK is available (independent of BUILD_VST
 # which controls whether mcfx_anything itself is built as a VST2 plugin)
 IF(BUILD_VST OR EXISTS "${VST2SDKPATH}/pluginterfaces/vst2.x/aeffectx.h")
-    target_compile_definitions(${SUBPROJECT_NAME} PRIVATE
-        JUCE_PLUGINHOST_VST=1
-    )
+    LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_VST=1)
 ENDIF()
+
+INCLUDE(${SRC_DIR}/Subproject.cmake)
+
+UNSET(MCFX_EXTRA_DEFS)

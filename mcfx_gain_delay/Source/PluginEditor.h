@@ -126,6 +126,19 @@ private:
 
     bool isStrgDown;
 
+    // (Re)build the per-channel strip widgets (labels, gain/delay knobs,
+    // phase/mute/solo/sig buttons) and set the editor size. Called from the
+    // constructor and from changeListenerCallback() when the host changes
+    // the track's channel count so the GUI updates live without a close/reopen.
+    void rebuildChannelStrips();
+
+    // Number of channels the host has actually negotiated. In the per-channel
+    // VST2 build this is always == NUM_CHANNELS; in the single multichannel
+    // build (NUM_CHANNELS == MCFX_MAX_CHANNELS == 128) it can be anything
+    // from 1 to NUM_CHANNELS. Captured at construction time and used for all
+    // per-channel UI creation / iteration.
+    int _numCh = 0;
+
     LookAndFeel_V3 MyLookAndFeel;
 
     Mcfx_gain_delayAudioProcessor* getProcessor() const

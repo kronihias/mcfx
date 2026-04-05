@@ -40,11 +40,7 @@ AudioProcessorEditor (ownerFilter)
 
     tooltipWindow.setMillisecondsBeforeTipAppears (500); // tooltip delay
 
-    String label_text = "mcfx_meter";
-    label_text << NUM_CHANNELS;
-
     addAndMakeVisible (label);
-    label.setText(label_text, dontSendNotification);
     label.setFont (Font (FontOptions (15.0000f, Font::plain)));
     label.setJustificationType (Justification::centredLeft);
     label.setEditable (false, false, false);
@@ -108,51 +104,14 @@ AudioProcessorEditor (ownerFilter)
     sld_offset.addListener (this);
     sld_offset.setDoubleClickReturnValue(true, 0.f);
 
-    // create meters and labels!
-    for (int i=0; i<NUM_CHANNELS; i++)
-    {
-        if (MeterComponent* const METER = new MeterComponent())
-        {
-            _meters.add(METER);
-            addChildComponent(_meters.getUnchecked(i));
-            _meters.getUnchecked(i)->setVisible(true);
-
-            if (Label* const LABEL = new Label ("new label", String (i+1)))
-            {
-                _labels.add(LABEL);
-                addChildComponent(_labels.getUnchecked(i));
-                _labels.getUnchecked(i)->setVisible(true);
-                const float font_size = (i < 99) ? 11.f : 9.f;
-                _labels.getUnchecked(i)->setFont (Font (FontOptions (font_size, Font::plain)));
-                _labels.getUnchecked(i)->setColour (Label::textColourId, Colours::white);
-                _labels.getUnchecked(i)->setJustificationType (Justification::centred);
-            }
-        }
-    }
-
-    int rows = floor((NUM_CHANNELS - 1.0) / 64.0) + 1;
-    
-    for (int i = 0; i < rows; i++) {
-        auto* const scale_left = new MeterScaleComponent (163, false);
-        _scales.add(scale_left);
-        addAndMakeVisible(_scales.getUnchecked(i * 2));
-        
-        // TODO: For some reason the right scale is not visible...!
-        auto* const scale_right = new MeterScaleComponent (163, true);
-        _scales.add(scale_right);
-        addAndMakeVisible(_scales.getUnchecked(i * 2 + 1));
-    }
-
     //[UserPreSize]
     //[/UserPreSize]
 
-    // make space between each group of eight
-    int gr_of_eight = std::min(64, NUM_CHANNELS) / GROUP_CHANNELS;
-
-    _width = 50 + METER_WIDTH * std::min(64, NUM_CHANNELS) + 50 + gr_of_eight*METER_GROUP_SPACE;
-    _height = 220 * (floor((NUM_CHANNELS - 1.0) / 64.0) + 1);
-
-    setSize (_width, _height);
+    // Build the per-channel meter strips, scales and set the editor size for
+    // the host's currently-negotiated channel count. Extracted into a helper
+    // so it can also be called from changeListenerCallback() when the host
+    // re-negotiates the bus layout (track channel count change in Reaper).
+    rebuildChannelStrips();
 
     // register as change listener (gui/dsp sync)
     ownerFilter->addChangeListener(this);
@@ -218,7 +177,8 @@ void Ambix_meterAudioProcessorEditor::resized()
 
     const int row_y_offset = 215;
 
-    for (int i = 0; i < NUM_CHANNELS; i++)
+    const int numActive = _meters.size();
+    for (int i = 0; i < numActive; i++)
     {
         const int row = (int)floor(i / 64);
         const int group = (i - row * 64) / GROUP_CHANNELS;
@@ -231,7 +191,7 @@ void Ambix_meterAudioProcessorEditor::resized()
         _labels.getUnchecked(i)->setBounds((int)(x-METER_WIDTH*0.75), y - 30 + 195, (int)(METER_WIDTH*2), 14);
     }
 
-    const int rows = floor((NUM_CHANNELS - 1.0) / 64.0) + 1;
+    const int rows = numActive > 0 ? (int)floor((numActive - 1.0) / 64.0) + 1 : 0;
     
     for (int i = 0; i < rows; i++) {
         _scales.getUnchecked(i * 2)->setBounds(20, 23 + i * row_y_offset, 50, 200); // left
@@ -289,7 +249,7 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
 
 
-    for (int i=0; i<NUM_CHANNELS; i++)
+    for (int i=0; i<_meters.size(); i++)
     {
         // _meters.getUnchecked(i)->setValue(ourProcessor->_rms.getUnchecked(i), ourProcessor->_peak.getUnchecked(i));
         _meters.getUnchecked(i)->setValue(ourProcessor->_my_meter_dsp.getUnchecked(i)->getRMS(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeak(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeakHold());
@@ -297,9 +257,85 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
 
 }
 
+void Ambix_meterAudioProcessorEditor::rebuildChannelStrips()
+{
+    Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+
+    // In the MC build NUM_CHANNELS == MCFX_MAX_CHANNELS (128) but the host
+    // may have negotiated fewer channels — only draw what is actually active.
+    const int numCh = jlimit (1, NUM_CHANNELS, ourProcessor->getTotalNumInputChannels());
+    _cachedNumCh = numCh;
+
+    String label_text = "mcfx_meter";
+    label_text << numCh;
+    label.setText (label_text, dontSendNotification);
+
+    // Clear any existing per-channel components so the rebuild is idempotent
+    // (called from both the constructor and changeListenerCallback).
+    _meters.clear();
+    _labels.clear();
+    _scales.clear();
+
+    // create meters and labels — one per active host channel
+    for (int i = 0; i < numCh; i++)
+    {
+        if (MeterComponent* const METER = new MeterComponent())
+        {
+            _meters.add (METER);
+            addChildComponent (_meters.getUnchecked (i));
+            _meters.getUnchecked (i)->setVisible (true);
+            // Re-seed current DSP state so the strip doesn't flash through 0
+            // after a rebuild (numChannelsChanged → rebuild keeps audio flowing).
+            _meters.getUnchecked (i)->offset ((int) ourProcessor->_offset);
+            _meters.getUnchecked (i)->_peak_hold = ourProcessor->_pk_hold;
+
+            if (Label* const LABEL = new Label ("new label", String (i + 1)))
+            {
+                _labels.add (LABEL);
+                addChildComponent (_labels.getUnchecked (i));
+                _labels.getUnchecked (i)->setVisible (true);
+                const float font_size = (i < 99) ? 11.f : 9.f;
+                _labels.getUnchecked (i)->setFont (Font (FontOptions (font_size, Font::plain)));
+                _labels.getUnchecked (i)->setColour (Label::textColourId, Colours::white);
+                _labels.getUnchecked (i)->setJustificationType (Justification::centred);
+            }
+        }
+    }
+
+    int rows = (int) floor ((numCh - 1.0) / 64.0) + 1;
+
+    for (int i = 0; i < rows; i++)
+    {
+        auto* const scale_left = new MeterScaleComponent (163, false);
+        _scales.add (scale_left);
+        addAndMakeVisible (_scales.getUnchecked (i * 2));
+
+        // TODO: For some reason the right scale is not visible...!
+        auto* const scale_right = new MeterScaleComponent (163, true);
+        _scales.add (scale_right);
+        addAndMakeVisible (_scales.getUnchecked (i * 2 + 1));
+    }
+
+    // make space between each group of eight
+    int gr_of_eight = std::min (64, numCh) / GROUP_CHANNELS;
+
+    _width  = 50 + METER_WIDTH * std::min (64, numCh) + 50 + gr_of_eight * METER_GROUP_SPACE;
+    _height = 220 * ((int) floor ((numCh - 1.0) / 64.0) + 1);
+
+    setSize (_width, _height);
+    resized();
+    repaint();
+}
+
 void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+
+    // Rebuild the per-channel strips when the host has re-negotiated the
+    // layout (e.g. track channel count changed in Reaper).
+    const int hostCh = jlimit (1, NUM_CHANNELS, ourProcessor->getTotalNumInputChannels());
+    if (hostCh != _cachedNumCh)
+        rebuildChannelStrips();
 
     sld_hold.setValue(ourProcessor->_hold,dontSendNotification);
     sld_fall.setValue(ourProcessor->_fall,dontSendNotification);
@@ -311,7 +347,7 @@ void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster 
         _scales.getUnchecked(i)->offset(sld_offset.getValue());
     }
 
-    for (int i=0; i<NUM_CHANNELS; i++)
+    for (int i=0; i<_meters.size(); i++)
     {
         _meters.getUnchecked(i)->offset( (int)ourProcessor->_offset);
         _meters.getUnchecked(i)->_peak_hold = ourProcessor->_pk_hold;
@@ -323,7 +359,7 @@ void Ambix_meterAudioProcessorEditor::mouseDown (const MouseEvent& e)
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
     //[UserCode_mouseDown] -- Add your code here...
-    for (int i=0; i<NUM_CHANNELS; i++)
+    for (int i=0; i<_meters.size(); i++)
     {
 
         // ourProcessor->_kmdsp.getUnchecked(i)->reset();

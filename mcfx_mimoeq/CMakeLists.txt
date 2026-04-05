@@ -12,8 +12,14 @@ else()
 	SET(PLUGIN_CODE M${NUM_CHANNELS})
 endif()
 
+SET(MC_PLUGIN_CODE "Emc0")
+
+# Pass EqCore to both variants via the MCFX_EXTRA_* hooks
+SET(MCFX_EXTRA_SOURCES  ${EQCORE_SOURCE} ${EQCORE_HEADER})
+SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/EqCore)
+
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 
-# add EqCore sources to the target
-target_sources (${SUBPROJECT_NAME} PRIVATE ${EQCORE_SOURCE} ${EQCORE_HEADER})
-target_include_directories (${SUBPROJECT_NAME} PRIVATE ${SRC_DIR}/common/EqCore)
+# clear so other plugins don't inherit
+UNSET(MCFX_EXTRA_SOURCES)
+UNSET(MCFX_EXTRA_INCLUDES)
