@@ -22,6 +22,70 @@
 
 #include "JuceHeader.h"
 
+class Mcfx_anythingAudioProcessor;
+
+//==============================================================================
+// Forwarding parameter: one slot in a fixed-size pool of proxy parameters
+// exposed to the DAW. Each slot may be bound to an inner-plugin parameter of
+// the master AudioPluginInstance. Host-driven writes (automation) are
+// deposited lock-free and applied to ALL instances at the same block
+// boundary by processBlock. GUI-driven changes on the master plugin flow
+// through the sync timer and are mirrored back to the host via
+// setValueNotifyingHost on the proxy.
+class ForwardingParameter : public HostedAudioProcessorParameter
+{
+public:
+    explicit ForwardingParameter (int index);
+
+    // Message-thread only: bind/unbind this slot to a master-instance parameter.
+    void bind (AudioProcessorParameter* innerParam);
+    void unbind();
+
+    // Message-thread: called from the sync timer when the master plugin's GUI
+    // moves its own parameter. Updates the cache and notifies the host so the
+    // DAW can record automation. Does NOT set the dirty flag (would feed the
+    // value back into the master instance in the next processBlock).
+    void updateFromInner (float newValue);
+
+    // Audio thread: if a host write is pending, writes the value to `out` and
+    // clears the dirty flag, returning true. Otherwise returns false.
+    bool consumePending (float& out) noexcept;
+
+    bool isBound() const noexcept { return _innerParam != nullptr; }
+
+    // HostedAudioProcessorParameter
+    String getParameterID() const override { return _stableId; }
+
+    // AudioProcessorParameter
+    float  getValue() const override                        { return _cachedValue.load (std::memory_order_relaxed); }
+    void   setValue (float newValue) override;
+    float  getDefaultValue() const override;
+    String getName (int maximumStringLength) const override;
+    String getLabel() const override;
+    String getText (float value, int maximumStringLength) const override;
+    float  getValueForText (const String& text) const override;
+    int    getNumSteps() const override;
+    bool   isDiscrete() const override;
+    bool   isBoolean() const override;
+    bool   isAutomatable() const override                   { return true; }
+
+private:
+    const int _index;
+    const String _stableId;   // "p000" .. "pNNN" — STABLE for lifetime of processor
+
+    // Current value visible to the host (updated by both directions).
+    std::atomic<float> _cachedValue   { 0.0f };
+    // Pending host-driven write to broadcast in the next processBlock.
+    std::atomic<float> _pendingValue  { 0.0f };
+    std::atomic<bool>  _pendingDirty  { false };
+
+    // Bound on the message thread from loadPlugin / unloadPlugin. Only read
+    // from the message thread (sync timer + metadata getters). Never touched
+    // from the audio thread — the audio thread talks to the instances
+    // directly via their own parameter arrays.
+    AudioProcessorParameter* _innerParam = nullptr;
+};
+
 //==============================================================================
 class Mcfx_anythingAudioProcessor  : public AudioProcessor,
                                        public ChangeBroadcaster
@@ -46,13 +110,11 @@ public:
     //==============================================================================
     const String getName() const override;
 
-    int getNumParameters() override;
-
-    float getParameter (int index) override;
-    void setParameter (int index, float newValue) override;
-
-    const String getParameterName (int index) override;
-    const String getParameterText (int index) override;
+    // Note: legacy getNumParameters / getParameter / setParameter / getParameterName
+    // / getParameterText overrides were REMOVED because they shadowed the modern
+    // AudioProcessorParameter pool (getNumParameters returning 0 would hide every
+    // forwarding parameter from the host). The base class implementations route
+    // correctly through the parameter list we populate via addParameter().
 
     const String getInputChannelName (int channelIndex) const override;
     const String getOutputChannelName (int channelIndex) const override;
@@ -75,16 +137,6 @@ public:
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
-    void setParameterNotifyingHost(int parameterIndex, float newValue)
-    {
-        setParameter(parameterIndex, newValue);
-    }
-
-    enum Parameters
-    {
-        totalNumParams
-    };
 
     //==============================================================================
     // Plugin hosting interface
@@ -124,6 +176,18 @@ public:
     void loadPluginListFromCache();
     static File getPluginListCacheFile();
 
+    // Fixed-size pool of forwarding parameters exposed to the DAW. Each slot
+    // can be dynamically bound to a parameter of the currently loaded plugin.
+    // Declared at construction time; never resized (adding/removing
+    // parameters after construction crashes many hosts).
+    static constexpr int kForwardingParameterCount = 256;
+    int  getForwardingParameterCount() const noexcept { return kForwardingParameterCount; }
+    ForwardingParameter* getForwardingParameter (int index) const noexcept
+    {
+        return (index >= 0 && index < _forwardingParameters.size())
+                 ? _forwardingParameters.getUnchecked (index) : nullptr;
+    }
+
 private:
     //==============================================================================
     // Plugin hosting
@@ -155,6 +219,11 @@ private:
     // Scratch buffer for sidechain/aux bus channels that the plugin expects
     // but that don't map to our multichannel I/O
     AudioBuffer<float> _scratchBuffer;
+
+    // Fixed pool of forwarding parameters. Owned by AudioProcessor (via
+    // addParameter) — the OwnedArray here only provides fast indexed access;
+    // we do NOT delete through it.
+    Array<ForwardingParameter*> _forwardingParameters;
 
     // Sidechain routing: route one of our input channels to the sidechain bus
     bool _hasSidechain = false;
