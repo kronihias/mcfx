@@ -9,5 +9,6 @@ else()
 	SET(PLUGIN_CODE D${NUM_CHANNELS})
 endif()
 
+SET(MC_PLUGIN_CODE "Dmc0")
 
 INCLUDE(${SRC_DIR}/Subproject.cmake)

@@ -138,8 +138,14 @@ bool ForwardingParameter::isBoolean() const
 //==============================================================================
 Mcfx_anythingAudioProcessor::Mcfx_anythingAudioProcessor()
     : AudioProcessor (BusesProperties()
+#if MCFX_MULTICHANNEL_BUILD
+                      .withInput  ("Input",  juce::AudioChannelSet::canonicalChannelSet(2), true)
+                      .withOutput ("Output", juce::AudioChannelSet::canonicalChannelSet(2), true)
+#else
                       .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
-                      .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true))
+                      .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+#endif
+                      )
 {
     addDefaultFormatsToManager (_formatManager);
 
@@ -210,11 +216,16 @@ void Mcfx_anythingAudioProcessor::changeProgramName (int index, const String& ne
 
 bool Mcfx_anythingAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    if (layouts.getMainInputChannelSet()  != juce::AudioChannelSet::discreteChannels(NUM_CHANNELS))
+    const int in  = layouts.getMainInputChannelSet().size();
+    const int out = layouts.getMainOutputChannelSet().size();
+#if MCFX_MULTICHANNEL_BUILD
+    if (layouts.getMainInputChannelSet().isDisabled()
+        || layouts.getMainOutputChannelSet().isDisabled())
         return false;
-    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::discreteChannels(NUM_CHANNELS))
-        return false;
-    return true;
+    return in == out && in >= 1 && in <= NUM_CHANNELS;
+#else
+    return in == NUM_CHANNELS && out == NUM_CHANNELS;
+#endif
 }
 
 void Mcfx_anythingAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -223,14 +234,60 @@ void Mcfx_anythingAudioProcessor::prepareToPlay (double sampleRate, int samplesP
     _currentBlockSize = samplesPerBlock;
 
     // Prepare all loaded instances
-    const ScopedLock lock (_pluginLock);
-    for (auto* instance : _pluginInstances)
-        instance->prepareToPlay (sampleRate, samplesPerBlock);
+    {
+        const ScopedLock lock (_pluginLock);
+        for (auto* instance : _pluginInstances)
+            instance->prepareToPlay (sampleRate, samplesPerBlock);
 
-    // Resize scratch buffer for new block size
-    int scratchCh = _totalInstanceChannels - _channelsPerInstance;
-    if (scratchCh > 0)
-        _scratchBuffer.setSize (scratchCh, samplesPerBlock, false, true);
+        // Resize scratch buffer for new block size
+        int scratchCh = _totalInstanceChannels - _channelsPerInstance;
+        if (scratchCh > 0)
+            _scratchBuffer.setSize (scratchCh, samplesPerBlock, false, true);
+    }
+
+    // React to host-driven channel count changes: if the host re-negotiated
+    // the bus layout (e.g. user changed a Reaper track's channel count from
+    // 2 → 8) and a plugin is loaded, recompute how many instances we need
+    // and rebuild the instance array off the audio thread. Current hosted
+    // plugin settings are preserved across the rebuild (state is copied
+    // from the master instance to every new instance).
+    if (_currentPluginDesc != nullptr && _channelsPerInstance > 0)
+    {
+        const int hostCh = jlimit (1, (int) NUM_CHANNELS, getTotalNumInputChannels());
+        int numNeeded = hostCh / _channelsPerInstance;
+        if (numNeeded == 0)
+            numNeeded = 1;
+
+        if (numNeeded != _numInstances || hostCh != _lastHostChannelCount)
+            scheduleInstanceCountRebuild();
+    }
+}
+
+void Mcfx_anythingAudioProcessor::scheduleInstanceCountRebuild()
+{
+    // Must run on the message thread (loadPlugin asserts this). Called from
+    // prepareToPlay which may be invoked on the audio thread — defer via the
+    // existing deferred-loader AsyncUpdater so loadPlugin + state-restore
+    // happens safely on the message thread.
+    if (_currentPluginDesc == nullptr || _pluginInstances.size() == 0)
+        return;
+
+    // Do not clobber an already-pending load (e.g. state restore in flight).
+    if (_pendingPluginDesc != nullptr)
+        return;
+
+    // Snapshot current hosted plugin state from the master instance so the
+    // rebuilt instances come up with identical settings.
+    MemoryBlock savedState;
+    {
+        const ScopedLock lock (_pluginLock);
+        if (_pluginInstances.size() > 0)
+            _pluginInstances.getUnchecked (0)->getStateInformation (savedState);
+    }
+
+    _pendingPluginDesc  = std::make_unique<PluginDescription> (*_currentPluginDesc);
+    _pendingPluginState = std::move (savedState);
+    _deferredLoader.triggerAsyncUpdate();
 }
 
 void Mcfx_anythingAudioProcessor::releaseResources()
@@ -727,13 +784,19 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
     if (totalInstanceChannels < channelsPerInstance)
         totalInstanceChannels = channelsPerInstance;
 
-    int numNeeded = NUM_CHANNELS / channelsPerInstance;
+    // Use the number of channels the host has actually negotiated on the main
+    // bus, NOT the compile-time NUM_CHANNELS. In the single multichannel
+    // build NUM_CHANNELS == MCFX_MAX_CHANNELS (128) but a track may have just
+    // 2, 8, 16, ... active channels — creating 64 instances on a stereo track
+    // is wasteful and surprising.
+    const int hostCh = jlimit (1, (int) NUM_CHANNELS, getTotalNumInputChannels());
+    int numNeeded = hostCh / channelsPerInstance;
     if (numNeeded == 0)
         numNeeded = 1;
 
-    fprintf (stderr, "  Instances needed: %d (stride %d x %d = %d of %d channels)\n",
+    fprintf (stderr, "  Instances needed: %d (stride %d x %d = %d of %d host channels, NUM_CHANNELS=%d)\n",
              numNeeded, numNeeded, channelsPerInstance,
-             numNeeded * channelsPerInstance, NUM_CHANNELS);
+             numNeeded * channelsPerInstance, hostCh, NUM_CHANNELS);
 
     OwnedArray<AudioPluginInstance> newInstances;
     newInstances.add (firstInstance.release());
@@ -778,6 +841,7 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
         _channelsPerInstance     = channelsPerInstance;
         _totalInstanceChannels   = totalInstanceChannels;
         _numInstances            = _pluginInstances.size();
+        _lastHostChannelCount    = hostCh;
         _currentPluginDesc       = std::make_unique<PluginDescription> (desc);
         _hasSidechain            = hasSidechain;
         _sidechainNumChannels    = sidechainNumChannels;
@@ -870,6 +934,7 @@ void Mcfx_anythingAudioProcessor::unloadPlugin()
         _channelsPerInstance = 0;
         _totalInstanceChannels = 0;
         _numInstances = 0;
+        _lastHostChannelCount = 0;
         _pluginNumInputChannels = 0;
         _pluginNumOutputChannels = 0;
         _hasSidechain = false;
@@ -920,7 +985,7 @@ String Mcfx_anythingAudioProcessor::getLoadedPluginName() const
 
 void Mcfx_anythingAudioProcessor::setSidechainSourceChannel (int channel)
 {
-    const int newValue = (channel >= 0 && channel < NUM_CHANNELS) ? channel : -1;
+    const int newValue = (channel >= 0 && channel < getTotalNumInputChannels()) ? channel : -1;
     if (newValue == _sidechainSourceChannel)
         return;
 

@@ -273,6 +273,19 @@ private:
     std::unique_ptr<PluginDescription> _pendingPluginDesc;
     MemoryBlock _pendingPluginState;
 
+    // Host channel count that drove the current _numInstances value. Updated
+    // in loadPlugin() and checked in prepareToPlay(): when the host
+    // re-negotiates the bus layout (e.g. the user changes a track's channel
+    // count in Reaper), numInstances may need to grow or shrink to match
+    // hostCh / _channelsPerInstance. If a change is detected we snapshot the
+    // current hosted plugin state, store the current desc as pending, and
+    // kick the same deferred-loader path used for state restore — which
+    // calls loadPlugin() on the message thread and then applies the saved
+    // state to every (old + newly created) instance so user settings are
+    // preserved across the layout change.
+    int _lastHostChannelCount = 0;
+    void scheduleInstanceCountRebuild();
+
     // Helper: disable sidechain and auxiliary buses on a plugin instance
     static void disableNonMainBuses (AudioPluginInstance& instance);
 

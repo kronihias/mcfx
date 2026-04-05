@@ -39,8 +39,13 @@ float param2gain (float param)
 //==============================================================================
 Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
   AudioProcessor (BusesProperties()
+#if MCFX_MULTICHANNEL_BUILD
+      .withInput  ("Input",  juce::AudioChannelSet::canonicalChannelSet(2), true)
+      .withOutput ("Output", juce::AudioChannelSet::canonicalChannelSet(2), true)
+#else
       .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
       .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+#endif
   ),
   _delay_buffer(2,256),
   _buf_write_pos(0),
@@ -639,8 +644,16 @@ void Mcfx_gain_delayAudioProcessor::releaseResources()
 
 bool Mcfx_gain_delayAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    return ((layouts.getMainOutputChannelSet().size() == NUM_CHANNELS) &&
-            (layouts.getMainInputChannelSet().size() == NUM_CHANNELS));
+    const int in  = layouts.getMainInputChannelSet().size();
+    const int out = layouts.getMainOutputChannelSet().size();
+#if MCFX_MULTICHANNEL_BUILD
+    if (layouts.getMainInputChannelSet().isDisabled()
+        || layouts.getMainOutputChannelSet().isDisabled())
+        return false;
+    return in == out && in >= 1 && in <= NUM_CHANNELS;
+#else
+    return in == NUM_CHANNELS && out == NUM_CHANNELS;
+#endif
 }
 
 void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
@@ -661,8 +674,10 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
     }
   }
 
-  // compute read position
-  for (int i=0; i < NUM_CHANNELS; i++) {
+  // compute read position — only for channels the host actually provides,
+  // so we never read past the end of the per-channel delay state for the
+  // multichannel build where NUM_CHANNELS == MCFX_MAX_CHANNELS (128).
+  for (int i=0; i < numChannels; i++) {
     _buf_read_pos.set(i, _buf_write_pos - _delay_smpls.getUnchecked(i));
     if (_buf_read_pos.getUnchecked(i) < 0)
       _buf_read_pos.set(i, _buf_size + _buf_read_pos.getUnchecked(i));

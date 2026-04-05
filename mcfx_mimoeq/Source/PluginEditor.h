@@ -176,6 +176,13 @@ private:
     LookAndFeel_V4 lookAndFeel_;
     Label statusBar_;
 
+    // Tracks the routing overview CallOutBox so we can dismiss it in the
+    // destructor — otherwise it may outlive the editor (REAPER leaves it on
+    // the Desktop when the FX window is closed) and a late mouse click would
+    // call back into our freed memory via its raw Listener* pointer.
+    Component::SafePointer<CallOutBox> routingCallOut_;
+    Component::SafePointer<CallOutBox> diagChannelCallOut_;
+
     void mouseEnter(const MouseEvent& e) override;
     void mouseExit(const MouseEvent& e) override;
 

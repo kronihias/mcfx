@@ -42,6 +42,11 @@ public:
 
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 
+    // Notify the editor (if any) when the host re-negotiates the bus layout
+    // so it can rebuild its per-channel meter strips without the user having
+    // to close and reopen the GUI.
+    void numChannelsChanged() override { sendChangeMessage(); }
+
     //==============================================================================
     AudioProcessorEditor* createEditor() override;
     bool hasEditor() const override;

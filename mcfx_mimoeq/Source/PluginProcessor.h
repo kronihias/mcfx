@@ -107,7 +107,11 @@ public:
     double getSampleRate_() const { return currentSampleRate_; }
     int getNumChannels_() const
     {
-#ifdef NUM_CHANNELS
+#if MCFX_MULTICHANNEL_BUILD
+        // Single-binary multichannel build: return the channel count the host
+        // actually negotiated, so routing / path editors only show those.
+        return getTotalNumInputChannels();
+#elif defined(NUM_CHANNELS)
         return NUM_CHANNELS;
 #else
         return getTotalNumInputChannels();

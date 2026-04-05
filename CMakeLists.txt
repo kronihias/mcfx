@@ -12,13 +12,20 @@ ADD_DEFINITIONS(-DVERSION=${VERSION})
 
 ################################################
 #choices at compile time
-SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin")
+SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin (per-channel VST2 build)")
 SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 
 SET(BUILD_VST3 FALSE CACHE BOOL "build VST3 plugins")
 SET(BUILD_VST TRUE CACHE BOOL "build VST2 plugins")
 SET(BUILD_STANDALONE FALSE CACHE BOOL "build standalone application (for those with editor)")
 SET(BUILD_LV2 FALSE CACHE BOOL "build LV2 plugins")
+
+# Single-binary multichannel build: produces ONE binary per plugin that the
+# host (Reaper, Max 9, ...) negotiates to the actual track channel count, up
+# to MCFX_MAX_CHANNELS. VST2 stays per-channel for legacy project compat.
+SET(MCFX_MAX_CHANNELS 128 CACHE STRING "max channel count for the single-binary multichannel VST3/AU/Standalone build")
+OPTION(MCFX_BUILD_VST2_PER_CHANNEL "Build per-channel VST2 variants (legacy)"        ON)
+OPTION(MCFX_BUILD_MC               "Build single multichannel VST3/AU/Standalone"     ON)
 
 
 IF(UNIX AND NOT APPLE AND NOT ANDROID)
@@ -40,14 +47,25 @@ ADD_DEFINITIONS(-DJUCE_MODAL_LOOPS_PERMITTED=1)
 SET(CMAKE_WARN_DEPRECATED OFF)
 SET(CMAKE_WARN_DEPRECATED OFF CACHE BOOL "" FORCE)
 
-ADD_DEFINITIONS(-DNUM_CHANNELS=${NUM_CHANNELS})
+# NOTE: NUM_CHANNELS is NOT added as a global definition anymore. It is set
+# per-target by Subproject.cmake so that the per-channel VST2 build gets the
+# configured NUM_CHANNELS and the multichannel VST3/AU/Standalone build gets
+# MCFX_MAX_CHANNELS, both within a single cmake configure step.
 
 ADD_DEFINITIONS(-DNUM_OUTPUTS=${NUM_OUTPUTS_DECODER})
 ADD_DEFINITIONS(-DNUM_FILTERS=${NUM_FILTERS})
 ADD_DEFINITIONS(-DNUM_FILTERS_VMIC=${NUM_FILTERS_VMIC})
 
 # formats
-set (MCFX_FORMATS "")
+# MCFX_FORMATS is the union of all formats. It is kept for any remaining
+# references. But Subproject.cmake picks the actual formats per variant
+# from the two split lists below:
+#   MCFX_FORMATS_VST2 — formats that go into the per-channel build (VST2, LV2)
+#   MCFX_FORMATS_MC   — formats that go into the single multichannel build
+#                       (VST3, AU, Standalone)
+set (MCFX_FORMATS      "")
+set (MCFX_FORMATS_VST2 "")
+set (MCFX_FORMATS_MC   "")
 
 if (BUILD_VST)
     SET (VST2SDKPATH "~/SDKs/vstsdk2.4" CACHE PATH "Path to the VST2 SDK")
@@ -59,23 +77,35 @@ if (BUILD_VST)
         endif()
     endif()
     juce_set_vst2_sdk_path (${VST2SDKPATH})
-    list (APPEND MCFX_FORMATS VST)
+    list (APPEND MCFX_FORMATS      VST)
+    list (APPEND MCFX_FORMATS_VST2 VST)
     message ("-- Building VST2 versions")
 endif(BUILD_VST)
 
 if (BUILD_VST3)
     message ("-- Building VST3 versions")
-    list (APPEND MCFX_FORMATS VST3)
+    list (APPEND MCFX_FORMATS    VST3)
+    list (APPEND MCFX_FORMATS_MC  VST3)
 endif(BUILD_VST3)
 
 if (BUILD_LV2)
     message ("-- Building LV2 versions")
-    list (APPEND MCFX_FORMATS LV2)
+    list (APPEND MCFX_FORMATS      LV2)
+    # LV2 keeps per-channel build for now
+    list (APPEND MCFX_FORMATS_VST2 LV2)
 endif(BUILD_LV2)
+
+if (APPLE)
+    # AU ships as part of the multichannel build on macOS
+    list (APPEND MCFX_FORMATS    AU)
+    list (APPEND MCFX_FORMATS_MC AU)
+    message ("-- Building AU versions (multichannel only)")
+endif(APPLE)
 
 if (BUILD_STANDALONE)
     message ("-- Building Standalone versions")
-    list (APPEND MCFX_FORMATS Standalone)
+    list (APPEND MCFX_FORMATS    Standalone)
+    list (APPEND MCFX_FORMATS_MC Standalone)
 
     IF(WIN32)
         SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
