@@ -23,6 +23,204 @@
 #define QUOTE(x) Q(x)
 
 //==============================================================================
+// Searchable plugin selector popup: a TextEditor on top and a ListBox below,
+// filtering the plugin list in real time as the user types.
+namespace
+{
+class PluginSearchPopup : public Component,
+                          private TextEditor::Listener,
+                          private ListBoxModel
+{
+public:
+    PluginSearchPopup (Array<PluginDescription> allTypes,
+                       std::function<void(int)> onPicked)
+        : _all (std::move (allTypes)), _onPicked (std::move (onPicked))
+    {
+        _search.setTextToShowWhenEmpty ("Type to search...", Colours::grey);
+        _search.addListener (this);
+        _search.setWantsKeyboardFocus (true);
+        addAndMakeVisible (_search);
+
+        // Collect unique formats (VST, VST3, AudioUnit, ...) in sorted order
+        StringArray formats;
+        for (const auto& d : _all)
+            if (d.pluginFormatName.isNotEmpty() && ! formats.contains (d.pluginFormatName))
+                formats.add (d.pluginFormatName);
+        formats.sort (true);
+
+        for (const auto& fmt : formats)
+        {
+            auto* b = new TextButton (fmt);
+            b->setClickingTogglesState (true);
+            b->setToggleState (true, dontSendNotification);
+            b->setColour (TextButton::buttonColourId,   Colour (0xff3a3a3a));
+            b->setColour (TextButton::buttonOnColourId, Colour (0xff3e6aa8));
+            b->onClick = [this]() { rebuildFiltered(); };
+            addAndMakeVisible (b);
+            _formatButtons.add (b);
+        }
+
+        _list.setModel (this);
+        _list.setRowHeight (20);
+        _list.setColour (ListBox::backgroundColourId, Colour (0xff1e1e1e));
+        addAndMakeVisible (_list);
+
+        rebuildFiltered();
+        setSize (400, 440);
+    }
+
+    void resized() override
+    {
+        auto r = getLocalBounds().reduced (4);
+        _search.setBounds (r.removeFromTop (24));
+        r.removeFromTop (4);
+
+        if (! _formatButtons.isEmpty())
+        {
+            auto row = r.removeFromTop (22);
+            int n = _formatButtons.size();
+            int gap = 4;
+            int bw = (row.getWidth() - gap * (n - 1)) / n;
+            for (int i = 0; i < n; ++i)
+            {
+                _formatButtons[i]->setBounds (row.removeFromLeft (bw));
+                if (i < n - 1) row.removeFromLeft (gap);
+            }
+            r.removeFromTop (4);
+        }
+
+        _list.setBounds (r);
+    }
+
+    void paint (Graphics& g) override
+    {
+        g.fillAll (Colour (0xff2a2a2a));
+    }
+
+    void visibilityChanged() override
+    {
+        if (isShowing())
+            _search.grabKeyboardFocus();
+    }
+
+    bool keyPressed (const KeyPress& key) override
+    {
+        if (key == KeyPress::downKey || key == KeyPress::upKey
+            || key == KeyPress::pageDownKey || key == KeyPress::pageUpKey)
+        {
+            _list.keyPressed (key);
+            return true;
+        }
+        if (key == KeyPress::returnKey)
+        {
+            pickRow (_list.getSelectedRow());
+            return true;
+        }
+        return false;
+    }
+
+private:
+    // TextEditor::Listener
+    void textEditorTextChanged (TextEditor&) override { rebuildFiltered(); }
+    void textEditorReturnKeyPressed (TextEditor&) override
+    {
+        pickRow (_list.getSelectedRow() >= 0 ? _list.getSelectedRow() : 0);
+    }
+    void textEditorEscapeKeyPressed (TextEditor&) override
+    {
+        if (auto* box = findParentComponentOfClass<CallOutBox>())
+            box->dismiss();
+    }
+
+    // ListBoxModel
+    int getNumRows() override { return _filtered.size(); }
+
+    void paintListBoxItem (int row, Graphics& g, int w, int h, bool selected) override
+    {
+        if (row < 0 || row >= _filtered.size()) return;
+        if (selected)
+            g.fillAll (Colour (0xff3e6aa8));
+
+        const auto& d = _all.getReference (_filtered[row]);
+        g.setFont (Font (FontOptions (14.0f)));
+
+        // Right-aligned format tag
+        auto fmt = d.pluginFormatName;
+        int fmtW = 0;
+        if (fmt.isNotEmpty())
+        {
+            fmtW = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), fmt) + 12;
+            g.setColour (Colour (0xffa0a0a0));
+            g.drawText (fmt, w - fmtW, 0, fmtW - 6, h, Justification::centredRight, true);
+        }
+
+        g.setColour (Colours::white);
+        String text = d.name;
+        if (d.manufacturerName.isNotEmpty())
+            text += "  (" + d.manufacturerName + ")";
+        g.drawText (text, 6, 0, w - 12 - fmtW, h, Justification::centredLeft, true);
+    }
+
+    void listBoxItemClicked (int row, const MouseEvent&) override
+    {
+        pickRow (row);
+    }
+
+    void returnKeyPressed (int row) override { pickRow (row); }
+
+    void pickRow (int row)
+    {
+        if (row < 0 || row >= _filtered.size()) return;
+        int idx = _filtered[row];
+        auto cb = _onPicked;
+        if (auto* box = findParentComponentOfClass<CallOutBox>())
+            box->dismiss();
+        if (cb) cb (idx);
+    }
+
+    void rebuildFiltered()
+    {
+        _filtered.clearQuick();
+        auto q = _search.getText().trim();
+        StringArray tokens;
+        tokens.addTokens (q, " ", "");
+        tokens.removeEmptyStrings();
+
+        // Collect enabled formats. If none are enabled, show all (avoids empty list).
+        StringArray enabledFormats;
+        for (auto* b : _formatButtons)
+            if (b->getToggleState())
+                enabledFormats.add (b->getButtonText());
+        bool filterByFormat = ! enabledFormats.isEmpty() && enabledFormats.size() < _formatButtons.size();
+        bool anyEnabled = ! enabledFormats.isEmpty();
+
+        for (int i = 0; i < _all.size(); ++i)
+        {
+            const auto& d = _all.getReference (i);
+            if (anyEnabled && ! enabledFormats.contains (d.pluginFormatName))
+                continue;
+            (void) filterByFormat;
+            String hay = (d.name + " " + d.manufacturerName + " " + d.pluginFormatName).toLowerCase();
+            bool ok = true;
+            for (auto& t : tokens)
+                if (! hay.contains (t.toLowerCase())) { ok = false; break; }
+            if (ok) _filtered.add (i);
+        }
+        _list.updateContent();
+        if (_filtered.size() > 0)
+            _list.selectRow (0);
+    }
+
+    Array<PluginDescription> _all;
+    Array<int> _filtered;
+    TextEditor _search;
+    OwnedArray<TextButton> _formatButtons;
+    ListBox _list;
+    std::function<void(int)> _onPicked;
+};
+} // namespace
+
+//==============================================================================
 Mcfx_anythingAudioProcessorEditor::Mcfx_anythingAudioProcessorEditor (Mcfx_anythingAudioProcessor* ownerFilter)
     : AudioProcessorEditor (ownerFilter)
 {
@@ -255,19 +453,25 @@ void Mcfx_anythingAudioProcessorEditor::showPluginMenu()
         return;
     }
 
-    PopupMenu menu;
-    knownPlugins.addToMenu (menu, types, KnownPluginList::sortByManufacturer);
+    // Sort by manufacturer then name for a stable, readable list
+    auto sorted = types;
+    std::sort (sorted.begin(), sorted.end(),
+               [] (const PluginDescription& a, const PluginDescription& b)
+               {
+                   int m = a.manufacturerName.compareIgnoreCase (b.manufacturerName);
+                   if (m != 0) return m < 0;
+                   return a.name.compareIgnoreCase (b.name) < 0;
+               });
 
-    menu.showMenuAsync (PopupMenu::Options().withTargetComponent (&_pluginSelectorButton),
-        [this, types] (int result)
+    auto content = std::make_unique<PluginSearchPopup> (sorted,
+        [this, sorted] (int index)
         {
-            if (result > 0)
-            {
-                int index = KnownPluginList::getIndexChosenByMenu (types, result);
-                if (index >= 0 && index < types.size())
-                    getProcessor()->loadPlugin (types.getReference (index));
-            }
+            if (index >= 0 && index < sorted.size())
+                getProcessor()->loadPlugin (sorted.getReference (index));
         });
+
+    auto buttonArea = _pluginSelectorButton.getScreenBounds();
+    CallOutBox::launchAsynchronously (std::move (content), buttonArea, nullptr);
 }
 
 void Mcfx_anythingAudioProcessorEditor::showSettings()
