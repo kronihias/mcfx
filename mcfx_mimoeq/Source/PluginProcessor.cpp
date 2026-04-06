@@ -21,7 +21,18 @@
 #include "PluginEditor.h"
 
 Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
+    : apvts(*this, nullptr, "PARAMETERS", createParameters())
 {
+    // Register APVTS parameter listeners for host automation
+    for (int i = 1; i <= kMaxAutomatedBands; ++i)
+    {
+        String prefix = "B" + String(i).paddedLeft('0', 2) + "_";
+        apvts.addParameterListener(prefix + "Freq", this);
+        apvts.addParameterListener(prefix + "Q", this);
+        apvts.addParameterListener(prefix + "Gain", this);
+        apvts.addParameterListener(prefix + "Enable", this);
+    }
+
     // Default 6 bands like mcfx_filter: HP, low shelf, peak1, peak2, high shelf, LP
     // All neutral settings, HP/LP disabled by default
 
@@ -80,6 +91,8 @@ Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
     lp->setGainDB(0.f);
     lp->setDiagonal(true);
     lp->setEnabled(false);
+
+    syncModelToAPVTS();
 }
 
 Mcfx_mimoeqAudioProcessor::~Mcfx_mimoeqAudioProcessor()
@@ -403,6 +416,7 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
 
     // Build and publish new processing state (lock-free)
     rebuildProcessingChains();
+    syncModelToAPVTS();
     sendChangeMessage();
 }
 
@@ -608,6 +622,7 @@ void Mcfx_mimoeqAudioProcessor::syncRestoreState(const String& targetState)
 
     // Lightweight sync: audio thread will pick up parameter changes via SmoothedValue
     requestParameterSync();
+    syncModelToAPVTS();
     sendChangeMessage();
 }
 
@@ -650,6 +665,126 @@ bool Mcfx_mimoeqAudioProcessor::redo()
     redoStack_.pop_back();
     restoreState(state);
     return true;
+}
+
+// --- APVTS Parameter Automation ---
+
+AudioProcessorValueTreeState::ParameterLayout Mcfx_mimoeqAudioProcessor::createParameters()
+{
+    AudioProcessorValueTreeState::ParameterLayout layout;
+
+    for (int i = 1; i <= kMaxAutomatedBands; ++i)
+    {
+        String prefix = "B" + String(i).paddedLeft('0', 2) + "_";
+        String name = "Band " + String(i) + " ";
+
+        layout.add(std::make_unique<AudioParameterFloat>(
+            ParameterID { prefix + "Freq", 1 },
+            name + "Freq",
+            NormalisableRange<float>(20.f, 20000.f, 0.f, 0.3f),
+            1000.f));
+
+        layout.add(std::make_unique<AudioParameterFloat>(
+            ParameterID { prefix + "Q", 1 },
+            name + "Q",
+            NormalisableRange<float>(0.1f, 20.f, 0.f, 0.4f),
+            0.707f));
+
+        layout.add(std::make_unique<AudioParameterFloat>(
+            ParameterID { prefix + "Gain", 1 },
+            name + "Gain",
+            NormalisableRange<float>(-24.f, 24.f, 0.01f),
+            0.f));
+
+        layout.add(std::make_unique<AudioParameterBool>(
+            ParameterID { prefix + "Enable", 1 },
+            name + "Enable",
+            true));
+    }
+
+    return layout;
+}
+
+void Mcfx_mimoeqAudioProcessor::parameterChanged(const String& parameterID, float newValue)
+{
+    if (updatingFromModel_)
+        return;
+
+    // Parse parameter ID: "B01_Freq" -> band index 0, param "Freq"
+    if (parameterID.length() < 4 || parameterID[0] != 'B')
+        return;
+
+    int bandIdx = parameterID.substring(1, 3).getIntValue() - 1;  // 0-based
+    String param = parameterID.substring(4);
+
+    if (bandIdx < 0 || bandIdx >= diagonalChain_.getNumBands())
+        return;
+
+    auto* band = diagonalChain_.getBand(bandIdx);
+    if (band == nullptr)
+        return;
+
+    // Only apply freq/Q/gain to IIR bands (other types don't use these params)
+    if (param == "Freq")
+    {
+        if (band->getType() == EqBandType::IIR)
+            band->setFrequency(newValue);
+    }
+    else if (param == "Q")
+    {
+        if (band->getType() == EqBandType::IIR)
+            band->setQ(newValue);
+    }
+    else if (param == "Gain")
+    {
+        if (band->getType() == EqBandType::IIR || band->getType() == EqBandType::Gain)
+            band->setGainDB(newValue);
+    }
+    else if (param == "Enable")
+    {
+        band->setEnabled(newValue >= 0.5f);
+    }
+
+    requestParameterSync();
+    sendChangeMessage();
+}
+
+void Mcfx_mimoeqAudioProcessor::syncModelToAPVTS()
+{
+    updatingFromModel_ = true;
+
+    int numBands = diagonalChain_.getNumBands();
+    for (int i = 0; i < kMaxAutomatedBands; ++i)
+    {
+        String prefix = "B" + String(i + 1).paddedLeft('0', 2) + "_";
+
+        if (i < numBands)
+        {
+            auto* band = diagonalChain_.getBand(i);
+            if (auto* p = apvts.getParameter(prefix + "Freq"))
+                p->setValueNotifyingHost(p->convertTo0to1(band->getFrequency()));
+            if (auto* p = apvts.getParameter(prefix + "Q"))
+                p->setValueNotifyingHost(p->convertTo0to1(band->getQ()));
+            if (auto* p = apvts.getParameter(prefix + "Gain"))
+                p->setValueNotifyingHost(p->convertTo0to1(band->getGainDB()));
+            if (auto* p = apvts.getParameter(prefix + "Enable"))
+                p->setValueNotifyingHost(band->isEnabled() ? 1.f : 0.f);
+        }
+        else
+        {
+            // Reset unused slots to defaults so host doesn't show stale values
+            if (auto* p = apvts.getParameter(prefix + "Freq"))
+                p->setValueNotifyingHost(p->convertTo0to1(1000.f));
+            if (auto* p = apvts.getParameter(prefix + "Q"))
+                p->setValueNotifyingHost(p->convertTo0to1(0.707f));
+            if (auto* p = apvts.getParameter(prefix + "Gain"))
+                p->setValueNotifyingHost(p->convertTo0to1(0.f));
+            if (auto* p = apvts.getParameter(prefix + "Enable"))
+                p->setValueNotifyingHost(1.f);
+        }
+    }
+
+    updatingFromModel_ = false;
 }
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()
