@@ -44,6 +44,9 @@ public:
         Preserves filter state for click-free parameter updates. */
     void syncParametersFrom(const EqChain& source);
 
+    /** Total convolver latency across all bands (serial processing = latencies add). */
+    int getConvolverLatency() const;
+
     // Frequency response — combined response of all enabled bands
     std::complex<float> getFrequencyResponse(double freqHz) const;
 

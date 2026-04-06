@@ -155,10 +155,11 @@ EqBandEditor::EqBandEditor()
 
     // FIR load button and plot
     addAndMakeVisible(btnLoadFIR_);
-    btnLoadFIR_.setTooltip("Load FIR coefficients from a text file");
+    btnLoadFIR_.setTooltip("Load FIR coefficients from a text or audio file");
     btnLoadFIR_.addListener(this);
     addAndMakeVisible(lblFIRInfo_);
     addAndMakeVisible(firPlot_);
+    firPlot_.onFileDropped = [this](const File& f) { loadFIRFile(f); };
 
     // Set label styles
     for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_ })
@@ -669,39 +670,65 @@ void EqBandEditor::buttonClicked(Button* b)
     }
     else if (b == &btnLoadFIR_)
     {
-        FileChooser chooser("Load FIR coefficients", File(), "*.txt;*.csv;*.dat");
+        FileChooser chooser("Load FIR coefficients", File(), "*.txt;*.csv;*.dat;*.wav;*.aif;*.aiff");
         if (chooser.browseForFileToOpen())
+            loadFIRFile(chooser.getResult());
+    }
+}
+
+void EqBandEditor::loadFIRFile(const File& file)
+{
+    if (band_ == nullptr) return;
+
+    auto ext = file.getFileExtension().toLowerCase();
+
+    // Audio file formats: use AudioFormatReader
+    if (ext == ".wav" || ext == ".aif" || ext == ".aiff")
+    {
+        if (band_->loadFIRFromFile(file))
         {
-            auto file = chooser.getResult();
-            StringArray lines;
-            file.readLines(lines);
-            std::vector<float> coeffs;
-            for (auto& line : lines)
+            auto& coeffs = band_->getFIRCoefficients();
+            String info;
+            info << coeffs.size() << " taps";
+            if (band_->getFIRSampleRate() > 0.0)
+                info << " @ " << (int)band_->getFIRSampleRate() << " Hz";
+            lblFIRInfo_.setText(info, dontSendNotification);
+            firPlot_.setCoefficients(coeffs);
+            if (listener_ != nullptr)
+                listener_->bandParameterChanged(bandIndex_);
+        }
+    }
+    // Text file formats: parse space/comma/tab-separated values
+    else
+    {
+        StringArray lines;
+        file.readLines(lines);
+        std::vector<float> coeffs;
+        for (auto& line : lines)
+        {
+            line = line.trim();
+            if (line.isNotEmpty() && !line.startsWith("#") && !line.startsWith("//"))
             {
-                line = line.trim();
-                if (line.isNotEmpty() && !line.startsWith("#") && !line.startsWith("//"))
+                StringArray tokens;
+                tokens.addTokens(line, ",; \t", "");
+                for (auto& tok : tokens)
                 {
-                    // Handle comma-separated or space-separated values
-                    StringArray tokens;
-                    tokens.addTokens(line, ",; \t", "");
-                    for (auto& tok : tokens)
-                    {
-                        tok = tok.trim();
-                        if (tok.isNotEmpty())
-                            coeffs.push_back(tok.getFloatValue());
-                    }
+                    tok = tok.trim();
+                    if (tok.isNotEmpty())
+                        coeffs.push_back(tok.getFloatValue());
                 }
             }
-            if (!coeffs.empty())
-            {
-                band_->setFIRCoefficients(coeffs);
-                String info;
-                info << coeffs.size() << " taps";
-                lblFIRInfo_.setText(info, dontSendNotification);
-                firPlot_.setCoefficients(coeffs);
-                if (listener_ != nullptr)
-                    listener_->bandParameterChanged(bandIndex_);
-            }
+        }
+        if (!coeffs.empty())
+        {
+            band_->setFIRCoefficients(coeffs);
+            band_->setFIRFilePath(file.getFullPathName());
+            String info;
+            info << coeffs.size() << " taps";
+            lblFIRInfo_.setText(info, dontSendNotification);
+            firPlot_.setCoefficients(coeffs);
+            if (listener_ != nullptr)
+                listener_->bandParameterChanged(bandIndex_);
         }
     }
 }
