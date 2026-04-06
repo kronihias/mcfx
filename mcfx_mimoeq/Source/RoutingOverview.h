@@ -342,7 +342,8 @@ public:
     static int getRecommendedWidth(int numChannels)
     {
         int cols = jmin(numChannels, kCols);
-        return cols * (kCellSize + kCellGap) - kCellGap + kMarginX * 2;
+        int w = cols * (kCellSize + kCellGap) - kCellGap + kMarginX * 2;
+        return jmax(w, 160);  // minimum width for title + All/None buttons
     }
 
     static int getRecommendedHeight(int numChannels)

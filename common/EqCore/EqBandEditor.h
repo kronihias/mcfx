@@ -188,34 +188,80 @@ public:
 
         // --- Waveform ---
         int n = (int)coeffs_.size();
+        int plotPoints = jmin(n, (int)w * 2); // at most 2 points per pixel
         float sampleW = w / (float)jmax(1, n - 1);
+
+        // For large FIR: use min/max decimation per pixel column to show envelope
+        bool decimated = plotPoints < n;
 
         // Fill area under curve
         Path fillPath;
+        Path linePath;
         bool started = false;
-        for (int i = 0; i < n; ++i)
+
+        if (!decimated)
         {
-            float xp = x0 + (float)i * sampleW;
-            float yp = midY - coeffs_[i] * scale;
-            if (!started) { fillPath.startNewSubPath(xp, midY); started = true; }
-            fillPath.lineTo(xp, yp);
+            // Small enough to draw every sample
+            for (int i = 0; i < n; ++i)
+            {
+                float xp = x0 + (float)i * sampleW;
+                float yp = midY - coeffs_[i] * scale;
+                if (!started) { fillPath.startNewSubPath(xp, midY); started = true; }
+                fillPath.lineTo(xp, yp);
+                if (i == 0) linePath.startNewSubPath(xp, yp);
+                else linePath.lineTo(xp, yp);
+            }
+            fillPath.lineTo(x0 + (float)(n - 1) * sampleW, midY);
         }
-        fillPath.lineTo(x0 + (float)(n - 1) * sampleW, midY);
+        else
+        {
+            // Decimate: for each pixel column, find min and max sample values
+            int numCols = (int)w;
+            for (int col = 0; col < numCols; ++col)
+            {
+                int i0 = (int)((float)col / w * n);
+                int i1 = jmin(n - 1, (int)((float)(col + 1) / w * n));
+                float vmin = coeffs_[i0], vmax = coeffs_[i0];
+                for (int i = i0 + 1; i <= i1; ++i)
+                {
+                    vmin = jmin(vmin, coeffs_[i]);
+                    vmax = jmax(vmax, coeffs_[i]);
+                }
+                float xp = x0 + (float)col;
+                float ypMin = midY - vmin * scale;
+                float ypMax = midY - vmax * scale;
+
+                if (!started)
+                {
+                    fillPath.startNewSubPath(xp, midY);
+                    linePath.startNewSubPath(xp, ypMax);
+                    started = true;
+                }
+                // Draw envelope: top edge then bottom edge on way back
+                linePath.lineTo(xp, ypMax);
+                fillPath.lineTo(xp, ypMax);
+            }
+            // Close the envelope by going back along the bottom
+            for (int col = numCols - 1; col >= 0; --col)
+            {
+                int i0 = (int)((float)col / w * n);
+                int i1 = jmin(n - 1, (int)((float)(col + 1) / w * n));
+                float vmin = coeffs_[i0];
+                for (int i = i0 + 1; i <= i1; ++i)
+                    vmin = jmin(vmin, coeffs_[i]);
+                float xp = x0 + (float)col;
+                float ypMin = midY - vmin * scale;
+                linePath.lineTo(xp, ypMin);
+            }
+            fillPath.lineTo(x0 + w, midY);
+        }
+
         fillPath.closeSubPath();
         g.setColour(Colours::white.withAlpha(0.08f));
         g.fillPath(fillPath);
 
-        // Draw line
-        Path linePath;
-        for (int i = 0; i < n; ++i)
-        {
-            float xp = x0 + (float)i * sampleW;
-            float yp = midY - coeffs_[i] * scale;
-            if (i == 0) linePath.startNewSubPath(xp, yp);
-            else linePath.lineTo(xp, yp);
-        }
-        g.setColour(Colours::white.withAlpha(0.7f));
-        g.strokePath(linePath, PathStrokeType(1.2f));
+        g.setColour(Colours::white.withAlpha(decimated ? 0.4f : 0.7f));
+        g.strokePath(linePath, PathStrokeType(decimated ? 0.5f : 1.2f));
 
         // Draw sample dots if not too many
         if (n <= 200)
@@ -311,6 +357,8 @@ private:
     ToggleButton btnInvertGain_ { "Invert" };
     Slider sldDelay_;
 
+    ComboBox cbSampleRate_;     // Original sample rate selector
+
     Label lblType_    { {}, "Type:" };
     Label lblSubType_ { {}, "Filter:" };
     Label lblFreq_    { {}, "Freq:" };
@@ -318,6 +366,7 @@ private:
     Label lblOrder_   { {}, "Order:" };
     Label lblGain_    { {}, "Gain:" };
     Label lblDelay_   { {}, "Delay:" };
+    Label lblSampleRate_ { {}, "Rate:" };
     Label lblHz_      { {}, "Hz" };
     Label lblDb_      { {}, "dB" };
     Label lblSamples_ { {}, "smpls" };
