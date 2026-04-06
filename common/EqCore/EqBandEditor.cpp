@@ -685,17 +685,26 @@ void EqBandEditor::loadFIRFile(const File& file)
     // Audio file formats: use AudioFormatReader
     if (ext == ".wav" || ext == ".aif" || ext == ".aiff")
     {
-        if (band_->loadFIRFromFile(file))
+        // Check channel count — if multi-channel, show popup to select
+        AudioFormatManager formatManager;
+        formatManager.registerBasicFormats();
+        std::unique_ptr<AudioFormatReader> reader(formatManager.createReaderFor(file));
+        if (reader == nullptr) return;
+
+        int numChannels = (int)reader->numChannels;
+        reader.reset(); // close reader before loading
+
+        if (numChannels > 1)
         {
-            auto& coeffs = band_->getFIRCoefficients();
-            String info;
-            info << coeffs.size() << " taps";
-            if (band_->getFIRSampleRate() > 0.0)
-                info << " @ " << (int)band_->getFIRSampleRate() << " Hz";
-            lblFIRInfo_.setText(info, dontSendNotification);
-            firPlot_.setCoefficients(coeffs);
-            if (listener_ != nullptr)
-                listener_->bandParameterChanged(bandIndex_);
+            // Defer popup until the OS drag-drop session has fully ended —
+            // otherwise macOS dismisses the menu instantly.
+            pendingAudioFile_ = file;
+            pendingAudioChannels_ = numChannels;
+            startTimer(200);
+        }
+        else
+        {
+            loadFIRAudioFile(file, 0);
         }
     }
     // Text file formats: parse space/comma/tab-separated values
@@ -722,7 +731,6 @@ void EqBandEditor::loadFIRFile(const File& file)
         if (!coeffs.empty())
         {
             band_->setFIRCoefficients(coeffs);
-            band_->setFIRFilePath(file.getFullPathName());
             String info;
             info << coeffs.size() << " taps";
             lblFIRInfo_.setText(info, dontSendNotification);
@@ -730,6 +738,47 @@ void EqBandEditor::loadFIRFile(const File& file)
             if (listener_ != nullptr)
                 listener_->bandParameterChanged(bandIndex_);
         }
+    }
+}
+
+void EqBandEditor::timerCallback()
+{
+    stopTimer();
+
+    if (pendingAudioChannels_ <= 0)
+        return;
+
+    PopupMenu menu;
+    for (int ch = 0; ch < pendingAudioChannels_; ++ch)
+        menu.addItem(ch + 1, "Channel " + String(ch + 1));
+
+    auto file = pendingAudioFile_;
+    pendingAudioChannels_ = 0;
+    pendingAudioFile_ = File();
+
+    menu.showMenuAsync(PopupMenu::Options().withTargetComponent(&firPlot_),
+        [this, file](int result)
+        {
+            if (result <= 0) return;
+            loadFIRAudioFile(file, result - 1);
+        });
+}
+
+void EqBandEditor::loadFIRAudioFile(const File& file, int channel)
+{
+    if (band_ == nullptr) return;
+
+    if (band_->loadFIRFromFile(file, channel))
+    {
+        auto& coeffs = band_->getFIRCoefficients();
+        String info;
+        info << coeffs.size() << " taps";
+        if (band_->getFIRSampleRate() > 0.0)
+            info << " @ " << (int)band_->getFIRSampleRate() << " Hz";
+        lblFIRInfo_.setText(info, dontSendNotification);
+        firPlot_.setCoefficients(coeffs);
+        if (listener_ != nullptr)
+            listener_->bandParameterChanged(bandIndex_);
     }
 }
 

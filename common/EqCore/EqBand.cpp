@@ -726,11 +726,15 @@ void EqBand::rebuildConvolver()
     useConvolver_ = false;
     convolverLatency_ = 0;
 
+    // FFT convolution typically beats direct form above ~64-128 taps,
+    // regardless of block size (with vDSP / FFTW hardware-accelerated FFT).
+    static constexpr int kConvolverThreshold = 128;
+
     if (firCoeffs_.empty() || maxBlockSize_ <= 0)
         return;
 
     int firLen = (int)firCoeffs_.size();
-    if (firLen <= maxBlockSize_)
+    if (firLen <= kConvolverThreshold)
         return;  // short FIR — direct convolution is cheaper and zero-latency
 
     convolver_ = std::make_unique<MtxConvMaster>();
@@ -966,11 +970,6 @@ var EqBand::toJson() const
                 const auto& coeffsToStore = firOriginalCoeffs_.empty() ? firCoeffs_ : firOriginalCoeffs_;
                 if (firOriginalSampleRate_ > 0.0)
                     params->setProperty("sample_rate", firOriginalSampleRate_);
-                if (firFilePath_.isNotEmpty())
-                {
-                    params->setProperty("file", firFilePath_);
-                    params->setProperty("channel", firFileChannel_);
-                }
                 if (coeffsToStore.size() > 64)
                 {
                     // Base64 encoding for large FIR filters
@@ -1077,59 +1076,37 @@ EqBand* EqBand::fromJson(const var& json)
         {
             band->setType(EqBandType::FIR);
             double firSR = (double)params.getProperty("sample_rate", 0.0);
-            String filePath = params.getProperty("file", "").toString();
-            int fileChannel = (int)params.getProperty("channel", 0);
 
-            bool loaded = false;
+            std::vector<float> coeffs;
 
-            // Try loading from WAV/audio file first
-            if (filePath.isNotEmpty())
+            // Try base64-encoded coefficients
+            if (params.hasProperty("coefficients_b64"))
             {
-                File f(filePath);
-                if (f.existsAsFile())
-                    loaded = band->loadFIRFromFile(f, fileChannel);
+                MemoryBlock mb;
+                if (mb.fromBase64Encoding(params["coefficients_b64"].toString()))
+                {
+                    int numFloats = (int)(mb.getSize() / sizeof(float));
+                    coeffs.resize(numFloats);
+                    std::memcpy(coeffs.data(), mb.getData(), numFloats * sizeof(float));
+                }
+            }
+            // Fallback: JSON array
+            else
+            {
+                auto arr = params["coefficients"];
+                if (arr.isArray())
+                {
+                    for (int i = 0; i < arr.size(); ++i)
+                        coeffs.push_back((float)arr[i]);
+                }
             }
 
-            if (!loaded)
+            if (!coeffs.empty())
             {
-                std::vector<float> coeffs;
-
-                // Try base64-encoded coefficients
-                if (params.hasProperty("coefficients_b64"))
-                {
-                    MemoryBlock mb;
-                    if (mb.fromBase64Encoding(params["coefficients_b64"].toString()))
-                    {
-                        int numFloats = (int)(mb.getSize() / sizeof(float));
-                        coeffs.resize(numFloats);
-                        std::memcpy(coeffs.data(), mb.getData(), numFloats * sizeof(float));
-                    }
-                }
-                // Fallback: JSON array
+                if (firSR > 0.0)
+                    band->setFIRCoefficientsWithSampleRate(coeffs, firSR);
                 else
-                {
-                    auto arr = params["coefficients"];
-                    if (arr.isArray())
-                    {
-                        for (int i = 0; i < arr.size(); ++i)
-                            coeffs.push_back((float)arr[i]);
-                    }
-                }
-
-                if (!coeffs.empty())
-                {
-                    if (firSR > 0.0)
-                        band->setFIRCoefficientsWithSampleRate(coeffs, firSR);
-                    else
-                        band->setFIRCoefficients(coeffs);
-                }
-
-                // Remember file path even if file wasn't found (for portability)
-                if (filePath.isNotEmpty())
-                {
-                    band->setFIRFilePath(filePath);
-                    band->setFIRFileChannel(fileChannel);
-                }
+                    band->setFIRCoefficients(coeffs);
             }
         }
         else

@@ -421,8 +421,27 @@ void EqGraph::mouseDown(const MouseEvent& e)
 {
     grabKeyboardFocus();
     dragBand_ = findBandAtPosition(e.getPosition());
-    if (dragBand_ >= 0 && listener_ != nullptr)
-        listener_->eqBandSelected(dragBand_);
+    draggingYAxis_ = false;
+
+    if (dragBand_ >= 0)
+    {
+        if (listener_ != nullptr)
+            listener_->eqBandSelected(dragBand_);
+    }
+    else
+    {
+        // No band handle hit — start Y-axis pan drag
+        draggingYAxis_ = true;
+        dragStartMinDb_ = mindb_;
+        dragStartMaxDb_ = maxdb_;
+        dragStartY_ = e.getPosition().getY();
+    }
+}
+
+void EqGraph::mouseUp(const MouseEvent&)
+{
+    dragBand_ = -1;
+    draggingYAxis_ = false;
 }
 
 bool EqGraph::keyPressed(const KeyPress& key)
@@ -536,6 +555,20 @@ void EqGraph::mouseDoubleClick(const MouseEvent& e)
 
 void EqGraph::mouseDrag(const MouseEvent& e)
 {
+    if (draggingYAxis_)
+    {
+        // Pan the Y-axis: translate dB range by drag distance
+        float height = (float)getHeight() - 12.f;
+        float dyn = dragStartMaxDb_ - dragStartMinDb_;
+        float pixelsPerDb = (height - ymargin_) / dyn;
+        float deltaDb = (e.getPosition().getY() - dragStartY_) / pixelsPerDb;
+
+        mindb_ = dragStartMinDb_ + deltaDb;
+        maxdb_ = dragStartMaxDb_ + deltaDb;
+        repaint();
+        return;
+    }
+
     if (dragBand_ < 0 || chain_ == nullptr || listener_ == nullptr)
         return;
 
@@ -551,9 +584,8 @@ void EqGraph::mouseDrag(const MouseEvent& e)
 
 void EqGraph::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel)
 {
+    // If pointer is near a band handle, adjust Q as before
     int bandIdx = findBandAtPosition(e.getPosition());
-    if (bandIdx < 0)
-        bandIdx = selectedBand_;
 
     if (bandIdx >= 0 && chain_ != nullptr && listener_ != nullptr)
     {
@@ -562,6 +594,31 @@ void EqGraph::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel
         {
             float newQ = jlimit(0.1f, 20.f, band->getQ() + wheel.deltaY * 2.f);
             listener_->eqBandQChanged(bandIdx, newQ);
+            return;
         }
     }
+
+    // No band handle — zoom the Y-axis range around the pointer position
+    float dyn = maxdb_ - mindb_;
+    float zoomFactor = 1.f - wheel.deltaY * 0.15f;  // scroll up = zoom in (smaller range)
+    zoomFactor = jlimit(0.8f, 1.25f, zoomFactor);
+
+    // Clamp: minimum 6 dB range, maximum 200 dB range
+    float newDyn = jlimit(6.f, 200.f, dyn * zoomFactor);
+
+    // Zoom around the dB value at the mouse Y position
+    float mouseDb = ypostodb(e.getPosition().getY());
+    float ratio = (mouseDb - mindb_) / dyn;  // 0..1 position of mouse in current range
+
+    mindb_ = mouseDb - ratio * newDyn;
+    maxdb_ = mouseDb + (1.f - ratio) * newDyn;
+
+    // Snap gridDiv_ to reasonable values based on range
+    if (newDyn <= 12.f)       gridDiv_ = 1.f;
+    else if (newDyn <= 24.f)  gridDiv_ = 3.f;
+    else if (newDyn <= 60.f)  gridDiv_ = 6.f;
+    else if (newDyn <= 120.f) gridDiv_ = 12.f;
+    else                      gridDiv_ = 24.f;
+
+    repaint();
 }

@@ -262,7 +262,8 @@ class EqBandEditor : public Component,
                      public Slider::Listener,
                      public ComboBox::Listener,
                      public Button::Listener,
-                     public Label::Listener
+                     public Label::Listener,
+                     private Timer
 {
 public:
 
@@ -347,6 +348,12 @@ private:
     Label lblFIRInfo_ { {}, "" };
     FIRPlot firPlot_;
     void loadFIRFile(const File& file);
+    void loadFIRAudioFile(const File& file, int channel);
+    void timerCallback() override;
+
+    // Deferred channel-selection popup for multi-channel audio drop
+    File pendingAudioFile_;
+    int pendingAudioChannels_ = 0;
 
     bool updating_ = false; // prevent feedback loops
 

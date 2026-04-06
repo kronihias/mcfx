@@ -1023,7 +1023,7 @@ void Mcfx_mimoeqAudioProcessorEditor::performUndo()
         graph_.setChain(chain);
         refreshTabs();
         if (chain != nullptr && chain->getNumBands() > 0)
-            selectBand(jmin(selectedBand_, chain->getNumBands() - 1));
+            selectBand(jlimit(0, chain->getNumBands() - 1, selectedBand_));
         else
             selectBand(-1);
         updateUndoRedoButtons();
@@ -1049,7 +1049,7 @@ void Mcfx_mimoeqAudioProcessorEditor::performRedo()
         graph_.setChain(chain);
         refreshTabs();
         if (chain != nullptr && chain->getNumBands() > 0)
-            selectBand(jmin(selectedBand_, chain->getNumBands() - 1));
+            selectBand(jlimit(0, chain->getNumBands() - 1, selectedBand_));
         else
             selectBand(-1);
         updateUndoRedoButtons();

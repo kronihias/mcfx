@@ -57,6 +57,7 @@ public:
     void timerCallback() override;
 
     void mouseDown(const MouseEvent& e) override;
+    void mouseUp(const MouseEvent& e) override;
     void mouseDoubleClick(const MouseEvent& e) override;
     void mouseDrag(const MouseEvent& e) override;
     void mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel) override;
@@ -77,6 +78,10 @@ private:
     Listener* listener_ = nullptr;
     int selectedBand_ = -1;
     int dragBand_ = -1;
+    bool draggingYAxis_ = false;     // true when dragging the Y-axis (pan)
+    float dragStartMinDb_ = 0.f;
+    float dragStartMaxDb_ = 0.f;
+    int dragStartY_ = 0;
 
     float minf_ = 20.f;
     float maxf_ = 20000.f;
