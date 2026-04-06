@@ -17,6 +17,7 @@ SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in second
 
 SET(BUILD_VST3 FALSE CACHE BOOL "build VST3 plugins")
 SET(BUILD_VST TRUE CACHE BOOL "build VST2 plugins")
+SET(BUILD_AU FALSE CACHE BOOL "build AU plugins (macOS only)")
 SET(BUILD_STANDALONE FALSE CACHE BOOL "build standalone application (for those with editor)")
 SET(BUILD_LV2 FALSE CACHE BOOL "build LV2 plugins")
 
@@ -95,12 +96,14 @@ if (BUILD_LV2)
     list (APPEND MCFX_FORMATS_VST2 LV2)
 endif(BUILD_LV2)
 
-if (APPLE)
-    # AU ships as part of the multichannel build on macOS
+if (BUILD_AU)
+    if (NOT APPLE)
+        message (FATAL_ERROR "AU plugins can only be built on macOS")
+    endif()
     list (APPEND MCFX_FORMATS    AU)
     list (APPEND MCFX_FORMATS_MC AU)
     message ("-- Building AU versions (multichannel only)")
-endif(APPLE)
+endif(BUILD_AU)
 
 if (BUILD_STANDALONE)
     message ("-- Building Standalone versions")
