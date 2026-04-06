@@ -88,6 +88,14 @@ void EqChain::syncParametersFrom(const EqChain& source)
         bands_[i]->syncParametersFrom(*source.bands_[i]);
 }
 
+int EqChain::getConvolverLatency() const
+{
+    int total = 0;
+    for (auto* band : bands_)
+        total += band->getConvolverLatency();
+    return total;
+}
+
 std::complex<float> EqChain::getFrequencyResponse(double freqHz) const
 {
     std::complex<float> combined(1.f, 0.f);

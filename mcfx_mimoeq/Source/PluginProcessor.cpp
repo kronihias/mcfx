@@ -138,6 +138,14 @@ void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
         newState->pathChains[kv.first] = copy;
     }
 
+    // Compute and report maximum convolver latency across all chains
+    int maxLatency = 0;
+    for (auto* ch : newState->diagChannelChains)
+        maxLatency = jmax(maxLatency, ch->getConvolverLatency());
+    for (auto* ch : newState->ownedPathChains)
+        maxLatency = jmax(maxLatency, ch->getConvolverLatency());
+    setLatencySamples(maxLatency);
+
     // Publish lock-free — audio thread will pick up on next buffer
     auto* oldPending = pendingState_.exchange(newState, std::memory_order_release);
     delete oldPending;  // discard unconsumed pending state (if any)
@@ -446,12 +454,8 @@ static bool bandStructureMatchesJson(const EqBand* band, const var& json)
     // Map type string → EqBandType + IIRSubType
     if (typeStr == "fir")
     {
-        if (band->getType() != EqBandType::FIR) return false;
-        // FIR tap count must match
-        var coeffs = params["coefficients"];
-        if (coeffs.isArray() && (int)coeffs.getArray()->size() != (int)band->getFIRCoefficients().size())
-            return false;
-        return true;
+        // FIR changes always require a full rebuild (convolver reconfiguration)
+        return false;
     }
     if (typeStr == "gain")
         return band->getType() == EqBandType::Gain;

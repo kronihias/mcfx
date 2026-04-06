@@ -21,8 +21,10 @@
 #define EQBAND_H_INCLUDED
 
 #include "JuceHeader.h"
+#include "MtxConv.h"
 #include <array>
 #include <complex>
+#include <memory>
 #include <vector>
 
 //==============================================================================
@@ -112,6 +114,19 @@ public:
     // --- FIR ---
     const std::vector<float>& getFIRCoefficients() const { return firCoeffs_; }
     void setFIRCoefficients(const std::vector<float>& coeffs);
+    void setFIRCoefficientsWithSampleRate(const std::vector<float>& coeffs, double sampleRate);
+    bool loadFIRFromFile(const File& file, int channel = 0);
+
+    const std::vector<float>& getFIROriginalCoefficients() const { return firOriginalCoeffs_; }
+    double getFIRSampleRate() const { return firOriginalSampleRate_; }
+    void setFIRSampleRate(double sr) { firOriginalSampleRate_ = sr; }
+    const String& getFIRFilePath() const { return firFilePath_; }
+    void setFIRFilePath(const String& path) { firFilePath_ = path; }
+    int getFIRFileChannel() const { return firFileChannel_; }
+    void setFIRFileChannel(int ch) { firFileChannel_ = ch; }
+
+    /** Returns the latency introduced by the partitioned convolver (0 if not active). */
+    int getConvolverLatency() const { return convolverLatency_; }
 
     // --- Raw IIR coefficients (direct biquad) ---
     struct BiquadCoeffs { float b0, b1, b2, a0, a1, a2; };
@@ -177,6 +192,8 @@ private:
     void applyIIR(float* data, int numSamples);
     void applyCascadeIIR(float* data, int numSamples);
     void applyFIR(float* data, int numSamples);
+    void resampleFIRCoefficients();
+    void rebuildConvolver();
     void applyGain(float* data, int numSamples);
     void applyDelay(float* data, int numSamples);
     void startSmoothing();       // set up smoothing after updateIIRCoefficients
@@ -215,10 +232,15 @@ private:
     static constexpr int kSmoothRampSamples = 128;  // ~2.7ms at 48kHz
 
     bool prepared_ = false;
+    int maxBlockSize_ = 0;
 
     // FIR
-    std::vector<float> firCoeffs_;
-    std::vector<float> firState_; // circular buffer for FIR convolution
+    std::vector<float> firCoeffs_;           // working coefficients (possibly resampled)
+    std::vector<float> firState_;            // circular buffer for FIR convolution
+    std::vector<float> firOriginalCoeffs_;   // original coefficients before resampling
+    double firOriginalSampleRate_ = 0.0;     // sample rate of original coefficients (0 = unknown/same as processing)
+    String firFilePath_;                     // path to source WAV/text file (empty if not from file)
+    int firFileChannel_ = 0;                 // which channel from WAV file
 
     // Gain
     float linearGain_ = 1.f;
@@ -234,6 +256,12 @@ private:
     int inputChannel_ = -1;  // -1 = not set (diagonal)
     int outputChannel_ = -1;
     bool diagonal_ = true;
+
+    // Partitioned convolution (for long FIR filters)
+    std::unique_ptr<MtxConvMaster> convolver_;
+    AudioSampleBuffer convolverIn_, convolverOut_;
+    bool useConvolver_ = false;
+    int convolverLatency_ = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqBand)
 };

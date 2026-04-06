@@ -24,11 +24,47 @@
 #include "EqBand.h"
 
 //==============================================================================
-/** Small component that draws a FIR impulse response (time-domain waveform). */
-class FIRPlot : public Component
+/** Small component that draws a FIR impulse response (time-domain waveform).
+    Supports drag-and-drop of .txt/.csv/.dat/.wav/.aif/.aiff files. */
+class FIRPlot : public Component, public FileDragAndDropTarget
 {
 public:
     FIRPlot() { setOpaque(false); }
+
+    /** Called when a compatible file is dropped onto the plot. */
+    std::function<void(const File&)> onFileDropped;
+
+    bool isInterestedInFileDrag(const StringArray& files) override
+    {
+        for (auto& f : files)
+        {
+            auto ext = File(f).getFileExtension().toLowerCase();
+            if (ext == ".txt" || ext == ".csv" || ext == ".dat"
+                || ext == ".wav" || ext == ".aif" || ext == ".aiff")
+                return true;
+        }
+        return false;
+    }
+
+    void filesDropped(const StringArray& files, int, int) override
+    {
+        dragOver_ = false;
+        repaint();
+        if (onFileDropped == nullptr) return;
+        for (auto& f : files)
+        {
+            auto ext = File(f).getFileExtension().toLowerCase();
+            if (ext == ".txt" || ext == ".csv" || ext == ".dat"
+                || ext == ".wav" || ext == ".aif" || ext == ".aiff")
+            {
+                onFileDropped(File(f));
+                return;
+            }
+        }
+    }
+
+    void fileDragEnter(const StringArray&, int, int) override { dragOver_ = true;  repaint(); }
+    void fileDragExit(const StringArray&)             override { dragOver_ = false; repaint(); }
 
     void setCoefficients(const std::vector<float>& coeffs)
     {
@@ -50,11 +86,16 @@ public:
 
         if (coeffs_.empty())
         {
-            g.setColour(Colours::white.withAlpha(0.3f));
-            g.setFont(Font(FontOptions(12.f)));
-            g.drawText("No FIR loaded", area, Justification::centred);
-            return;
+            if (!dragOver_)
+            {
+                g.setColour(Colours::white.withAlpha(0.3f));
+                g.setFont(Font(FontOptions(12.f)));
+                g.drawText("No FIR loaded", area, Justification::centred);
+            }
+            // fall through to drag overlay below
         }
+        else
+        {
 
         const float padT = 6.f, padB = 6.f, padR = 6.f;
         const float axisW = 38.f; // left margin for Y-axis labels
@@ -195,10 +236,23 @@ public:
         g.drawText(String(n) + " taps",
                    (int)(x0), (int)(y0 + h - 14.f), (int)w - 4, 14,
                    Justification::bottomRight);
+        } // end of else (non-empty coefficients)
+
+        // Drag-over highlight
+        if (dragOver_)
+        {
+            g.setColour(Colours::white.withAlpha(0.15f));
+            g.fillRoundedRectangle(area, 4.f);
+            g.setColour(Colours::white.withAlpha(0.6f));
+            g.drawRoundedRectangle(area.reduced(1.f), 4.f, 2.f);
+            g.setFont(Font(FontOptions(13.f)));
+            g.drawText("Drop FIR file here", area, Justification::centred);
+        }
     }
 
 private:
     std::vector<float> coeffs_;
+    bool dragOver_ = false;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FIRPlot)
 };
@@ -292,6 +346,7 @@ private:
     TextButton btnLoadFIR_ { "Load FIR..." };
     Label lblFIRInfo_ { {}, "" };
     FIRPlot firPlot_;
+    void loadFIRFile(const File& file);
 
     bool updating_ = false; // prevent feedback loops
 

@@ -25,6 +25,11 @@ EqBand::EqBand()
 
 EqBand::~EqBand()
 {
+    if (convolver_)
+    {
+        convolver_->StopProc();
+        convolver_->Cleanup();
+    }
 }
 
 void EqBand::setType(EqBandType t)
@@ -158,7 +163,90 @@ void EqBand::setCrossoverOrder(int lrOrder)
 void EqBand::setFIRCoefficients(const std::vector<float>& coeffs)
 {
     firCoeffs_ = coeffs;
+    firOriginalCoeffs_ = coeffs;
+    firOriginalSampleRate_ = 0.0;  // unknown / same as processing
     firState_.resize(coeffs.size(), 0.f);
+}
+
+void EqBand::setFIRCoefficientsWithSampleRate(const std::vector<float>& coeffs, double sampleRate)
+{
+    firOriginalCoeffs_ = coeffs;
+    firOriginalSampleRate_ = sampleRate;
+    if (prepared_ && firOriginalSampleRate_ > 0.0 && firOriginalSampleRate_ != sampleRate_)
+        resampleFIRCoefficients();
+    else
+    {
+        firCoeffs_ = coeffs;
+        firState_.resize(coeffs.size(), 0.f);
+    }
+}
+
+bool EqBand::loadFIRFromFile(const File& file, int channel)
+{
+    AudioFormatManager formatManager;
+    formatManager.registerBasicFormats();
+
+    std::unique_ptr<AudioFormatReader> reader(formatManager.createReaderFor(file));
+    if (reader == nullptr)
+        return false;
+
+    int numSamples = (int)reader->lengthInSamples;
+    int ch = jmin(channel, (int)reader->numChannels - 1);
+    if (ch < 0) ch = 0;
+
+    AudioBuffer<float> buffer(reader->numChannels, numSamples);
+    reader->read(&buffer, 0, numSamples, 0, true, true);
+
+    std::vector<float> coeffs(numSamples);
+    auto* src = buffer.getReadPointer(ch);
+    std::copy(src, src + numSamples, coeffs.begin());
+
+    firFilePath_ = file.getFullPathName();
+    firFileChannel_ = ch;
+    setFIRCoefficientsWithSampleRate(coeffs, reader->sampleRate);
+    return true;
+}
+
+void EqBand::resampleFIRCoefficients()
+{
+    if (firOriginalCoeffs_.empty() || firOriginalSampleRate_ <= 0.0
+        || firOriginalSampleRate_ == sampleRate_)
+    {
+        firCoeffs_ = firOriginalCoeffs_;
+        firState_.resize(firCoeffs_.size(), 0.f);
+        return;
+    }
+
+    double sr_conv_fact = sampleRate_ / firOriginalSampleRate_;
+    int origSize = (int)firOriginalCoeffs_.size();
+    int newSize = (int)std::ceil(origSize * sr_conv_fact);
+
+    AudioBuffer<float> origBuf(1, origSize);
+    std::copy(firOriginalCoeffs_.begin(), firOriginalCoeffs_.end(),
+              origBuf.getWritePointer(0));
+
+    MemoryAudioSource memorySource(origBuf, false);
+    ResamplingAudioSource resamplingSource(&memorySource, false, 1);
+    resamplingSource.setResamplingRatio(1.0 / sr_conv_fact);
+    resamplingSource.prepareToPlay(newSize, sampleRate_);
+
+    AudioBuffer<float> resampledBuf(1, newSize);
+    resampledBuf.clear();
+
+    AudioSourceChannelInfo info;
+    info.startSample = 0;
+    info.numSamples = newSize;
+    info.buffer = &resampledBuf;
+    resamplingSource.getNextAudioBlock(info);
+
+    // scale to maintain filter gain
+    resampledBuf.applyGain((float)(firOriginalSampleRate_ / sampleRate_));
+
+    firCoeffs_.resize(newSize);
+    std::copy(resampledBuf.getReadPointer(0),
+              resampledBuf.getReadPointer(0) + newSize,
+              firCoeffs_.begin());
+    firState_.resize(newSize, 0.f);
 }
 
 void EqBand::setRawCoefficients(float b0, float b1, float b2, float a0, float a1, float a2)
@@ -205,6 +293,7 @@ void EqBand::setDelaySamples(int samples)
 void EqBand::prepare(double sampleRate, int maxBlockSize)
 {
     sampleRate_ = sampleRate;
+    maxBlockSize_ = maxBlockSize;
     prepared_ = false; // suppress smoothing during initial coefficient calc
 
     // Initialize parameter smoothing (same approach as SmoothIIRFilter)
@@ -220,7 +309,14 @@ void EqBand::prepare(double sampleRate, int maxBlockSize)
         updateIIRCoefficients();
 
     if (type_ == EqBandType::FIR)
-        firState_.resize(firCoeffs_.size(), 0.f);
+    {
+        if (!firOriginalCoeffs_.empty() && firOriginalSampleRate_ > 0.0)
+            resampleFIRCoefficients();
+        else
+            firState_.resize(firCoeffs_.size(), 0.f);
+
+        rebuildConvolver();
+    }
 
     if (type_ == EqBandType::Delay && delaySamples_ > 0)
     {
@@ -305,6 +401,10 @@ void EqBand::syncParametersFrom(const EqBand& source)
     else if (type_ == EqBandType::FIR)
     {
         firCoeffs_ = source.firCoeffs_;
+        firOriginalCoeffs_ = source.firOriginalCoeffs_;
+        firOriginalSampleRate_ = source.firOriginalSampleRate_;
+        firFilePath_ = source.firFilePath_;
+        firFileChannel_ = source.firFileChannel_;
         if (firState_.size() != firCoeffs_.size())
             firState_.resize(firCoeffs_.size(), 0.f);
     }
@@ -614,11 +714,63 @@ void EqBand::applyCascadeIIR(float* data, int numSamples)
     }
 }
 
+void EqBand::rebuildConvolver()
+{
+    // Tear down existing convolver
+    if (convolver_)
+    {
+        convolver_->StopProc();
+        convolver_->Cleanup();
+        convolver_.reset();
+    }
+    useConvolver_ = false;
+    convolverLatency_ = 0;
+
+    if (firCoeffs_.empty() || maxBlockSize_ <= 0)
+        return;
+
+    int firLen = (int)firCoeffs_.size();
+    if (firLen <= maxBlockSize_)
+        return;  // short FIR — direct convolution is cheaper and zero-latency
+
+    convolver_ = std::make_unique<MtxConvMaster>();
+    int maxPart = jmax(8192, maxBlockSize_);
+    if (!convolver_->Configure(1, 1, maxBlockSize_, firLen, maxBlockSize_, maxPart))
+    {
+        convolver_.reset();
+        return;
+    }
+
+    AudioSampleBuffer irBuf(1, firLen);
+    std::copy(firCoeffs_.begin(), firCoeffs_.end(), irBuf.getWritePointer(0));
+    convolver_->AddFilter(0, 0, irBuf);
+    convolver_->StartProc();
+
+    convolverIn_.setSize(1, maxBlockSize_);
+    convolverOut_.setSize(1, maxBlockSize_);
+    convolverIn_.clear();
+    convolverOut_.clear();
+    useConvolver_ = true;
+    convolverLatency_ = maxBlockSize_;
+}
+
 void EqBand::applyFIR(float* data, int numSamples)
 {
     if (firCoeffs_.empty())
         return;
 
+    // Use partitioned convolution for long FIR filters
+    if (useConvolver_ && convolver_)
+    {
+        std::copy(data, data + numSamples, convolverIn_.getWritePointer(0));
+        convolver_->processBlock(convolverIn_, convolverOut_, numSamples);
+        std::copy(convolverOut_.getReadPointer(0),
+                  convolverOut_.getReadPointer(0) + numSamples,
+                  data);
+        return;
+    }
+
+    // Direct-form time-domain convolution for short filters
     int firLen = (int)firCoeffs_.size();
 
     for (int i = 0; i < numSamples; ++i)
@@ -810,10 +962,29 @@ var EqBand::toJson() const
             case EqBandType::FIR:
             {
                 params->setProperty("type", "fir");
-                Array<var> arr;
-                for (auto c : firCoeffs_)
-                    arr.add(c);
-                params->setProperty("coefficients", arr);
+                // Use original (unresampled) coefficients for storage
+                const auto& coeffsToStore = firOriginalCoeffs_.empty() ? firCoeffs_ : firOriginalCoeffs_;
+                if (firOriginalSampleRate_ > 0.0)
+                    params->setProperty("sample_rate", firOriginalSampleRate_);
+                if (firFilePath_.isNotEmpty())
+                {
+                    params->setProperty("file", firFilePath_);
+                    params->setProperty("channel", firFileChannel_);
+                }
+                if (coeffsToStore.size() > 64)
+                {
+                    // Base64 encoding for large FIR filters
+                    MemoryBlock mb(coeffsToStore.data(), coeffsToStore.size() * sizeof(float));
+                    params->setProperty("coefficients_b64", mb.toBase64Encoding());
+                    params->setProperty("coefficients_b64_format", "float32le");
+                }
+                else
+                {
+                    Array<var> arr;
+                    for (auto c : coeffsToStore)
+                        arr.add(c);
+                    params->setProperty("coefficients", arr);
+                }
                 break;
             }
             case EqBandType::Gain:
@@ -905,13 +1076,60 @@ EqBand* EqBand::fromJson(const var& json)
         else if (type == "fir")
         {
             band->setType(EqBandType::FIR);
-            auto arr = params["coefficients"];
-            if (arr.isArray())
+            double firSR = (double)params.getProperty("sample_rate", 0.0);
+            String filePath = params.getProperty("file", "").toString();
+            int fileChannel = (int)params.getProperty("channel", 0);
+
+            bool loaded = false;
+
+            // Try loading from WAV/audio file first
+            if (filePath.isNotEmpty())
+            {
+                File f(filePath);
+                if (f.existsAsFile())
+                    loaded = band->loadFIRFromFile(f, fileChannel);
+            }
+
+            if (!loaded)
             {
                 std::vector<float> coeffs;
-                for (int i = 0; i < arr.size(); ++i)
-                    coeffs.push_back((float)arr[i]);
-                band->setFIRCoefficients(coeffs);
+
+                // Try base64-encoded coefficients
+                if (params.hasProperty("coefficients_b64"))
+                {
+                    MemoryBlock mb;
+                    if (mb.fromBase64Encoding(params["coefficients_b64"].toString()))
+                    {
+                        int numFloats = (int)(mb.getSize() / sizeof(float));
+                        coeffs.resize(numFloats);
+                        std::memcpy(coeffs.data(), mb.getData(), numFloats * sizeof(float));
+                    }
+                }
+                // Fallback: JSON array
+                else
+                {
+                    auto arr = params["coefficients"];
+                    if (arr.isArray())
+                    {
+                        for (int i = 0; i < arr.size(); ++i)
+                            coeffs.push_back((float)arr[i]);
+                    }
+                }
+
+                if (!coeffs.empty())
+                {
+                    if (firSR > 0.0)
+                        band->setFIRCoefficientsWithSampleRate(coeffs, firSR);
+                    else
+                        band->setFIRCoefficients(coeffs);
+                }
+
+                // Remember file path even if file wasn't found (for portability)
+                if (filePath.isNotEmpty())
+                {
+                    band->setFIRFilePath(filePath);
+                    band->setFIRFileChannel(fileChannel);
+                }
             }
         }
         else
