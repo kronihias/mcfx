@@ -60,7 +60,8 @@ float EqGraph::ypostodb(int ypos) const
 {
     float height = (float)getHeight() - 12.f;
     float dyn = maxdb_ - mindb_;
-    return -((ypos - ymargin_ / 2) / (height - ymargin_) * dyn + mindb_);
+    float fraction = (ypos - ymargin_ / 2) / (height - ymargin_);
+    return maxdb_ - fraction * dyn;
 }
 
 int EqGraph::hztoxpos(float hz_val) const
@@ -141,13 +142,10 @@ void EqGraph::drawGrid(Graphics& g)
 {
     g.setColour(Colour(0x60ffffff));
 
-    // dB grid lines
-    float dyn = maxdb_ - mindb_;
-    int numGridLines = (int)(dyn / gridDiv_) + 1;
-
-    for (int i = 0; i < numGridLines; i++)
+    // dB grid labels — anchored to absolute multiples of gridDiv_
+    float firstDb = std::ceil(mindb_ / gridDiv_) * gridDiv_;
+    for (float db_val = firstDb; db_val <= maxdb_; db_val += gridDiv_)
     {
-        float db_val = maxdb_ - i * gridDiv_;
         int ypos = dbtoypos(db_val);
 
         String axislabel = String((int)db_val);
@@ -323,23 +321,21 @@ void EqGraph::calcPaths()
     }
 }
 
-void EqGraph::resized()
+void EqGraph::rebuildGridPaths()
 {
     int width = getWidth();
 
-    // Create grid paths
     pathGridW_.clear();
     pathGrid_.clear();
 
-    float dyn = maxdb_ - mindb_;
-    int numGridLines = (int)(dyn / gridDiv_) + 1;
-
-    for (int i = 0; i < numGridLines; i++)
+    // dB grid lines — anchored to absolute multiples of gridDiv_
+    float firstDb = std::ceil(mindb_ / gridDiv_) * gridDiv_;
+    for (float db_val = firstDb; db_val <= maxdb_; db_val += gridDiv_)
     {
-        float db_val = maxdb_ - i * gridDiv_;
         int ypos = dbtoypos(db_val);
 
-        if (db_val == 0.f)
+        // Use a small epsilon to detect 0 dB reliably with float math
+        if (std::abs(db_val) < 0.01f)
         {
             pathGridW_.startNewSubPath(xmargin_, (float)ypos);
             pathGridW_.lineTo((float)width, (float)ypos);
@@ -351,6 +347,7 @@ void EqGraph::resized()
         }
     }
 
+    // Frequency grid lines
     for (float f = minf_; f <= maxf_; f += powf(10, floorf(log10(f))))
     {
         int xpos = hztoxpos(f);
@@ -365,6 +362,11 @@ void EqGraph::resized()
             pathGrid_.lineTo((float)xpos, (float)dbtoypos(mindb_));
         }
     }
+}
+
+void EqGraph::resized()
+{
+    rebuildGridPaths();
 }
 
 void EqGraph::timerCallback()
@@ -565,6 +567,7 @@ void EqGraph::mouseDrag(const MouseEvent& e)
 
         mindb_ = dragStartMinDb_ + deltaDb;
         maxdb_ = dragStartMaxDb_ + deltaDb;
+        rebuildGridPaths();
         repaint();
         return;
     }
@@ -620,5 +623,6 @@ void EqGraph::mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel
     else if (newDyn <= 120.f) gridDiv_ = 12.f;
     else                      gridDiv_ = 24.f;
 
+    rebuildGridPaths();
     repaint();
 }

@@ -380,6 +380,8 @@ void Mcfx_mimoeqAudioProcessorEditor::notifyChainChanged()
 {
     auto* proc = getProcessor();
     proc->requestRebuild();  // full rebuild: deferred to audio thread
+    if (diagonalMode_)
+        proc->syncModelToAPVTS();  // keep host parameters in sync
     proc->sendChangeMessage();
 }
 
@@ -387,6 +389,8 @@ void Mcfx_mimoeqAudioProcessorEditor::notifyParameterChanged()
 {
     auto* proc = getProcessor();
     proc->requestParameterSync();  // lightweight: sync params to channel copies
+    if (diagonalMode_)
+        proc->syncModelToAPVTS();  // keep host parameters in sync
     proc->sendChangeMessage();
 }
 

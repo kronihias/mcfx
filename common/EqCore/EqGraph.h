@@ -70,6 +70,7 @@ private:
     float xpostohz(int xpos) const;
 
     void calcPaths();
+    void rebuildGridPaths();
     void drawGrid(Graphics& g);
     void drawBandHandles(Graphics& g);
     int findBandAtPosition(Point<int> pos) const;

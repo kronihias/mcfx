@@ -40,7 +40,8 @@ struct ProcessingState
 };
 
 class Mcfx_mimoeqAudioProcessor : public AudioProcessor,
-                                   public ChangeBroadcaster
+                                   public ChangeBroadcaster,
+                                   private AudioProcessorValueTreeState::Listener
 {
 public:
     Mcfx_mimoeqAudioProcessor();
@@ -54,12 +55,6 @@ public:
     bool hasEditor() const override { return true; }
 
     const String getName() const override { return JucePlugin_Name; }
-
-    int getNumParameters() override { return 0; }
-    float getParameter(int) override { return 0.f; }
-    void setParameter(int, float) override {}
-    const String getParameterName(int) override { return {}; }
-    const String getParameterText(int) override { return {}; }
 
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
@@ -80,6 +75,12 @@ public:
     const std::map<PathKey, EqChain*>& getAllPaths() const { return pathChains_; }
     bool removePathChain(int inCh, int outCh);
     std::vector<PathKey> getPathKeys() const;
+
+    // --- VST3 Parameter Automation (diagonal chain) ---
+    AudioProcessorValueTreeState apvts;
+    static constexpr int kMaxAutomatedBands = 24;
+    /** Push current diagonal chain parameter values to APVTS (call after any model change). */
+    void syncModelToAPVTS();
 
     // Diagonal chain model (GUI thread edits, audio thread reads parameters for sync)
     EqChain& getDiagonalChain() { return diagonalChain_; }
@@ -139,6 +140,11 @@ public:
     bool canRedo() const { return !redoStack_.empty(); }
 
 private:
+    // ---- APVTS ----
+    AudioProcessorValueTreeState::ParameterLayout createParameters();
+    void parameterChanged(const String& parameterID, float newValue) override;
+    bool updatingFromModel_ = false;  // feedback guard for syncModelToAPVTS
+
     // ---- Model data (GUI thread writes, audio thread reads floats for sync) ----
     EqChain diagonalChain_;
     std::set<int> diagChannelMask_;   // empty = all channels; otherwise 1-based channel set
