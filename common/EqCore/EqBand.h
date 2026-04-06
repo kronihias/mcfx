@@ -118,12 +118,16 @@ public:
     bool loadFIRFromFile(const File& file, int channel = 0);
 
     const std::vector<float>& getFIROriginalCoefficients() const { return firOriginalCoeffs_; }
-    double getFIRSampleRate() const { return firOriginalSampleRate_; }
-    void setFIRSampleRate(double sr) { firOriginalSampleRate_ = sr; }
+    double getFIRSampleRate() const { return originalSampleRate_; }
+    void setFIRSampleRate(double sr) { originalSampleRate_ = sr; }
     const String& getFIRFilePath() const { return firFilePath_; }
     void setFIRFilePath(const String& path) { firFilePath_ = path; }
     int getFIRFileChannel() const { return firFileChannel_; }
     void setFIRFileChannel(int ch) { firFileChannel_ = ch; }
+
+    // General original sample rate (used for both IIR raw biquad resampling and FIR resampling)
+    double getOriginalSampleRate() const { return originalSampleRate_; }
+    void setOriginalSampleRate(double sr);
 
     /** Returns the latency introduced by the partitioned convolver (0 if not active). */
     int getConvolverLatency() const { return convolverLatency_; }
@@ -181,6 +185,10 @@ public:
     // If alwaysCompute is true, returns the response even when disabled
     std::complex<float> getFrequencyResponse(double freqHz, bool alwaysCompute = false) const;
 
+    /** Rebuild the cached FIR frequency response via FFT.
+        Called automatically when FIR coefficients change. */
+    void rebuildFIRFrequencyResponse();
+
     // --- JSON ---
     var toJson() const;
     static EqBand* fromJson(const var& json);
@@ -193,6 +201,7 @@ private:
     void applyCascadeIIR(float* data, int numSamples);
     void applyFIR(float* data, int numSamples);
     void resampleFIRCoefficients();
+    void resampleRawBiquad();
     void rebuildConvolver();
     void applyGain(float* data, int numSamples);
     void applyDelay(float* data, int numSamples);
@@ -238,7 +247,7 @@ private:
     std::vector<float> firCoeffs_;           // working coefficients (possibly resampled)
     std::vector<float> firState_;            // circular buffer for FIR convolution
     std::vector<float> firOriginalCoeffs_;   // original coefficients before resampling
-    double firOriginalSampleRate_ = 0.0;     // sample rate of original coefficients (0 = unknown/same as processing)
+    double originalSampleRate_ = 0.0;     // sample rate of original coefficients (0 = unknown/same as processing)
     String firFilePath_;                     // path to source WAV/text file (empty if not from file)
     int firFileChannel_ = 0;                 // which channel from WAV file
 
@@ -256,6 +265,10 @@ private:
     int inputChannel_ = -1;  // -1 = not set (diagonal)
     int outputChannel_ = -1;
     bool diagonal_ = true;
+
+    // Cached FIR frequency response (computed via FFT for fast display)
+    std::vector<std::complex<float>> firFFT_;  // half-spectrum (N/2+1 bins)
+    int firFFTSize_ = 0;                        // FFT size used
 
     // Partitioned convolution (for long FIR filters)
     std::unique_ptr<MtxConvMaster> convolver_;

@@ -164,21 +164,27 @@ void EqBand::setFIRCoefficients(const std::vector<float>& coeffs)
 {
     firCoeffs_ = coeffs;
     firOriginalCoeffs_ = coeffs;
-    firOriginalSampleRate_ = 0.0;  // unknown / same as processing
+    originalSampleRate_ = 0.0;  // unknown / same as processing
     firState_.resize(coeffs.size(), 0.f);
+    rebuildFIRFrequencyResponse();
+    if (prepared_)
+        rebuildConvolver();
 }
 
 void EqBand::setFIRCoefficientsWithSampleRate(const std::vector<float>& coeffs, double sampleRate)
 {
     firOriginalCoeffs_ = coeffs;
-    firOriginalSampleRate_ = sampleRate;
-    if (prepared_ && firOriginalSampleRate_ > 0.0 && firOriginalSampleRate_ != sampleRate_)
-        resampleFIRCoefficients();
+    originalSampleRate_ = sampleRate;
+    if (prepared_ && originalSampleRate_ > 0.0 && originalSampleRate_ != sampleRate_)
+        resampleFIRCoefficients();  // calls rebuildFIRFrequencyResponse() internally
     else
     {
         firCoeffs_ = coeffs;
         firState_.resize(coeffs.size(), 0.f);
+        rebuildFIRFrequencyResponse();
     }
+    if (prepared_)
+        rebuildConvolver();
 }
 
 bool EqBand::loadFIRFromFile(const File& file, int channel)
@@ -209,15 +215,15 @@ bool EqBand::loadFIRFromFile(const File& file, int channel)
 
 void EqBand::resampleFIRCoefficients()
 {
-    if (firOriginalCoeffs_.empty() || firOriginalSampleRate_ <= 0.0
-        || firOriginalSampleRate_ == sampleRate_)
+    if (firOriginalCoeffs_.empty() || originalSampleRate_ <= 0.0
+        || originalSampleRate_ == sampleRate_)
     {
         firCoeffs_ = firOriginalCoeffs_;
         firState_.resize(firCoeffs_.size(), 0.f);
         return;
     }
 
-    double sr_conv_fact = sampleRate_ / firOriginalSampleRate_;
+    double sr_conv_fact = sampleRate_ / originalSampleRate_;
     int origSize = (int)firOriginalCoeffs_.size();
     int newSize = (int)std::ceil(origSize * sr_conv_fact);
 
@@ -240,13 +246,129 @@ void EqBand::resampleFIRCoefficients()
     resamplingSource.getNextAudioBlock(info);
 
     // scale to maintain filter gain
-    resampledBuf.applyGain((float)(firOriginalSampleRate_ / sampleRate_));
+    resampledBuf.applyGain((float)(originalSampleRate_ / sampleRate_));
 
     firCoeffs_.resize(newSize);
     std::copy(resampledBuf.getReadPointer(0),
               resampledBuf.getReadPointer(0) + newSize,
               firCoeffs_.begin());
     firState_.resize(newSize, 0.f);
+    rebuildFIRFrequencyResponse();
+}
+
+void EqBand::rebuildFIRFrequencyResponse()
+{
+    if (firCoeffs_.empty())
+    {
+        firFFT_.clear();
+        firFFTSize_ = 0;
+        return;
+    }
+
+    // Choose FFT size: next power of 2 >= firCoeffs_.size(), minimum 1024
+    int n = (int)firCoeffs_.size();
+    int fftOrder = 0;
+    int fftSize = 1;
+    while (fftSize < jmax(1024, n))
+    {
+        fftSize <<= 1;
+        fftOrder++;
+    }
+
+    // JUCE FFT expects interleaved real/imag pairs — size 2*fftSize
+    std::vector<float> fftData(fftSize * 2, 0.f);
+    for (int i = 0; i < n; ++i)
+        fftData[i * 2] = firCoeffs_[i]; // real part only
+
+    juce::dsp::FFT fft(fftOrder);
+    fft.performFrequencyOnlyForwardTransform(fftData.data(), true);
+
+    // Store as complex half-spectrum (N/2+1 bins)
+    int numBins = fftSize / 2 + 1;
+    firFFT_.resize(numBins);
+    firFFTSize_ = fftSize;
+
+    // performFrequencyOnlyForwardTransform stores magnitudes in the real parts
+    // We need the full complex spectrum, so redo with performRealOnlyForwardTransform
+    std::fill(fftData.begin(), fftData.end(), 0.f);
+    for (int i = 0; i < n; ++i)
+        fftData[i * 2] = firCoeffs_[i];
+
+    fft.performRealOnlyForwardTransform(fftData.data(), true);
+
+    for (int i = 0; i < numBins; ++i)
+        firFFT_[i] = std::complex<float>(fftData[i * 2], fftData[i * 2 + 1]);
+}
+
+void EqBand::setOriginalSampleRate(double sr)
+{
+    originalSampleRate_ = sr;
+    if (!prepared_)
+        return;
+
+    if (type_ == EqBandType::IIR && hasRawCoeffs_)
+        resampleRawBiquad();
+    else if (type_ == EqBandType::FIR && !firOriginalCoeffs_.empty())
+    {
+        resampleFIRCoefficients();
+        rebuildConvolver();
+    }
+}
+
+void EqBand::resampleRawBiquad()
+{
+    // Resample raw biquad coefficients from originalSampleRate_ to sampleRate_
+    // using inverse bilinear transform → analog prototype → forward bilinear transform.
+    if (!hasRawCoeffs_ || originalSampleRate_ <= 0.0 || originalSampleRate_ == sampleRate_)
+    {
+        // No resampling needed — apply raw coefficients directly
+        if (isBiquadStable(rawCoeffs_.a1, rawCoeffs_.a2))
+        {
+            iirCoeffs_ = IIRCoefficients(rawCoeffs_.b0, rawCoeffs_.b1, rawCoeffs_.b2,
+                                          1.f, rawCoeffs_.a1, rawCoeffs_.a2);
+            startSmoothing();
+        }
+        return;
+    }
+
+    // rawCoeffs_ stores the user's original (normalized: a0=1) coefficients at originalSampleRate_.
+    // We map them to sampleRate_ via the s-domain.
+    double c1 = 1.0 / (2.0 * originalSampleRate_);
+    double c2 = 1.0 / (2.0 * sampleRate_);
+
+    double b0 = rawCoeffs_.b0, b1 = rawCoeffs_.b1, b2 = rawCoeffs_.b2;
+    double a0 = 1.0,           a1 = rawCoeffs_.a1, a2 = rawCoeffs_.a2;
+
+    // Analog prototype via inverse bilinear at originalSampleRate_
+    double A0 = b0 + b1 + b2;
+    double A1 = 2.0 * c1 * (b0 - b2);
+    double A2 = c1 * c1 * (b0 - b1 + b2);
+    double B0 = a0 + a1 + a2;
+    double B1 = 2.0 * c1 * (a0 - a2);
+    double B2 = c1 * c1 * (a0 - a1 + a2);
+
+    // Forward bilinear at sampleRate_
+    double c2sq = c2 * c2;
+    double nb0 = A0 * c2sq + A1 * c2 + A2;
+    double nb1 = 2.0 * A0 * c2sq - 2.0 * A2;
+    double nb2 = A0 * c2sq - A1 * c2 + A2;
+    double na0 = B0 * c2sq + B1 * c2 + B2;
+    double na1 = 2.0 * B0 * c2sq - 2.0 * B2;
+    double na2 = B0 * c2sq - B1 * c2 + B2;
+
+    // Normalize by na0
+    if (std::abs(na0) < 1e-15)
+        return; // degenerate — don't update
+
+    nb0 /= na0; nb1 /= na0; nb2 /= na0;
+    na1 /= na0; na2 /= na0;
+
+    if (isBiquadStable((float)na1, (float)na2))
+    {
+        iirCoeffs_ = IIRCoefficients((float)nb0, (float)nb1, (float)nb2,
+                                      1.f, (float)na1, (float)na2);
+        startSmoothing();
+    }
 }
 
 void EqBand::setRawCoefficients(float b0, float b1, float b2, float a0, float a1, float a2)
@@ -270,14 +392,8 @@ void EqBand::setRawCoefficients(float b0, float b1, float b2, float a0, float a1
         rawCoeffs_.a0 = 1.f;
     }
 
-    // Only set up processing coefficients if stable
-    if (isBiquadStable(rawCoeffs_.a1, rawCoeffs_.a2))
-    {
-        iirCoeffs_ = IIRCoefficients(rawCoeffs_.b0, rawCoeffs_.b1, rawCoeffs_.b2,
-                                      1.f, rawCoeffs_.a1, rawCoeffs_.a2);
-        startSmoothing();
-    }
-    // If unstable, coefficients are stored but not applied to processing
+    // Apply coefficients (with possible resampling for raw biquad)
+    resampleRawBiquad();
 }
 
 void EqBand::setDelaySamples(int samples)
@@ -307,10 +423,12 @@ void EqBand::prepare(double sampleRate, int maxBlockSize)
 
     if (type_ == EqBandType::IIR && !hasRawCoeffs_)
         updateIIRCoefficients();
+    else if (type_ == EqBandType::IIR && hasRawCoeffs_)
+        resampleRawBiquad();
 
     if (type_ == EqBandType::FIR)
     {
-        if (!firOriginalCoeffs_.empty() && firOriginalSampleRate_ > 0.0)
+        if (!firOriginalCoeffs_.empty() && originalSampleRate_ > 0.0)
             resampleFIRCoefficients();
         else
             firState_.resize(firCoeffs_.size(), 0.f);
@@ -352,6 +470,8 @@ void EqBand::syncParametersFrom(const EqBand& source)
             hasRawCoeffs_ = source.hasRawCoeffs_;
             needsCoeffUpdate = true;
         }
+
+        originalSampleRate_ = source.originalSampleRate_;
 
         if (source.hasRawCoeffs_)
         {
@@ -402,7 +522,7 @@ void EqBand::syncParametersFrom(const EqBand& source)
     {
         firCoeffs_ = source.firCoeffs_;
         firOriginalCoeffs_ = source.firOriginalCoeffs_;
-        firOriginalSampleRate_ = source.firOriginalSampleRate_;
+        originalSampleRate_ = source.originalSampleRate_;
         firFilePath_ = source.firFilePath_;
         firFileChannel_ = source.firFileChannel_;
         if (firState_.size() != firCoeffs_.size())
@@ -854,15 +974,25 @@ std::complex<float> EqBand::getFrequencyResponse(double freqHz, bool alwaysCompu
 
         case EqBandType::FIR:
         {
-            // H(z) = sum(h[n] * z^-n)
-            double omega = 2.0 * MathConstants<double>::pi * freqHz / sampleRate_;
-            std::complex<double> sum(0.0, 0.0);
-            for (int n = 0; n < (int)firCoeffs_.size(); ++n)
-            {
-                double angle = -omega * n;
-                sum += (double)firCoeffs_[n] * std::complex<double>(cos(angle), sin(angle));
-            }
-            return std::complex<float>((float)sum.real(), (float)sum.imag());
+            if (firFFT_.empty() || firFFTSize_ <= 0)
+                return std::complex<float>(1.f, 0.f);
+
+            // Look up the precomputed FFT spectrum via linear interpolation
+            double binFreq = sampleRate_ / (double)firFFTSize_;
+            double binIdx = freqHz / binFreq;
+            int numBins = (int)firFFT_.size();
+
+            if (binIdx <= 0.0)
+                return firFFT_[0];
+            if (binIdx >= numBins - 1)
+                return firFFT_[numBins - 1];
+
+            int i0 = (int)binIdx;
+            float frac = (float)(binIdx - i0);
+            auto& v0 = firFFT_[i0];
+            auto& v1 = firFFT_[i0 + 1];
+            return std::complex<float>(v0.real() + frac * (v1.real() - v0.real()),
+                                       v0.imag() + frac * (v1.imag() - v0.imag()));
         }
 
         case EqBandType::Gain:
@@ -939,6 +1069,8 @@ var EqBand::toJson() const
         {
             case EqBandType::IIR:
                 params->setProperty("type", iirSubTypeToString(iirSubType_));
+                if (originalSampleRate_ > 0.0)
+                    params->setProperty("sample_rate", originalSampleRate_);
                 if (iirSubType_ == IIRSubType::RawBiquad)
                 {
                     params->setProperty("b0", rawCoeffs_.b0);
@@ -968,8 +1100,8 @@ var EqBand::toJson() const
                 params->setProperty("type", "fir");
                 // Use original (unresampled) coefficients for storage
                 const auto& coeffsToStore = firOriginalCoeffs_.empty() ? firCoeffs_ : firOriginalCoeffs_;
-                if (firOriginalSampleRate_ > 0.0)
-                    params->setProperty("sample_rate", firOriginalSampleRate_);
+                if (originalSampleRate_ > 0.0)
+                    params->setProperty("sample_rate", originalSampleRate_);
                 if (coeffsToStore.size() > 64)
                 {
                     // Base64 encoding for large FIR filters
@@ -1113,6 +1245,9 @@ EqBand* EqBand::fromJson(const var& json)
         {
             // IIR parameterized
             band->setType(EqBandType::IIR);
+            double iirSR = (double)params.getProperty("sample_rate", 0.0);
+            if (iirSR > 0.0)
+                band->originalSampleRate_ = iirSR;
             auto subType = stringToIIRSubType(type);
             band->setIIRSubType(subType);
             if (subType == IIRSubType::RawBiquad)

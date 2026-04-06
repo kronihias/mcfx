@@ -161,8 +161,24 @@ EqBandEditor::EqBandEditor()
     addAndMakeVisible(firPlot_);
     firPlot_.onFileDropped = [this](const File& f) { loadFIRFile(f); };
 
+    // Sample rate selector (for IIR raw biquad and FIR)
+    addAndMakeVisible(lblSampleRate_);
+    addAndMakeVisible(cbSampleRate_);
+    cbSampleRate_.addItem("Auto", 1);
+    cbSampleRate_.addItem("16000 Hz", 2);
+    cbSampleRate_.addItem("22050 Hz", 3);
+    cbSampleRate_.addItem("44100 Hz", 4);
+    cbSampleRate_.addItem("48000 Hz", 5);
+    cbSampleRate_.addItem("88200 Hz", 6);
+    cbSampleRate_.addItem("96000 Hz", 7);
+    cbSampleRate_.addItem("176400 Hz", 8);
+    cbSampleRate_.addItem("192000 Hz", 9);
+    cbSampleRate_.setTooltip("Original sample rate of the filter coefficients. "
+                             "If different from the processing rate, coefficients will be resampled.");
+    cbSampleRate_.addListener(this);
+
     // Set label styles
-    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_ })
+    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_, &lblSampleRate_ })
     {
         lbl->setFont(Font(FontOptions(13.f, Font::plain)));
         lbl->setColour(Label::textColourId, Colours::white);
@@ -266,10 +282,31 @@ void EqBandEditor::updateFromBand()
     else if (type == EqBandType::FIR)
     {
         auto& coeffs = band_->getFIRCoefficients();
+        double sr = band_->getOriginalSampleRate();
         String info;
         info << coeffs.size() << " taps";
+        if (sr > 0.0)
+        {
+            double ms = (double)coeffs.size() / sr * 1000.0;
+            info << "  (" << String(ms, 1) << " ms)";
+        }
         lblFIRInfo_.setText(info, dontSendNotification);
         firPlot_.setCoefficients(coeffs);
+    }
+
+    // Sample rate selector — applies to IIR and FIR
+    {
+        double sr = band_->getOriginalSampleRate();
+        int srId = 1; // "Auto"
+        if      (sr == 16000.0)  srId = 2;
+        else if (sr == 22050.0)  srId = 3;
+        else if (sr == 44100.0)  srId = 4;
+        else if (sr == 48000.0)  srId = 5;
+        else if (sr == 88200.0)  srId = 6;
+        else if (sr == 96000.0)  srId = 7;
+        else if (sr == 176400.0) srId = 8;
+        else if (sr == 192000.0) srId = 9;
+        cbSampleRate_.setSelectedId(srId, dontSendNotification);
     }
 
     btnEnable_.setToggleState(band_->isEnabled(), dontSendNotification);
@@ -361,6 +398,11 @@ void EqBandEditor::showControlsForType(EqBandType type)
     lblDelay_.setVisible(isDelay);
     sldDelay_.setVisible(isDelay);
     lblSamples_.setVisible(isDelay);
+
+    // Sample rate selector: visible for IIR (raw biquad) and FIR
+    bool showSR = isBiquad || isFIR;
+    lblSampleRate_.setVisible(showSR);
+    cbSampleRate_.setVisible(showSR);
 
     btnLoadFIR_.setVisible(isFIR);
     lblFIRInfo_.setVisible(isFIR);
@@ -468,16 +510,38 @@ void EqBandEditor::resized()
     sldDelay_.setBounds(x + lblW + 4, y, w - lblW - 50, rowH);
     lblSamples_.setBounds(getWidth() - 45, y, 40, rowH);
 
-    // FIR (shares same y as delay since they're mutually exclusive)
-    btnLoadFIR_.setBounds(x + lblW + 4, y, 100, rowH);
-    lblFIRInfo_.setBounds(x + lblW + 110, y, 100, rowH);
-    if (btnLoadFIR_.isVisible()) y += rowH + gap;
+    // Sample rate selector (for IIR raw biquad and FIR — placed before FIR load or biquad coeffs)
+    if (cbSampleRate_.isVisible() && !lblBiquad_.isVisible())
+    {
+        // FIR mode: show sample rate on same row as FIR load button
+        lblSampleRate_.setBounds(x, y, lblW, rowH);
+        cbSampleRate_.setBounds(x + lblW + 4, y, 110, rowH);
+        // FIR load button and info on same row, after the sample rate
+        btnLoadFIR_.setBounds(x + lblW + 120, y, 100, rowH);
+        lblFIRInfo_.setBounds(x + lblW + 226, y, 130, rowH);
+        if (btnLoadFIR_.isVisible()) y += rowH + gap;
+    }
+    else if (!cbSampleRate_.isVisible())
+    {
+        // FIR (shares same y as delay since they're mutually exclusive)
+        btnLoadFIR_.setBounds(x + lblW + 4, y, 100, rowH);
+        lblFIRInfo_.setBounds(x + lblW + 110, y, 100, rowH);
+        if (btnLoadFIR_.isVisible()) y += rowH + gap;
+    }
 
     // FIR impulse response plot — fills remaining space
     if (firPlot_.isVisible())
     {
         int plotH = jmax(60, getHeight() - y - 4);
         firPlot_.setBounds(x, y, w, plotH);
+    }
+
+    // Sample rate selector for raw biquad (before biquad coefficients)
+    if (cbSampleRate_.isVisible() && lblBiquad_.isVisible())
+    {
+        lblSampleRate_.setBounds(x, y, lblW, rowH);
+        cbSampleRate_.setBounds(x + lblW + 4, y, 110, rowH);
+        y += rowH + gap;
     }
 
     // Biquad coefficient editor
@@ -624,6 +688,38 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
             band_->setButterworthOrder(cbOrder_.getSelectedId());
         isStructuralChange = true; // order changes cascade section count
     }
+    else if (cb == &cbSampleRate_)
+    {
+        double sr = 0.0; // "Auto" = use processing sample rate
+        switch (cbSampleRate_.getSelectedId())
+        {
+            case 2: sr = 16000.0; break;
+            case 3: sr = 22050.0; break;
+            case 4: sr = 44100.0; break;
+            case 5: sr = 48000.0; break;
+            case 6: sr = 88200.0; break;
+            case 7: sr = 96000.0; break;
+            case 8: sr = 176400.0; break;
+            case 9: sr = 192000.0; break;
+        }
+        band_->setOriginalSampleRate(sr);
+
+        // Update FIR info label if FIR
+        if (band_->getType() == EqBandType::FIR)
+        {
+            auto& coeffs = band_->getFIRCoefficients();
+            String info;
+            info << coeffs.size() << " taps";
+            if (sr > 0.0)
+            {
+                double ms = (double)band_->getFIROriginalCoefficients().size() / sr * 1000.0;
+                info << "  (" << String(ms, 1) << " ms)";
+            }
+            lblFIRInfo_.setText(info, dontSendNotification);
+            firPlot_.setCoefficients(coeffs);
+        }
+        isStructuralChange = true; // resampling requires rebuild
+    }
 
     if (listener_ != nullptr)
     {
@@ -696,11 +792,11 @@ void EqBandEditor::loadFIRFile(const File& file)
 
         if (numChannels > 1)
         {
-            // Defer popup until the OS drag-drop session has fully ended —
-            // otherwise macOS dismisses the menu instantly.
+            // Use AlertWindow instead of PopupMenu — PopupMenu gets dismissed
+            // by lingering macOS drag sessions even with Timer deferral.
             pendingAudioFile_ = file;
             pendingAudioChannels_ = numChannels;
-            startTimer(200);
+            startTimer(100); // short delay to let drag session finish
         }
         else
         {
@@ -735,8 +831,9 @@ void EqBandEditor::loadFIRFile(const File& file)
             info << coeffs.size() << " taps";
             lblFIRInfo_.setText(info, dontSendNotification);
             firPlot_.setCoefficients(coeffs);
+            // FIR loading is structural: requires full rebuild for MtxConv setup
             if (listener_ != nullptr)
-                listener_->bandParameterChanged(bandIndex_);
+                listener_->bandStructureChanged(bandIndex_);
         }
     }
 }
@@ -748,20 +845,34 @@ void EqBandEditor::timerCallback()
     if (pendingAudioChannels_ <= 0)
         return;
 
-    PopupMenu menu;
-    for (int ch = 0; ch < pendingAudioChannels_; ++ch)
-        menu.addItem(ch + 1, "Channel " + String(ch + 1));
-
+    int numCh = pendingAudioChannels_;
     auto file = pendingAudioFile_;
     pendingAudioChannels_ = 0;
     pendingAudioFile_ = File();
 
-    menu.showMenuAsync(PopupMenu::Options().withTargetComponent(&firPlot_),
-        [this, file](int result)
+    // AlertWindow is more reliable than PopupMenu after drag-drop on macOS.
+    auto* alert = new AlertWindow("Select Channel",
+                                   "The file has " + String(numCh)
+                                   + " channels.\nSelect which channel to use as FIR impulse response.",
+                                   AlertWindow::QuestionIcon);
+    StringArray channelNames;
+    for (int ch = 1; ch <= numCh; ++ch)
+        channelNames.add("Channel " + String(ch));
+    alert->addComboBox("channel", channelNames, "Channel");
+    alert->addButton("OK", 1);
+    alert->addButton("Cancel", 0);
+
+    // enterModalState with deleteWhenDismissed=true handles cleanup.
+    // The callback fires before deletion, so we can read the combo value.
+    alert->enterModalState(true, ModalCallbackFunction::create(
+        [this, file, alert](int result)
         {
-            if (result <= 0) return;
-            loadFIRAudioFile(file, result - 1);
-        });
+            if (result == 1)
+            {
+                int ch = alert->getComboBoxComponent("channel")->getSelectedItemIndex();
+                loadFIRAudioFile(file, ch);
+            }
+        }), true);
 }
 
 void EqBandEditor::loadFIRAudioFile(const File& file, int channel)
@@ -771,14 +882,35 @@ void EqBandEditor::loadFIRAudioFile(const File& file, int channel)
     if (band_->loadFIRFromFile(file, channel))
     {
         auto& coeffs = band_->getFIRCoefficients();
+        double sr = band_->getOriginalSampleRate();
         String info;
         info << coeffs.size() << " taps";
-        if (band_->getFIRSampleRate() > 0.0)
-            info << " @ " << (int)band_->getFIRSampleRate() << " Hz";
+        if (sr > 0.0)
+        {
+            double ms = (double)band_->getFIROriginalCoefficients().size() / sr * 1000.0;
+            info << "  (" << String(ms, 1) << " ms)";
+        }
         lblFIRInfo_.setText(info, dontSendNotification);
         firPlot_.setCoefficients(coeffs);
+
+        // Update sample rate combo from WAV metadata
+        updating_ = true;
+        int srId = 1; // "Auto"
+        if      (sr == 16000.0)  srId = 2;
+        else if (sr == 22050.0)  srId = 3;
+        else if (sr == 44100.0)  srId = 4;
+        else if (sr == 48000.0)  srId = 5;
+        else if (sr == 88200.0)  srId = 6;
+        else if (sr == 96000.0)  srId = 7;
+        else if (sr == 176400.0) srId = 8;
+        else if (sr == 192000.0) srId = 9;
+        cbSampleRate_.setSelectedId(srId, dontSendNotification);
+        updating_ = false;
+
+        // FIR loading is structural: requires full rebuild so per-channel
+        // processing copies get their MtxConv convolvers set up.
         if (listener_ != nullptr)
-            listener_->bandParameterChanged(bandIndex_);
+            listener_->bandStructureChanged(bandIndex_);
     }
 }
 

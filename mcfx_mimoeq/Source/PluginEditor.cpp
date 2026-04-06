@@ -141,8 +141,8 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     addMouseListener(this, true);
 
     setResizable(true, true);
-    setResizeLimits(450, 400, 1200, 800);
-    setSize(650, 500);
+    setResizeLimits(450, 400, 1200, 900);
+    setSize(650, 540);
 }
 
 Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
@@ -187,6 +187,15 @@ void Mcfx_mimoeqAudioProcessorEditor::paint(Graphics& g)
                                       true));
     g.fillRect(getLocalBounds());
 
+    // Subtle vertical separator between Diagonal and MIMO sections
+    {
+        int sepX = btnDiagChans_.getRight() + 8;
+        int sepY = btnModeDiag_.getY() + 2;
+        int sepH = btnModeDiag_.getHeight() - 4;
+        g.setColour(Colours::white.withAlpha(0.15f));
+        g.drawVerticalLine(sepX, (float)sepY, (float)(sepY + sepH));
+    }
+
     // Version drawn just above the status bar
     int statusH = 42;
     g.setColour(Colours::white.withAlpha(0.35f));
@@ -209,13 +218,17 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
 
     // Mode & path selector row
     int pathY = 26;
-    btnModeDiag_.setBounds(4, pathY, 75, 22);
-    btnDiagChans_.setBounds(83, pathY, 65, 22);
-    btnModeMIMO_.setBounds(160, pathY, 55, 22);
-    cbPathSelector_.setBounds(222, pathY, 150, 22);
-    btnAddPath_.setBounds(377, pathY, 70, 22);
-    btnRemovePath_.setBounds(451, pathY, 85, 22);
-    btnRouting_.setBounds(541, pathY, 65, 22);
+    int mx = 4; // running x position
+    btnModeDiag_.setBounds(mx, pathY, 75, 22);       mx += 79;
+    btnDiagChans_.setBounds(mx, pathY, 65, 22);      mx += 69;
+
+    mx += 16; // visual gap between diagonal section and MIMO section
+
+    btnModeMIMO_.setBounds(mx, pathY, 55, 22);       mx += 59;
+    cbPathSelector_.setBounds(mx, pathY, 150, 22);   mx += 154;
+    btnAddPath_.setBounds(mx, pathY, 70, 22);        mx += 74;
+    btnRemovePath_.setBounds(mx, pathY, 85, 22);     mx += 89;
+    btnRouting_.setBounds(mx, pathY, 65, 22);
 
     // Graph
     int graphTop = pathY + 28;
