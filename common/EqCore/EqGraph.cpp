@@ -87,6 +87,26 @@ void EqGraph::paint(Graphics& g)
 
     drawGrid(g);
 
+    // Draw spectrum analyzer behind EQ curves
+    if (analyzerOn_ && (inputAnalyzer_ != nullptr || outputAnalyzer_ != nullptr))
+    {
+        calcAnalyzerPaths();
+
+        // Input spectrum: semi-transparent white, thin
+        if (inputAnalyzer_ != nullptr)
+        {
+            g.setColour(Colour(0x44ffffff));
+            g.strokePath(pathAnalyzerIn_, PathStrokeType(0.75f));
+        }
+
+        // Output spectrum: yellow, slightly thicker
+        if (outputAnalyzer_ != nullptr)
+        {
+            g.setColour(Colour(0x99ffdd00));
+            g.strokePath(pathAnalyzerOut_, PathStrokeType(1.0f));
+        }
+    }
+
     // Draw magnitude response
     if (chain_ != nullptr)
     {
@@ -319,6 +339,58 @@ void EqGraph::calcPaths()
         bandFills_[b].lineTo((float)(width - 1), zeroY);
         bandFills_[b].closeSubPath();
     }
+}
+
+void EqGraph::calcAnalyzerPaths()
+{
+    int width = getWidth();
+    int startX = (int)xmargin_;
+    const float magFloor = 1e-10f;
+
+    // For auto-normalize: find the peak magnitude across both analyzers
+    float peakMag = magFloor;
+    if (analyzerAutoNormalize_)
+    {
+        for (int xPos = startX; xPos < width; xPos += 2) // sample every 2 pixels for speed
+        {
+            float hz = xpostohz(xPos);
+            if (inputAnalyzer_ != nullptr)
+                peakMag = jmax(peakMag, inputAnalyzer_->getMagnitude(hz));
+            if (outputAnalyzer_ != nullptr)
+                peakMag = jmax(peakMag, outputAnalyzer_->getMagnitude(hz));
+        }
+    }
+
+    float offset = analyzerAutoNormalize_ ? -20.f * log10f(peakMag) : analyzerOffset_;
+
+    auto buildPath = [&](SpectrumAnalyzer* analyzer, Path& path)
+    {
+        path.clear();
+        if (analyzer == nullptr)
+            return;
+
+        bool started = false;
+        for (int xPos = startX; xPos < width; ++xPos)
+        {
+            float hz = xpostohz(xPos);
+            float mag = jmax(magFloor, analyzer->getMagnitude(hz));
+            float db = 20.f * log10f(mag) + offset;
+            float y = (float)dbtoypos(db);
+
+            if (!started)
+            {
+                path.startNewSubPath((float)xPos, y);
+                started = true;
+            }
+            else
+            {
+                path.lineTo((float)xPos, y);
+            }
+        }
+    };
+
+    buildPath(inputAnalyzer_, pathAnalyzerIn_);
+    buildPath(outputAnalyzer_, pathAnalyzerOut_);
 }
 
 void EqGraph::rebuildGridPaths()

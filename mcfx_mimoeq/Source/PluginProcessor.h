@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "EqChain.h"
+#include "SpectrumAnalyzer.h"
 #include <map>
 #include <atomic>
 #include <set>
@@ -105,6 +106,16 @@ public:
     bool loadConfigFromFile(const File& file);
     bool saveConfigToFile(const File& file);
 
+    // --- Spectrum Analyzer ---
+    SpectrumAnalyzer& getInputAnalyzer() { return inputAnalyzer_; }
+    SpectrumAnalyzer& getOutputAnalyzer() { return outputAnalyzer_; }
+    bool isAnalyzerEnabled() const { return analyzerEnabled_.load(std::memory_order_relaxed); }
+    void setAnalyzerEnabled(bool on) { analyzerEnabled_.store(on, std::memory_order_relaxed); }
+    bool editorAnalyzerOn = false;       // persisted toggle state
+    int editorAnalyzerChannel = 0;       // 0 = sum, 1..N = specific channel
+    bool analyzerAutoNormalize = true;    // normalize to 0dB peak
+    float analyzerOffset = 0.f;          // dB offset (when auto-normalize is off)
+
     double getSampleRate_() const { return currentSampleRate_; }
     int getNumChannels_() const
     {
@@ -175,6 +186,11 @@ private:
     std::vector<String> undoStack_;
     std::vector<String> redoStack_;
     static constexpr int kMaxUndoSteps = 100;
+
+    // Spectrum analyzers
+    SpectrumAnalyzer inputAnalyzer_;
+    SpectrumAnalyzer outputAnalyzer_;
+    std::atomic<bool> analyzerEnabled_ { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Mcfx_mimoeqAudioProcessor)
 };

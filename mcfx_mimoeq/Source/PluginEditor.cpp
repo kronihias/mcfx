@@ -85,8 +85,15 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     updatePathSelector();
 
+    // Analyzer toggle
+    addAndMakeVisible(btnAnalyzer_);
+    btnAnalyzer_.setClickingTogglesState(true);
+    btnAnalyzer_.addListener(this);
+    btnAnalyzer_.setTooltip("Toggle spectrum analyzer overlay. Right-click to select channel.");
+
     addAndMakeVisible(graph_);
     graph_.setListener(this);
+    graph_.setAnalyzers(&processor->getInputAnalyzer(), &processor->getOutputAnalyzer());
     graph_.setTooltip("Drag handles to adjust frequency/gain. Mouse wheel to adjust Q.\nDouble-click to add a band. Double-click a handle to toggle enable. Press E to toggle enable.\nDrop a .json file to load configuration.");
 
     addAndMakeVisible(bandEditor_);
@@ -137,12 +144,18 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     else if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
 
+    // Restore analyzer state
+    btnAnalyzer_.setToggleState(processor->editorAnalyzerOn, dontSendNotification);
+    processor->getInputAnalyzer().setAnalyzerChannel(processor->editorAnalyzerChannel);
+    processor->getOutputAnalyzer().setAnalyzerChannel(processor->editorAnalyzerChannel);
+    updateAnalyzerState();
+
     // Listen for mouse enter/exit on all child components for status bar
     addMouseListener(this, true);
 
     setResizable(true, true);
     setResizeLimits(450, 400, 1200, 900);
-    setSize(650, 540);
+    setSize(700, 540);
 }
 
 Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
@@ -152,6 +165,8 @@ Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
     proc->editorDiagonalMode = diagonalMode_;
     proc->editorSelectedPath = selectedPath_;
     proc->editorSelectedBand = selectedBand_;
+    proc->editorAnalyzerOn = btnAnalyzer_.getToggleState();
+    proc->editorAnalyzerChannel = proc->getInputAnalyzer().getAnalyzerChannel();
 
     // Dismiss any still-open routing overview CallOutBox. It holds a raw
     // Listener* pointing back at this editor, so if it outlives us a
@@ -170,6 +185,11 @@ Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
     {
         diagChannelCallOut_->setVisible(false);
         diagChannelCallOut_->dismiss();
+    }
+    if (analyzerSettingsCallOut_ != nullptr)
+    {
+        analyzerSettingsCallOut_->setVisible(false);
+        analyzerSettingsCallOut_->dismiss();
     }
 
     proc->removeChangeListener(this);
@@ -228,7 +248,8 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     cbPathSelector_.setBounds(mx, pathY, 150, 22);   mx += 154;
     btnAddPath_.setBounds(mx, pathY, 70, 22);        mx += 74;
     btnRemovePath_.setBounds(mx, pathY, 85, 22);     mx += 89;
-    btnRouting_.setBounds(mx, pathY, 65, 22);
+    btnRouting_.setBounds(mx, pathY, 65, 22);        mx += 69;
+    btnAnalyzer_.setBounds(mx, pathY, 80, 22);
 
     // Graph
     int graphTop = pathY + 28;
@@ -339,6 +360,7 @@ void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
         selectBand(0);
     else
         selectBand(-1);
+    updateAnalyzerState();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::refreshTabs()
@@ -577,6 +599,7 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             selectBand(0);
         else
             selectBand(-1);
+        updateAnalyzerState();
         return;
     }
 
@@ -622,6 +645,12 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
     if (b == &btnRouting_)
     {
         showRoutingOverview();
+        return;
+    }
+
+    if (b == &btnAnalyzer_)
+    {
+        updateAnalyzerState();
         return;
     }
 
@@ -1096,4 +1125,163 @@ void Mcfx_mimoeqAudioProcessorEditor::mouseEnter(const MouseEvent& e)
 void Mcfx_mimoeqAudioProcessorEditor::mouseExit(const MouseEvent&)
 {
     statusBar_.setText("", dontSendNotification);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::mouseDown(const MouseEvent& e)
+{
+    // Right-click on analyzer button shows channel selection menu
+    if (e.mods.isPopupMenu() && e.eventComponent == &btnAnalyzer_)
+    {
+        showAnalyzerSettingsPopup();
+        return;
+    }
+    AudioProcessorEditor::mouseDown(e);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
+{
+    bool on = btnAnalyzer_.getToggleState();
+    getProcessor()->setAnalyzerEnabled(on);
+    graph_.setAnalyzerEnabled(on);
+    graph_.setAnalyzerAutoNormalize(getProcessor()->analyzerAutoNormalize);
+    graph_.setAnalyzerOffset(getProcessor()->analyzerOffset);
+
+    // In MIMO mode, lock analyzers to the selected path's channels
+    if (!diagonalMode_)
+    {
+        getProcessor()->getInputAnalyzer().setAnalyzerChannel(selectedPath_.first);
+        getProcessor()->getOutputAnalyzer().setAnalyzerChannel(selectedPath_.second);
+    }
+    else
+    {
+        // In diagonal mode, both analyzers use the same user-selected channel
+        int ch = getProcessor()->editorAnalyzerChannel;
+        getProcessor()->getInputAnalyzer().setAnalyzerChannel(ch);
+        getProcessor()->getOutputAnalyzer().setAnalyzerChannel(ch);
+    }
+
+    if (!on)
+    {
+        getProcessor()->getInputAnalyzer().reset();
+        getProcessor()->getOutputAnalyzer().reset();
+    }
+}
+
+//==============================================================================
+// Analyzer settings popup — shown on right-click of the Analyzer toggle
+//==============================================================================
+class AnalyzerSettingsComponent : public Component,
+                                  private ComboBox::Listener,
+                                  private Button::Listener,
+                                  private Slider::Listener
+{
+public:
+    AnalyzerSettingsComponent(Mcfx_mimoeqAudioProcessor* proc, EqGraph* graph, bool diagonalMode)
+        : proc_(proc), graph_(graph)
+    {
+        // Channel selector
+        addAndMakeVisible(lblChannel_);
+        lblChannel_.setText("Channel:", dontSendNotification);
+        lblChannel_.setColour(Label::textColourId, Colours::white);
+
+        addAndMakeVisible(cbChannel_);
+        int numCh = jmax(1, proc->getNumChannels_());
+        cbChannel_.addItem("all", 1);
+        for (int ch = 1; ch <= numCh; ++ch)
+            cbChannel_.addItem(String(ch), ch + 1);
+        cbChannel_.setSelectedId(proc->editorAnalyzerChannel + 1, dontSendNotification);
+        cbChannel_.addListener(this);
+
+        // In MIMO mode, channels are locked to the selected path
+        if (!diagonalMode)
+        {
+            cbChannel_.setEnabled(false);
+            cbChannel_.setTooltip("Channel is set by the selected MIMO path");
+        }
+
+        // Auto-normalize toggle
+        addAndMakeVisible(btnAutoNorm_);
+        btnAutoNorm_.setButtonText("auto-normalize");
+        btnAutoNorm_.setToggleState(proc->analyzerAutoNormalize, dontSendNotification);
+        btnAutoNorm_.addListener(this);
+        btnAutoNorm_.setColour(ToggleButton::textColourId, Colours::white);
+        btnAutoNorm_.setColour(ToggleButton::tickColourId, Colours::orange);
+
+        // Offset slider
+        addAndMakeVisible(lblOffset_);
+        lblOffset_.setText("Offset:", dontSendNotification);
+        lblOffset_.setColour(Label::textColourId, Colours::white);
+
+        addAndMakeVisible(sldOffset_);
+        sldOffset_.setRange(-80.0, 80.0, 0.5);
+        sldOffset_.setValue(proc->analyzerOffset, dontSendNotification);
+        sldOffset_.setSliderStyle(Slider::LinearHorizontal);
+        sldOffset_.setTextBoxStyle(Slider::TextBoxRight, false, 50, 20);
+        sldOffset_.setColour(Slider::textBoxTextColourId, Colours::white);
+        sldOffset_.setDoubleClickReturnValue(true, 0.0);
+        sldOffset_.addListener(this);
+        sldOffset_.setEnabled(!proc->analyzerAutoNormalize);
+        sldOffset_.setTooltip("dB offset for analyzer display");
+
+        setSize(220, 90);
+    }
+
+    void resized() override
+    {
+        int y = 4;
+        lblChannel_.setBounds(4, y, 60, 22);
+        cbChannel_.setBounds(68, y, 70, 22);
+        y += 26;
+        btnAutoNorm_.setBounds(4, y, 150, 22);
+        y += 26;
+        lblOffset_.setBounds(4, y, 50, 22);
+        sldOffset_.setBounds(54, y, 162, 22);
+    }
+
+    void paint(Graphics& g) override
+    {
+        g.fillAll(Colour(0xff2a2a2a));
+    }
+
+private:
+    void comboBoxChanged(ComboBox*) override
+    {
+        int ch = cbChannel_.getSelectedId() - 1; // 0 = all, 1..N = channel
+        proc_->getInputAnalyzer().setAnalyzerChannel(ch);
+        proc_->getOutputAnalyzer().setAnalyzerChannel(ch);
+        proc_->editorAnalyzerChannel = ch;
+    }
+
+    void buttonClicked(Button*) override
+    {
+        bool autoOn = btnAutoNorm_.getToggleState();
+        proc_->analyzerAutoNormalize = autoOn;
+        graph_->setAnalyzerAutoNormalize(autoOn);
+        sldOffset_.setEnabled(!autoOn);
+    }
+
+    void sliderValueChanged(Slider*) override
+    {
+        float offset = (float)sldOffset_.getValue();
+        proc_->analyzerOffset = offset;
+        graph_->setAnalyzerOffset(offset);
+    }
+
+    Mcfx_mimoeqAudioProcessor* proc_;
+    EqGraph* graph_;
+    Label lblChannel_;
+    ComboBox cbChannel_;
+    ToggleButton btnAutoNorm_;
+    Label lblOffset_;
+    Slider sldOffset_;
+};
+
+void Mcfx_mimoeqAudioProcessorEditor::showAnalyzerSettingsPopup()
+{
+    auto* settings = new AnalyzerSettingsComponent(getProcessor(), &graph_, diagonalMode_);
+    auto& box = CallOutBox::launchAsynchronously(
+        std::unique_ptr<Component>(settings),
+        btnAnalyzer_.getScreenBounds(),
+        nullptr);
+    analyzerSettingsCallOut_ = &box;
 }
