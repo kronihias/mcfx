@@ -214,8 +214,11 @@ IF (JUCE_JACK)
     find_package(Jack REQUIRED)
 
     message ("-- Patching JUCE Jack implementation")
-    execute_process(COMMAND patch ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_devices/native/juce_linux_JackAudio.cpp ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_linux_JackAudio.cpp.patch --forward OUTPUT_VARIABLE patch_result)
-    message(${patch_result})
+    execute_process(COMMAND patch --forward
+        ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_devices/native/juce_JackAudio.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_JackAudio.cpp.patch
+        OUTPUT_VARIABLE patch_result)
+    message("${patch_result}")
 ENDIF (JUCE_JACK)
 
 include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
