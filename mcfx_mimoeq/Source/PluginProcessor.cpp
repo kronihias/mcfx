@@ -260,11 +260,12 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     auto& diagChains = activeState_->diagChannelChains;
     auto& diagMask = activeState_->diagChannelMask;
     auto& pathChains = activeState_->pathChains;
-
-    // Save a copy of the raw input before any processing.
-    // MIMO paths always read from this snapshot so that diagonal muting
-    // and EQ don't interfere with MIMO input signals.
     bool hasAnyMimoPaths = !pathChains.empty();
+
+    // Save raw input before diagonal processing.
+    // MIMO paths whose input channel is NOT in the diagonal mask read
+    // the unprocessed signal; those whose input IS in the mask read
+    // the diagonal-processed result (serial: diagonal → MIMO).
     if (hasAnyMimoPaths)
     {
         inputSnapshot_.setSize(numChannels, numSamples, false, false, true);
@@ -272,23 +273,21 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
             inputSnapshot_.copyFrom(ch, 0, buffer.getReadPointer(ch), numSamples);
     }
 
-    // Step 1: Apply diagonal chain to channels in mask, mute excluded channels.
+    // Step 1: Apply diagonal chain to channels in mask.
+    // Channels not in the mask are left untouched (not muted) — MIMO
+    // paths may still route them.
     for (int ch = 0; ch < numChannels; ++ch)
     {
-        if (diagMask.empty() || diagMask.count(ch + 1) > 0)
-        {
-            if (ch < (int)diagChains.size())
-                diagChains[ch]->processBlock(buffer.getWritePointer(ch), numSamples);
-        }
-        else
-        {
-            buffer.clear(ch, 0, numSamples);
-        }
+        bool diagActive = diagMask.empty() || diagMask.count(ch + 1) > 0;
+        if (diagActive && ch < (int)diagChains.size())
+            diagChains[ch]->processBlock(buffer.getWritePointer(ch), numSamples);
     }
 
-    // Step 2: Apply per-path MIMO chains.
-    // All paths read from the saved input snapshot, process, and accumulate
-    // into the work buffer. The work buffer is then added to the output.
+    // Step 2: Apply per-path MIMO chains (serial after diagonal).
+    // Each MIMO path reads from:
+    //   - diagonal output if the input channel had diagonal active
+    //   - raw input otherwise
+    // MIMO output replaces (not adds to) the affected output channels.
     if (hasAnyMimoPaths)
     {
         workBuffer_.setSize(numChannels, numSamples, false, false, true);
@@ -307,17 +306,22 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
 
             mimoOutputChannels.insert(outCh);
 
-            // Read from snapshot, process (if bands exist), accumulate into work buffer
+            // Pick source: diagonal output (buffer) or raw input (snapshot)
+            bool inChDiagActive = diagMask.empty() || diagMask.count(inCh + 1) > 0;
+            const float* source = inChDiagActive
+                ? buffer.getReadPointer(inCh)
+                : inputSnapshot_.getReadPointer(inCh);
+
             AudioSampleBuffer temp(1, numSamples);
-            temp.copyFrom(0, 0, inputSnapshot_.getReadPointer(inCh), numSamples);
+            temp.copyFrom(0, 0, source, numSamples);
             if (chain->getNumBands() > 0)
                 chain->processBlock(temp.getWritePointer(0), numSamples);
             workBuffer_.addFrom(outCh, 0, temp.getReadPointer(0), numSamples);
         }
 
-        // Add MIMO contributions to output
+        // Replace output channels that have MIMO paths targeting them
         for (int ch : mimoOutputChannels)
-            buffer.addFrom(ch, 0, workBuffer_.getReadPointer(ch), numSamples);
+            buffer.copyFrom(ch, 0, workBuffer_.getReadPointer(ch), numSamples);
     }
 
     // Capture post-processing spectrum

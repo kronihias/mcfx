@@ -25,12 +25,14 @@ public:
         virtual void routingPathSelected(int inCh, int outCh) = 0;
         virtual void routingPathCreated(int inCh, int outCh) = 0;
         virtual void routingPathRemoved(int inCh, int outCh) = 0;
+        virtual void routingDiagonalRequested() {}
     };
 
     RoutingOverviewComponent(const std::vector<PathKey>& paths,
                              const std::map<PathKey, int>& bandCounts,
                              int numChannels,
                              bool hasDiagonalBands,
+                             const std::set<int>& diagMask,
                              Listener* listener);
 
     void updatePaths(const std::vector<PathKey>& paths,
@@ -56,6 +58,7 @@ private:
     std::map<PathKey, int> bandCounts_;
     int numChannels_;
     bool hasDiagonalBands_;
+    std::set<int> diagMask_;  // empty = all channels; 1-based channel set
     Listener* listener_;
     int hoveredWire_ = -1;      // index into paths_
     PathKey selectedPath_ { -1, -1 };
@@ -79,6 +82,7 @@ private:
     int hitTestWire(Point<float> pt) const;
     int hitTestInputPort(Point<float> pt) const;   // returns 1-based ch or -1
     int hitTestOutputPort(Point<float> pt) const;  // returns 1-based ch or -1
+    int hitTestDiagBox(Point<float> pt) const;     // returns 1-based ch or -1
     bool pathExists(int inCh, int outCh) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RoutingOverviewComponent)
@@ -96,6 +100,7 @@ public:
                            const std::map<PathKey, int>& bandCounts,
                            int numChannels,
                            bool hasDiagonalBands,
+                           const std::set<int>& diagMask,
                            RoutingOverviewComponent::Listener* listener);
 
     void updatePaths(const std::vector<PathKey>& paths,
@@ -130,6 +135,7 @@ private:
     std::map<PathKey, int> bandCounts_;
     int numChannels_;
     bool hasDiagonalBands_;
+    std::set<int> diagMask_;
     RoutingOverviewComponent::Listener* listener_;
     PathKey selectedPath_ { -1, -1 };
     PathKey hoveredCell_ { -1, -1 };
@@ -160,6 +166,7 @@ public:
                               const std::map<PathKey, int>& bandCounts,
                               int numChannels,
                               bool hasDiagonalBands,
+                              const std::set<int>& diagMask,
                               RoutingOverviewComponent::Listener* listener)
         : numChannels_(numChannels),
           paths_(paths),
@@ -168,9 +175,9 @@ public:
           listener_(listener)
     {
         overview_ = std::make_unique<RoutingOverviewComponent>(paths, bandCounts,
-                                                                numChannels, hasDiagonalBands, listener);
+                                                                numChannels, hasDiagonalBands, diagMask, listener);
         matrix_ = std::make_unique<RoutingMatrixComponent>(paths, bandCounts,
-                                                            numChannels, hasDiagonalBands, listener);
+                                                            numChannels, hasDiagonalBands, diagMask, listener);
 
         viewport_.setViewedComponent(overview_.get(), false);
         viewport_.setScrollBarsShown(true, false);

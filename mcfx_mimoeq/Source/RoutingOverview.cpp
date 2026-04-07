@@ -12,11 +12,13 @@ RoutingOverviewComponent::RoutingOverviewComponent(const std::vector<PathKey>& p
                                                      const std::map<PathKey, int>& bandCounts,
                                                      int numChannels,
                                                      bool hasDiagonalBands,
+                                                     const std::set<int>& diagMask,
                                                      Listener* listener)
     : paths_(paths),
       bandCounts_(bandCounts),
       numChannels_(numChannels),
       hasDiagonalBands_(hasDiagonalBands),
+      diagMask_(diagMask),
       listener_(listener)
 {
     setSize(kWidth, getRecommendedHeight(numChannels));
@@ -110,16 +112,7 @@ void RoutingOverviewComponent::paint(Graphics& g)
     g.drawText("Routing Overview", getLocalBounds().removeFromTop(28),
                Justification::centred, false);
 
-    // Diagonal indicator
-    if (hasDiagonalBands_)
-    {
-        g.setColour(Colours::aquamarine.withAlpha(0.7f));
-        g.setFont(Font(FontOptions(10.f, Font::italic)));
-        g.drawText("Diagonal EQ active on all channels",
-                   4, 16, getWidth() - 8, 16, Justification::centred, false);
-    }
-
-    // Draw port labels
+    // Draw port labels and diagonal indicators
     g.setFont(Font(FontOptions(12.f, Font::plain)));
     for (int ch = 1; ch <= numChannels_; ++ch)
     {
@@ -133,6 +126,25 @@ void RoutingOverviewComponent::paint(Graphics& g)
         g.drawRoundedRectangle(inRect, 4.f, 1.f);
         g.setColour(Colours::white.withAlpha(0.9f));
         g.drawText(String(ch), inRect, Justification::centred, false);
+
+        // "D" box right after input port if diagonal is active for this channel
+        bool diagActive = hasDiagonalBands_
+                          && (diagMask_.empty() || diagMask_.count(ch) > 0);
+        if (diagActive)
+        {
+            float dX = inRect.getRight() + 3.f;
+            float dY = inRect.getY() + 2.f;
+            float dW = 18.f;
+            float dH = inRect.getHeight() - 4.f;
+            Rectangle<float> dRect(dX, dY, dW, dH);
+            g.setColour(Colours::aquamarine.withAlpha(0.25f));
+            g.fillRoundedRectangle(dRect, 3.f);
+            g.setColour(Colours::aquamarine.withAlpha(0.7f));
+            g.drawRoundedRectangle(dRect, 3.f, 1.f);
+            g.setFont(Font(FontOptions(10.f, Font::bold)));
+            g.drawText("D", dRect, Justification::centred, false);
+            g.setFont(Font(FontOptions(12.f, Font::plain)));
+        }
 
         // Output port
         g.setColour(Colour(0xff3a3a3a));
@@ -246,6 +258,27 @@ int RoutingOverviewComponent::hitTestOutputPort(Point<float> pt) const
     return -1;
 }
 
+int RoutingOverviewComponent::hitTestDiagBox(Point<float> pt) const
+{
+    if (!hasDiagonalBands_)
+        return -1;
+
+    for (int ch = 1; ch <= numChannels_; ++ch)
+    {
+        bool diagActive = diagMask_.empty() || diagMask_.count(ch) > 0;
+        if (!diagActive)
+            continue;
+
+        auto inRect = getInputPortRect(ch);
+        float dX = inRect.getRight() + 3.f;
+        float dY = inRect.getY() + 2.f;
+        Rectangle<float> dRect(dX, dY, 18.f, inRect.getHeight() - 4.f);
+        if (dRect.expanded(2.f).contains(pt))
+            return ch;
+    }
+    return -1;
+}
+
 bool RoutingOverviewComponent::pathExists(int inCh, int outCh) const
 {
     PathKey key { inCh, outCh };
@@ -268,6 +301,13 @@ Path RoutingOverviewComponent::makeWirePathToPoint(int inCh, Point<float> end) c
 
 void RoutingOverviewComponent::mouseDown(const MouseEvent& e)
 {
+    // Check if clicking on a "D" box — switch to diagonal mode
+    if (hitTestDiagBox(e.position) > 0 && listener_ != nullptr)
+    {
+        listener_->routingDiagonalRequested();
+        return;
+    }
+
     // Check if clicking on an input port to start a drag
     int inputCh = hitTestInputPort(e.position);
     if (inputCh > 0)
@@ -345,11 +385,13 @@ RoutingMatrixComponent::RoutingMatrixComponent(const std::vector<PathKey>& paths
                                                  const std::map<PathKey, int>& bandCounts,
                                                  int numChannels,
                                                  bool hasDiagonalBands,
+                                                 const std::set<int>& diagMask,
                                                  RoutingOverviewComponent::Listener* listener)
     : paths_(paths),
       bandCounts_(bandCounts),
       numChannels_(numChannels),
       hasDiagonalBands_(hasDiagonalBands),
+      diagMask_(diagMask),
       listener_(listener)
 {
     setSize(getRecommendedWidth(numChannels), getRecommendedHeight(numChannels));
@@ -405,15 +447,6 @@ void RoutingMatrixComponent::paint(Graphics& g)
     g.drawText("Routing Matrix", getLocalBounds().removeFromTop(28),
                Justification::centred, false);
 
-    // Diagonal indicator
-    if (hasDiagonalBands_)
-    {
-        g.setColour(Colours::aquamarine.withAlpha(0.7f));
-        g.setFont(Font(FontOptions(10.f, Font::italic)));
-        g.drawText("Diagonal EQ active on all channels",
-                   4, 16, getWidth() - 8, 16, Justification::centred, false);
-    }
-
     // Column labels (outputs)
     for (int out = 1; out <= numChannels_; ++out)
     {
@@ -438,15 +471,21 @@ void RoutingMatrixComponent::paint(Graphics& g)
     g.drawText("IN", 2, kMarginTop, kMarginLeft - 4, numChannels_ * kCellSize,
                Justification::centredTop, false);
 
-    // Row labels (inputs)
+    // Row labels (inputs) — mark with "D" if diagonal EQ is active
     for (int in = 1; in <= numChannels_; ++in)
     {
         bool highlighted = (hoveredCell_.first == in);
+        bool diagActive = hasDiagonalBands_
+                          && (diagMask_.empty() || diagMask_.count(in) > 0);
         g.setFont(Font(FontOptions(10.f, highlighted ? Font::bold : Font::plain)));
         g.setColour(Colours::aquamarine.withAlpha(highlighted ? 1.0f : 0.7f));
         auto cellR = getCellRect(in, 1);
-        g.drawText(String(in),
-                   kMarginLeft - 18, cellR.getY(), 14, kCellSize,
+
+        String label = String(in);
+        if (diagActive)
+            label << " D";
+        g.drawText(label,
+                   2, cellR.getY(), kMarginLeft - 4, kCellSize,
                    Justification::centredRight, false);
     }
 

@@ -57,7 +57,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     btnModeDiag_.setToggleState(true, dontSendNotification);
     btnModeDiag_.addListener(this);
     btnModeMIMO_.addListener(this);
-    btnModeDiag_.setTooltip("Diagonal: apply the same EQ chain to all channels independently");
+    btnModeDiag_.setTooltip("Diagonal: apply the same EQ chain to all selected channels (input-to-output) independently");
     btnModeMIMO_.setTooltip("MIMO: configure individual EQ paths between input/output channels");
 
     // Diagonal channel selector
@@ -825,6 +825,7 @@ void Mcfx_mimoeqAudioProcessorEditor::showRoutingOverview()
     auto keys = getProcessor()->getPathKeys();
     int numCh = jmax(1, getProcessor()->getNumChannels_());
     bool hasDiag = getProcessor()->getDiagonalChain().getNumBands() > 0;
+    auto& diagMask = getProcessor()->getDiagChannelMask();
 
     // Build band count map for each path
     std::map<PathKey, int> bandCounts;
@@ -835,7 +836,7 @@ void Mcfx_mimoeqAudioProcessorEditor::showRoutingOverview()
             bandCounts[key] = chain->getNumBands();
     }
 
-    auto* wrapper = new ScrollableRoutingOverview(keys, bandCounts, numCh, hasDiag, this);
+    auto* wrapper = new ScrollableRoutingOverview(keys, bandCounts, numCh, hasDiag, diagMask, this);
     wrapper->setShowMatrix(getProcessor()->editorRoutingMatrixView);
     wrapper->onViewChanged = [this](bool isMatrix) {
         getProcessor()->editorRoutingMatrixView = isMatrix;
@@ -982,6 +983,29 @@ void Mcfx_mimoeqAudioProcessorEditor::routingPathRemoved(int inCh, int outCh)
             }
         }
     }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::routingDiagonalRequested()
+{
+    // Dismiss the routing popup
+    if (routingCallOut_ != nullptr)
+    {
+        routingCallOut_->setVisible(false);
+        routingCallOut_->dismiss();
+    }
+
+    // Switch to diagonal mode
+    btnModeDiag_.setToggleState(true, dontSendNotification);
+    btnModeMIMO_.setToggleState(false, dontSendNotification);
+    updatePathSelector();
+    auto* chain = getActiveChain();
+    graph_.setChain(chain);
+    refreshTabs();
+    if (chain != nullptr && chain->getNumBands() > 0)
+        selectBand(0);
+    else
+        selectBand(-1);
+    updateAnalyzerState();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::updateDiagChannelButton()

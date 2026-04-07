@@ -118,11 +118,16 @@ EqBandEditor::EqBandEditor()
     addAndMakeVisible(lblDelay_);
     addAndMakeVisible(sldDelay_);
     addAndMakeVisible(lblSamples_);
-    sldDelay_.setRange(0, 10000, 1);
-    sldDelay_.setTextBoxStyle(Slider::TextBoxLeft, false, 60, 20);
+    addAndMakeVisible(btnDelayMs_);
+    sldDelay_.setRange(0, 24000, 1);
+    sldDelay_.setTextBoxStyle(Slider::TextBoxLeft, false, 80, 20);
     sldDelay_.setSliderStyle(Slider::LinearHorizontal);
     sldDelay_.setTooltip("Delay in samples");
     sldDelay_.addListener(this);
+    btnDelayMs_.setClickingTogglesState(true);
+    btnDelayMs_.setToggleState(true, dontSendNotification);
+    btnDelayMs_.addListener(this);
+    btnDelayMs_.setTooltip("Toggle between samples and milliseconds");
 
     // Enable toggle
     addAndMakeVisible(btnEnable_);
@@ -277,7 +282,7 @@ void EqBandEditor::updateFromBand()
     }
     else if (type == EqBandType::Delay)
     {
-        sldDelay_.setValue(band_->getDelaySamples(), dontSendNotification);
+        updateDelayDisplay();
     }
     else if (type == EqBandType::FIR)
     {
@@ -398,6 +403,7 @@ void EqBandEditor::showControlsForType(EqBandType type)
     lblDelay_.setVisible(isDelay);
     sldDelay_.setVisible(isDelay);
     lblSamples_.setVisible(isDelay);
+    btnDelayMs_.setVisible(isDelay);
 
     // Sample rate selector: visible for IIR (raw biquad) and FIR
     bool showSR = isBiquad || isFIR;
@@ -483,6 +489,8 @@ void EqBandEditor::resized()
     if (sldQ_.isVisible()) y += rowH + gap;
 
     // Gain row: dB slider or linear slider (mutually exclusive)
+    if (sldGain_.isVisible() || sldLinearGain_.isVisible())
+        y += 14; // extra spacing to clear band ID indicator
     if (sldGain_.isVisible())
     {
         lblGain_.setBounds(x, y, lblW, rowH);
@@ -505,10 +513,13 @@ void EqBandEditor::resized()
         y += rowH + gap;
     }
 
-    // Delay
+    // Delay — extra spacing to clear band ID indicator
+    if (lblDelay_.isVisible())
+        y += 14;
     lblDelay_.setBounds(x, y, lblW, rowH);
-    sldDelay_.setBounds(x + lblW + 4, y, w - lblW - 50, rowH);
-    lblSamples_.setBounds(getWidth() - 45, y, 40, rowH);
+    sldDelay_.setBounds(x + lblW + 4, y, w - lblW - 110, rowH);
+    lblSamples_.setBounds(sldDelay_.getRight() + 2, y, 40, rowH);
+    btnDelayMs_.setBounds(lblSamples_.getRight() + 2, y, 50, rowH);
 
     // Sample rate selector (for IIR raw biquad and FIR — placed before FIR load or biquad coeffs)
     if (cbSampleRate_.isVisible() && !lblBiquad_.isVisible())
@@ -601,7 +612,18 @@ void EqBandEditor::sliderValueChanged(Slider* s)
     else if (s == &sldLinearGain_)
         band_->setLinearGain((float)sldLinearGain_.getValue());
     else if (s == &sldDelay_)
-        band_->setDelaySamples((int)sldDelay_.getValue());
+    {
+        if (delayInMs_)
+        {
+            double ms = sldDelay_.getValue();
+            int samples = (int)std::round(ms * band_->getSampleRate() / 1000.0);
+            band_->setDelaySamples(samples);
+        }
+        else
+        {
+            band_->setDelaySamples((int)sldDelay_.getValue());
+        }
+    }
 
     if (listener_ != nullptr)
         listener_->bandParameterChanged(bandIndex_);
@@ -753,6 +775,11 @@ void EqBandEditor::buttonClicked(Button* b)
         band_->setInvertGain(btnInvertGain_.getToggleState());
         if (listener_ != nullptr)
             listener_->bandParameterChanged(bandIndex_);
+    }
+    else if (b == &btnDelayMs_)
+    {
+        delayInMs_ = btnDelayMs_.getToggleState();
+        updateDelayDisplay();
     }
     else if (b == &btnCopyCoeffs_)
     {
@@ -1037,5 +1064,32 @@ void EqBandEditor::labelTextChanged(Label* l)
         applyBiquadCoeffsFromUI();
         if (listener_ != nullptr)
             listener_->bandStructureChanged(bandIndex_);
+    }
+}
+
+void EqBandEditor::updateDelayDisplay()
+{
+    if (band_ == nullptr) return;
+
+    int samples = band_->getDelaySamples();
+    double sr = band_->getSampleRate();
+
+    if (delayInMs_)
+    {
+        double maxMs = 24000.0 / sr * 1000.0;  // 24000 samples in ms
+        sldDelay_.setRange(0.0, jmax(1.0, maxMs), 0.001);
+        double ms = (double)samples / sr * 1000.0;
+        sldDelay_.setValue(ms, dontSendNotification);
+        sldDelay_.setNumDecimalPlacesToDisplay(3);
+        sldDelay_.setTooltip("Delay in milliseconds");
+        lblSamples_.setText("ms", dontSendNotification);
+    }
+    else
+    {
+        sldDelay_.setRange(0, 24000, 1);
+        sldDelay_.setValue(samples, dontSendNotification);
+        sldDelay_.setNumDecimalPlacesToDisplay(0);
+        sldDelay_.setTooltip("Delay in samples");
+        lblSamples_.setText("smpls", dontSendNotification);
     }
 }
