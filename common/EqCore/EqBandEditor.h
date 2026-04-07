@@ -340,6 +340,7 @@ public:
 private:
     void showControlsForType(EqBandType type);
     void populateOrderCombo(bool isCrossover, bool isAP = false);
+    void updateDelayDisplay();
 
     EqBand* band_ = nullptr;
     int bandIndex_ = -1;
@@ -356,6 +357,8 @@ private:
     ToggleButton btnGainLinear_ { "Linear" };
     ToggleButton btnInvertGain_ { "Invert" };
     Slider sldDelay_;
+    ToggleButton btnDelayMs_ { "ms" };  // toggle: off = samples, on = ms
+    bool delayInMs_ = true;
 
     ComboBox cbSampleRate_;     // Original sample rate selector
 

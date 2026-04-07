@@ -159,6 +159,9 @@ public:
     int getDelaySamples() const { return delaySamples_; }
     void setDelaySamples(int samples);
 
+    // --- Sample rate (read-only, set by prepare()) ---
+    double getSampleRate() const { return sampleRate_; }
+
     // --- Enable ---
     bool isEnabled() const { return enabled_; }
     void setEnabled(bool e) { enabled_ = e; }
