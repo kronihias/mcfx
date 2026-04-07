@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "EqChain.h"
+#include "SpectrumAnalyzer.h"
 
 class EqGraph : public Component,
                 public SettableTooltipClient,
@@ -50,6 +51,16 @@ public:
     void setListener(Listener* l) { listener_ = l; }
     void setSelectedBand(int idx) { selectedBand_ = idx; repaint(); }
 
+    /** Set spectrum analyzers to overlay on the graph. Pass nullptr to disable. */
+    void setAnalyzers(SpectrumAnalyzer* input, SpectrumAnalyzer* output)
+    {
+        inputAnalyzer_ = input;
+        outputAnalyzer_ = output;
+    }
+    void setAnalyzerEnabled(bool on) { analyzerOn_ = on; }
+    void setAnalyzerAutoNormalize(bool on) { analyzerAutoNormalize_ = on; }
+    void setAnalyzerOffset(float dbOffset) { analyzerOffset_ = dbOffset; }
+
     static Colour getBandColour(int bandIndex);
 
     void paint(Graphics& g) override;
@@ -70,6 +81,7 @@ private:
     float xpostohz(int xpos) const;
 
     void calcPaths();
+    void calcAnalyzerPaths();
     void rebuildGridPaths();
     void drawGrid(Graphics& g);
     void drawBandHandles(Graphics& g);
@@ -98,6 +110,15 @@ private:
     std::vector<Path> bandFills_;     // filled areas for individual bands
     Path pathGrid_;
     Path pathGridW_;
+
+    // Spectrum analyzer
+    SpectrumAnalyzer* inputAnalyzer_ = nullptr;
+    SpectrumAnalyzer* outputAnalyzer_ = nullptr;
+    bool analyzerOn_ = false;
+    bool analyzerAutoNormalize_ = true;
+    float analyzerOffset_ = 0.f;
+    Path pathAnalyzerIn_;
+    Path pathAnalyzerOut_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqGraph)
 };

@@ -122,6 +122,11 @@ private:
     EqBandEditor bandEditor_;
     EqTabBar tabs_;
 
+    ToggleButton btnAnalyzer_ { "Analyzer" };
+    void updateAnalyzerState();
+    void showAnalyzerSettingsPopup();
+    Component::SafePointer<CallOutBox> analyzerSettingsCallOut_;
+
     TextButton btnAdd_ { "+" };
     TextButton btnRemove_ { "-" };
     TextButton btnUndo_ { "Undo" };
@@ -185,6 +190,7 @@ private:
 
     void mouseEnter(const MouseEvent& e) override;
     void mouseExit(const MouseEvent& e) override;
+    void mouseDown(const MouseEvent& e) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Mcfx_mimoeqAudioProcessorEditor)
 };

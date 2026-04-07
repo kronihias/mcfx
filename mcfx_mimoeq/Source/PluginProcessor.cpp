@@ -107,6 +107,11 @@ void Mcfx_mimoeqAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     currentSampleRate_ = sampleRate;
     currentBlockSize_ = samplesPerBlock;
     workBuffer_.setSize(getTotalNumInputChannels(), samplesPerBlock);
+
+    int numCh = getTotalNumInputChannels();
+    inputAnalyzer_.prepare(sampleRate, numCh);
+    outputAnalyzer_.prepare(sampleRate, numCh);
+
     rebuildProcessingChains();
 }
 
@@ -247,6 +252,11 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     int numChannels = buffer.getNumChannels();
     int numSamples = buffer.getNumSamples();
 
+    // Capture pre-processing spectrum
+    bool analyzerOn = analyzerEnabled_.load(std::memory_order_relaxed);
+    if (analyzerOn)
+        inputAnalyzer_.pushBuffer(buffer, numSamples);
+
     auto& diagChains = activeState_->diagChannelChains;
     auto& diagMask = activeState_->diagChannelMask;
     auto& pathChains = activeState_->pathChains;
@@ -309,6 +319,10 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
         for (int ch : mimoOutputChannels)
             buffer.addFrom(ch, 0, workBuffer_.getReadPointer(ch), numSamples);
     }
+
+    // Capture post-processing spectrum
+    if (analyzerOn)
+        outputAnalyzer_.pushBuffer(buffer, numSamples);
 }
 
 AudioProcessorEditor* Mcfx_mimoeqAudioProcessor::createEditor()
