@@ -19,6 +19,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "mcfx_buses.h"
 
 #ifdef _WINDOWS
 #include <windows.h>
@@ -34,13 +35,13 @@
 #define MAX_PART_SIZE 8192
 //==============================================================================
 Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
-    AudioProcessor (BusesProperties()
+    AudioProcessor (
 #if MCFX_MULTICHANNEL_BUILD
-        .withInput  ("Input",  juce::AudioChannelSet::canonicalChannelSet(2), true)
-        .withOutput ("Output", juce::AudioChannelSet::canonicalChannelSet(2), true)
+        MCFX_MULTICHANEL_BUSES
 #else
-        .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
-        .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+        BusesProperties()
+            .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+            .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
 #endif
     ),
     Thread("mtx_convolver_master"),
@@ -242,15 +243,11 @@ void Mcfx_convolverAudioProcessor::releaseResources()
 
 bool Mcfx_convolverAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    const int in  = layouts.getMainInputChannelSet().size();
-    const int out = layouts.getMainOutputChannelSet().size();
 #if MCFX_MULTICHANNEL_BUILD
-    if (layouts.getMainInputChannelSet().isDisabled()
-        || layouts.getMainOutputChannelSet().isDisabled())
-        return false;
-    return in == out && in >= 1 && in <= NUM_CHANNELS;
+    return mcfx::isMultichannelLayoutSupported (layouts, NUM_CHANNELS);
 #else
-    return in == NUM_CHANNELS && out == NUM_CHANNELS;
+    return layouts.getMainInputChannelSet().size()  == NUM_CHANNELS
+        && layouts.getMainOutputChannelSet().size() == NUM_CHANNELS;
 #endif
 }
 
