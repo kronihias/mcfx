@@ -19,9 +19,19 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "mcfx_buses.h"
 
 Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
-    : apvts(*this, nullptr, "PARAMETERS", createParameters())
+    : AudioProcessor (
+#if MCFX_MULTICHANNEL_BUILD
+          MCFX_MULTICHANEL_BUSES
+#else
+          BusesProperties()
+              .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+              .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+#endif
+      ),
+      apvts(*this, nullptr, "PARAMETERS", createParameters())
 {
     // Register APVTS parameter listeners for host automation
     for (int i = 1; i <= kMaxAutomatedBands; ++i)
@@ -117,6 +127,16 @@ void Mcfx_mimoeqAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
 
 void Mcfx_mimoeqAudioProcessor::releaseResources()
 {
+}
+
+bool Mcfx_mimoeqAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
+{
+#if MCFX_MULTICHANNEL_BUILD
+    return mcfx::isMultichannelLayoutSupported (layouts, NUM_CHANNELS);
+#else
+    return layouts.getMainInputChannelSet().size()  == NUM_CHANNELS
+        && layouts.getMainOutputChannelSet().size() == NUM_CHANNELS;
+#endif
 }
 
 void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()

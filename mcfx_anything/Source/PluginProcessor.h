@@ -21,6 +21,7 @@
 #define PLUGINPROCESSOR_H_INCLUDED
 
 #include "JuceHeader.h"
+#include "mcfx_buses.h"
 
 class Mcfx_anythingAudioProcessor;
 
@@ -100,6 +101,7 @@ public:
     void releaseResources() override;
 
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+    MCFX_MULTICHANEL_BUS_OVERRIDES
 
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 

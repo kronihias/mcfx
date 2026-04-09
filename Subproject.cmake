@@ -95,9 +95,7 @@ if(MCFX_BUILD_VST2_PER_CHANNEL AND MCFX_FORMATS_VST2)
         JucePlugin_PreferredChannelConfigurations=${_vst2_chcfg}
         ${MCFX_EXTRA_DEFS})
 
-    if(MCFX_EXTRA_INCLUDES)
-        target_include_directories(${_vst2_target} PRIVATE ${MCFX_EXTRA_INCLUDES})
-    endif()
+    target_include_directories(${_vst2_target} PRIVATE ${SRC_DIR}/common ${MCFX_EXTRA_INCLUDES})
 
     target_link_libraries(${_vst2_target} PRIVATE
         juce::juce_audio_utils
@@ -158,9 +156,7 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
         MCFX_MULTICHANNEL_BUILD=1
         ${MCFX_EXTRA_DEFS})
 
-    if(MCFX_EXTRA_INCLUDES)
-        target_include_directories(${_mc_target} PRIVATE ${MCFX_EXTRA_INCLUDES})
-    endif()
+    target_include_directories(${_mc_target} PRIVATE ${SRC_DIR}/common ${MCFX_EXTRA_INCLUDES})
 
     target_link_libraries(${_mc_target} PRIVATE
         juce::juce_audio_utils

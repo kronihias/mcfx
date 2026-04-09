@@ -21,6 +21,7 @@
 #define __PLUGINPROCESSOR_H_43F61266__
 
 #include "JuceHeader.h"
+#include "mcfx_buses.h"
 
 #include "MySignalGenerator.h"
 #include "ChannelStepper.h"
@@ -48,6 +49,7 @@ public:
     void releaseResources() override;
 
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+    MCFX_MULTICHANEL_BUS_OVERRIDES
 
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 

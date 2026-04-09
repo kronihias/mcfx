@@ -19,6 +19,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "mcfx_buses.h"
 
 float param2db(float param)
 {
@@ -38,13 +39,13 @@ float param2gain (float param)
 
 //==============================================================================
 Mcfx_gain_delayAudioProcessor::Mcfx_gain_delayAudioProcessor() :
-  AudioProcessor (BusesProperties()
+  AudioProcessor (
 #if MCFX_MULTICHANNEL_BUILD
-      .withInput  ("Input",  juce::AudioChannelSet::canonicalChannelSet(2), true)
-      .withOutput ("Output", juce::AudioChannelSet::canonicalChannelSet(2), true)
+      MCFX_MULTICHANEL_BUSES
 #else
-      .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
-      .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+      BusesProperties()
+          .withInput  ("Input",  juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
+          .withOutput ("Output", juce::AudioChannelSet::discreteChannels(NUM_CHANNELS), true)
 #endif
   ),
   _delay_buffer(2,256),
@@ -644,15 +645,11 @@ void Mcfx_gain_delayAudioProcessor::releaseResources()
 
 bool Mcfx_gain_delayAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-    const int in  = layouts.getMainInputChannelSet().size();
-    const int out = layouts.getMainOutputChannelSet().size();
 #if MCFX_MULTICHANNEL_BUILD
-    if (layouts.getMainInputChannelSet().isDisabled()
-        || layouts.getMainOutputChannelSet().isDisabled())
-        return false;
-    return in == out && in >= 1 && in <= NUM_CHANNELS;
+    return mcfx::isMultichannelLayoutSupported (layouts, NUM_CHANNELS);
 #else
-    return in == NUM_CHANNELS && out == NUM_CHANNELS;
+    return layouts.getMainInputChannelSet().size()  == NUM_CHANNELS
+        && layouts.getMainOutputChannelSet().size() == NUM_CHANNELS;
 #endif
 }
 
