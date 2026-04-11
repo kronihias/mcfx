@@ -21,7 +21,6 @@
 #define __PLUGINPROCESSOR_H_421B8C00__
 
 #include "JuceHeader.h"
-#include "mcfx_buses.h"
 #include "MyMeterDsp.h"
 
 //==============================================================================
@@ -40,7 +39,6 @@ public:
     void releaseResources() override;
 
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
-    MCFX_MULTICHANEL_BUS_OVERRIDES
 
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 

@@ -244,7 +244,7 @@ void Mcfx_convolverAudioProcessor::releaseResources()
 bool Mcfx_convolverAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
 #if MCFX_MULTICHANNEL_BUILD
-    return mcfx::isMultichannelLayoutSupported (layouts, NUM_CHANNELS);
+    return mcfx::isMultichannelLayoutSupported (layouts, NUM_CHANNELS, wrapperType);
 #else
     return layouts.getMainInputChannelSet().size()  == NUM_CHANNELS
         && layouts.getMainOutputChannelSet().size() == NUM_CHANNELS;
