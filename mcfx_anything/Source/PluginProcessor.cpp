@@ -218,7 +218,7 @@ void Mcfx_anythingAudioProcessor::changeProgramName (int index, const String& ne
 bool Mcfx_anythingAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
 #if MCFX_MULTICHANNEL_BUILD
-    return mcfx::isMultichannelLayoutSupported (layouts, NUM_CHANNELS);
+    return mcfx::isMultichannelLayoutSupported (layouts, NUM_CHANNELS, wrapperType);
 #else
     return layouts.getMainInputChannelSet().size()  == NUM_CHANNELS
         && layouts.getMainOutputChannelSet().size() == NUM_CHANNELS;

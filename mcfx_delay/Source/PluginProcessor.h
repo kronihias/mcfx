@@ -21,7 +21,6 @@
 #define PLUGINPROCESSOR_H_INCLUDED
 
 #include "JuceHeader.h"
-#include "mcfx_buses.h"
 
 #ifndef MAX_DELAYTIME_S
     #define MAX_DELAYTIME_S 0.5
@@ -43,7 +42,6 @@ public:
     void releaseResources() override;
 
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
-    MCFX_MULTICHANEL_BUS_OVERRIDES
 
     void processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 
