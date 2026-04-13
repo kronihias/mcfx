@@ -18,6 +18,7 @@
  */
 
 #include "PluginEditor.h"
+#include "OutOfProcessPluginScanner.h"
 
 #define Q(x) #x
 #define QUOTE(x) Q(x)
@@ -474,6 +475,159 @@ void Mcfx_anythingAudioProcessorEditor::showPluginMenu()
     CallOutBox::launchAsynchronously (std::move (content), buttonArea, nullptr);
 }
 
+// Wraps PluginListComponent with a "Scan All (Parallel)" button + progress bar.
+class PluginSettingsPanel : public Component, private Timer
+{
+public:
+    PluginSettingsPanel (AudioPluginFormatManager& formatManager,
+                         KnownPluginList& knownPlugins,
+                         const File& deadMansPedalFile,
+                         const File& scannerExe)
+        : formatManager_ (formatManager),
+          knownPlugins_ (knownPlugins),
+          scannerExe_ (scannerExe)
+    {
+        pluginList_ = std::make_unique<PluginListComponent> (formatManager, knownPlugins,
+                                                              deadMansPedalFile, nullptr, true);
+        addAndMakeVisible (*pluginList_);
+
+        scanButton_.setButtonText ("Scan All (Parallel)");
+        scanButton_.setEnabled (scannerExe_.existsAsFile());
+        scanButton_.setTooltip (scannerExe_.existsAsFile()
+                                    ? "Scan all plugin directories using parallel out-of-process scanning"
+                                    : "Scanner executable not found");
+        scanButton_.onClick = [this] { startParallelScan(); };
+        addAndMakeVisible (scanButton_);
+
+        cancelButton_.setButtonText ("Cancel");
+        cancelButton_.onClick = [this] { cancelScan(); };
+        cancelButton_.setVisible (false);
+        addAndMakeVisible (cancelButton_);
+
+        progressBar_.setPercentageDisplay (true);
+        progressBar_.setVisible (false);
+        addAndMakeVisible (progressBar_);
+
+        statusLabel_.setJustificationType (Justification::centredLeft);
+        statusLabel_.setColour (Label::textColourId, Colours::lightgrey);
+        statusLabel_.setVisible (false);
+        addAndMakeVisible (statusLabel_);
+    }
+
+    ~PluginSettingsPanel() override
+    {
+        cancelScan();
+    }
+
+    void resized() override
+    {
+        auto area = getLocalBounds();
+        auto topBar = area.removeFromTop (36);
+
+        topBar.reduce (4, 4);
+        scanButton_.setBounds (topBar.removeFromLeft (160));
+        topBar.removeFromLeft (4);
+        cancelButton_.setBounds (topBar.removeFromLeft (70));
+        topBar.removeFromLeft (8);
+
+        if (progressBar_.isVisible())
+        {
+            progressBar_.setBounds (topBar.removeFromLeft (160));
+            topBar.removeFromLeft (8);
+        }
+
+        statusLabel_.setBounds (topBar);
+
+        pluginList_->setBounds (area);
+    }
+
+private:
+    void startParallelScan()
+    {
+        if (scanner_ != nullptr)
+            return;
+
+        scanner_ = std::make_unique<ParallelPluginScanner> (
+            formatManager_, knownPlugins_, scannerExe_);
+
+        scanner_->setProgressCallback ([this] (float progress, String name, int found)
+        {
+            // Already on message thread (callAsync in ParallelPluginScanner)
+            progress_ = progress;
+            statusLabel_.setText (name + " (" + String (found) + " found)", dontSendNotification);
+            progressBar_.setVisible (true);
+            statusLabel_.setVisible (true);
+            resized();
+
+            if (progress >= 1.0f)
+                onScanFinished();
+        });
+
+        scanButton_.setEnabled (false);
+        cancelButton_.setVisible (true);
+        progressBar_.setVisible (true);
+        statusLabel_.setVisible (true);
+        statusLabel_.setText ("Starting scan...", dontSendNotification);
+        progress_ = 0.0;
+        resized();
+
+        scanner_->startThread();
+        startTimerHz (10);
+    }
+
+    void cancelScan()
+    {
+        if (scanner_ != nullptr)
+        {
+            scanner_->signalThreadShouldExit();
+            scanner_->stopThread (5000);
+            scanner_.reset();
+        }
+
+        onScanFinished();
+    }
+
+    void onScanFinished()
+    {
+        stopTimer();
+        scanner_.reset();
+        scanButton_.setEnabled (true);
+        cancelButton_.setVisible (false);
+        progressBar_.setVisible (false);
+        resized();
+
+        // Keep status label visible briefly to show result
+        Timer::callAfterDelay (3000, [safeThis = SafePointer<PluginSettingsPanel> (this)]()
+        {
+            if (safeThis != nullptr)
+            {
+                safeThis->statusLabel_.setVisible (false);
+                safeThis->resized();
+            }
+        });
+    }
+
+    void timerCallback() override
+    {
+        // ProgressBar auto-reads progress_ via its double& reference.
+        // Just trigger a repaint.
+        progressBar_.repaint();
+    }
+
+    AudioPluginFormatManager& formatManager_;
+    KnownPluginList& knownPlugins_;
+    File scannerExe_;
+
+    std::unique_ptr<PluginListComponent> pluginList_;
+    TextButton scanButton_;
+    TextButton cancelButton_;
+    ProgressBar progressBar_ { progress_ };
+    Label statusLabel_;
+    double progress_ = 0.0;
+
+    std::unique_ptr<ParallelPluginScanner> scanner_;
+};
+
 void Mcfx_anythingAudioProcessorEditor::showSettings()
 {
     auto deadMansPedalFile = File::getSpecialLocation (File::userApplicationDataDirectory)
@@ -483,12 +637,11 @@ void Mcfx_anythingAudioProcessorEditor::showSettings()
     // Ensure directory exists
     deadMansPedalFile.getParentDirectory().createDirectory();
 
-    auto* content = new PluginListComponent (getProcessor()->getFormatManager(),
+    auto* content = new PluginSettingsPanel (getProcessor()->getFormatManager(),
                                              getProcessor()->getKnownPluginList(),
                                              deadMansPedalFile,
-                                             nullptr,
-                                             true);
-    content->setSize (600, 500);
+                                             getProcessor()->getScannerExecutable());
+    content->setSize (700, 540);
 
     DialogWindow::LaunchOptions options;
     options.content.setOwned (content);
