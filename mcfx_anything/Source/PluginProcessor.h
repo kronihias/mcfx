@@ -176,6 +176,10 @@ public:
     void loadPluginListFromCache();
     static File getPluginListCacheFile();
 
+    // Out-of-process scanner executable
+    File getScannerExecutable() const { return _scannerExe; }
+    static File findScannerExecutable();
+
     // Fixed-size pool of forwarding parameters exposed to the DAW. Each slot
     // can be dynamically bound to a parameter of the currently loaded plugin.
     // Declared at construction time; never resized (adding/removing
@@ -193,6 +197,7 @@ private:
     // Plugin hosting
     AudioPluginFormatManager _formatManager;
     KnownPluginList _knownPluginList;
+    File _scannerExe;
 
     // Listener to auto-save plugin list when it changes (after scan)
     class PluginListChangeListener : public ChangeListener

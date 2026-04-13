@@ -20,6 +20,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "mcfx_buses.h"
+#include "OutOfProcessPluginScanner.h"
 
 //==============================================================================
 // ForwardingParameter — exposes one slot of our fixed proxy pool to the DAW.
@@ -152,6 +153,13 @@ Mcfx_anythingAudioProcessor::Mcfx_anythingAudioProcessor()
 
     // Load cached plugin list from disk so we don't need to rescan
     loadPluginListFromCache();
+
+    // Use out-of-process scanner for crash isolation (if scanner exe is available)
+    _scannerExe = findScannerExecutable();
+
+    if (_scannerExe.existsAsFile())
+        _knownPluginList.setCustomScanner (
+            std::make_unique<OutOfProcessPluginScanner> (_scannerExe));
 
     // Auto-save plugin list whenever it changes (e.g. after scanning)
     _knownPluginList.addChangeListener (&_pluginListChangeListener);
@@ -514,6 +522,50 @@ void Mcfx_anythingAudioProcessor::loadPluginListFromCache()
 
     if (auto xml = parseXML (cacheFile))
         _knownPluginList.recreateFromXml (*xml);
+}
+
+File Mcfx_anythingAudioProcessor::findScannerExecutable()
+{
+    auto thisExe = File::getSpecialLocation (File::currentExecutableFile);
+
+   #if JUCE_WINDOWS
+    const String scannerName = "mcfx_plugin_scanner.exe";
+   #else
+    const String scannerName = "mcfx_plugin_scanner";
+   #endif
+
+   #if JUCE_MAC
+    // macOS bundle: <bundle>/Contents/MacOS/<binary>
+    // Scanner at:   <bundle>/Contents/Helpers/mcfx_plugin_scanner
+    auto helpers = thisExe.getParentDirectory()     // MacOS/
+                          .getParentDirectory()     // Contents/
+                          .getChildFile ("Helpers")
+                          .getChildFile (scannerName);
+
+    if (helpers.existsAsFile())
+        return helpers;
+   #endif
+
+    // Alongside the executable (Windows, Linux, dev builds)
+    auto alongside = thisExe.getParentDirectory()
+                            .getChildFile (scannerName);
+
+    if (alongside.existsAsFile())
+        return alongside;
+
+   #if JUCE_WINDOWS
+    // Windows VST3 bundle: plugin.vst3/Contents/x86_64-win/plugin.vst3
+    // Try two levels up from the DLL, then into a Helpers dir
+    auto winHelpers = thisExe.getParentDirectory()      // x86_64-win/
+                             .getParentDirectory()      // Contents/
+                             .getChildFile ("Helpers")
+                             .getChildFile (scannerName);
+
+    if (winHelpers.existsAsFile())
+        return winHelpers;
+   #endif
+
+    return {};
 }
 
 //==============================================================================
