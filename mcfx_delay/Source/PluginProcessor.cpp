@@ -168,7 +168,7 @@ void Mcfx_delayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
 
     _buf_size = (int)(MAX_DELAYTIME_S * sampleRate + samplesPerBlock + 1); // MAX_DELAYTIME_S maximum
     _delay_buffer.clear();
-    _delay_smpls = (int)(_delay_ms*MAX_DELAYTIME_S*sampleRate);
+    _delay_smpls = (int)floor(_delay_ms*MAX_DELAYTIME_S*sampleRate+0.5f);
 }
 
 int Mcfx_delayAudioProcessor::getDelayInSmpls()
