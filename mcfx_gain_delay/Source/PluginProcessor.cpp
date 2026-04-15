@@ -213,7 +213,7 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
 
       case 1: // delay
         _delay_ms.set(ch, newValue);
-        _delay_smpls.set(ch, (int)(newValue*MAX_DELAYTIME_S*getSampleRate()));
+        _delay_smpls.set(ch, (int)floor(newValue*MAX_DELAYTIME_S*getSampleRate()+0.5f));
         break;
 
       case 2: // phase
@@ -631,7 +631,7 @@ void Mcfx_gain_delayAudioProcessor::prepareToPlay (double sampleRate, int sample
   _delay_buffer.clear();
 
   for (int i = 0; i < NUM_CHANNELS; i++) {
-    _delay_smpls.set(i, (int)(_delay_ms.getUnchecked(i)*MAX_DELAYTIME_S*sampleRate));
+    _delay_smpls.set(i, (int)floor(_delay_ms.getUnchecked(i)*MAX_DELAYTIME_S*sampleRate+0.5f));
   }
 
   _siggen.setSamplerate((float)sampleRate);
