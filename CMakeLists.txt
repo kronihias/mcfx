@@ -234,3 +234,12 @@ ADD_SUBDIRECTORY ( mcfx_gain_delay )
 ADD_SUBDIRECTORY ( mcfx_meter )
 ADD_SUBDIRECTORY ( mcfx_mimoeq )
 ADD_SUBDIRECTORY ( mcfx_anything )
+
+################################################
+# Optional: offline CLI test harness for Python-driven regression tests.
+# Build with:  cmake -B _build -DBUILD_TESTHOST=ON  (requires BUILD_VST3=ON)
+OPTION(BUILD_TESTHOST "Build mcfx_testhost offline test harness" OFF)
+IF(BUILD_TESTHOST)
+    message("-- Building mcfx_testhost test harness")
+    ADD_SUBDIRECTORY( mcfx_testhost )
+ENDIF(BUILD_TESTHOST)
