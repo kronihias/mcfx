@@ -175,6 +175,8 @@ private:
 
     AudioSampleBuffer workBuffer_;
     AudioSampleBuffer inputSnapshot_; // saved input for cross-path reads
+    AudioSampleBuffer tempBuffer_;    // single-channel scratch buffer for MIMO paths
+    std::vector<bool> mimoOutputMask_; // pre-allocated per-channel MIMO output mask
 
     std::atomic<bool> needsParamSync_ { false };
     void doParamSyncIfNeeded();
