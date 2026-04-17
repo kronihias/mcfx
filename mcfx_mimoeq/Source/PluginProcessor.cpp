@@ -117,6 +117,9 @@ void Mcfx_mimoeqAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     currentSampleRate_ = sampleRate;
     currentBlockSize_ = samplesPerBlock;
     workBuffer_.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    inputSnapshot_.setSize(getTotalNumInputChannels(), samplesPerBlock);
+    tempBuffer_.setSize(1, samplesPerBlock);
+    mimoOutputMask_.assign(getTotalNumInputChannels(), false);
 
     int numCh = getTotalNumInputChannels();
     inputAnalyzer_.prepare(sampleRate, numCh);
@@ -288,7 +291,6 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     // the diagonal-processed result (serial: diagonal → MIMO).
     if (hasAnyMimoPaths)
     {
-        inputSnapshot_.setSize(numChannels, numSamples, false, false, true);
         for (int ch = 0; ch < numChannels; ++ch)
             inputSnapshot_.copyFrom(ch, 0, buffer.getReadPointer(ch), numSamples);
     }
@@ -310,10 +312,9 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     // MIMO output replaces (not adds to) the affected output channels.
     if (hasAnyMimoPaths)
     {
-        workBuffer_.setSize(numChannels, numSamples, false, false, true);
         workBuffer_.clear();
 
-        std::set<int> mimoOutputChannels;
+        std::fill(mimoOutputMask_.begin(), mimoOutputMask_.begin() + numChannels, false);
 
         for (auto& kv : pathChains)
         {
@@ -324,7 +325,7 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
             if (inCh < 0 || inCh >= numChannels || outCh < 0 || outCh >= numChannels)
                 continue;
 
-            mimoOutputChannels.insert(outCh);
+            mimoOutputMask_[outCh] = true;
 
             // Pick source: diagonal output (buffer) or raw input (snapshot)
             bool inChDiagActive = diagMask.empty() || diagMask.count(inCh + 1) > 0;
@@ -332,16 +333,16 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
                 ? buffer.getReadPointer(inCh)
                 : inputSnapshot_.getReadPointer(inCh);
 
-            AudioSampleBuffer temp(1, numSamples);
-            temp.copyFrom(0, 0, source, numSamples);
+            tempBuffer_.copyFrom(0, 0, source, numSamples);
             if (chain->getNumBands() > 0)
-                chain->processBlock(temp.getWritePointer(0), numSamples);
-            workBuffer_.addFrom(outCh, 0, temp.getReadPointer(0), numSamples);
+                chain->processBlock(tempBuffer_.getWritePointer(0), numSamples);
+            workBuffer_.addFrom(outCh, 0, tempBuffer_.getReadPointer(0), numSamples);
         }
 
         // Replace output channels that have MIMO paths targeting them
-        for (int ch : mimoOutputChannels)
-            buffer.copyFrom(ch, 0, workBuffer_.getReadPointer(ch), numSamples);
+        for (int ch = 0; ch < numChannels; ++ch)
+            if (mimoOutputMask_[ch])
+                buffer.copyFrom(ch, 0, workBuffer_.getReadPointer(ch), numSamples);
     }
 
     // Capture post-processing spectrum
