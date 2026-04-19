@@ -1,223 +1,339 @@
-mcfx - multichannel cross platform audio plug-in suite
-==============
+# mcfx — Multichannel Cross-Platform Audio Plug-in Suite
 
-- mcfx is a suite of multichannel vst plug-ins or standalone applications (standalone currently meter and convolver only)
+A suite of multichannel VST/VST3/AU plug-ins and standalone applications for macOS, Windows, and Linux.
 
-- channel count is configurable with compile time flag
+- Channel count is configurable at compile time (VST2 plug-ins support up to 128 channels)
+- VST3: one binary per plug-in, automatically adjusts to the track's channel count (up to 64 channels)
+- Built on the [JUCE](https://www.juce.com) framework (GPLv3)
+- Designed to complement the [ambiX Ambisonic plug-ins](http://www.matthiaskronlachner.com/?p=2015)
+- Ready-to-use binaries available at [https://github.com/kronihias/mcfx/releases](https://github.com/kronihias/mcfx/releases)
 
-- cross platform VST for MacOSX, Windows and Linux
+---
 
-- uses the JUCE framework (www.juce.com, GPLv3), libsoxr (LGPL, http://soxr.sourceforge.net)
+## Table of Contents
 
-- ready to use binaries for MacOSX (> 10.5, 32/64 bit) and Windows (32/64 bit) can be found at http://www.matthiaskronlachner.com/?p=1910
+- [License](#license)
+- [Plug-ins](#plug-ins)
+  - [mcfx_convolver](#mcfx_convolver)
+  - [mcfx_anything](#mcfx_anything)
+  - [mcfx_mimoeq](#mcfx_mimoeq)
+  - [mcfx_delay](#mcfx_delay)
+  - [mcfx_filter](#mcfx_filter)
+  - [mcfx_gain_delay](#mcfx_gain_delay)
+  - [mcfx_meter](#mcfx_meter)
+- [Prerequisites for Building](#prerequisites-for-building)
+- [How to Build](#how-to-build)
+- [Build Parameters](#build-parameters)
+- [Changelog](#changelog)
 
-- these plug-ins have been developed to be used with the ambiX Ambisonic plug-ins: http://www.matthiaskronlachner.com/?p=2015
+---
 
-license
---------------
+## License
 
-mcfx is free software and licensed under the GNU General Public License version 3 (GPLv3).
+mcfx is free software licensed under the **GNU General Public License version 3 (GPLv3)**.
 
-prerequisites for building
---------------
+---
 
-CMake, working build environment
+## Plug-ins
 
-- **Linux:**  
-    Install LINUX Libraries (Debian, Ubuntu):
+### mcfx_convolver
 
-    ```
-    sudo apt install libasound2-dev libjack-jackd2-dev \
-        ladspa-sdk \
-        libcurl4-openssl-dev  \
-        libfreetype6-dev \
-        libx11-dev libxcomposite-dev libxcursor-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
-        libwebkit2gtk-4.0-dev \
-        libglu1-mesa-dev mesa-common-dev \
-        libfftw3-dev \
-        libzita-convolver3 \
-        libzita-convolver-dev
-    ```
+Multichannel convolution matrix.
 
-- **Windows x64:**  
-    Download [FFTW](https://www.fftw.org/) for [Windows](https://www.fftw.org/install/windows.html) 64bit and run the command `lib /machine:x64 /def:libfftw3f-3.def` from the Visual Studio Developer Command Prompt to generate *libfftw3f-3.lib*.  
-    Alternatively, run the command `lib /def:libfftw3f-3.def` from the `x64 Native Tools Command Prompt for VS`.
-    Note that this simpler command, instructed by the FFTW documentation, will generate a 32bit library when called from the default Developer Command Prompt or Powershell (and therefore fail to link)
+- Highly optimized non-uniformly partitioned fast convolution using SIMD for Intel and Apple Silicon
+- Loads configuration files compatible with jconvolver `.conf` format
+- Supports loading `.wav` files directly, optionally reading input channel metadata
+- Drag and drop a `.conf` or `.wav` file onto the GUI to load it
+- Option to embed the preset inside the DAW project (no external files needed)
+- OSC remote control: `/reload`, `/load <preset.conf>` — configurable port
+- See `CONVOLVER_CONFIG_HOWTO.txt` for configuration details and the `MATLAB/` folder for export scripts
+- For an easier-to-configure convolver, see [mcfx_mimoeq](#mcfx_mimoeq)
 
-Make sure of using fftw-3.3.6-pl2 or later, as earlier versions do not contain the `fftwf_make_planner_thread_safe()` function.
+**Preset search paths:**
 
-Clone the repository with the submodules:
+| Platform | Path |
+|----------|------|
+| Windows | `C:\Users\<username>\AppData\Roaming\mcfx\convolver_presets\` |
+| macOS | `~/Library/mcfx/convolver_presets/` |
+| Linux | `~/mcfx/convolver_presets/` |
+
+---
+
+### mcfx_anything
+
+Transforms (almost) any audio plug-in into a multichannel plug-in.
+
+- Scans and hosts VST2, VST3, and AU plug-ins; scanning runs out-of-process for speed and crash-resistance
+- Runs as many instances as needed to cover all channels of the mcfx multichannel bus — one instance per stereo (or N-channel) pair
+- All instances stay in sync: parameter changes on the master instance are automatically mirrored to all slave instances
+- Exposes up to 256 host-automatable forwarding parameters so DAW automation works transparently across all instances
+- Supports sidechain routing: any input channel can be routed to the plug-in's sidechain bus
+- Saves and restores the full plug-in state (including which plug-in is loaded) with the DAW project
+
+---
+
+### mcfx_mimoeq
+
+Multichannel MIMO (Multiple Input Multiple Output) parametric equalizer.
+
+- Applies per-channel EQ on the diagonal (optionally restricted to a subset of channels) and per input-to-output path EQ chains for cross-channel processing
+- Diagonal chain supports up to 24 automated IIR bands (HP, low shelf, peak, high shelf, LP) with host automation via VST3 parameters
+- Individual input-to-output path chains for routing-aware corrections (e.g. speaker crosstalk compensation), supporting IIR, FIR (partitioned convolution), delay, and gain nodes
+- Routing can be visualized as a matrix or wires view
+- Built-in spectrum analyzer with per-channel or summed display
+- Loads and saves configuration as JSON files (allows importing automated speaker/room EQ configurations for large multichannel installations)
+- Built-in undo/redo
+- Can also be seen as a more flexible `mcfx_convolver`, but for dense filter matrices `mcfx_convolver` will be more efficient
+
+---
+
+### mcfx_delay
+
+Delays all channels by the same amount.
+
+- Maximum delay time is set at compile time via `MAX_DELAYTIME_S` (default: 0.5 s)
+
+---
+
+### mcfx_filter
+
+Applies identical filter settings to all channels, with a frequency analyzer showing the sum of all channels.
+
+- Low/high pass: 2nd-order Butterworth or cascaded 4th-order (Linkwitz–Riley) for crossover use
+- 2× parametric peak filters ±18 dB
+- Low and high shelf filters ±18 dB
+- All filter parameters can be adjusted during playback without audible glitches
+- For a more flexible multichannel EQ, see [mcfx_mimoeq](#mcfx_mimoeq)
+
+---
+
+### mcfx_gain_delay
+
+Per-channel gain and delay calibration tool, useful for multi-speaker setups.
+
+- Individual gain and delay per channel with phase, solo, and mute buttons
+- Built-in signal generator (sine, toneburst) for testing individual channels; sine frequency range down to 10 Hz
+- Paste gain/delay values directly from the clipboard (semicolon, comma, newline, tab, or space separated)
+- Maximum delay time set at compile time via `MAX_DELAYTIME_S`
+
+---
+
+### mcfx_meter
+
+Multichannel level meter with RMS, peak, and peak hold.
+
+---
+
+## Prerequisites for Building
+
+CMake and a working build environment are required.
+
+**Linux** — install dependencies (Debian/Ubuntu):
+
+```bash
+sudo apt install libasound2-dev libjack-jackd2-dev \
+    ladspa-sdk \
+    libcurl4-openssl-dev \
+    libfreetype6-dev \
+    libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
+    libwebkit2gtk-4.0-dev \
+    libglu1-mesa-dev mesa-common-dev \
+    libfftw3-dev \
+    libzita-convolver3 \
+    libzita-convolver-dev
 ```
+
+**Windows x64** — download [FFTW for Windows](https://www.fftw.org/install/windows.html) (64-bit) and generate the import library from the `x64 Native Tools Command Prompt for VS`:
+
+```
+lib /machine:x64 /def:libfftw3f-3.def
+```
+
+> Note: running `lib /def:libfftw3f-3.def` from the default Developer Command Prompt generates a 32-bit library and will fail to link.
+
+Use fftw-3.3.6-pl2 or later — earlier versions lack `fftwf_make_planner_thread_safe()`.
+
+Clone the repository including submodules:
+
+```bash
 git clone --recurse-submodules https://github.com/kronihias/mcfx/
 ```
 
+---
 
+## How to Build
 
-Howto build yourself:
---------------
+Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
-Use **cmake gui** or **cmake/ccmake** from terminal to configure the build.
-
-1. Create a folder in the *mcfx* folder eg. *BUILD*
+1. Create a build folder inside the `mcfx` directory:
+    ```bash
+    mkdir BUILD
     ```
-    mkdir BUILD # On Linux, MacOS or Windows Powershell    
-    ```
-2. Run cmake or ccmake from the *BUILD* folder, or use the cmake gui and press *Configure*.  
-    In the terminal:
-    ```
+
+2. Configure with CMake (terminal):
+    ```bash
     cd BUILD
     ccmake ..
     ```
-    Press the *C* key.
-      
-    If using the GUI instead, select the target build system (e.g., in Windows use Visual Studio or MinGW).
-3. Set the [Build Parameters](#build-parameters),  *Configure* again. Then *Generate*.
-4. Build the project with the selected build system (e.g., Visual Studio, Xcode, or make).  
-    E.g., for Linux:
-    ```
+    Press `C` to configure. When using the GUI, select your target build system (e.g. Visual Studio or MinGW on Windows).
+
+3. Set the [Build Parameters](#build-parameters), configure again, then generate.
+
+4. Build with your chosen build system. Example for Linux:
+    ```bash
     make -j$(nproc) config=Release
     ```
-    `-j$(nproc)` will instruct make to use all available cores for the build.
-5. After a successful build, find the binaries in `BUILD/_bin/`,`BUILD/vst/` or `BUILD/vst3` and copy to system VST folder  
 
-    **VST2 installation folders:**
+5. After a successful build, find the binaries in `BUILD/_bin/`, `BUILD/vst/`, or `BUILD/vst3/` and copy them to your system plug-in folder:
 
-    - MacOSX: `/Library/Audio/Plug-Ins/VST`
-    - Windows: `C:\Program Files\Steinberg\VstPlugins`, `C:\Program Files\Common Files\VST2`, or `C:\Program Files\VSTPlugins`
-    - Linux: `~/.vst/`, `/usr/lib/lxvst` or `/usr/local/lib/lxvst`
+    | Format | macOS | Windows | Linux |
+    |--------|-------|---------|-------|
+    | VST2 | `/Library/Audio/Plug-Ins/VST` | `C:\Program Files\Common Files\VST2` | `~/.vst/` or `/usr/local/lib/lxvst` |
+    | VST3 | `/Library/Audio/Plug-Ins/VST3` | `C:\Program Files\Common Files\VST3` | `/usr/lib/vst3/` |
 
-    **VST3 installation folders:**
-    - MacOSX: `/Library/Audio/Plug-Ins/VST3`
-    - Windows: `C:\Program Files\Common Files\VST3`
-    - Linux: `/usr/lib/vst3/`
+---
 
 ## Build Parameters
 
-- **``NUM_CHANNELS``** - Number of input/output channels for each plugin. Default is 36.
-- **``MAX_DELAYTIME_S``** - Maximum delay time for mcfx_delay in seconds. Default is 0.5s.
-- **``BUILD_STANDALONE``** - Build standalone applications. Default is OFF.
-- **``BUILD_VST3``** - Build VST3 plugins. Default is **ON**.
-- **``BUILD_VST2``** - Build VST2 plugins. Default is OFF.
-- **``BUILD_LV2``** - Build LV2 plugins. Default is OFF.
-- **``VST2SDKPATH``** - Path to the VST2 SDK. Default is "~/SDKs/vstsdk2.4"
-- **``WITH_ZITA_CONVOLVER``** - Build with zita-convolver (better performance under Linux). Default is OFF.
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `NUM_CHANNELS` | Number of input/output channels per plugin | `36` |
+| `MAX_DELAYTIME_S` | Maximum delay time for mcfx_delay (seconds) | `0.5` |
+| `BUILD_STANDALONE` | Build standalone applications | `OFF` |
+| `BUILD_VST3` | Build VST3 plugins | **`ON`** |
+| `BUILD_VST2` | Build VST2 plugins | `OFF` |
+| `BUILD_LV2` | Build LV2 plugins | `OFF` |
+| `VST2SDKPATH` | Path to the VST2 SDK | `~/SDKs/vstsdk2.4` |
+| `WITH_ZITA_CONVOLVER` | Use zita-convolver for better Linux performance | `OFF` |
+
+**FFTW paths** (set manually if not found automatically):
+
+- **`FFTW3F_LIBRARY`** — path to the FFTW3F library file (note the trailing **f**):
+  - Linux: `/usr/lib/x86_64-linux-gnu/libfftw3f-3.so`
+  - Windows/MSVC: `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.lib`
+  - Windows/MinGW: `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.dll`
+- **`FFTW3_INCLUDE_DIR`** — path to the FFTW3 include directory, e.g. `/usr/include`
+- **`FFTW3F_THREADS_LIBRARY`** *(Linux only)* — e.g. `/usr/lib/x86_64-linux-gnu/libfftw3f_threads.so`
+
 ---
-- **``FFTW3F_LIBRARY``** - Path to the FFTW3F library file (Note the final **f**!).  
-    - On Linux this should point to the `.so` shared library file, e.g., `/usr/lib/x86_64-linux-gnu/libfftw3f-3.so`.
-    - On Windows with Visual Studio, this should point to the `.lib` file generated in a [previous step](#prerequisites-for-building), e.g., `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.lib`.
-    - On Windows with MinGW, this should point to the `.dll` dynamic library file, e.g., `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.dll`.
-- **``FFTW3_INCLUDE_DIR``** - Path to the FFTW3 include directory, e.g., `/usr/include`.
-- [**``FFTW3F_THREADS_LIBRARY``**] - If present (e.g., on Linux), this should point to the `.so` file for the FFTW3F threads library, e.g., `/usr/lib/x86_64-linux-gnu/libfftw3f_threads.so`.
 
-plug-ins explained:
-==============
+## Changelog
 
-mcfx_convolver
---------------
-multichannel convolution matrix
+### 0.7.0 (2026-04-19)
 
-loads configuration files (compatible to jconvolver .conf files)
+> *Dedicated to Angelo Farina, whose pioneering work on multichannel audio, Ambisonics, and room acoustics measurement was a great inspiration for these plug-ins.*
 
-supports loading `.wav` files directly (optionally reading input channel metadata)
+- `mcfx_convolver`: performance optimizations (avoid allocation in audio callback, convolver engine improvements) - thanks to Angelo Farina, Luca Battisti and Domenico Stefani
+- **New:** `mcfx_anything` — transforms (almost) any plug-in into a multichannel plug-in via multi-instance hosting, parameter sync, DAW automation forwarding, and out-of-process scanning
+- **New:** `mcfx_mimoeq` — multichannel MIMO parametric filter (IIR, FIR, delay, gain) with diagonal and per-path chains, up to 24 automated bands, spectrum analyzer, and JSON preset support
+- `mcfx_delay`: fix delay time rounding issue
+- VST3 plug-ins now automatically adjust to the track's channel count — one binary per plug-in, up to 64 channels (AU and VST2 support up to 128); VST3 is recommended going forward
+- update to JUCE 8
 
-just drag/drop a `.conf` or `.wav` file into the GUI to load it
+### 0.6.4 (2024-03-20)
 
-have a look at `CONVOLVER_CONFIG_HOWTO.txt` for details about the configuration files
+`mcfx_convolver`: add master gain parameter and rotary control, mechanism to save channel count in WAV IR files, fix debug window. Add build and installer creation scripts.
 
-check the `MATLAB` folder for simple export scripts
+### 0.6.3 (2023-12-21)
 
-searches for configuration file in following folders:
-- Windows 7,8: `C:\Users\username\AppData\Roaming\mcfx\convolver_presets\`
-- MacOS: `~/Library/mcfx/convolver_presets/`
-- Linux: `~/mcfx/convolver_presets/`
+`mcfx_filter`: fix parameter smoothing to avoid instabilities and glitches while changing filter parameters; performance optimizations.
 
+### 0.6.2 (2023-12-11)
 
-mcfx_delay
---------------
-delay each channel about the same time (maximum delay time in seconds is a compile time flag (default 0.5s): MAX_DELAYTIME_S)
+Add 128-channel version of all plug-ins; adjust `mcfx_meter` and `mcfx_gain_delay` GUI to display 128 channels properly.
 
+### 0.6.1 (2023-12-08)
 
-mcfx_filter
---------------
-filter each channel with the same low/high cut, peak filter and high/low shelf filter settings, frequency analyzer that displays a sum of all channels
+`mcfx_convolver`: support loading `.wav` files directly (a `.conf` file is written to disk and loaded in the background); support drag/drop of `.wav` or `.conf` files onto the GUI.
 
-low and high pass: 2nd order butterworth filter or 2x 2nd order butterworth cascaded (resulting in linkwitz riley characteristic) for use as x-over network
+### 0.6.0 (2023-04-16)
 
-plus 2x parametric filter +- 18dB
+New builds optimized for Apple Silicon and 64-bit Intel Mac; Windows 64-bit. Update to JUCE 7; removed soxr dependency. `mcfx_gain_delay`: sine generator now starts at 10 Hz.
 
-plus low and high shelf filters +- 18dB
+### 0.5.11 (2020-05-20)
 
-filter parameters can be adjusted during playback without introducing audible glitches (except switching lp/hp bypass and order)
+`mcfx_convolver`: fix +6 dB gain on the macOS version (Windows was correct). **Note:** macOS projects using this plug-in will output 6 dB less than with older versions.
 
+### 0.5.10 (2020-05-19)
 
-mcfx_gain_delay
---------------
-set different delay time and gain setting for each channel (good for multispeaker calibration), includes a signal generator for testing individual channels
+`mcfx_filter`: High-Shelf Q was not stored in the plug-in state — fixed.
 
-the GUI allows to paste a list of float gain and delay values from the clipboard with semicolon, comma, newline, tab or space separated.
+### 0.5.9 (2020-02-05)
 
-maximum delay time in seconds is a compile time flag (MAX_DELAYTIME_S)
+`mcfx_convolver`: fix dropouts/artifacts for hosts sending incomplete block sizes (e.g. Adobe, Steinberg); fix reloading stored presets; add filter length and latency debug messages; fix GUI crash in Adobe hosts.
 
-mcfx_meter
---------------
+### 0.5.8 (2020-01-31)
 
-multichannel level meter with RMS, peak and peak hold
+`mcfx_convolver`: option to store preset inside the DAW project; allow exporting the stored preset as a `.zip` file.
 
+### 0.5.7 (2019-04-28)
 
-changelog:
-==============
-- 0.6.4 (2024-03-20) - mcfx_convolver: add master gain parameter and rotary control, add mechanism to save channel count in wav IR files, fix debug window. Add build and installer creation scripts.
+`mcfx_convolver`: OSC receive support (`/reload`, `/load <preset.conf>`); configurable OSC port in GUI.
 
-- 0.6.3 (2023-12-21) - mcfx_filter: fix parameter smoothing to avoid instabilities and glitches while changing filter parameters, performance optimizations.
+### 0.5.6 (2019-03-20)
 
-- 0.6.2 (2023-12-11) - add 128 channel version of all plugins - since REAPER does allow for 128 channels per track, adjust mcfx_meter and mcfx_gain_delay GUI to display 128 channels properly
+`mcfx_convolver`: maintain FIR filter gain when resampled; add plug-in parameter to trigger preset reload.
 
-- 0.6.1 (2023-12-08) - mcfx_convolver: support loading `.wav` files (a `.conf` file will be written to disk and loaded in the background!), support drag/drop `.wav` or `.conf` files onto the GUI for loading
+### 0.5.5 (2018-03-16)
 
-- 0.6.0 (2023-04-16) - new builds optimized for Apple Silicon and 64 bit Intel Mac; Win 64 bit; Update to JUCE 7; removed soxr dependency to simplify build; mcfx_gain_delay: allow sine generator to start at f=10 Hz
+`mcfx_filter`, `mcfx_gain_delay`, `mcfx_delay`: improved slider behavior for finer control. `mcfx_gain_delay`: Ctrl+click for exclusive solo/phase/mute; add toneburst to signal generator; fix saving channel state of signal generator.
 
-- 0.5.11 (2020-05-20) - mcfx_convolver - Mac OS version added a +6dB gain to the filtered output, this is fixed now (Windows version was correct) -> this might influence old projects under OSX since mcfx_convolver will output 6dB less than older versions!
+### 0.5.4 (2017-05-20)
 
-- 0.5.10 (2020-05-19) - mcfx_filter - High-Shelf Q was not stored in the plugin state, this is fixed now
+`mcfx_convolver`, `mcfx_filter`: fix thread-safety to avoid startup crash when other plug-ins use FFTW.
 
-- 0.5.9 (2020-02-05) - mcfx_convolver - fix dropouts/artifacts for hosts that send incomplete block sizes (eg. Adobe, Steinberg), fix reloading of stored presets, add filter length and latency debug messages, fix gui crash in Adobe hosts
+### 0.5.3 (2017-05-02)
 
-- 0.5.8 (2020-01-31) - mcfx_convolver - option to store preset within the project -> allows to exchange a DAW (eg. Reaper) project without need to provide the preset files extra, allow to export stored preset as .zip file for recovering it from the project
+`mcfx_delay`, `mcfx_gain_delay`: fix glitch in delay line.
 
-- 0.5.7 (2019-04-28) - mcfx_convolver - osc receive support: /reload, /load <preset.conf> -> allows remote control of reloading/loading presets, port can be set in GUI
+### 0.5.2 (2017-03-20)
 
-- 0.5.6 (2019-03-20) - mcfx_convolver - maintain fir filter gain if resampled, add plugin parameter to trigger reload of configuration
+Various bugfixes. `mcfx_convolver`: performance optimizations; adjustable maximum partition size.
 
-- 0.5.5 (2018-03-16) - filter, gain_delay, delay: slider behavior changed for more accurate control; gain_delay: ctrl+click for exclusive solo/phase/mute, add toneburst for signalgenerator, bugfix saving channel state of signalgenerator
+### 0.5.1 (2016-04-25)
 
-- 0.5.4 (2017-05-20) - mcfx_convolver and mcfx_filter: fixed threadsafety to avoid startup crash if other plugins use fftw
+`mcfx_convolver`: fix bug loading packed (dense) matrix. `mcfx_gain_delay`: GUI fix.
 
-- 0.5.3 (2017-05-02) - mcfx_delay and mcfx_gain_delay fixed glitch in delayline
+### 0.5.0 (2016-04-08)
 
-- 0.5.2 (2017-03-20) - various bugfixes; mcfx_convolver: performance optimizations, adjustable maximum partition size
+Add signal generator to `mcfx_gain_delay`. `mcfx_convolver`: support packed WAV file for dense FIR matrix (see `CONVOLVER_CONFIG_HOWTO.txt`). `mcfx_filter`: smooth IIR filter to avoid clicks on parameter changes.
 
-- 0.5.1 (2016-04-25) - mcfx_convolver: fixed bug in loading packed (dense) matrix; mcfx_gain_delay gui fix
+### 0.4.2 (2016-02-19)
 
-- 0.5.0 (2016-04-08) - add signal generator to mcfx_gain_delay; convolver: support for packed wav file to load a dense FIR matrix from only one .wav file -> have a look at CONVOLVER_CONFIG_HOWTO.txt; filter: smooth iir filter to avoid clicks when parameters change
+Fix convolver bug.
 
-- 0.4.2 (2016-02-19) - fixed one more convolver bug
+### 0.4.1 (2016-02-17)
 
-- 0.4.1 (2016-02-17) - fixed convolver bug which resulted in mixed up partitions
+Fix convolver bug causing mixed-up partitions.
 
-- 0.4.0 (2015-11-04) - gui for mcfx_delay, gui for mcfx_filter (with fft analyzer), added phase, solo and mute buttons to mcfx_gain_delay
+### 0.4.0 (2015-11-04)
 
-- 0.3.3 (2015-07-19) - performance improvements for mcfx_convolver
-_
-- 0.3.2 (2014-12-28) - audiomulch compatibility, gui for mcfx_gain_delay with paste from clipboard functionality, mcfx_meter added scale offset
+GUI for `mcfx_delay` and `mcfx_filter` (with FFT analyzer). Add phase, solo, and mute buttons to `mcfx_gain_delay`.
 
-- 0.3.1 (2014-06-16) - fixed vst id for bidule compatibility
+### 0.3.3 (2015-07-19)
 
-- 0.3 (2014-03-15) - added mcfx_convolver
+Performance improvements for `mcfx_convolver`.
 
-- 0.2 (2014-02-25) - removed some license incompatible code, juce update
+### 0.3.2 (2014-12-28)
 
-- 0.1 (2014-01-10) - first release 
+AudioMulch compatibility. GUI for `mcfx_gain_delay` with paste-from-clipboard. `mcfx_meter`: add scale offset.
 
-______________________________
-(C) 2013-2017 Matthias Kronlachner
-m.kronlachner@gmail.com
+### 0.3.1 (2014-06-16)
+
+Fix VST ID for Bidule compatibility.
+
+### 0.3 (2014-03-15)
+
+Add `mcfx_convolver`.
+
+### 0.2 (2014-02-25)
+
+Remove license-incompatible code; JUCE update.
+
+### 0.1 (2014-01-10)
+
+First release.
+
+---
+
+&copy; 2013–2026 Matthias Kronlachner — m.kronlachner@gmail.com
