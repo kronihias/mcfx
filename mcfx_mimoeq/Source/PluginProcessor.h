@@ -21,6 +21,7 @@
 #define PLUGINPROCESSOR_H_INCLUDED
 
 #include "JuceHeader.h"
+#include "mcfx_buses.h"
 #include "EqChain.h"
 #include "SpectrumAnalyzer.h"
 #include <map>
@@ -51,6 +52,11 @@ public:
     void prepareToPlay(double sampleRate, int samplesPerBlock) override;
     void releaseResources() override;
     bool isBusesLayoutSupported (const BusesLayout& layouts) const override;
+
+   #if MCFX_MULTICHANNEL_BUILD
+    MCFX_MULTICHANEL_APPLY_BUS_LAYOUTS_OVERRIDE
+   #endif
+
     void processBlock(AudioSampleBuffer& buffer, MidiBuffer& midiMessages) override;
 
     AudioProcessorEditor* createEditor() override;
