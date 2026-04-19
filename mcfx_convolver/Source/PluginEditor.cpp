@@ -333,10 +333,10 @@ void Mcfx_convolverAudioProcessorEditor::resized()
     txt_rcv_port.setBounds(146, 108, 40, 18);
     tgl_rcv_active.setBounds(16, 105, 130, 24);
 
-    size_t sld_master_gainSize = 72;
-    size_t leftmostFreePixel = 190+18;
+    int sld_master_gainSize = 72;
+    int leftmostFreePixel = 190+18;
     jassert((fromRight(150)-leftmostFreePixel)>0); // If this fails, window width is too small
-    size_t xPosGain = (fromRight(150)-leftmostFreePixel)/2-(sld_master_gainSize/2)+leftmostFreePixel;  //
+    int xPosGain = (fromRight(150)-leftmostFreePixel)/2-(sld_master_gainSize/2)+leftmostFreePixel;
     sld_master_gain.setBounds(xPosGain, 134, sld_master_gainSize, sld_master_gainSize);
     lbl_master_gain.setBounds(xPosGain, 110, sld_master_gainSize, 24);
 

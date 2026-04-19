@@ -201,9 +201,9 @@ void Mcfx_mimoeqAudioProcessorEditor::paint(Graphics& g)
 {
     g.fillAll(Colour(0xff1a1a1a));
     g.setGradientFill(ColourGradient(Colour(0xff4e4e4e),
-                                      proportionOfWidth(0.6f), proportionOfHeight(0.7f),
+                                      (float)proportionOfWidth(0.6f), (float)proportionOfHeight(0.7f),
                                       Colours::black,
-                                      proportionOfWidth(0.1f), proportionOfHeight(0.1f),
+                                      (float)proportionOfWidth(0.1f), (float)proportionOfHeight(0.1f),
                                       true));
     g.fillRect(getLocalBounds());
 

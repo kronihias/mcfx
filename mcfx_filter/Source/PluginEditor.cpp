@@ -638,59 +638,59 @@ void LowhighpassAudioProcessorEditor::sliderValueChanged (Slider* sliderThatWasM
 
     if (sliderThatWasMoved == &sld_lc_f)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LCfreqParam, freq2param(sld_lc_f.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LCfreqParam, freq2param((float)sld_lc_f.getValue()));
     }
     else if (sliderThatWasMoved == &sld_hc_f)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HCfreqParam, freq2param(sld_hc_f.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HCfreqParam, freq2param((float)sld_hc_f.getValue()));
     }
     else if (sliderThatWasMoved == &sld_hs_f)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HSfreqParam, freq2param(sld_hs_f.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HSfreqParam, freq2param((float)sld_hs_f.getValue()));
     }
     else if (sliderThatWasMoved == &sld_hs_g)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HSGainParam, db2param(sld_hs_g.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HSGainParam, db2param((float)sld_hs_g.getValue()));
     }
     else if (sliderThatWasMoved == &sld_hs_q)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HSQParam, q2param(sld_hs_q.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::HSQParam, q2param((float)sld_hs_q.getValue()));
     }
     else if (sliderThatWasMoved == &sld_p1_f)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1freqParam, freq2param(sld_p1_f.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1freqParam, freq2param((float)sld_p1_f.getValue()));
     }
     else if (sliderThatWasMoved == &sld_p1_g)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1GainParam, db2param(sld_p1_g.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1GainParam, db2param((float)sld_p1_g.getValue()));
     }
     else if (sliderThatWasMoved == &sld_p1_q)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1QParam, q2param(sld_p1_q.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF1QParam, q2param((float)sld_p1_q.getValue()));
     }
     else if (sliderThatWasMoved == &sld_p2_f)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2freqParam, freq2param(sld_p2_f.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2freqParam, freq2param((float)sld_p2_f.getValue()));
     }
     else if (sliderThatWasMoved == &sld_p2_g)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2GainParam, db2param(sld_p2_g.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2GainParam, db2param((float)sld_p2_g.getValue()));
     }
     else if (sliderThatWasMoved == &sld_p2_q)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2QParam, q2param(sld_p2_q.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::PF2QParam, q2param((float)sld_p2_q.getValue()));
     }
     else if (sliderThatWasMoved == &sld_ls_f)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LSfreqParam, freq2param(sld_ls_f.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LSfreqParam, freq2param((float)sld_ls_f.getValue()));
     }
     else if (sliderThatWasMoved == &sld_ls_g)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LSGainParam, db2param(sld_ls_g.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LSGainParam, db2param((float)sld_ls_g.getValue()));
     }
     else if (sliderThatWasMoved == &sld_ls_q)
     {
-        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LSQParam, q2param(sld_ls_q.getValue()));
+        ourProcessor->setParameterNotifyingHost(LowhighpassAudioProcessor::LSQParam, q2param((float)sld_ls_q.getValue()));
     }
     else if (sliderThatWasMoved == &sld_analyzer_offset)
     {

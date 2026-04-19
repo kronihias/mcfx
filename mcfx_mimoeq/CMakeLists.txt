@@ -19,6 +19,10 @@ endif()
 
 SET(MC_PLUGIN_CODE "Emc0")
 
+IF(NOT APPLE)
+    SET(WITH_FFTW3 TRUE)
+ENDIF()
+
 # Pass EqCore + MtxConv to both variants via the MCFX_EXTRA_* hooks
 SET(MCFX_EXTRA_SOURCES  ${EQCORE_SOURCE} ${EQCORE_HEADER} ${MTXCONV_SOURCES})
 SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/EqCore ${SRC_DIR}/mcfx_convolver/Source)

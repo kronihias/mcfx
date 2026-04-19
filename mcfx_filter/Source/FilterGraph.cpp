@@ -101,7 +101,7 @@ int FilterGraph::dbtoypos(float db_val)
 
     float dyn = maxdb_-mindb_;
 
-    int ypos = ymargin/2 + (height - ymargin) * (1.f - (db_val - mindb_) / dyn);
+    int ypos = (int)(ymargin/2 + (height - ymargin) * (1.f - (db_val - mindb_) / dyn));
 
     return ypos;
 }
@@ -121,7 +121,7 @@ int FilterGraph::hztoxpos(float hz_val)
 {
     float width = (float) getWidth();
 
-    int xpos = xmargin + (width-xmargin) * ( log(hz_val/minf_) / log(maxf_/minf_) );
+    int xpos = (int)(xmargin + (width-xmargin) * ( log(hz_val/minf_) / log(maxf_/minf_) ));
 
     return xpos;
 }
@@ -139,8 +139,8 @@ void FilterGraph::paint (Graphics& g)
     int width = getWidth();
 
     // background
-    g.setGradientFill (ColourGradient (Colour (0xff232338), width / 2, getHeight() / 2, Colour (0xff21222a), 2.5f, getHeight() / 2, true));
-    g.fillRoundedRectangle (xmargin-2, 0.f, width - xmargin+4, getHeight()-12, 10.000f);
+    g.setGradientFill (ColourGradient (Colour (0xff232338), (float)(width / 2), (float)(getHeight() / 2), Colour (0xff21222a), 2.5f, (float)(getHeight() / 2), true));
+    g.fillRoundedRectangle ((float)(xmargin-2), 0.f, (float)(width - xmargin+4), (float)(getHeight()-12), 10.000f);
 
     g.setColour (Colour (0x60ffffff));
 
@@ -149,7 +149,7 @@ void FilterGraph::paint (Graphics& g)
     // create the grid path
 
     float dyn = maxdb_-mindb_;
-    int numgridlines = dyn/grid_div+1;
+    int numgridlines = (int)(dyn/grid_div+1);
 
     for (int i=0; i < numgridlines; i++)
     {
@@ -198,10 +198,10 @@ void FilterGraph::calcPathMagPhase()
     // plot magnitude
     path_mag_.clear();
 
-    path_mag_.startNewSubPath(xmargin, dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xmargin)).magnitude) ));
+    path_mag_.startNewSubPath(xmargin, (float)dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz((int)xmargin)).magnitude) ));
 
-    for (int xPos=xmargin+1; xPos<width; xPos++) {
-        path_mag_.quadraticTo(xPos-1, dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xPos-1)).magnitude) ), xPos, dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xPos)).magnitude) ));
+    for (int xPos=(int)xmargin+1; xPos<width; xPos++) {
+        path_mag_.quadraticTo((float)(xPos-1), (float)dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xPos-1)).magnitude) ), (float)xPos, (float)dbtoypos( 20*log10f(filterinfo_->getResponse(xpostohz(xPos)).magnitude) ));
     }
 
 }
@@ -219,22 +219,22 @@ void  FilterGraph::calcPathAnalyzer()
     // plot input magnitude — no spatial smoothing (temporal smoothing is sufficient)
     path_in_mag_.clear();
 
-    float y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz(xmargin)), magFloor))) );
+    float y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz((int)xmargin)), magFloor))) );
     path_in_mag_.startNewSubPath(xmargin, y);
 
-    for (int xPos=xmargin+1; xPos<width; xPos++) {
-        y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz(xPos)), magFloor))) );
+    for (int xPos=(int)xmargin+1; xPos<width; xPos++) {
+        y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz(xPos)), magFloor))) );
         path_in_mag_.lineTo((float)xPos, y);
     }
 
     // plot output magnitude
     path_out_mag_.clear();
 
-    y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz(xmargin)), magFloor))) );
+    y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz((int)xmargin)), magFloor))) );
     path_out_mag_.startNewSubPath(xmargin, y);
 
-    for (int xPos=xmargin+1; xPos<width; xPos++) {
-        y = dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz(xPos)), magFloor))) );
+    for (int xPos=(int)xmargin+1; xPos<width; xPos++) {
+        y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz(xPos)), magFloor))) );
         path_out_mag_.lineTo((float)xPos, y);
     }
 
@@ -284,23 +284,23 @@ void FilterGraph::resized()
 
 
     float dyn = maxdb_-mindb_;
-    int numgridlines = dyn/grid_div+1;
+    int numgridlines = (int)(dyn/grid_div)+1;
 
     for (int i=0; i < numgridlines; i++)
     {
         float db_val = maxdb_-i*grid_div;
 
-        int ypos = dbtoypos(db_val);
+        float ypos = (float)dbtoypos(db_val);
 
         if (db_val == 0)
         {
             path_w_grid.startNewSubPath(xmargin, ypos);
-            path_w_grid.lineTo(width, ypos);
+            path_w_grid.lineTo((float)width, ypos);
         }
         else
         {
             path_grid.startNewSubPath(xmargin, ypos);
-            path_grid.lineTo(width, ypos);
+            path_grid.lineTo((float)width, ypos);
         }
 
 
@@ -310,18 +310,18 @@ void FilterGraph::resized()
 
     // plot freq lines
     for (float f=minf_; f <= maxf_; f += powf(10, floorf(log10(f)))) {
-        int xpos = hztoxpos(f);
+        float xpos = (float)hztoxpos(f);
 
 
         if ((f == 50) || (f == 100) || (f == 500) || (f == 1000) || (f == 5000) || (f == 10000))
         {
-            path_w_grid.startNewSubPath(xpos, dbtoypos(maxdb_));
-            path_w_grid.lineTo(xpos, dbtoypos(mindb_));
+            path_w_grid.startNewSubPath(xpos, (float)dbtoypos(maxdb_));
+            path_w_grid.lineTo(xpos, (float)dbtoypos(mindb_));
 
         } else
         {
-            path_grid.startNewSubPath(xpos, dbtoypos(maxdb_));
-            path_grid.lineTo(xpos, dbtoypos(mindb_));
+            path_grid.startNewSubPath(xpos, (float)dbtoypos(maxdb_));
+            path_grid.lineTo(xpos, (float)dbtoypos(mindb_));
         }
     }
 
