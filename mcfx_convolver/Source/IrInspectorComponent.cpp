@@ -367,6 +367,7 @@ void IrPlotComponent::drawFrequencyDomain(Graphics& g, Rectangle<int> area)
 
 IrMatrixComponent::IrMatrixComponent()
 {
+    setWantsKeyboardFocus(true);
 }
 
 void IrMatrixComponent::updateMatrix(ConvolverData& convData)
@@ -501,10 +502,48 @@ void IrMatrixComponent::mouseDown(const MouseEvent& e)
         if (matrix_[out][in].irIndex >= 0)
         {
             setSelectedCell(in, out);
+            grabKeyboardFocus();
             if (onCellClicked)
                 onCellClicked(in, out);
         }
     }
+}
+
+bool IrMatrixComponent::keyPressed(const KeyPress& key)
+{
+    if (numInputs_ == 0 || numOutputs_ == 0)
+        return false;
+
+    int newIn  = (selectedIn_  < 0) ? 0 : selectedIn_;
+    int newOut = (selectedOut_ < 0) ? 0 : selectedOut_;
+
+    if      (key == KeyPress::rightKey) newIn  = jmin(numInputs_  - 1, newIn  + 1);
+    else if (key == KeyPress::leftKey)  newIn  = jmax(0,               newIn  - 1);
+    else if (key == KeyPress::downKey)  newOut = jmin(numOutputs_ - 1, newOut + 1);
+    else if (key == KeyPress::upKey)    newOut = jmax(0,               newOut - 1);
+    else return false;
+
+    setSelectedCell(newIn, newOut);
+
+    if (auto* vp = findParentComponentOfClass<Viewport>())
+    {
+        int cellX = headerSize + newIn  * cellSize;
+        int cellY = headerSize + newOut * cellSize;
+        int vpX = vp->getViewPositionX();
+        int vpY = vp->getViewPositionY();
+        int vpW = vp->getMaximumVisibleWidth();
+        int vpH = vp->getMaximumVisibleHeight();
+        if (cellX < vpX)                  vpX = cellX;
+        if (cellX + cellSize > vpX + vpW) vpX = cellX + cellSize - vpW;
+        if (cellY < vpY)                  vpY = cellY;
+        if (cellY + cellSize > vpY + vpH) vpY = cellY + cellSize - vpH;
+        vp->setViewPosition(vpX, vpY);
+    }
+
+    if (matrix_[newOut][newIn].irIndex >= 0 && onCellClicked)
+        onCellClicked(newIn, newOut);
+
+    return true;
 }
 
 //==============================================================================

@@ -78,6 +78,7 @@ public:
     void mouseDown(const MouseEvent& e) override;
     void mouseMove(const MouseEvent& e) override;
     void mouseExit(const MouseEvent& e) override;
+    bool keyPressed(const KeyPress& key) override;
 
     String getTooltip() override
     {
