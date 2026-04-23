@@ -1316,6 +1316,9 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
         xml.setAttribute("configData", tempFileBlock.toBase64Encoding());
     }
 
+    // save ValueTreeState parameters (e.g. MASTERGAIN)
+    xml.addChildElement (valueTreeState.copyState().createXml().release());
+
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
 }
@@ -1349,6 +1352,10 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
               setOscIn(true);
 
             _storeConfigDataInProject.set(xmlState->getIntAttribute("storeConfigDataInProject", 0)); // -> default: don't store convolver data for existing projects
+
+            // restore ValueTreeState parameters (e.g. MASTERGAIN)
+            if (auto* vtsXml = xmlState->getChildByName (valueTreeState.state.getType()))
+                valueTreeState.replaceState (ValueTree::fromXml (*vtsXml));
         }
 
         File tempDir(newPresetDir);
