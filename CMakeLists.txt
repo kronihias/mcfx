@@ -198,8 +198,10 @@ ENDIF()
 
 IF (UNIX)
     # this is to make the convolver build under linux happy
-    SET (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -msse3")
-    SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3")
+    IF (CMAKE_SYSTEM_PROCESSOR MATCHES "(x86_64|i386|amd64)")
+        SET (CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} -msse3")
+        SET (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -msse3")
+    ENDIF()
 ENDIF (UNIX)
 
 ################################################
