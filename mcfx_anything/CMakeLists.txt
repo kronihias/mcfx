@@ -19,8 +19,12 @@ IF(APPLE)
 ENDIF(APPLE)
 
 # Enable VST2 hosting if the VST2 SDK is available (independent of BUILD_VST
-# which controls whether mcfx_anything itself is built as a VST2 plugin)
-IF(BUILD_VST OR EXISTS "${VST2SDKPATH}/pluginterfaces/vst2.x/aeffectx.h")
+# which controls whether mcfx_anything itself is built as a VST2 plugin).
+# MCFX_VST2_SDK_AVAILABLE is set in the root CMakeLists.txt after confirming
+# the SDK header is reachable; juce_set_vst2_sdk_path has registered the
+# include directory on the juce_vst2_sdk target, which JUCE links to every
+# plugin target automatically.
+IF(BUILD_VST OR MCFX_VST2_SDK_AVAILABLE)
     LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_VST=1)
 ENDIF()
 

@@ -52,13 +52,19 @@ public:
             _pluginEditor->setBounds (0, toolbar, getWidth(), getHeight() - toolbar);
     }
 
-    // Some plugins (notably Waves) render a blank/white custom GUI when their
-    // IPlugView::attached() happens before the host NSView is actually on
-    // screen — the plugin binds its GL/Metal context to a zero-sized parent
-    // and never recovers. Work around this by rebuilding the editor exactly
-    // once, asynchronously, after this component is really showing with a
-    // native peer. Users previously had to toggle Generic<->Custom to do
-    // this dance manually.
+    // Defers creation of the native plugin editor until the inspector window
+    // is actually on-screen. Two problems drive this:
+    //  - Some plugins (notably Waves) render a blank/white custom GUI when
+    //    IPlugView::attached() happens before the host NSView is on screen:
+    //    they bind their GL/Metal context to a zero-sized parent and never
+    //    recover.
+    //  - Some Apple AUs (e.g. AUHipassFilter) throw an NSException out of
+    //    -[CAAppleEQGraphView setFrameSize:] during the first autolayout
+    //    pass that runs inside -[NSWindow makeKeyAndOrderFront:], which
+    //    crashes the host if their native view already exists at show time.
+    // rebuildEditor() therefore creates a GenericAudioProcessorEditor as a
+    // placeholder until _didPostShowRebuild flips, at which point it builds
+    // the real custom editor.
     void parentHierarchyChanged() override
     {
         if (_didPostShowRebuild) return;
@@ -101,10 +107,14 @@ private:
     {
         _pluginEditor.reset();
 
-        if (_useGenericEditor || ! _hasCustomEditor)
-            _pluginEditor.reset (new GenericAudioProcessorEditor (*_instance));
-        else
+        // Only create the native plugin editor once the inspector window has
+        // been shown — see parentHierarchyChanged() for why.
+        const bool canMakeCustom = _hasCustomEditor && ! _useGenericEditor && _didPostShowRebuild;
+
+        if (canMakeCustom)
             _pluginEditor.reset (_instance->createEditor());
+        else
+            _pluginEditor.reset (new GenericAudioProcessorEditor (*_instance));
 
         if (_pluginEditor)
         {

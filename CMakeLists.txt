@@ -68,8 +68,13 @@ set (MCFX_FORMATS      "")
 set (MCFX_FORMATS_VST2 "")
 set (MCFX_FORMATS_MC   "")
 
+# VST2 SDK path is needed both for building VST2 plugins AND for VST2 plugin
+# hosting in mcfx_anything (which can run in a VST3-only build). Declare it
+# unconditionally so the header include dir can be registered with JUCE even
+# when BUILD_VST is OFF.
+SET (VST2SDKPATH "~/SDKs/vstsdk2.4" CACHE PATH "Path to the VST2 SDK")
+
 if (BUILD_VST)
-    SET (VST2SDKPATH "~/SDKs/vstsdk2.4" CACHE PATH "Path to the VST2 SDK")
     # checking VST2 SDK
     if (VST2SDKPATH STREQUAL "/usr/include")
         CHECK_INCLUDE_FILES(pluginterfaces/vst2.x/aeffectx.h HAVE_VST2_HEADERS)
@@ -77,11 +82,24 @@ if (BUILD_VST)
             message (FATAL_ERROR "You have to specify the VST2SDKPATH variable with the path to the VST2 SDK if you want to build VST2 versions.")
         endif()
     endif()
-    juce_set_vst2_sdk_path (${VST2SDKPATH})
     list (APPEND MCFX_FORMATS      VST)
     list (APPEND MCFX_FORMATS_VST2 VST)
     message ("-- Building VST2 versions")
 endif(BUILD_VST)
+
+# Register the VST2 SDK with JUCE whenever the header is available. This
+# creates the juce_vst2_sdk INTERFACE target whose include directories are
+# propagated to any plugin that hosts VST2 (mcfx_anything), independent of
+# whether BUILD_VST is ON.
+get_filename_component(_vst2_sdk_abs "${VST2SDKPATH}" ABSOLUTE)
+if (EXISTS "${_vst2_sdk_abs}/pluginterfaces/vst2.x/aeffectx.h")
+    juce_set_vst2_sdk_path (${VST2SDKPATH})
+    SET (MCFX_VST2_SDK_AVAILABLE TRUE)
+elseif (BUILD_VST)
+    # BUILD_VST=ON implies we must have the SDK; let JUCE raise the error.
+    juce_set_vst2_sdk_path (${VST2SDKPATH})
+endif()
+unset(_vst2_sdk_abs)
 
 if (BUILD_VST3)
     message ("-- Building VST3 versions")
