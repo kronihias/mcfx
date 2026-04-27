@@ -266,6 +266,8 @@ ADD_SUBDIRECTORY ( mcfx_meter )
 ADD_SUBDIRECTORY ( mcfx_mimoeq )
 ADD_SUBDIRECTORY ( mcfx_anything )
 ADD_SUBDIRECTORY ( mcfx_graph )
+ADD_SUBDIRECTORY ( mcfx_send )
+ADD_SUBDIRECTORY ( mcfx_receive )
 
 ################################################
 # Optional: offline CLI test harness for Python-driven regression tests.
