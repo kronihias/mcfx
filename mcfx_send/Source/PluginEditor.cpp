@@ -145,11 +145,39 @@ McfxSendAudioProcessorEditor::McfxSendAudioProcessorEditor (McfxSendAudioProcess
     pwEditor.onFocusLost = [this]() { processor.setPassword (pwEditor.getText()); };
     pwEditor.onReturnKey = [this]() { processor.setPassword (pwEditor.getText()); };
 
+    addAndMakeVisible (boundLabel);
+    boundLabel.setJustificationType (juce::Justification::centredLeft);
+    boundLabel.setTooltip (
+        "Local UDP port this sender is bound to. Hand this address to\n"
+        "the receiving peer if it can't see this sender via Bonjour\n"
+        "(different subnet, mDNS blocked, etc.) — they paste it into\n"
+        "their Direct IP tab and click Connect.");
+
     addAndMakeVisible (statusLabel);
     statusLabel.setJustificationType (juce::Justification::centredLeft);
+    statusLabel.setTooltip (
+        "Active targets summary. Each accepted receiver in the targets\n"
+        "list gets one packet per audio period; bandwidth scales\n"
+        "linearly with the target count. uid=... is this sender's\n"
+        "stable Bonjour identifier, useful when looking at packet\n"
+        "captures or matching log lines across both sides.");
 
     addAndMakeVisible (networkLabel);
     networkLabel.setJustificationType (juce::Justification::centredLeft);
+    networkLabel.setTooltip (
+        "Aggregate sender stats (smoothed over ~0.5 s).\n\n"
+        "MB/s, kB/s, B/s\n"
+        "    Outbound throughput across all targets combined.\n\n"
+        "<N> pkt/s\n"
+        "    Packet send rate. Pack as many frames per packet as fit\n"
+        "    in a 1400-byte UDP datagram, send N packets per audio\n"
+        "    period. Multiply by the number of active targets for\n"
+        "    the per-target rate.\n\n"
+        "overruns <N>\n"
+        "    Times the audio thread couldn't push into the SPSC ring\n"
+        "    because the SendThread hadn't drained fast enough. A\n"
+        "    non-zero count under sustained load means the network\n"
+        "    can't keep up — try a lower channel count or 16-bit PCM.");
     networkLabel.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(),
                                                           12.0f, juce::Font::plain)));
     networkLabel.setColour (juce::Label::textColourId, juce::Colour (0xffc8c8c8));
@@ -271,7 +299,10 @@ void McfxSendAudioProcessorEditor::connectSelected()
     if (row < 0 || row >= (int) localTab.list.rows.size()) return;
     const auto& r = localTab.list.rows[(size_t) row];
     if (r.ip.isEmpty() || r.port <= 0) return;
-    processor.addTarget (r.ip, r.port);
+    // Pass wireUid for Bonjour-discovered rows (=0 for Direct-IP) so
+    // the target entry pairs against the discovered row from the very
+    // first refresh, no transient "(direct)" while the ACK is in flight.
+    processor.addTarget (r.ip, r.port, r.wireUid);
 }
 
 void McfxSendAudioProcessorEditor::disconnectSelected()
@@ -319,6 +350,16 @@ void McfxSendAudioProcessorEditor::rebuildUnifiedRows()
     std::vector<UnifiedRow> rows;
     rows.reserve (discovered.size() + targets.size());
 
+    // Pair discovered Bonjour entries with our targets list by wire UID
+    // (Bonjour TXT "wuid" == receiver's stream UID, same value the
+    // receiver writes into CommonHeader.sender on its outbound INVITEs).
+    // UID is the only identity — host:port can drift across re-binds
+    // and multi-homed source-IP differences.
+    //
+    // Direct-IP target entries (created via the user typing a host in
+    // the Direct IP tab) have receiverUid=0 until the first INVITE_ACK
+    // arrives; they correctly DON'T pair against any discovered row
+    // and fall through to the "(direct)" rendering below.
     std::vector<bool> targetsConsumed (targets.size(), false);
     for (const auto& d : discovered)
     {
@@ -329,12 +370,14 @@ void McfxSendAudioProcessorEditor::rebuildUnifiedRows()
         r.ip         = d.ip.toString();
         r.port       = d.port;
         r.channels   = d.channels;
+        r.wireUid    = d.wireUid;
         r.viaBonjour = true;
         r.state      = RowState::Discovered;
+
         for (size_t i = 0; i < targets.size(); ++i)
         {
             const auto& t = targets[i];
-            if (t.host == r.ip && t.port == r.port)
+            if (t.receiverUid != 0 && t.receiverUid == d.wireUid)
             {
                 r.state         = stateFromTarget (t.state);
                 r.rejectReason  = t.rejectReason;
@@ -388,14 +431,15 @@ void McfxSendAudioProcessorEditor::resized()
     titleLabel.setBounds (area.removeFromTop (28));
     area.removeFromTop (6);
 
-    auto rowChans = area.removeFromTop (28);
-    chansLabel.setBounds (rowChans.removeFromLeft (130));
-    chansCombo.setBounds (rowChans.removeFromLeft (180));
-    area.removeFromTop (6);
-
-    auto rowFmt = area.removeFromTop (28);
-    formatLabel.setBounds (rowFmt.removeFromLeft (90));
-    formatCombo.setBounds (rowFmt.removeFromLeft (200));
+    // Channels-to-send and Format share one row to save vertical space —
+    // the chans combo only ever holds small numbers so 80 px is plenty;
+    // the format combo needs room for "PCM 32-bit float".
+    auto rowChansFmt = area.removeFromTop (28);
+    chansLabel.setBounds  (rowChansFmt.removeFromLeft (130));
+    chansCombo.setBounds  (rowChansFmt.removeFromLeft (80));
+    rowChansFmt.removeFromLeft (16);
+    formatLabel.setBounds (rowChansFmt.removeFromLeft (70));
+    formatCombo.setBounds (rowChansFmt.removeFromLeft (160));
     area.removeFromTop (6);
 
     auto rowPw = area.removeFromTop (28);
@@ -403,15 +447,28 @@ void McfxSendAudioProcessorEditor::resized()
     pwEditor.setBounds (rowPw.removeFromLeft (200));
     area.removeFromTop (6);
 
+    // Listening-port label first (mirrors the receiver's boundLabel
+    // position above its connectionStatusLabel) so the user can grab
+    // the sender's UDP port for manual / Direct-IP peering.
+    boundLabel.setBounds (area.removeFromTop (24));
+    area.removeFromTop (2);
+    // Status banner sits just above the tabs (mirrors the receiver's
+    // connectionStatusLabel position). Aggregate-stats networkLabel
+    // moves to the bottom strip, between the buttons and the meter,
+    // so the tab list is the visually dominant element on both sides.
     statusLabel.setBounds (area.removeFromTop (24));
-    area.removeFromTop (4);
-    networkLabel.setBounds (area.removeFromTop (20));
     area.removeFromTop (8);
 
+    // Bottom strip: meter pinned at the bottom, then per-stream stats,
+    // then the Connect / Disconnect / Refresh button row. Identical
+    // ordering to the receiver editor.
     constexpr int kMeterHeight = 140;
     auto meterRow = area.removeFromBottom (kMeterHeight);
     meter.setBounds (meterRow);
-    area.removeFromBottom (8);
+    area.removeFromBottom (4);
+
+    networkLabel.setBounds (area.removeFromBottom (20));
+    area.removeFromBottom (4);
 
     auto buttonRow = area.removeFromBottom (32);
     area.removeFromBottom (4);
@@ -421,6 +478,8 @@ void McfxSendAudioProcessorEditor::resized()
     buttonRow.removeFromLeft (6);
     refreshButton.setBounds    (buttonRow.removeFromLeft (90));
 
+    // Whatever's left in the middle is the tabbed connect panel; the
+    // inner ListBox auto-scrolls when the row count exceeds the height.
     tabs.setBounds (area);
 
     if (resizer)
@@ -438,6 +497,20 @@ void McfxSendAudioProcessorEditor::timerCallback()
     // Track the host's bus width so the "Channels to send" combo can't
     // offer values that exceed what the input bus actually provides.
     rebuildChansCombo (processor.getMainBusNumInputChannels());
+
+    // Local listen-port label. Updated every tick because the port can
+    // change across releaseResources / prepareToPlay cycles (the host
+    // tearing down and re-arming the plugin), and we want the displayed
+    // value to follow the current binding.
+    {
+        const int bound = processor.getListenPort();
+        boundLabel.setText ((bound > 0)
+            ? "Listening on UDP port " + juce::String (bound)
+            : juce::String ("Not bound"),
+            juce::dontSendNotification);
+        boundLabel.setColour (juce::Label::textColourId,
+            (bound > 0) ? juce::Colours::white : juce::Colours::orange);
+    }
 
     const int active = processor.getActiveTargetCount();
     statusLabel.setText (active > 0
@@ -466,7 +539,7 @@ void McfxSendAudioProcessorEditor::timerCallback()
                 if (v >= 1.0e3) return juce::String (v / 1.0e3, 1) + " kB/s";
                 return juce::String ((int) v) + " B/s";
             };
-            net = fmtRate (bps) + "  " + juce::String ((int) pps) + " pps"
+            net = fmtRate (bps) + "  " + juce::String ((int) pps) + " pkt/s"
                 + "  overruns " + juce::String (processor.getOverruns());
         }
     }

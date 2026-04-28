@@ -61,6 +61,8 @@ public:
         RowState     state = RowState::Discovered;
         mcfx::net::InviteAckReason rejectReason = mcfx::net::IAR_OK;
         bool         viaBonjour = true;
+        std::uint32_t wireUid = 0;   // sender's wire UID, from Bonjour TXT
+                                     // "wuid"; 0 for Direct-IP rows
     };
 
 private:
@@ -147,6 +149,10 @@ private:
     // --- Per-peer telemetry --------------------------------------------
     juce::Label peersLabel;
     juce::Label networkLabel;
+    // TooltipWindow has to be a long-lived child of the editor for any
+    // setTooltip() on our other components to actually surface on hover.
+    // 700 ms is JUCE's default delay-before-show.
+    juce::TooltipWindow tooltipWindow { this, 700 };
 
     struct History
     {

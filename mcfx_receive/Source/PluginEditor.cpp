@@ -188,11 +188,44 @@ McfxReceiveAudioProcessorEditor::McfxReceiveAudioProcessorEditor (McfxReceiveAud
 
     addAndMakeVisible (peersLabel);
     peersLabel.setJustificationType (juce::Justification::centredLeft);
+    peersLabel.setTooltip (
+        "Connected peers (one entry per accepted sender). Format:\n"
+        "    <channels> ch  (<sender IP>:<sender source port>)\n"
+        "Multiple peers are pipe-separated. \"(priming)\" means the\n"
+        "ring buffer is still filling to the prefill threshold and no\n"
+        "audio is being mixed yet.");
+
     addAndMakeVisible (networkLabel);
     networkLabel.setJustificationType (juce::Justification::centredLeft);
     networkLabel.setFont (juce::Font (juce::FontOptions (juce::Font::getDefaultMonospacedFontName(),
                                                           12.0f, juce::Font::plain)));
     networkLabel.setColour (juce::Label::textColourId, juce::Colour (0xffc8c8c8));
+    networkLabel.setTooltip (
+        "Per-peer network stats (smoothed over ~0.5 s).\n\n"
+        "MB/s, kB/s, B/s\n"
+        "    Inbound throughput from this sender.\n\n"
+        "<N> pkt/s\n"
+        "    Packet arrival rate. Senders pack as many frames per\n"
+        "    packet as fit in a 1400-byte UDP datagram, so pkt/s\n"
+        "    scales with channel count and sample format.\n\n"
+        "buf <X>ms (+<Y>ms)\n"
+        "    Effective jitter buffer depth. <X> is the user-set\n"
+        "    floor; the optional (+<Y>ms) is per-peer auto-headroom\n"
+        "    that grows on packet loss / underrun and decays during\n"
+        "    clean periods, capped at 200 ms.\n\n"
+        "lat ~<X>ms\n"
+        "    Estimated total one-way latency: sender block + jitter\n"
+        "    buffer + receiver block + resampler group delay. Does\n"
+        "    not include actual network transit (would need synced\n"
+        "    clocks); on a LAN that's negligible vs. the buffer.\n\n"
+        "fill <N> fr\n"
+        "    Current ring fill in source frames. Targets prefill +\n"
+        "    period/2 in steady state; the adaptive resampler nudges\n"
+        "    its ratio to keep this stable as the two clocks drift.\n\n"
+        "gap <N>      frames zero-filled to cover packet loss.\n"
+        "underrun <N> times the audio thread found the ring empty.\n"
+        "reorderDrop <N> packets dropped because they arrived after\n"
+        "             a later one had already been written.");
 
     // --- Audio meter at the bottom ---
     addAndMakeVisible (meter);
@@ -244,7 +277,11 @@ void McfxReceiveAudioProcessorEditor::connectSelected()
     const auto& r = localTab.list.rows[(size_t) row];
     if (r.ip.isEmpty() || r.port <= 0) return;
     processor.clearLastAttempt();
-    processor.inviteSender (r.ip, r.port);
+    // Pass wireUid for Bonjour-discovered rows (=0 for Direct-IP) so the
+    // accepted entry pairs against the discovered row from the very
+    // first refresh — no flicker through "(direct)" while we wait for
+    // the INVITE_ACK to populate the UID.
+    processor.inviteSender (r.ip, r.port, r.wireUid);
 }
 
 void McfxReceiveAudioProcessorEditor::disconnectSelected()
@@ -253,7 +290,12 @@ void McfxReceiveAudioProcessorEditor::disconnectSelected()
     if (row < 0 || row >= (int) localTab.list.rows.size()) return;
     const auto& r = localTab.list.rows[(size_t) row];
     if (r.ip.isEmpty() || r.port <= 0) return;
-    processor.uninviteSender (r.ip, r.port);
+    // Pass wireUid for Bonjour-paired rows. Without this, after the
+    // sender re-binds to a different ephemeral source port (e.g. on
+    // its own prepareToPlay) the accepted entry's host:port no longer
+    // matches the discovered row, and a host:port-only uninvite would
+    // silently fail to find anything to evict.
+    processor.uninviteSender (r.ip, r.port, r.wireUid);
 }
 
 bool McfxReceiveAudioProcessorEditor::currentSelectionIsConnected() const
@@ -297,8 +339,16 @@ void McfxReceiveAudioProcessorEditor::rebuildUnifiedRows()
     std::vector<UnifiedRow> rows;
     rows.reserve (discovered.size() + accepted.size());
 
-    // 1. Walk discovered senders. For each, look up by IP:port in the
-    //    accepted set to attach the connection state.
+    // 1. Walk discovered senders. For each, look up the matching accepted
+    //    entry by wire UID (Bonjour TXT "wuid" == sender's stream UID,
+    //    same value the sender writes into CommonHeader.sender). UID is
+    //    the only identity — host:port can drift across re-binds and
+    //    multi-homed source-IP differences.
+    //
+    //    Direct-IP accepted entries (created via the user typing a host
+    //    in the Direct IP tab) have uid=0 until the first INVITE_ACK
+    //    arrives; they correctly DON'T pair against any discovered row
+    //    and fall through to the "(direct)" rendering below.
     std::vector<bool> acceptedConsumed (accepted.size(), false);
     for (const auto& d : discovered)
     {
@@ -310,13 +360,14 @@ void McfxReceiveAudioProcessorEditor::rebuildUnifiedRows()
         r.port       = d.port;
         r.channels   = d.channels;
         r.format     = d.format;
+        r.wireUid    = d.wireUid;
         r.viaBonjour = true;
         r.state      = RowState::Discovered;
 
         for (size_t i = 0; i < accepted.size(); ++i)
         {
             const auto& a = accepted[i];
-            if (a.host == r.ip && a.port == r.port)
+            if (a.uid != 0 && a.uid == d.wireUid)
             {
                 r.state         = stateFromAccepted (a.state);
                 r.rejectReason  = a.rejectReason;
@@ -411,7 +462,10 @@ void McfxReceiveAudioProcessorEditor::resized()
     buttonRow.removeFromLeft (6);
     refreshButton.setBounds    (buttonRow.removeFromLeft (90));
 
-    // Whatever's left is the tabbed connect panel.
+    // Whatever's left is the tabbed connect panel. The inner ListBox
+    // surfaces a vertical scrollbar automatically once the row count
+    // exceeds the visible area, so a long discovered list still works
+    // even when the window is small.
     tabs.setBounds (area);
 
     if (resizer)
@@ -490,13 +544,13 @@ void McfxReceiveAudioProcessorEditor::timerCallback()
             };
 
             netText += fmtRate (h.ratePerSec)
-                     + "  " + juce::String ((int) h.ppsRate) + " pps"
+                     + "  " + juce::String ((int) h.ppsRate) + " pkt/s"
                      + "  buf " + juce::String (p.effectiveBufMs) + "ms"
                      + (p.autoExtraMs > 0
                            ? " (+" + juce::String (p.autoExtraMs) + "ms)"
                            : juce::String())
                      + "  lat ~" + juce::String (p.totalLatencyMs) + "ms"
-                     + "  fill " + juce::String (p.fillFrames);
+                     + "  fill " + juce::String (p.fillFrames) + " fr";
             if (p.gapFrames)      netText += "  gap "       + juce::String (p.gapFrames);
             if (p.underruns)      netText += "  underrun "  + juce::String (p.underruns);
             if (p.droppedReorder) netText += "  reorderDrop " + juce::String (p.droppedReorder);

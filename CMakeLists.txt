@@ -277,3 +277,15 @@ IF(BUILD_TESTHOST)
     message("-- Building mcfx_testhost test harness")
     ADD_SUBDIRECTORY( mcfx_testhost )
 ENDIF(BUILD_TESTHOST)
+
+################################################
+# Optional: single-process loopback test for mcfx_send + mcfx_receive.
+# Drives both stream classes directly (no plugin wrapper, no DAW) over
+# localhost UDP so the network audio path can be verified by the
+# Python tests in /tests/test_net_loopback.py.
+# Build with:  cmake -B _build -DBUILD_NET_TESTS=ON
+OPTION(BUILD_NET_TESTS "Build mcfx_net_loopback_test (network audio integration tests)" OFF)
+IF(BUILD_NET_TESTS)
+    message("-- Building mcfx_net_loopback_test")
+    ADD_SUBDIRECTORY( mcfx_net_test )
+ENDIF(BUILD_NET_TESTS)

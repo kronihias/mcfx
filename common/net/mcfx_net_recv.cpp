@@ -20,8 +20,11 @@
 #include "mcfx_net_recv.h"
 #include "mcfx_net_rt.h"
 
+#include <chrono>
+#include <cstdlib>
 #include <cstring>
 #include <cmath>
+#include <random>
 
 // dbry/audio-resampler — vendored under common/third_party. Public API is
 // pure C; wrap in extern "C" so name-mangling doesn't trip the linker.
@@ -136,6 +139,27 @@ struct RecvStream::PeerStream
     // store from the message thread would race the audio-thread RMW.
     std::atomic<int> pendingReadAdvance { 0 };
 
+    // True once we've processed the first DATA packet for this peer.
+    // Used to suppress the bogus "gap" event on the very first packet
+    // (writeFramePos starts at 0, but sender's `count` field is wherever
+    // its absoluteFrame counter happened to be — typically large if the
+    // sender has been running before the receiver connected). Without
+    // this, the initial connect spuriously bumps autoExtra → prefill
+    // grows → 5 s later the autoExtra decay drops prefill back, the
+    // rate loop sees a huge target jump, slams rcorr to its lower
+    // clamp, underruns, re-bumps autoExtra, repeats. NetThread-only.
+    bool haveSeenData = false;
+
+    // Smoothed prefill in frames — used by the audio loop's err target
+    // so step changes in prefillFrames (e.g. an autoExtra bump or its
+    // decay) don't appear to the rate loop as instantaneous target
+    // jumps. Without smoothing, a 20 ms autoExtra decay drops
+    // prefillFrames by ~960 samples in 100 ms, and the rate loop slams
+    // rcorr to its ±5 % clamp trying to chase the moving target,
+    // underrunning the ring on the way down. Audio-thread-only state.
+    double prefillSmoothFrames = 0.0;
+    bool   prefillSmoothInited = false;
+
     // Recompute effectiveBufMs + prefillFrames from the user-set floor
     // and the per-peer adaptive extra. Called whenever either changes.
     // Caps total at 500 ms to bound worst-case latency.
@@ -247,6 +271,155 @@ struct RecvStream::PeerStream
         rcInited = false;
     }
 
+    // ---- Arrival-time DLL ------------------------------------------------
+    //
+    // The 3rd-order rate loop above can't separate slow clock drift (signal)
+    // from fast network jitter (noise) when both arrive on the same scalar
+    // (`fillNow`). On a same-machine loopback there is no jitter so the
+    // loop locks easily; on a real cross-machine LAN, packet jitter (~ms)
+    // dominates the err input to the loop and produces audible pitch
+    // wobble at the 0.5 Hz fast-startup bandwidth, plus occasional anti-
+    // windup-triggered glitches once the integrator drifts.
+    //
+    // To fix that we run a 2nd-order PLL/DLL on packet arrival times — one
+    // update per sender period (HF_LAST_OF_PERIOD packets only). Its output
+    // (filtered arrival time `dllT0`, filtered period duration `dllDt`) is
+    // published via a single-producer/single-consumer seqlock-style pair
+    // that the audio thread snapshots once per block. The audio thread then
+    // computes the rate-loop's `err` from the DLL's predicted-write-pos
+    // (interpolated between the two most recent anchors) instead of the
+    // raw, jitter-modulated `fillNow`.
+    //
+    // Per-packet `tx_us` from the wire is folded into the
+    // `smoothedNetSpread` telemetry only — the DLL math itself uses
+    // arrival times (sender and receiver steady_clock origins differ; only
+    // arrival deltas are clock-domain-consistent).
+    double   dllT0          = 0.0;   // predicted arrival time of next sender period (rx-clock secs)
+    double   dllDt          = 0.0;   // sender period duration in rx-clock secs (drift-tracking)
+    double   dllW1          = 0.0;   // PI proportional gain
+    double   dllW2          = 0.0;   // PI integral gain
+    bool     dllInited      = false; // first-period bootstrap done
+
+    // SPSC seqlock pair. NetThread writes the inactive slot and bumps
+    // `dllSeq` by 2 with release ordering; audio thread acquire-loads,
+    // reads the indexed slot, re-loads to verify stability.
+    struct DllSnap { uint64_t k = 0; double t = 0.0; double dt = 0.0; };
+    std::atomic<uint32_t> dllSeq { 0 };
+    DllSnap               dllSlot[2];
+
+    // Audio-side anchor pair (last two distinct snapshots) — interpolated
+    // between to estimate the predicted write-pos at the current rx-clock
+    // instant. Only the audio thread writes these.
+    uint64_t dllAK0 = 0, dllAK1 = 0;
+    double   dllAT0 = 0.0, dllAT1 = 0.0;
+    double   dllADt = 0.0;
+    bool     dllAudioPrimed   = false;
+    int      dllAudioSnapsSeen = 0;
+
+    // Telemetry: EMA of (arrival_rx - tx_us). Sender/receiver clock
+    // origins differ across machines so the absolute value is unitless,
+    // but stability over time is a useful network-health proxy.
+    double   smoothedNetSpreadSec = 0.0;
+
+    // Recompute DLL PI coefficients for a target bandwidth in Hz. Caller
+    // must set `dllDt` first.
+    void setDllBw (double bwHz) noexcept
+    {
+        const double w = 6.28318530718 * bwHz * dllDt;
+        dllW1 = 3.0 * w;
+        dllW2 = w * w;
+    }
+
+    void resetDll() noexcept
+    {
+        dllInited            = false;
+        dllAudioPrimed       = false;
+        dllAudioSnapsSeen    = 0;
+        smoothedNetSpreadSec = 0.0;
+    }
+
+    // NetThread: publish a fresh anchor for the audio thread to consume.
+    void publishDllSnap (uint64_t k, double t, double dt) noexcept
+    {
+        const uint32_t seq  = dllSeq.load (std::memory_order_relaxed);
+        const int      slot = static_cast<int> ((seq >> 1) & 1u) ^ 1;
+        dllSlot[slot].k  = k;
+        dllSlot[slot].t  = t;
+        dllSlot[slot].dt = dt;
+        dllSeq.store (seq + 2, std::memory_order_release);
+    }
+
+    // Audio thread: snapshot the most recently published anchor.
+    DllSnap readDllSnap() const noexcept
+    {
+        DllSnap snap;
+        for (;;)
+        {
+            const uint32_t s1 = dllSeq.load (std::memory_order_acquire);
+            const int      slot = static_cast<int> ((s1 >> 1) & 1u);
+            snap.k  = dllSlot[slot].k;
+            snap.t  = dllSlot[slot].t;
+            snap.dt = dllSlot[slot].dt;
+            const uint32_t s2 = dllSeq.load (std::memory_order_acquire);
+            if (s1 == s2) return snap;
+            // NetThread published mid-read; retry. Bounded — NetThread
+            // only publishes at sender-period rate (every few ms).
+        }
+    }
+
+    // NetThread: PI step + publish, called once per sender period when
+    // an HF_LAST_OF_PERIOD packet arrives. arrivalSec is in the receiver's
+    // steady_clock domain; endFrame is the absolute sender-frame index of
+    // the start of the *next* period (i.e. data.count + nfram of the
+    // packet that just arrived). txUs is the sender-side timestamp from
+    // the packet header (used for telemetry only).
+    void updateDll (uint64_t endFrame, double arrivalSec, uint64_t txUs) noexcept
+    {
+        if (sampleRate <= 0 || period <= 0) return;
+
+        if (! dllInited)
+        {
+            // Bootstrap: seed period from sender's nominal SR and predict
+            // the next period boundary one period from now in rx-clock.
+            dllDt = (double) period / (double) sampleRate;
+            setDllBw (0.05);
+            // Anchor pair: pin (k = endFrame, t = arrivalSec). Predict the
+            // next packet to arrive at arrivalSec + dllDt.
+            publishDllSnap (endFrame, arrivalSec, dllDt);
+            dllT0     = arrivalSec + dllDt;
+            dllInited = true;
+            // Telemetry seed.
+            smoothedNetSpreadSec = arrivalSec - (double) txUs * 1e-6;
+            return;
+        }
+
+        // PI step. Anti-jump clamp to ±dllDt absorbs single-period misses
+        // (e.g. a lost HF_LAST_OF_PERIOD packet) without a wild jump.
+        double err = arrivalSec - dllT0;
+        if (err >  dllDt) err =  dllDt;
+        if (err < -dllDt) err = -dllDt;
+        dllT0 += dllW1 * err;
+        dllDt += dllW2 * err;
+
+        // Refresh PI coefficients in case dllDt drifted significantly
+        // (clock skew slowly changes the operating point). Cheap.
+        setDllBw (0.05);
+
+        // Publish the just-filtered anchor — paired with the sender frame
+        // index of *this* period boundary (endFrame). The audio thread
+        // interpolates between this and the previously published anchor.
+        publishDllSnap (endFrame, dllT0, dllDt);
+
+        // Advance prediction by one period for the next packet.
+        dllT0 += dllDt;
+
+        // Telemetry EMA.
+        constexpr double telBlend = 0.05;
+        const double inst = arrivalSec - (double) txUs * 1e-6;
+        smoothedNetSpreadSec = (1.0 - telBlend) * smoothedNetSpreadSec
+                             + telBlend * inst;
+    }
+
     ~PeerStream()
     {
         if (resampler != nullptr)
@@ -274,6 +447,20 @@ RecvStream::RecvStream()
 {
     peers         = std::make_shared<PeerList>();
     peersSnapshot = peers;
+
+    // Random per-process wire UID (mirrors SendStream::SendStream). Used in
+    // outbound INVITE / UNINVITE / INVITE_ACK headers so the sender can
+    // identify which receiver a given control packet came from. Also
+    // republished in Bonjour TXT (field "wuid") so the sender's editor
+    // can pair Bonjour-discovered receivers with its accepted-targets
+    // entries by UID rather than fragile (host:port) match — the source
+    // IP of an inbound INVITE doesn't always equal the Bonjour-published
+    // IP on multi-homed hosts.
+    std::random_device rd;
+    std::mt19937 gen (rd());
+    std::uniform_int_distribution<uint32_t> dist;
+    receiverUid = dist (gen);
+    if (receiverUid == 0) receiverUid = 1;
 }
 
 RecvStream::~RecvStream()
@@ -354,6 +541,15 @@ void RecvStream::prepareToPlay (double sampleRate, int blockSize, int outputChan
     outputSampleRate = static_cast<int> (sampleRate);
     outputBlockSize  = blockSize;
     outputChans      = outputChannels;
+
+    // Reset anticipative-render detection so a fresh prepareToPlay starts
+    // from a clean slate. (Reaper re-issues prepareToPlay when the host
+    // sample rate, block size, or channel count changes.)
+    pullLastSec       = 0.0;
+    pullFastRunCount  = 0;
+    pullSlowRunCount  = 0;
+    pullInFastMode    = false;
+    pullFastSilenceLogged = 0;
 
     if (! socketBound)
         bind (0);
@@ -478,6 +674,15 @@ std::vector<RecvStream::PeerSnapshot> RecvStream::snapshotPeers() const
         const int resampMs = (p->sampleRate > 0)
                                     ? ((p->resTaps / 2) * 1000) / p->sampleRate : 0;
         s.totalLatencyMs = senderBlockMs + s.effectiveBufMs + recvBlockMs + resampMs;
+        // Rate-loop snapshot. The doubles are written only by the audio
+        // thread; the message-thread read here is a benign torn-read
+        // (each is a single 8-byte aligned store on macOS x86_64 / ARM)
+        // and we don't need exact coherence — these are diagnostics, not
+        // anything the snapshot consumer drives behaviour from.
+        s.rcorr           = p->rcRcorr;
+        s.rcZ3            = p->rcZ3;
+        s.rcNominalRatio  = p->rcNominalRatio;
+        s.smoothedNetSpreadMs = p->smoothedNetSpreadSec * 1000.0;
         out.push_back (std::move (s));
     }
     return out;
@@ -521,7 +726,7 @@ bool RecvStream::isAcceptedUid (uint32_t uid) const noexcept
     return false;
 }
 
-bool RecvStream::inviteSender (const juce::String& host, int port)
+bool RecvStream::inviteSender (const juce::String& host, int port, std::uint32_t wireUid)
 {
     if (host.isEmpty() || port < 1 || port > 65535) return false;
     sockaddr_in addr {};
@@ -555,20 +760,29 @@ bool RecvStream::inviteSender (const juce::String& host, int port)
         // reconnects after the first session appear to hang in
         // "Inviting..." until the 5 s deadline.
         const auto nowT = juce::Time::getCurrentTime();
-        for (auto& s : accepted)
+        // Match an existing entry first by UID (when the caller knows it
+        // up front from the discovered row), then by host:port.
+        AcceptedSender* match = nullptr;
+        if (wireUid != 0)
+            for (auto& s : accepted)
+                if (s.uid == wireUid) { match = &s; break; }
+        if (! match)
+            for (auto& s : accepted)
+                if (s.host == host && s.port == port) { match = &s; break; }
+
+        if (match != nullptr)
         {
-            if (s.host == host && s.port == port)
-            {
-                s.state         = SenderState::Pending;
-                s.rejectReason  = IAR_OK;
-                s.addedAt       = nowT;
-                s.lastInviteAt  = nowT;
-                sendOneInvite (s);
-                return true;
-            }
+            match->state         = SenderState::Pending;
+            match->rejectReason  = IAR_OK;
+            match->addedAt       = nowT;
+            match->lastInviteAt  = nowT;
+            if (wireUid != 0) match->uid = wireUid;
+            sendOneInvite (*match);
+            return true;
         }
 
         AcceptedSender s;
+        s.uid         = wireUid;
         s.addr        = addr;
         s.host        = host;
         s.port        = port;
@@ -581,36 +795,57 @@ bool RecvStream::inviteSender (const juce::String& host, int port)
     return true;
 }
 
-void RecvStream::uninviteSender (const juce::String& host, int port)
+void RecvStream::uninviteSender (const juce::String& host, int port, std::uint32_t wireUid)
 {
-    // Two-pass eviction. First, find ANY entry matching host:port and
-    // capture its UID. Then erase EVERY entry matching either that
-    // host:port OR that UID — this catches duplicate / stale entries
-    // that may have accumulated if the sender re-bound to a new
-    // ephemeral port mid-session (we'd then have one Pending entry at
-    // the old port and one Active entry at the new one). Without this,
-    // the user clicks "Disconnect" on the active row, only the active
-    // entry goes away, and the stale Pending sits there forever.
+    // Two-pass eviction. First, find a matching entry — UID first when
+    // the caller passed it (e.g. the user clicked Disconnect on a
+    // Bonjour-paired row whose accepted entry's host:port may not match
+    // the discovered IP because the sender's outbound interface differs
+    // from its Bonjour-published IP), then host:port. Second, erase
+    // EVERY entry matching either the captured host:port OR the
+    // captured UID — catches duplicate / stale entries.
     AcceptedSender evicted;
     uint32_t evictedUid = 0;
+    juce::String evictedHost;
+    int evictedPort = 0;
     bool found = false;
     {
         const juce::ScopedLock sl (acceptedLock);
-        for (auto& s : accepted)
+        if (wireUid != 0)
         {
-            if (s.host == host && s.port == port)
+            for (auto& s : accepted)
             {
-                evicted = s;
-                evictedUid = s.uid;
-                found = true;
-                break;
+                if (s.uid == wireUid)
+                {
+                    evicted     = s;
+                    evictedUid  = s.uid;
+                    evictedHost = s.host;
+                    evictedPort = s.port;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (! found)
+        {
+            for (auto& s : accepted)
+            {
+                if (s.host == host && s.port == port)
+                {
+                    evicted     = s;
+                    evictedUid  = s.uid;
+                    evictedHost = s.host;
+                    evictedPort = s.port;
+                    found = true;
+                    break;
+                }
             }
         }
         if (found)
         {
             for (auto it = accepted.begin(); it != accepted.end(); )
             {
-                const bool hostPortMatch = (it->host == host && it->port == port);
+                const bool hostPortMatch = (it->host == evictedHost && it->port == evictedPort);
                 const bool uidMatch      = (evictedUid != 0 && it->uid == evictedUid);
                 if (hostPortMatch || uidMatch) it = accepted.erase (it);
                 else                           ++it;
@@ -681,7 +916,7 @@ void RecvStream::sendOneInvite (AcceptedSender& s) noexcept
     hdr->flags  = 0;
     hdr->sfmt   = 0;
     hdr->nchan  = 0;
-    hdr->sender = 0; // receiver doesn't have a fixed-stream UID; sender ignores this field on INVITE
+    hdr->sender = receiverUid;
     hdr->seq    = 0;
 
     body->listen_port = static_cast<uint32_t> (boundPort);
@@ -711,7 +946,8 @@ void RecvStream::sendOneUninvite (const AcceptedSender& s) noexcept
     auto* body = reinterpret_cast<UninvitePayload*> (buf + sizeof (CommonHeader));
 
     std::memcpy (hdr->magic, kMagic, sizeof (kMagic));
-    hdr->ptype = PT_UNINVITE;
+    hdr->ptype  = PT_UNINVITE;
+    hdr->sender = receiverUid;
     body->listen_port = static_cast<uint32_t> (boundPort);
 
     const auto rawHandle = socket->getRawSocketHandle();
@@ -730,7 +966,8 @@ void RecvStream::sendInviteAck (const sockaddr_in& to,
     auto* dst  = reinterpret_cast<InviteAckPayload*> (buf + sizeof (CommonHeader));
 
     std::memcpy (hdr->magic, kMagic, sizeof (kMagic));
-    hdr->ptype = PT_INVITE_ACK;
+    hdr->ptype  = PT_INVITE_ACK;
+    hdr->sender = receiverUid;
     *dst = body;
 
     const auto rawHandle = socket->getRawSocketHandle();
@@ -818,15 +1055,43 @@ void RecvStream::handleInvitePacket (const sockaddr_in& from,
     {
         const juce::ScopedLock sl (acceptedLock);
         bool found = false;
-        for (auto& s : accepted)
+
+        // Match by wire UID — the only identity. Refresh the sockaddr we
+        // use for outbound replies but leave host/port alone so they
+        // stay the canonical identity used by the editor's row pairing.
+        // Multi-homed sender source-IP differences and source-port
+        // shifts across re-binds all fold into "same UID, refresh addr".
+        if (hdr.sender != 0)
         {
-            if (s.host == hostStr && s.port == portInt)
+            for (auto& s : accepted)
             {
-                s.uid   = hdr.sender;
-                s.state = SenderState::Active;
-                s.addr  = senderAddr;
-                found = true;
-                break;
+                if (s.uid == hdr.sender)
+                {
+                    s.state = SenderState::Active;
+                    s.addr  = senderAddr;
+                    found = true;
+                    break;
+                }
+            }
+        }
+        // Direct-IP race: we initiated via inviteSender(host, port) and
+        // the peer's INVITE arrived before our INVITE_ACK could land.
+        // Our entry still has uid=0; populate it from this INVITE rather
+        // than spawning a duplicate. Bonjour-discovered entries carry
+        // their wireUid up front (set by inviteSender from the editor),
+        // so they don't take this branch.
+        if (! found)
+        {
+            for (auto& s : accepted)
+            {
+                if (s.uid == 0 && s.host == hostStr && s.port == portInt)
+                {
+                    s.uid   = hdr.sender;
+                    s.state = SenderState::Active;
+                    s.addr  = senderAddr;
+                    found = true;
+                    break;
+                }
             }
         }
         if (! found)
@@ -1146,6 +1411,7 @@ RecvStream::PeerStream* RecvStream::findOrCreatePeer (uint32_t uid,
                                      SUBSAMPLE_INTERPOLATE);      // variable-ratio mode
     entry->resetRateLoop();
     entry->setLoopBw (0.5);                                       // fast lock
+    entry->resetDll();                                            // arrival-time DLL — bootstraps on first HF_LAST_OF_PERIOD packet
     if (outputSampleRate > 0)
         entry->rcBlocksToFastPhase = juce::jmax (1, (4 * outputSampleRate) / juce::jmax (1, outputBlockSize));
     // Stage / output scratch — sized for the worst case (sender slower
@@ -1166,6 +1432,17 @@ RecvStream::PeerStream* RecvStream::findOrCreatePeer (uint32_t uid,
     }
     DBG ("mcfx_recv: new peer uid=" + juce::String::toHexString ((juce::int64) uid)
          + " ch=" + juce::String (entry->nchan));
+    std::cerr << "mcfx_recv: new peer uid=" << std::hex << uid << std::dec
+              << " ch=" << entry->nchan
+              << " placeholder period=" << entry->period
+              << " placeholder sampleRate=" << entry->sampleRate
+              << " outputBlockSize=" << outputBlockSize
+              << " outputSampleRate=" << outputSampleRate
+              << " ringFrames=" << entry->ringFrames
+              << " prefillFrames=" << entry->prefillFrames.load()
+              << " trigger=" << (hdr.ptype == PT_DATA ? "DATA"
+                                : hdr.ptype == PT_DESC ? "DESC" : "other")
+              << std::endl;
     return entry.get();
 }
 
@@ -1173,6 +1450,13 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
                               const sockaddr_in& from)
 {
     if (nbytes < kHeaderBytes) return;
+
+    // Capture arrival time as early as possible — feeds the per-peer
+    // arrival-time DLL on HF_LAST_OF_PERIOD packets. Receiver-side
+    // steady_clock is monotonic across macOS / Linux / Windows.
+    const double arrivalSec = std::chrono::duration<double> (
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+
     CommonHeader hdr {};
     std::memcpy (&hdr, buf, sizeof (hdr));
 
@@ -1195,7 +1479,9 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
         std::memcpy (&d, buf + sizeof (CommonHeader), sizeof (d));
         // Apply sender's reported period to refine the prefill target if
         // the ring was sized to the receiver's blockSize as a placeholder.
-        if (d.period > 0 && d.period != static_cast<uint32_t> (peer->period))
+        const bool periodChanged = (d.period > 0
+                                    && d.period != static_cast<uint32_t> (peer->period));
+        if (periodChanged)
         {
             peer->period = static_cast<int> (d.period);
             // Don't resize the ring mid-flight — it'd race the audio
@@ -1203,9 +1489,46 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
             // sender periods; for unusually large sender periods we'd
             // need a re-allocation pass, deferred.
         }
+        const bool rateChanged = (d.fsamp > 0
+                                  && static_cast<int> (d.fsamp) != peer->sampleRate);
         if (d.fsamp > 0)
             peer->sampleRate = static_cast<int> (d.fsamp);
         peer->recomputeBuffer (jitterFloorMs.load (std::memory_order_relaxed));
+
+        // Reset the rate-control loop when EITHER the sender's reported
+        // sample rate or its period changes — both feed into the loop's
+        // operating point. Sample-rate change shifts the resampler's
+        // nominal output/input ratio (otherwise audio plays detuned).
+        // Period change shifts the loop target (`prefill + period/2` is
+        // the natural mean fill given the sender's burst size); without
+        // a reset the already-accumulated z's wind up the integrator
+        // against the new target and pin rcorr to its ±5% clamp,
+        // producing detuning + glitching until the user rebuilds the
+        // peer (e.g. by changing channel count on the sender).
+        if (rateChanged || periodChanged)
+        {
+            std::cerr << "mcfx_recv: DESC reset uid="
+                      << std::hex << hdr.sender << std::dec
+                      << " period " << peer->period
+                      << " (was " << (periodChanged ? "different" : "same") << ")"
+                      << " sampleRate " << peer->sampleRate
+                      << " (was " << (rateChanged ? "different" : "same") << ")"
+                      << " outputSR=" << peer->outputSampleRate
+                      << " outputBlock=" << peer->outputBlockSize
+                      << std::endl;
+            if (peer->outputSampleRate > 0 && peer->sampleRate > 0)
+            {
+                peer->rcNominalRatio = (double) peer->outputSampleRate
+                                     / (double) peer->sampleRate;
+                peer->resetRateLoop();
+                peer->setLoopBw (0.5);
+            }
+            // Sender SR or period change invalidates dllDt (which is in
+            // rx-clock secs per sender-period, scaled by sender's SR and
+            // period). Re-bootstrap on the next HF_LAST_OF_PERIOD packet.
+            peer->resetDll();
+            peer->primed.store (false, std::memory_order_release);
+        }
         return;
     }
 
@@ -1242,6 +1565,21 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
     // position get zero-filled.
     const uint64_t startFrame = data.count;
     const uint64_t endFrame   = startFrame + static_cast<uint64_t> (frames);
+
+    // First DATA packet for this peer: align positions to the sender's
+    // current count instead of leaving them at the default 0. Without
+    // this we'd treat the sender's accumulated frame count as a "gap"
+    // (bumping autoExtra) and trigger the ring overrun guard (because
+    // fill = startFrame >> ringFrames). The spurious autoExtra bump in
+    // particular kicks off a 5 s cycle: prefill grows on the bump,
+    // collapses on decay, the rate loop overshoots, the ring drains
+    // into underrun, underrun re-bumps autoExtra, repeat.
+    if (! peer->haveSeenData)
+    {
+        peer->haveSeenData = true;
+        peer->readFramePos.store  (startFrame, std::memory_order_release);
+        peer->writeFramePos.store (startFrame, std::memory_order_release);
+    }
 
     auto curWrite = peer->writeFramePos.load (std::memory_order_acquire);
     if (endFrame <= curWrite)
@@ -1351,11 +1689,76 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
 
     peer->writeFramePos.store (endFrame, std::memory_order_release);
 
-    // Become primed once the ring fill crosses the prefill threshold.
+    // Drive the per-peer arrival-time DLL once per sender period, on the
+    // packet bearing HF_LAST_OF_PERIOD. Within-period packets are
+    // intentionally ignored — their inter-packet spacing carries
+    // sendto-burst noise rather than clock-drift information. The DLL's
+    // filtered output is what the audio thread reads to compute the
+    // rate-loop's err each block.
+    if ((hdr.flags & HF_LAST_OF_PERIOD) != 0)
+        peer->updateDll (endFrame, arrivalSec, data.tx_us);
+
+    // Overrun guard. The receiver's adaptive resampler can only drain at
+    // most ~5% faster than the sender writes — that's enough for clock-
+    // drift compensation but not for a sender that's pumping multiples
+    // of realtime (e.g. REAPER's anticipative-FX pre-roll calls
+    // processBlock several times per audio cycle to fill plugin
+    // lookahead buffers; the sender obediently ships every sample).
+    //
+    // Without this guard, the writer just laps the unread reader: the
+    // ring physically only holds `ringFrames` worth of audio, but the
+    // 64-bit write/read counters keep growing, so fillFramesNow() can
+    // exceed ringFrames by huge amounts while the actual buffer
+    // contents are silently overwritten — gibberish out, glitches
+    // everywhere, anti-windup loop spinning forever.
+    //
+    // Detect when the new write would cross the reader (fill is about
+    // to exceed ringFrames) and jump the read pointer forward to
+    // `endFrame - prefillFrames` — drop the backlog, keep just enough
+    // audio to satisfy a fresh prime. Drop primed so the audio thread
+    // re-engages with a clean ring + zeroed loop state.
+    {
+        const auto curRead = peer->readFramePos.load (std::memory_order_acquire);
+        const auto fill    = (endFrame > curRead) ? (endFrame - curRead) : 0;
+        const auto cap     = (uint64_t) peer->ringFrames;
+        if (fill > cap)
+        {
+            const int  keep    = juce::jmin ((int) cap / 2,
+                                             peer->prefillFrames.load (std::memory_order_acquire));
+            const auto newRead = endFrame - (uint64_t) keep;
+            peer->readFramePos.store (newRead, std::memory_order_release);
+            peer->primed.store      (false,   std::memory_order_release);
+            peer->resetRateLoop();
+            peer->underruns.fetch_add (1, std::memory_order_relaxed);
+            // One-line stderr so this is visible in normal operation —
+            // a sustained overrun stream means the sender is producing
+            // faster than realtime (anticipative FX, offline render,
+            // etc.) and the receiver can't stay locked. Throttle to
+            // every 50th to avoid spamming the terminal.
+            const auto cnt = peer->underruns.load (std::memory_order_relaxed);
+            if (cnt < 5 || cnt % 50 == 0)
+                std::cerr << "mcfx_recv: ring overrun #" << cnt
+                          << " uid=" << std::hex << peer->uid << std::dec
+                          << " fill=" << fill << " > ringFrames=" << cap
+                          << " (sender is producing > realtime; dropping "
+                          << (fill - keep) << " frames)" << std::endl;
+        }
+    }
+
+    // Become primed once the ring fill crosses the rate-loop's TARGET
+    // fill — not just the prefill threshold. The loop targets
+    // `prefillFrames + period/2` (the natural mean fill given the
+    // sender's burst size); priming exactly at prefillFrames means the
+    // loop sees err = -period/2 sustained on the first audio block,
+    // pinning rcorr to its +5% clamp and spinning the integrator into
+    // anti-windup → reset → re-prime → repeat. Waiting for the target
+    // means the loop starts on its operating point with err ≈ 0.
     if (! peer->primed.load (std::memory_order_relaxed))
     {
-        const auto fill = peer->fillFramesNow();
-        if (fill >= peer->prefillFrames.load (std::memory_order_acquire))
+        const int prefill = peer->prefillFrames.load (std::memory_order_acquire);
+        const int target  = prefill + (peer->period / 2);
+        const auto fill   = peer->fillFramesNow();
+        if (fill >= target)
             peer->primed.store (true, std::memory_order_release);
     }
 }
@@ -1380,6 +1783,86 @@ void RecvStream::pullAndMix (float* const* out,
 
     const int floorMs = jitterFloorMs.load (std::memory_order_relaxed);
     const double nowSec = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+
+    // ---------------------------------------------------------------------
+    // Anticipative-render detection. REAPER (and a few other hosts) can
+    // call processBlock at multiples of realtime to pre-render plugin
+    // output for the buffered playback queue. For a network-streaming
+    // receiver this is fundamentally impossible — the future audio
+    // doesn't exist yet (the sender is generating it in real time).
+    // Letting the rate loop fight that mode produces the canonical
+    // pitch-up + glitch cycle (rcorr pins at +5% clamp, anti-windup
+    // trips, re-prime, repeat).
+    //
+    // Detection: compare the wallclock interval between consecutive
+    // pullAndMix calls against the expected blockSize / sampleRate.
+    // Hysteresis is set high (~64 sustained fast blocks ≈ 80 ms at
+    // 48k/64) to ignore transient OS-scheduling catch-up bursts. In
+    // fast mode we output silence and bypass the rate loop — letting
+    // the user notice anticipative-FX is on rather than producing
+    // glitchy audio.
+    if (outputSampleRate > 0 && blockSize > 0)
+    {
+        const double expectedSec  = static_cast<double> (blockSize)
+                                  / static_cast<double> (outputSampleRate);
+        if (pullLastSec > 0.0)
+        {
+            const double interval = nowSec - pullLastSec;
+            if (interval < expectedSec * 0.5)
+            {
+                pullFastRunCount++;
+                pullSlowRunCount = 0;
+                if (pullFastRunCount >= 64 && ! pullInFastMode)
+                {
+                    pullInFastMode = true;
+                    pullFastSilenceLogged++;
+                    std::cerr << "mcfx_recv: host calling pullAndMix at "
+                              << static_cast<int> (expectedSec * 1000.0
+                                                   / juce::jmax (1e-9, interval))
+                              << "x realtime — likely anticipative-FX "
+                                 "pre-render. Future network audio "
+                                 "doesn't exist; outputting silence. "
+                                 "Disable anticipative FX in the host. "
+                                 "(occurrence #"
+                              << pullFastSilenceLogged << ")"
+                              << std::endl;
+                }
+            }
+            else if (interval > expectedSec * 0.8)
+            {
+                pullSlowRunCount++;
+                pullFastRunCount = 0;
+                if (pullSlowRunCount >= 16 && pullInFastMode)
+                {
+                    pullInFastMode = false;
+                    pullFastSilenceLogged = 0;
+                    std::cerr << "mcfx_recv: host returned to realtime "
+                                 "pacing — resuming network audio."
+                              << std::endl;
+                    // Force a clean re-prime — DLL anchor pair and ring
+                    // fill have drifted relative to the audio thread's
+                    // tNow during the fast burst, so the rate loop's
+                    // err signal would explode if we just continued.
+                    for (const auto& p : *snap)
+                    {
+                        if (! p) continue;
+                        p->primed.store (false, std::memory_order_release);
+                        p->resetRateLoop();
+                    }
+                }
+            }
+            // Else: interval is in the "uncertain" middle band; don't
+            // change run counts. Avoids flapping on a single weird block.
+        }
+        pullLastSec = nowSec;
+    }
+    if (pullInFastMode)
+    {
+        // Output silence (caller already cleared the buffer per pullAndMix
+        // contract). Leave rate loop / DLL state untouched so we resume
+        // cleanly when fast mode ends.
+        return;
+    }
 
     // Stale-peer sweep. A peer that hasn't sent a DATA packet in
     // kStaleTimeoutSec is dropped from the list — sender process died,
@@ -1524,21 +2007,149 @@ void RecvStream::pullAndMix (float* const* out,
         const int      fillNow   = (curWrite0 > curRead0)
                                      ? (int) (curWrite0 - curRead0) : 0;
         const int      prefill   = p->prefillFrames.load (std::memory_order_acquire);
-        const int      loopTarget = prefill + (p->period / 2);
-        const double   err       = (double) (fillNow - loopTarget);
 
-        // First block after (re)priming: jump-correct the read pointer
-        // straight to the target fill, then engage the loop. Avoids a
-        // slow ramp-in.
+        // Smoothed prefill — exponentially low-passes the discrete
+        // prefillFrames so autoExtra bumps/decays don't jolt the rate
+        // loop's target. Time constant ~2 s (alpha tuned for the audio
+        // block period). On (re)prime we snap to the current prefill
+        // to avoid an unnecessary ramp-in transient.
+        if (! p->prefillSmoothInited)
+        {
+            p->prefillSmoothFrames = (double) prefill;
+            p->prefillSmoothInited = true;
+        }
+        else
+        {
+            // alpha = 1 - exp(-blockTime / tau) for tau ≈ 2 s.
+            // For blockTime ≈ 1.33 ms (64 frames @ 48 kHz), alpha ≈ 6.7e-4.
+            // Safe to compute at runtime — tiny cost, runs once per audio
+            // block, accommodates any blockSize/sampleRate combo.
+            const double alpha = (outputBlockSize > 0 && outputSampleRate > 0)
+                ? (1.0 - std::exp (-(double) outputBlockSize
+                                    / ((double) outputSampleRate * 2.0)))
+                : 0.001;
+            p->prefillSmoothFrames += alpha * ((double) prefill - p->prefillSmoothFrames);
+        }
+        const int loopTarget = (int) std::lround (p->prefillSmoothFrames + (double) p->period / 2.0);
+
+        // First block after (re)priming: zero the rate loop, drop any
+        // stale DLL anchor pair, and engage at fast bandwidth. Must run
+        // BEFORE the err-shape selection below — otherwise a stale anchor
+        // pair from a prior epoch would feed an extrapolation made at a
+        // wildly different rx-clock instant into the new loop.
         if (! p->rcInited)
         {
-            // We're already at "fill = target" by definition of priming
-            // (primed flag was set the moment fill crossed prefillFrames).
-            // Nothing to snap, just zero the integrator and start.
             p->resetRateLoop();
             p->setLoopBw (0.5);
             p->rcInited = true;
             p->rcBlocksSinceLock = 0;
+            p->dllAudioPrimed   = false;
+            p->dllAudioSnapsSeen = 0;
+            // Snap smoothed prefill to current prefill so re-prime
+            // doesn't introduce its own tracking transient.
+            p->prefillSmoothInited = false;
+        }
+
+        // Snapshot the latest DLL anchor and shift our two-anchor pair
+        // when a new one is observed. Both flags are written only by this
+        // (audio) thread, so no atomic.
+        const auto newest = p->readDllSnap();
+        if (! p->dllAudioPrimed)
+        {
+            if (newest.dt > 0.0)
+            {
+                if (p->dllAudioSnapsSeen == 0)
+                {
+                    // First snapshot seeds both anchors identically. Cold
+                    // path remains active until a second distinct anchor.
+                    p->dllAK0 = p->dllAK1 = newest.k;
+                    p->dllAT0 = p->dllAT1 = newest.t;
+                    p->dllADt = newest.dt;
+                    ++p->dllAudioSnapsSeen;
+                }
+                else if (newest.k != p->dllAK1)
+                {
+                    p->dllAK0 = p->dllAK1;
+                    p->dllAT0 = p->dllAT1;
+                    p->dllAK1 = newest.k;
+                    p->dllAT1 = newest.t;
+                    p->dllADt = newest.dt;
+                    p->dllAudioPrimed = true;
+                    ++p->dllAudioSnapsSeen;
+                }
+            }
+        }
+        else if (newest.k != p->dllAK1)
+        {
+            p->dllAK0 = p->dllAK1;
+            p->dllAT0 = p->dllAT1;
+            p->dllAK1 = newest.k;
+            p->dllAT1 = newest.t;
+            p->dllADt = newest.dt;
+        }
+
+        // err signal feeding the 3rd-order rate loop. With the DLL primed
+        // (≥ 2 distinct anchors observed), we use a linearly-interpolated
+        // predicted-write-pos that filters network jitter out of the err
+        // — see arrival-time DLL block in PeerStream above. Until then,
+        // fall back to the raw fill so behaviour matches pre-DLL on the
+        // very first block(s) after a re-prime. The 3rd-order loop math
+        // (z1/z2/z3, anti-windup, ratio clamp, bw schedule) is unchanged.
+        // Loop target adjusted for the err signal we use. The cold path
+        // err = fillNow - target needs a +period/2 offset because fillNow
+        // is BURSTY (oscillates between prefill and prefill+period at
+        // sender's packet cadence; mean is prefill+period/2). The DLL
+        // path err = predictedWriteNow - readPos - target uses a CONTINUOUS
+        // predictedWriteNow that already sits +period/2 above the bursty
+        // writeFramePos on average — so the right target there is
+        // prefill+period (not prefill+period/2). Without this distinction
+        // the DLL path drives mean(fillNow) down to prefill (= the priming
+        // threshold), risking underrun on every minor jitter.
+        double err;
+        if (p->dllAudioPrimed && p->dllAT1 != p->dllAT0)
+        {
+            const double tNow = std::chrono::duration<double> (
+                std::chrono::steady_clock::now().time_since_epoch()).count();
+            const double d1   = tNow      - p->dllAT0;
+            const double d2   = p->dllAT1 - p->dllAT0;
+            const double kSpan = (double) (int64_t) (p->dllAK1 - p->dllAK0);
+            const double predictedWriteNow =
+                (double) p->dllAK0 + kSpan * (d1 / d2);
+            const double dllTarget = p->prefillSmoothFrames + (double) p->period;
+            err = (predictedWriteNow - (double) curRead0) - dllTarget;
+        }
+        else
+        {
+            // Cold path — no two-anchor pair yet (new peer / re-prime).
+            err = (double) (fillNow - loopTarget);
+        }
+
+        // Periodic state log — only enabled if MCFX_NET_DEBUG=1 in the
+        // environment. cerr writes from the audio thread are too slow to
+        // run on every block; even once per second of unconditional
+        // logging perturbs realtime scheduling enough to push the test
+        // suite over its audio-overrun budget. Gating by env var keeps
+        // the logging available for in-DAW diagnosis ("export
+        // MCFX_NET_DEBUG=1 ; open -a REAPER") without perturbing
+        // production runs.
+        static const bool sLogEnabled = std::getenv ("MCFX_NET_DEBUG") != nullptr;
+        if (sLogEnabled && outputBlockSize > 0 && outputSampleRate > 0)
+        {
+            const int logEvery = juce::jmax (1, outputSampleRate / outputBlockSize);
+            static thread_local int logCounter = 0;
+            if ((++logCounter % logEvery) == 1)
+            {
+                std::cerr << "mcfx_recv: rcorr=" << p->rcRcorr
+                          << " z3=" << p->rcZ3
+                          << " z2=" << p->rcZ2
+                          << " err=" << err
+                          << " fill=" << fillNow
+                          << " prefill=" << prefill
+                          << " autoExtra=" << p->autoExtraMs.load()
+                          << " period=" << p->period
+                          << " dllPrimed=" << (p->dllAudioPrimed ? "y" : "n")
+                          << std::endl;
+            }
         }
 
         // Loop step (only when primed; primed gate sits above this block).
@@ -1551,6 +2162,13 @@ void RecvStream::pullAndMix (float* const* out,
         // the prefill mechanism re-prime.
         if (std::abs (p->rcZ3) > 0.05)
         {
+            std::cerr << "mcfx_recv: anti-windup reset uid="
+                      << std::hex << p->uid << std::dec
+                      << " z3=" << p->rcZ3
+                      << " rcorr=" << p->rcRcorr
+                      << " fill=" << fillNow << " target=" << loopTarget
+                      << " period=" << p->period
+                      << std::endl;
             p->resetRateLoop();
             p->primed.store (false, std::memory_order_release);
             // Bump auto-headroom — next prime sits deeper, giving the
@@ -1583,8 +2201,17 @@ void RecvStream::pullAndMix (float* const* out,
         const auto avail    = (curWrite > curRead) ? (curWrite - curRead) : 0;
         if (avail < (uint64_t) wantIn)
         {
+            const auto un = p->underruns.fetch_add (1, std::memory_order_relaxed) + 1;
+            if (un < 5 || un % 50 == 0)
+                std::cerr << "mcfx_recv: underrun #" << un
+                          << " uid=" << std::hex << p->uid << std::dec
+                          << " avail=" << avail << " wantIn=" << wantIn
+                          << " ratio=" << ratio
+                          << " period=" << p->period
+                          << " prefill=" << prefill
+                          << " target=" << loopTarget
+                          << std::endl;
             p->primed.store (false, std::memory_order_release);
-            p->underruns.fetch_add (1, std::memory_order_relaxed);
             p->bumpAutoExtra (floorMs, nowSec);
             continue;
         }

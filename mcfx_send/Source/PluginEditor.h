@@ -47,6 +47,8 @@ public:
         RowState     state = RowState::Discovered;
         mcfx::net::InviteAckReason rejectReason = mcfx::net::IAR_OK;
         bool         viaBonjour = true;
+        std::uint32_t wireUid = 0;   // receiver's wire UID, from Bonjour
+                                     // TXT "wuid"; 0 for Direct-IP rows
     };
 
 private:
@@ -72,8 +74,17 @@ private:
     juce::Label    pwLabel { {}, "Password (optional):" };
     juce::TextEditor pwEditor;
 
+    // Mirrors the receiver's boundLabel — shows the sender's locally
+    // bound UDP port, so the user can paste it into a Direct-IP form
+    // on a peer that can't see Bonjour.
+    juce::Label boundLabel;
+
     juce::Label statusLabel;
     juce::Label networkLabel;
+    // TooltipWindow has to be a long-lived child of the editor for any
+    // setTooltip() on our other components to actually surface on hover.
+    // 700 ms matches the receiver editor and JUCE's default delay.
+    juce::TooltipWindow tooltipWindow { this, 700 };
 
     // Single unified targets list. Status dot encodes RowState; double-
     // click to toggle connect/disconnect.

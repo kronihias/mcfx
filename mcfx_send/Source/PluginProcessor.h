@@ -50,7 +50,8 @@ public:
 
     // Multi-target additions: clicking a discovered receiver in the editor
     // ADDS that receiver to the targets list (additive), not REPLACES.
-    void addTarget    (const juce::String& host, int port) { stream.addTarget (host, port); }
+    void addTarget    (const juce::String& host, int port, std::uint32_t wireUid = 0)
+                       { stream.addTarget (host, port, wireUid); }
     void removeTarget (const juce::String& host, int port) { stream.removeTarget (host, port); }
     void clearTargets() { stream.clearTargets(); }
     std::vector<mcfx::net::SendStream::Target> getTargets() const

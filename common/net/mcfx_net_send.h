@@ -114,7 +114,10 @@ public:
     // becomes Active only after an INVITE_ACK with reason=OK arrives. If
     // the same host:port is already in the list, this re-INVITE just
     // refreshes the existing entry. Returns false on bad input.
-    bool addTarget (const juce::String& host, int port);
+    // wireUid is the receiver's stream UID — pass 0 for Direct IP path,
+    // pass discovered.wireUid when the user clicks Connect on a Bonjour
+    // row so the editor's UID-pairing finds the entry immediately.
+    bool addTarget (const juce::String& host, int port, std::uint32_t wireUid = 0);
 
     // Remove a target. Sends a courtesy UNINVITE and drops the entry.
     void removeTarget (const juce::String& host, int port);
@@ -207,6 +210,22 @@ private:
     std::atomic<uint64_t> sentPackets    { 0 };
     std::atomic<uint64_t> sentBytes      { 0 };
     std::atomic<uint64_t> audioOverruns  { 0 };
+
+    // Anticipative-render detection (audio-thread state, single producer/
+    // consumer). Mirrors the receiver's logic. When the host calls
+    // pushAudioBlock at multiples of realtime (REAPER's anticipative-FX),
+    // there's no point packetising and queuing audio that's destined to
+    // overflow the FIFO and be dropped — and the receiver can't possibly
+    // play "future" audio anyway. Detect sustained fast calls and bail
+    // out of pushAudioBlock cleanly: no FIFO write, no SendThread wake,
+    // just return like everything's fine. The audio thread carries on at
+    // its accelerated pace (it's REAPER's pre-render, after all) without
+    // wasting CPU or filling the FIFO with stale data.
+    double pushLastSec       = 0.0;
+    int    pushFastRunCount  = 0;
+    int    pushSlowRunCount  = 0;
+    bool   pushInFastMode    = false;
+    int    pushFastSilenceLogged = 0;
 
     std::atomic<bool> running { false };
     juce::WaitableEvent wake;

@@ -84,6 +84,10 @@ void McfxReceiveAudioProcessor::refreshDiscoveryAdvertise()
 
     mcfx::net::Discovery::PublishInfo info;
     info.uid      = stableUid;
+    // Wire UID — uint32 we write into outbound CommonHeader.sender.
+    // Lets the sender's editor pair its targets-list entries with its
+    // Bonjour-discovered receivers by UID rather than fragile (host:port).
+    info.wireUid  = stream.getReceiverUid();
     info.host     = mcfx::net::getFriendlyComputerName();
     info.user     = juce::SystemStats::getLogonName();
     info.channels = getMainBusNumOutputChannels();

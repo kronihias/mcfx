@@ -62,12 +62,29 @@ void McfxSendAudioProcessor::refreshSenderAdvertise()
     if (! senderAdvertiser) return;
     mcfx::net::Discovery::PublishInfo info;
     info.uid      = stableUid;
+    // Wire UID = the uint32 written into outbound CommonHeader.sender.
+    // Republishing it in Bonjour TXT lets the receiver's editor pair
+    // discovered-sender entries with its accepted-set entries by UID,
+    // surviving multi-homed source-IP differences and source-port shifts
+    // across re-binds.
+    info.wireUid  = stream.getSenderUid();
     // Use the friendly Sharing-pref-pane name on macOS (e.g. "Matthias's
     // MacBook Pro") rather than the unix hostname (e.g. "Mac" or
     // "Matthiass-MacBook-Pro-M2-2"). That's what the user recognises.
     info.host     = mcfx::net::getFriendlyComputerName();
     info.user     = juce::SystemStats::getLogonName();
-    info.channels = stream.getActiveTargetCount() > 0 ? getMainBusNumInputChannels() : 0;
+    // Always advertise the configured wire channel count, even before any
+    // target is connected. Otherwise a fresh sender shows up in receivers'
+    // browse lists with "0 ch" until somebody connects, which is exactly
+    // the wrong UX — the receiver wants to see "this sender will give me
+    // N channels" before deciding to connect.
+    {
+        const int configured = getSendChannels();
+        const int busWidth   = getMainBusNumInputChannels();
+        info.channels = (configured > 0)
+                          ? juce::jmin (configured, busWidth)
+                          : busWidth;
+    }
     {
         const juce::ScopedLock sl (paramLock);
         info.track = trackName;
@@ -123,6 +140,10 @@ void McfxSendAudioProcessor::setSendChannels (int n)
     if (busChans <= 0) return;
     const int wireChans = (n > 0) ? juce::jmin (n, busChans) : busChans;
     stream.setRingChannels (wireChans);
+    // Re-publish so receivers see the new channel count in their browse
+    // list. Cheap — same TXT-only update path the host name / project
+    // name changes also use.
+    refreshSenderAdvertise();
 }
 
 int McfxSendAudioProcessor::getSendChannels() const

@@ -87,10 +87,21 @@ public:
     // sender is added to the local "accepted" set and inbound DATA from
     // its UID will pass the filter; on rejected ACK, no audio flows.
     // Idempotent: re-inviting an existing sender refreshes the entry.
-    bool inviteSender (const juce::String& host, int port);
+    // wireUid is the sender's stream UID — pass 0 if unknown (Direct IP
+    // path); pass the value from the Bonjour-discovered entry's wireUid
+    // when the user clicks Connect on a discovered row. Populating it
+    // up front lets the editor's row-pairing UID-match this entry from
+    // the very first refresh, instead of waiting for the INVITE_ACK.
+    bool inviteSender (const juce::String& host, int port, std::uint32_t wireUid = 0);
 
     // UNINVITE + remove from the accepted set.
-    void uninviteSender (const juce::String& host, int port);
+    // Like inviteSender, takes an optional wireUid. Pass it from the
+    // discovered row's wireUid when disconnecting a Bonjour-paired
+    // peer — the accepted entry's host:port may have drifted (sender
+    // re-bound to a different ephemeral source port), so matching by
+    // host:port alone would silently fail to find the entry. UID
+    // matching survives that.
+    void uninviteSender (const juce::String& host, int port, std::uint32_t wireUid = 0);
     void uninviteAllSenders();
 
     // Password gate. Empty = no auth (matches all-zeros hash).
@@ -156,6 +167,12 @@ public:
     int  getBoundPort()        const noexcept { return boundPort; }
     int  getNumPeers()         const noexcept;
 
+    // Stable per-process wire UID. Embedded in outbound INVITE / UNINVITE /
+    // INVITE_ACK headers and republished in Bonjour TXT, so the sender's
+    // editor can pair its accepted-targets entries with Bonjour-discovered
+    // receivers by UID — robust against multi-homed source-IP differences.
+    uint32_t getReceiverUid()  const noexcept { return receiverUid; }
+
     // What was the most recently *requested* port (raw user input).
     // Lets the UI tell the user "you typed an invalid port; we're on the
     // ephemeral fallback".
@@ -184,6 +201,28 @@ public:
         // would need synchronised clocks); on a LAN this is the dominant
         // component and is a good "how delayed is this audio" indicator.
         int          totalLatencyMs;
+        // Rate-control loop state — exposed so the loopback test driver
+        // can verify that clock-drift compensation actually converges to
+        // the right ratio. Also useful as a future editor debug overlay.
+        // - `rcorr`: current per-block multiplier on the resampler ratio.
+        //   Steady state with matched clocks ≈ 1.0; with the sender X
+        //   ppm faster than the receiver, settles at outputSR / senderSR.
+        //   Clamped to [0.95, 1.05].
+        // - `rcZ3`: integrator state. |z3| > 0.05 trips anti-windup and
+        //   resets the loop; sustained near-threshold values mean the
+        //   loop is fighting against more drift than it can compensate.
+        // - `rcNominalRatio`: outputSR / senderSR captured at peer
+        //   create. The actual ratio applied each block is rcNominalRatio
+        //   * rcorr.
+        double       rcorr;
+        double       rcZ3;
+        double       rcNominalRatio;
+        // EMA of (arrival_rx - sender_tx) per packet. Sender and receiver
+        // steady_clock origins differ per machine, so the absolute number
+        // is meaningless across hosts — but its stability over time is a
+        // useful proxy for network jitter health, and changes signal
+        // path-quality changes. Reported in milliseconds.
+        double       smoothedNetSpreadMs;
     };
     // For UI use only — message thread, not audio.
     std::vector<PeerSnapshot> snapshotPeers() const;
@@ -245,6 +284,8 @@ private:
     int outputChans     = 0;
     int outputSampleRate = 48000;
 
+    uint32_t receiverUid = 0;
+
     // Accepted-senders set. Inbound DATA from a UID not in this set is
     // dropped (with a once-per-source DBG log). Entries are added via
     // inviteSender (we initiate) or via inbound INVITE (sender wants to
@@ -264,6 +305,22 @@ private:
     // default as sonolink, comfortable on a clean LAN. Atomic for
     // lock-free read on the audio thread.
     std::atomic<int> jitterFloorMs { 25 };
+
+    // Anticipative-render detection (audio thread only — single producer/
+    // consumer of these). Some hosts (REAPER's anticipative-FX setting)
+    // call processBlock at multiples of realtime to pre-render plugin
+    // output ahead of playback. For a network-streaming receiver this is
+    // hopeless — the future audio doesn't exist yet (the sender is
+    // producing it in real time). Detection: compare the wallclock
+    // interval between consecutive pullAndMix calls against the expected
+    // blockSize/sampleRate. With hysteresis, mark the plugin as "fast
+    // mode" and bail out cleanly: output silence, leave the rate loop
+    // and DLL state untouched. When intervals normalise we resume.
+    double pullLastSec       = 0.0;
+    int    pullFastRunCount  = 0;     // consecutive fast-interval blocks observed
+    int    pullSlowRunCount  = 0;     // consecutive realtime-interval blocks
+    bool   pullInFastMode    = false;
+    int    pullFastSilenceLogged = 0; // counts log spam — only print once per entry
 
     std::atomic<bool>   running { false };
     std::unique_ptr<NetThread> netThread;

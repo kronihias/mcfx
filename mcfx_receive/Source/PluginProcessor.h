@@ -53,8 +53,10 @@ public:
 
     // ----- Bidirectional connect -------------------------------------------
 
-    bool inviteSender    (const juce::String& host, int port) { return stream.inviteSender (host, port); }
-    void uninviteSender  (const juce::String& host, int port) { stream.uninviteSender (host, port); }
+    bool inviteSender    (const juce::String& host, int port, std::uint32_t wireUid = 0)
+                          { return stream.inviteSender (host, port, wireUid); }
+    void uninviteSender  (const juce::String& host, int port, std::uint32_t wireUid = 0)
+                          { stream.uninviteSender (host, port, wireUid); }
     void uninviteAllSenders() { stream.uninviteAllSenders(); }
     std::vector<mcfx::net::RecvStream::AcceptedSender> getAcceptedSenders() const
     {

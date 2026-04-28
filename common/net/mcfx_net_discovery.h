@@ -93,17 +93,23 @@ public:
         int            channels = 0;
         juce::String   format;       // "PCM 32-bit float" etc.
         juce::Time     lastSeen;
+        // The remote's wire UID (uint32, written into the CommonHeader's
+        // sender field on the wire). Lets the editors pair Bonjour-
+        // discovered entries with locally-tracked accepted/targets entries
+        // by UID — robust against multi-homed source-IP differences.
+        std::uint32_t  wireUid = 0;
     };
 
     struct PublishInfo
     {
-        juce::String uid;
-        juce::String track;
-        juce::String host;
-        juce::String user;
-        juce::String project;
-        int          channels = 0;
-        juce::String format;
+        juce::String  uid;
+        juce::String  track;
+        juce::String  host;
+        juce::String  user;
+        juce::String  project;
+        int           channels = 0;
+        juce::String  format;
+        std::uint32_t wireUid = 0;   // matches outbound CommonHeader.sender
     };
 
     explicit Discovery (Mode m, const juce::String& whichUid)
@@ -162,7 +168,8 @@ public:
                           || (info.user     != lastInfo.user)
                           || (info.project  != lastInfo.project)
                           || (info.channels != lastInfo.channels)
-                          || (info.format   != lastInfo.format);
+                          || (info.format   != lastInfo.format)
+                          || (info.wireUid  != lastInfo.wireUid);
         if (! changed) return;
 
         currentPort = audioPort;
@@ -258,6 +265,10 @@ private:
         if (lastInfo.project.isNotEmpty()) fields.set ("proj", lastInfo.project);
         if (lastInfo.channels > 0)        fields.set ("ch",    juce::String (lastInfo.channels));
         if (lastInfo.format.isNotEmpty()) fields.set ("fmt",   lastInfo.format);
+        // wireUid travels as decimal so it survives an existing TXT
+        // value-tokeniser quirk on negative ints; readers parse it the
+        // same way and reconstruct the uint32.
+        if (lastInfo.wireUid != 0)        fields.set ("wuid",  juce::String ((juce::int64) lastInfo.wireUid));
 
         advertiser = std::make_unique<juce::NetworkServiceDiscovery::Advertiser> (
             serviceUid, buildDescription (fields),
@@ -290,6 +301,7 @@ private:
             d.project  = fields.getValue ("proj",  {});
             d.channels = fields.getValue ("ch",    "0").getIntValue();
             d.format   = fields.getValue ("fmt",   {});
+            d.wireUid  = (std::uint32_t) fields.getValue ("wuid", "0").getLargeIntValue();
             out.push_back (std::move (d));
         }
 
@@ -309,7 +321,8 @@ private:
                     if (a.uid != b.uid || a.ip.toString() != b.ip.toString()
                         || a.port != b.port || a.track != b.track || a.host != b.host
                         || a.user != b.user || a.project != b.project
-                        || a.channels != b.channels || a.format != b.format)
+                        || a.channels != b.channels || a.format != b.format
+                        || a.wireUid != b.wireUid)
                     { changed = true; break; }
                 }
             }

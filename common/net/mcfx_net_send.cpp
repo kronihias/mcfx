@@ -50,17 +50,42 @@ public:
         setCurrentThreadRealtime (20.0, 3.0, 10.0);
 
         owner.sendDescriptorToAllActive();
-        auto lastDescTime = juce::Time::getMillisecondCounterHiRes();
+        const auto startWallMs = juce::Time::getMillisecondCounterHiRes();
+        auto lastDescTime = startWallMs;
+        // Wall-clock pacing: hosts may call the audio thread MUCH faster
+        // than realtime (REAPER's anticipative-FX rendering pre-renders
+        // tracks ahead so plugins with latency can run at low buffer
+        // sizes). Without pacing, our SendThread happily drains the FIFO
+        // and ships every sample, flooding the receiver at 2-5x realtime
+        // and overrunning its ring. Pace by tracking how many frames
+        // SHOULD have been sent by now (wallclock × sampleRate) and only
+        // sending up to that. Excess audio backs up in the FIFO and is
+        // dropped via audioOverruns when pushAudioBlock can't fit more —
+        // exactly the behaviour you want for offline/anticipative
+        // rendering: the network stream stays at realtime regardless of
+        // how fast the host wants to render.
+        uint64_t framesSentTotal = 0;
 
         while (! threadShouldExit())
         {
+            const double now = juce::Time::getMillisecondCounterHiRes();
+            const double elapsedMs = now - startWallMs;
+
+            // Frames the sender is "allowed" to have sent by this
+            // wallclock moment. Allow a small slack of one period so we
+            // don't perpetually starve when scheduling adds jitter.
+            const uint64_t framesDue = (uint64_t) (elapsedMs * 0.001
+                                                  * (double) owner.ringSampleRate)
+                                     + (uint64_t) owner.ringBlockSize;
+
             while (owner.fifo != nullptr
+                   && framesSentTotal + (uint64_t) owner.ringBlockSize <= framesDue
                    && owner.fifo->getNumReady() >= owner.ringBlockSize * owner.ringNumChannels)
             {
                 owner.sendPeriodFromFifoToAllActive();
+                framesSentTotal += (uint64_t) owner.ringBlockSize;
             }
 
-            const double now = juce::Time::getMillisecondCounterHiRes();
             if (now - lastDescTime > 100.0)
             {
                 owner.sendDescriptorToAllActive();
@@ -68,7 +93,15 @@ public:
                 lastDescTime = now;
             }
 
-            owner.wake.wait (20);
+            // Sleep until the next period boundary (or up to 20 ms,
+            // whichever comes first). This caps idle CPU while keeping
+            // the timing accurate to ~1 ms.
+            const double nextDueMs = startWallMs
+                + 1000.0 * (double) (framesSentTotal + (uint64_t) owner.ringBlockSize)
+                         / (double) owner.ringSampleRate;
+            const int waitMs = juce::jlimit (1, 20,
+                                             (int) std::ceil (nextDueMs - now));
+            owner.wake.wait (waitMs);
         }
     }
 
@@ -213,6 +246,16 @@ void SendStream::prepareToPlay (double sampleRate, int blockSize,
     sentBytes.store (0, std::memory_order_relaxed);
     audioOverruns.store (0, std::memory_order_relaxed);
 
+    // Reset anticipative-render detection state so a fresh prepareToPlay
+    // (e.g. user changing channel count) starts from a clean slate. This
+    // is what makes channel-change on the sender clear out any sticky
+    // fast-mode flag from a previous configuration.
+    pushLastSec       = 0.0;
+    pushFastRunCount  = 0;
+    pushSlowRunCount  = 0;
+    pushInFastMode    = false;
+    pushFastSilenceLogged = 0;
+
     running.store (true, std::memory_order_release);
     sendThread = std::make_unique<SendThread> (*this);
     sendThread->startThread (juce::Thread::Priority::high);
@@ -260,6 +303,65 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
 
     const int chans = juce::jmin (numChannels, ringNumChannels);
     if (chans <= 0) return false;
+
+    // Anticipative-render detection. REAPER (and a few other hosts) can
+    // call processBlock at multiples of realtime to pre-render plugin
+    // output for the buffered playback queue. The SendThread paces UDP
+    // emission at WALLCLOCK rate, so any audio pushed past realtime just
+    // overflows the FIFO and gets dropped (audioOverruns). Worse, the
+    // receiver can't possibly play audio that doesn't exist yet — the
+    // pre-rendered output is meaningless across a network. Detect
+    // sustained fast calls (~80 ms of consecutive sub-realtime intervals)
+    // and short-circuit pushAudioBlock cleanly: no FIFO write, no wake,
+    // just return success. Pairs with the receive-side detector so the
+    // whole pipeline ignores anticipative-FX rather than fighting it.
+    if (ringSampleRate > 0)
+    {
+        const double nowSec = std::chrono::duration<double> (
+            std::chrono::steady_clock::now().time_since_epoch()).count();
+        const double expectedSec = static_cast<double> (numSamples)
+                                 / static_cast<double> (ringSampleRate);
+        if (pushLastSec > 0.0)
+        {
+            const double interval = nowSec - pushLastSec;
+            if (interval < expectedSec * 0.5)
+            {
+                pushFastRunCount++;
+                pushSlowRunCount = 0;
+                if (pushFastRunCount >= 64 && ! pushInFastMode)
+                {
+                    pushInFastMode = true;
+                    pushFastSilenceLogged++;
+                    std::cerr << "mcfx_send: host calling pushAudioBlock at "
+                              << static_cast<int> (expectedSec * 1000.0
+                                                   / juce::jmax (1e-9, interval))
+                              << "x realtime — likely anticipative-FX "
+                                 "pre-render. Skipping the FIFO push; "
+                                 "network audio can't represent future "
+                                 "samples. Disable anticipative FX in "
+                                 "the host. (occurrence #"
+                              << pushFastSilenceLogged << ")"
+                              << std::endl;
+                }
+            }
+            else if (interval > expectedSec * 0.8)
+            {
+                pushSlowRunCount++;
+                pushFastRunCount = 0;
+                if (pushSlowRunCount >= 16 && pushInFastMode)
+                {
+                    pushInFastMode = false;
+                    pushFastSilenceLogged = 0;
+                    std::cerr << "mcfx_send: host returned to realtime "
+                                 "pacing — resuming network send."
+                              << std::endl;
+                }
+            }
+        }
+        pushLastSec = nowSec;
+    }
+    if (pushInFastMode)
+        return true;   // Pretend success; nothing to do at multi-realtime.
 
     const int needed = numSamples * ringNumChannels;
 
@@ -311,7 +413,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
 // Target management
 // ---------------------------------------------------------------------------
 
-bool SendStream::addTarget (const juce::String& host, int port)
+bool SendStream::addTarget (const juce::String& host, int port, std::uint32_t wireUid)
 {
     if (host.isEmpty() || port < 1 || port > 65535) return false;
 
@@ -321,25 +423,31 @@ bool SendStream::addTarget (const juce::String& host, int port)
     {
         const juce::ScopedLock sl (targetsLock);
 
-        // Idempotent: dedupe by host:port. Re-adding an existing target
-        // re-arms the INVITE retry (useful for nudging a peer that
-        // didn't ACK the first round).
-        // Reset addedAt + lastInviteAt to NOW on every (re-)add so the
-        // retry timer doesn't immediately Timeout an entry whose
-        // original addedAt is from a previous connect session — that
-        // bug made reconnects appear to hang in Inviting.
+        // Match an existing entry: UID first (when caller passed it from
+        // the discovered row), host:port as fallback for the Direct IP
+        // path. Re-adding an existing target re-arms the INVITE retry,
+        // which is useful for nudging a peer that didn't ACK the first
+        // round. Reset addedAt + lastInviteAt to NOW on every (re-)add
+        // so the retry deadline doesn't fire on a timestamp from a
+        // previous connect session.
         const auto nowT = juce::Time::getCurrentTime();
-        for (auto& t : targets)
+        Target* match = nullptr;
+        if (wireUid != 0)
+            for (auto& t : targets)
+                if (t.receiverUid == wireUid) { match = &t; break; }
+        if (! match)
+            for (auto& t : targets)
+                if (t.host == host && t.port == port) { match = &t; break; }
+
+        if (match != nullptr)
         {
-            if (t.host == host && t.port == port)
-            {
-                t.state         = TargetState::Pending;
-                t.rejectReason  = IAR_OK;
-                t.addedAt       = nowT;
-                t.lastInviteAt  = nowT;
-                sendOneInvite (t);
-                return true;
-            }
+            match->state         = TargetState::Pending;
+            match->rejectReason  = IAR_OK;
+            match->addedAt       = nowT;
+            match->lastInviteAt  = nowT;
+            if (wireUid != 0) match->receiverUid = wireUid;
+            sendOneInvite (*match);
+            return true;
         }
 
         if ((int) targets.size() >= kMaxTargets)
@@ -349,12 +457,13 @@ bool SendStream::addTarget (const juce::String& host, int port)
         }
 
         Target t;
-        t.addr        = addr;
-        t.host        = host;
-        t.port        = port;
-        t.label       = host + ":" + juce::String (port);
-        t.state       = TargetState::Pending;
-        t.addedAt     = juce::Time::getCurrentTime();
+        t.addr         = addr;
+        t.host         = host;
+        t.port         = port;
+        t.label        = host + ":" + juce::String (port);
+        t.state        = TargetState::Pending;
+        t.receiverUid  = wireUid;
+        t.addedAt      = juce::Time::getCurrentTime();
         t.lastInviteAt = t.addedAt;
         targets.push_back (t);
         sendOneInvite (targets.back());
@@ -566,6 +675,15 @@ void SendStream::sendPeriodFromFifoToAllActive() noexcept
         hdr->sender = senderUid;
         hdr->seq    = nextSeq.fetch_add (1, std::memory_order_relaxed);
 
+        // Per-packet sender timestamp. The receiver's per-arrival DLL uses
+        // these to filter network jitter out of the rate-loop input on
+        // cross-machine streams. Captured here (not at start of period) so
+        // multi-packet periods don't all share the same value — each
+        // packet's individual sendto-spacing reaches the receiver as
+        // signal, and the DLL filters network jitter on top.
+        dat->tx_us    = static_cast<std::uint64_t> (
+            std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now().time_since_epoch()).count());
         dat->count    = periodStartFrame + static_cast<uint32_t> (frameOffset);
         dat->nfram    = static_cast<uint16_t> (frames);
         dat->reserved = 0;
@@ -801,15 +919,38 @@ void SendStream::handleInvitePacket (const sockaddr_in& from,
     {
         const juce::ScopedLock sl (targetsLock);
 
-        for (auto& t : targets)
+        // Match by wire UID — the only identity. Refresh the sockaddr
+        // we use for outbound DATA but leave host/port alone so they
+        // stay the canonical identity used by the editor's row pairing.
+        if (hdr.sender != 0)
         {
-            if (t.host == hostStr && t.port == portInt)
+            for (auto& t : targets)
             {
-                // Already known — refresh state to Active.
-                t.state         = TargetState::Active;
-                t.receiverUid   = hdr.sender;
-                added = true;
-                break;
+                if (t.receiverUid == hdr.sender)
+                {
+                    t.state = TargetState::Active;
+                    t.addr  = inviterAudioAddr;
+                    added   = true;
+                    break;
+                }
+            }
+        }
+        // Direct-IP race: we initiated via addTarget(host, port) and
+        // the peer's INVITE arrived before our INVITE_ACK could land.
+        // Our entry still has receiverUid=0; populate it now rather
+        // than spawning a duplicate. Bonjour-discovered targets carry
+        // their wireUid up front and so don't take this branch.
+        if (! added)
+        {
+            for (auto& t : targets)
+            {
+                if (t.receiverUid == 0 && t.host == hostStr && t.port == portInt)
+                {
+                    t.state         = TargetState::Active;
+                    t.receiverUid   = hdr.sender;
+                    added = true;
+                    break;
+                }
             }
         }
         if (! added)
@@ -846,6 +987,15 @@ void SendStream::handleInvitePacket (const sockaddr_in& from,
     {
         DBG ("mcfx_send: INVITE accepted from " << hostStr << ":" << portInt
              << " (uid=" << juce::String::toHexString ((juce::int64) hdr.sender) << ")");
+        // Send a DESC immediately so the receiver knows our real period
+        // and sample rate before its first DATA packet lands. Otherwise
+        // the receiver's findOrCreatePeer initializes peer->period to
+        // its own outputBlockSize as a placeholder and won't see ours
+        // until the next 100 ms DESC tick — by which point its rate-
+        // control loop has wound up against the wrong target fill (loop
+        // target = prefill + period/2) and pinned rcorr to its ±5%
+        // clamp, producing detuning + periodic glitching until rebuild.
+        sendDescriptorTo (inviterAudioAddr);
     }
     sendInviteAck (from, ack);
 }

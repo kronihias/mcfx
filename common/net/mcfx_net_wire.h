@@ -36,8 +36,11 @@
 namespace mcfx { namespace net {
 
 // 4-byte magic. Bumps for protocol breaks; receivers MUST drop packets that
-// don't match. "mcxa" = mcfx audio, big-endian-readable in tcpdump.
-inline constexpr char kMagic[4] = { 'm', 'c', 'x', 'a' };
+// don't match. "mcxb" = mcfx audio v2 — DataPayload now carries a sender
+// steady-clock timestamp ahead of count/nfram so the receiver can drive a
+// per-arrival DLL for clock-drift compensation. The previous "mcxa" layout
+// is wire-incompatible and is rejected by the magic check.
+inline constexpr char kMagic[4] = { 'm', 'c', 'x', 'b' };
 
 // Common header types.
 enum PacketType : std::uint8_t
@@ -117,15 +120,20 @@ static_assert (sizeof (DescPayload) == 20, "DescPayload size mismatch");
 // Audio data (ADATA). count is the absolute starting sample index in the
 // sender's stream; it lets the receiver detect packet loss precisely (gap)
 // and reordering (count goes backwards). nfram is how many sample frames
-// follow in this packet.
+// follow in this packet. tx_us is the sender's steady_clock micros sampled
+// at sendto() time and feeds the receiver's per-arrival DLL — it drives
+// clock-drift compensation for cross-machine streams. (Steady-clock
+// origins differ per machine, so the absolute value is meaningless across
+// hosts; only deltas/per-stream interpretation matter.)
 struct DataPayload
 {
+    std::uint64_t tx_us;       // sender steady_clock micros at sendto()
     std::uint32_t count;       // absolute sample index of first frame in this packet
     std::uint16_t nfram;       // frames in this packet
     std::uint16_t reserved;    // 0
     // ... interleaved samples follow ...
 };
-static_assert (sizeof (DataPayload) == 8, "DataPayload size mismatch");
+static_assert (sizeof (DataPayload) == 16, "DataPayload size mismatch");
 
 // PT_INVITE — sent from a peer that wants to be added to the recipient's
 // target list. Recipient is the sender plug-in; it password-checks and
