@@ -447,9 +447,10 @@ struct Driver
     {
         if (channel < 0 || channel >= (int) capture.size()) return -1.0;
         if (captureFramesNow < 4096) return -1.0;
-        // Skip the first few hundred ms (priming + group delay) and FFT
-        // a power-of-two window from the middle of the capture.
-        const int skip = (int) (opts.recvSampleRate * 0.5);
+        // Skip the first 5 s — covers priming + the rate loop's fast-bw
+        // lock-in window during which the receiver's output is muted to
+        // hide convergence transients.
+        const int skip = (int) (opts.recvSampleRate * 5.0);
         if (skip + 4096 > captureFramesNow) return -1.0;
         // Goertzel-bin scan around expected (1 kHz on ch0, 1 kHz + 100·c
         // on chN). Find the bin with max magnitude in [500, 5000] Hz.

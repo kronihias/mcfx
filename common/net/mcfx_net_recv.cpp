@@ -173,10 +173,10 @@ struct RecvStream::PeerStream
                              std::memory_order_release);
     }
 
-    // Multiplicative bump on loss / underrun: at least 20 ms, at most
-    // double the current extra, capped at 200 ms total of auto headroom.
-    // React fast to network glitches, then slowly earn the latency back.
-    // Returns the new auto-extra value so callers can recomputeBuffer.
+    // Multiplicative bump on packet-loss gap events: at least 20 ms, at
+    // most double the current extra, capped at 200 ms total. Used for
+    // network-loss events where a graduated response is appropriate (a
+    // one-off lost packet shouldn't lock the buffer to maximum).
     int bumpAutoExtra (int floorMs, double nowSec) noexcept
     {
         const int cur  = autoExtraMs.load (std::memory_order_relaxed);
@@ -188,19 +188,37 @@ struct RecvStream::PeerStream
         return neu;
     }
 
-    // Slow decay — 1 ms per audio block once we've been loss-free for
-    // 5 s. That earns ~3 s back per minute of clean network on a 64-
-    // sample block at 48k. Called from the audio thread; cheap.
+    // Aggressive bump used for audio-thread underrun events. Underruns
+    // mean the ring went below the resampler's input demand — either
+    // the sender's audio thread is stalling (e.g. Windows scheduling
+    // jitter) or the network is bunching packets. Either way the
+    // buffer was clearly too small. Geometric growth from 20 ms takes
+    // 6 underrun events (= 6 audible glitches) to reach the 200 ms
+    // cap; jumping to the cap on the first underrun makes recovery
+    // single-event. Latency cost is real (extra 200 ms of buffering)
+    // but that's strictly better than a continuous glitch cascade.
+    void bumpAutoExtraToCap (int floorMs, double nowSec) noexcept
+    {
+        autoExtraMs.store (200, std::memory_order_relaxed);
+        lastLossTimeSec.store (nowSec, std::memory_order_relaxed);
+        recomputeBuffer (floorMs);
+    }
+
+    // Slow decay — 1 ms per second once we've been clean for 60 s.
+    // That earns ~60 ms back per minute of pristine network. The slow
+    // schedule deliberately favours stability over latency-recovery:
+    // a single bump event makes the buffer LARGER for hours, on the
+    // assumption that whatever caused the bump is likely to recur. If
+    // the network is genuinely clean for many minutes, autoExtra will
+    // eventually drift back down. Called from the audio thread; cheap.
     void maybeDecay (int floorMs, double nowSec) noexcept
     {
         const int extra = autoExtraMs.load (std::memory_order_relaxed);
         if (extra <= 0) return;
         const double lastLoss = lastLossTimeSec.load (std::memory_order_relaxed);
-        if (lastLoss > 0.0 && (nowSec - lastLoss) < 5.0) return;
-        // Tick at most every ~5 ms so the decay rate doesn't depend on
-        // the host's audio block size.
+        if (lastLoss > 0.0 && (nowSec - lastLoss) < 60.0) return;
         const double lastTick = lastDecayTickSec.load (std::memory_order_relaxed);
-        if (lastTick > 0.0 && (nowSec - lastTick) < 0.005) return;
+        if (lastTick > 0.0 && (nowSec - lastTick) < 1.0) return;
         autoExtraMs.store (extra - 1, std::memory_order_relaxed);
         lastDecayTickSec.store (nowSec, std::memory_order_relaxed);
         recomputeBuffer (floorMs);
@@ -241,6 +259,29 @@ struct RecvStream::PeerStream
     int    rcBlocksToFastPhase   = 0;   // ~4 s of host blocks; computed at create
     bool   rcInited = false;            // false → use first-block jump-correct
     double rcNominalRatio = 1.0;        // outputSR / senderSR
+    // Output-mute state — silences this peer's output until the rate
+    // loop has stabilised. The lock-in transient (loop running at fast
+    // bw chasing a possibly-large initial err) can pin rcorr to its
+    // ±5 % clamp for a second or two, which sounds like the audio is
+    // sliding sharply out of tune before settling. Muting hides this.
+    //
+    // Adaptive unmute logic:
+    //   1. Wait at least `rcMuteMinBlocks` (≈ 0.5 s) after (re)prime
+    //      regardless of loop state — the rate-loop fast-bw response
+    //      is itself ~0.3 s, so we shouldn't even check stability
+    //      before then.
+    //   2. After the min-time, check that |z2| has been below a tight
+    //      threshold for `rcMuteStableNeed` consecutive blocks. z2
+    //      reflects the proportional path output of the loop; it stays
+    //      tiny in steady state regardless of what DC offset the
+    //      integrator (z3) eventually carries. So this criterion works
+    //      across both matched-rate and genuine-drift cases.
+    //   3. Safety cap: force unmute after a generous timeout
+    //      (~10 s) even if z2 never settles to threshold.
+    bool   rcMuteActive          = false;
+    int    rcMuteStableConsec    = 0;     // consecutive stable blocks
+    int    rcMuteMinBlocksLeft   = 0;     // count down min-mute time first
+    int    rcMuteBlocksRemaining = 0;     // safety-cap countdown
 
     // Scratch buffers used by the audio thread to stage interleaved
     // input out of the circular ring (resampler can't read across the
@@ -2010,9 +2051,17 @@ void RecvStream::pullAndMix (float* const* out,
 
         // Smoothed prefill — exponentially low-passes the discrete
         // prefillFrames so autoExtra bumps/decays don't jolt the rate
-        // loop's target. Time constant ~2 s (alpha tuned for the audio
-        // block period). On (re)prime we snap to the current prefill
-        // to avoid an unnecessary ramp-in transient.
+        // loop's target. Time constant must be SLOWER than the loop's
+        // slow-bw settling time (~3.2 s at 0.05 Hz) — otherwise the
+        // loop chases the moving target and wobbles. We use 30 s, which
+        // is a full order of magnitude slower than the loop and absorbs
+        // both the autoExtra bump (~20 ms appears, peer must ramp up
+        // to it gracefully) and the eventual decay (~200 ms drop, loop
+        // sees a barely-moving target). User-initiated floor changes
+        // also propagate at 30 s — acceptable since those are rare and
+        // the priming threshold (which controls actual buffered audio
+        // depth) responds immediately. On (re)prime we snap to the
+        // current prefill to avoid a ramp-in transient.
         if (! p->prefillSmoothInited)
         {
             p->prefillSmoothFrames = (double) prefill;
@@ -2020,14 +2069,12 @@ void RecvStream::pullAndMix (float* const* out,
         }
         else
         {
-            // alpha = 1 - exp(-blockTime / tau) for tau ≈ 2 s.
-            // For blockTime ≈ 1.33 ms (64 frames @ 48 kHz), alpha ≈ 6.7e-4.
-            // Safe to compute at runtime — tiny cost, runs once per audio
-            // block, accommodates any blockSize/sampleRate combo.
+            // alpha = 1 - exp(-blockTime / tau) for tau = 30 s.
+            // For blockTime ≈ 1.33 ms (64 frames @ 48 kHz), alpha ≈ 4.4e-5.
             const double alpha = (outputBlockSize > 0 && outputSampleRate > 0)
                 ? (1.0 - std::exp (-(double) outputBlockSize
-                                    / ((double) outputSampleRate * 2.0)))
-                : 0.001;
+                                    / ((double) outputSampleRate * 30.0)))
+                : 4.4e-5;
             p->prefillSmoothFrames += alpha * ((double) prefill - p->prefillSmoothFrames);
         }
         const int loopTarget = (int) std::lround (p->prefillSmoothFrames + (double) p->period / 2.0);
@@ -2048,6 +2095,24 @@ void RecvStream::pullAndMix (float* const* out,
             // Snap smoothed prefill to current prefill so re-prime
             // doesn't introduce its own tracking transient.
             p->prefillSmoothInited = false;
+            // Mute the output until the rate loop stabilises. Min-mute
+            // covers the fast-bw response time (~0.5 s); after that we
+            // check |z2| < 5e-5 sustained as the unmute trigger. A
+            // generous safety cap (≈ 10 s) force-unmutes if the loop
+            // never quite settles by criterion.
+            p->rcMuteActive = true;
+            p->rcMuteStableConsec = 0;
+            if (outputSampleRate > 0 && outputBlockSize > 0)
+            {
+                const int blocksPerSec = outputSampleRate / outputBlockSize;
+                p->rcMuteMinBlocksLeft   = blocksPerSec / 2;     // 0.5 s
+                p->rcMuteBlocksRemaining = blocksPerSec * 10;    // 10 s safety
+            }
+            else
+            {
+                p->rcMuteMinBlocksLeft   = 375;
+                p->rcMuteBlocksRemaining = 7500;
+            }
         }
 
         // Snapshot the latest DLL anchor and shift our two-anchor pair
@@ -2115,7 +2180,23 @@ void RecvStream::pullAndMix (float* const* out,
             const double kSpan = (double) (int64_t) (p->dllAK1 - p->dllAK0);
             const double predictedWriteNow =
                 (double) p->dllAK0 + kSpan * (d1 / d2);
-            const double dllTarget = p->prefillSmoothFrames + (double) p->period;
+
+            // The DLL's predictedWriteNow grows smoothly between snap
+            // updates; the actual writeFramePos is stair-step, jumping
+            // by (period / N_packets_per_period) at each packet arrival.
+            // Mean(predictedWriteNow − writeFramePos) = period_per_packet
+            // / 2. For 1 packet-per-period (low channel count) that's
+            // period/2; for many packets-per-period (high channel count
+            // with MTU-fragmented audio) it's small. We need to add this
+            // offset to dllTarget so the loop drives mean(fillNow) to
+            // the same operating point regardless of packet count.
+            const int nPackets   = packetsPerPeriod (p->period, p->nchan, p->fmt);
+            const double offset  = (nPackets > 0)
+                                    ? ((double) p->period / (2.0 * (double) nPackets))
+                                    : 0.0;
+            const double dllTarget = p->prefillSmoothFrames
+                                   + (double) p->period / 2.0
+                                   + offset;
             err = (predictedWriteNow - (double) curRead0) - dllTarget;
         }
         else
@@ -2171,8 +2252,11 @@ void RecvStream::pullAndMix (float* const* out,
                       << std::endl;
             p->resetRateLoop();
             p->primed.store (false, std::memory_order_release);
-            // Bump auto-headroom — next prime sits deeper, giving the
-            // loop more slack the next time.
+            // Geometric autoExtra bump (20 ms minimum). The output mute
+            // mechanism hides convergence transients audibly, so we
+            // don't need to jump to the cap on the first event — gradual
+            // growth keeps steady-state latency low on clean networks
+            // where jitter is small (e.g. wired LAN).
             p->bumpAutoExtra (floorMs, nowSec);
             continue;
         }
@@ -2212,6 +2296,11 @@ void RecvStream::pullAndMix (float* const* out,
                           << " target=" << loopTarget
                           << std::endl;
             p->primed.store (false, std::memory_order_release);
+            // Geometric autoExtra bump. Mute mechanism hides the brief
+            // convergence transient after re-prime, so we don't need
+            // to jump to cap; gradual growth keeps wired-LAN latency
+            // low while still climbing fast enough to handle bursty
+            // senders within a few events.
             p->bumpAutoExtra (floorMs, nowSec);
             continue;
         }
@@ -2244,13 +2333,49 @@ void RecvStream::pullAndMix (float* const* out,
             p->resOutScratch.data(), blockSize,
             ratio);
 
-        // Sum resampler output into host buffer (same accumulate-mix
-        // semantics as the previous direct path).
-        const float* src = p->resOutScratch.data();
-        const int nFramesOut = (int) rr.output_generated;
-        for (int f = 0; f < nFramesOut; ++f)
-            for (int c = 0; c < mixCh; ++c)
-                out[c][f] += src[f * chans + c];
+        // Adaptive un-mute. We sum the resampler output into the host
+        // buffer UNLESS the peer is still muted from a recent (re)prime.
+        // While muted, we count consecutive blocks where the rate loop
+        // appears stable (rcorr within ±1 % of unity); after 50
+        // consecutive stable blocks (~67 ms @ 48 k/64) we unmute. A
+        // safety countdown also force-unmutes after the fast-bw window
+        // elapses regardless, so a never-stabilising stream eventually
+        // emits audio.
+        if (p->rcMuteActive)
+        {
+            // First serve the min-mute window (loop hasn't had time to
+            // do anything meaningful yet). After that, unmute as soon
+            // as rcorr is close to unity (within 1000 ppm) for 100
+            // consecutive blocks (~133 ms @ 48 k/64). This covers the
+            // matched-rate case (rcorr ≈ 1.0 ± a few ppm of test-
+            // driver thread bias) and reasonable real-drift cases
+            // (most clock mismatches are well under 1000 ppm). For
+            // extreme drift the safety cap eventually fires.
+            if (p->rcMuteMinBlocksLeft > 0)
+            {
+                p->rcMuteMinBlocksLeft--;
+            }
+            else if (std::abs (p->rcRcorr - 1.0) < 1e-3)
+            {
+                if (++p->rcMuteStableConsec >= 100)
+                    p->rcMuteActive = false;
+            }
+            else
+            {
+                p->rcMuteStableConsec = 0;
+            }
+            if (--p->rcMuteBlocksRemaining <= 0)
+                p->rcMuteActive = false;
+        }
+
+        if (! p->rcMuteActive)
+        {
+            const float* src = p->resOutScratch.data();
+            const int nFramesOut = (int) rr.output_generated;
+            for (int f = 0; f < nFramesOut; ++f)
+                for (int c = 0; c < mixCh; ++c)
+                    out[c][f] += src[f * chans + c];
+        }
 
         // Advance the read pointer by what the resampler actually used,
         // not what we offered. Keeps the ring fill arithmetic exact.
