@@ -850,9 +850,9 @@ void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
         if (_hostedEditor == _hostedCustomEditor.get())
         {
             _hostedEditor->removeComponentListener (this);
-            removeChildComponent (_hostedEditor);
             _hostedEditor = nullptr;
         }
+        removeChildComponent (_hostedCustomEditor.get());
         _hostedCustomEditor.reset();
     }
     if (_hostedGenericEditor != nullptr && ! editorBelongsToMaster (_hostedGenericEditor.get()))
@@ -860,17 +860,24 @@ void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
         if (_hostedEditor == _hostedGenericEditor.get())
         {
             _hostedEditor->removeComponentListener (this);
-            removeChildComponent (_hostedEditor);
             _hostedEditor = nullptr;
         }
+        removeChildComponent (_hostedGenericEditor.get());
         _hostedGenericEditor.reset();
     }
 
-    // Detach the currently visible editor (we'll re-attach the chosen one below).
+    // Hide (but do NOT detach) the currently visible editor. removeChildComponent
+    // would clear its peer, which makes NSViewAttachment call
+    // [NSView removeFromSuperview] — Apple AU views (e.g. AUHipassFilter's
+    // spectrum view) interpret that as "I'm being deleted" and stop updating
+    // their bindings, so the cached editor would be visually frozen the next
+    // time we re-attached it. setVisible(false) only sets [NSView setHidden:YES]
+    // while keeping the view parented to its NSWindow, which AU views handle
+    // correctly. See juce_NSViewComponent_mac.mm: NSViewAttachment::removeFromParent.
     if (_hostedEditor)
     {
         _hostedEditor->removeComponentListener (this);
-        removeChildComponent (_hostedEditor);
+        _hostedEditor->setVisible (false);
         _hostedEditor = nullptr;
     }
 
@@ -893,6 +900,9 @@ void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
 
         if (_hostedEditor)
         {
+            // addAndMakeVisible is a no-op for a component that's already a
+            // child; it then calls setVisible(true), which restores the AU
+            // view via [NSView setHidden:NO] without a re-parent.
             addAndMakeVisible (_hostedEditor);
             _hostedEditor->setTopLeftPosition (0, topBarHeight);
             _hostedEditor->addComponentListener (this);

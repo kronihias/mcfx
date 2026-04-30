@@ -1150,13 +1150,25 @@ void Mcfx_anythingAudioProcessor::syncParametersFromMaster()
         {
             _lastParameterValues[(size_t) p] = currentValue;
 
-            // Push to all slave instances
+            // Push to all slave instances. We also explicitly notify each
+            // slave parameter's JUCE listeners — AUInstanceParameter::setValue
+            // calls AUEventListenerNotify with itself as the sending listener,
+            // which excludes the JUCE listener from the dispatch and means
+            // sendValueChangedMessageToListeners is NOT called as a side
+            // effect. Without this explicit call, any GenericAudioProcessorEditor
+            // pointed at the slave (e.g. an Inspect popup in Generic UI mode)
+            // never sees the change because its ParameterListener is hung off
+            // the slave's parameter and only fires via that broadcast.
             for (int i = 1; i < _pluginInstances.size(); ++i)
             {
                 auto* slave = _pluginInstances.getUnchecked (i);
                 auto slaveParams = slave->getParameters();
                 if (p < slaveParams.size())
-                    slaveParams[p]->setValue (currentValue);
+                {
+                    auto* slaveParam = slaveParams[p];
+                    slaveParam->setValue (currentValue);
+                    slaveParam->sendValueChangedMessageToListeners (currentValue);
+                }
             }
 
             // Notify the host via the forwarding proxy so the DAW sees
