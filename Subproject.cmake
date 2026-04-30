@@ -34,13 +34,24 @@
 
 get_filename_component(SUBDIRNAME ${CMAKE_CURRENT_SOURCE_DIR} NAME)
 
-# Collect sources once
+# Collect sources once. The legacy glob pattern *.c* matches .c/.cpp/.cc/.cxx
+# but NOT .mm — Objective-C++ files have to be globbed explicitly. We pick
+# them up on Apple only so non-macOS builds don't try to compile Cocoa
+# source as plain C++.
 if(DEFINED SPECIFIC_SOURE_DIR)
     file(GLOB_RECURSE _MCFX_SOURCE ${SPECIFIC_SOURE_DIR}/Source/*.c*)
     file(GLOB_RECURSE _MCFX_HEADER ${SPECIFIC_SOURE_DIR}/Source/*.h*)
+    if(APPLE)
+        file(GLOB_RECURSE _MCFX_OBJC_SOURCE ${SPECIFIC_SOURE_DIR}/Source/*.mm)
+        list(APPEND _MCFX_SOURCE ${_MCFX_OBJC_SOURCE})
+    endif()
 else()
     file(GLOB_RECURSE _MCFX_SOURCE Source/*.c*)
     file(GLOB_RECURSE _MCFX_HEADER Source/*.h*)
+    if(APPLE)
+        file(GLOB_RECURSE _MCFX_OBJC_SOURCE Source/*.mm)
+        list(APPEND _MCFX_SOURCE ${_MCFX_OBJC_SOURCE})
+    endif()
 endif()
 
 if(BUILD_STANDALONE)

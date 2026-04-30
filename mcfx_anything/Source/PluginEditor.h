@@ -22,10 +22,85 @@
 
 #include "JuceHeader.h"
 #include "PluginProcessor.h"
+#include "InspectorClickBlocker.h"
 
 //==============================================================================
-// Popup window that shows a specific plugin instance's GUI for inspection
-// Wrapper component that holds a toolbar + the plugin editor inside the inspector
+// Transparent overlay placed on top of the inspector's plugin editor to make
+// it read-only. We never want a user to drive parameters through a slave
+// instance — the master→slave sync is one-way, so any change made on a
+// slave's GUI desyncs that slave from everything else (see
+// Mcfx_anythingAudioProcessor::syncParametersFromMaster).
+//
+// The overlay has two layers, both invisible to rendering and opaque to input:
+//   1. JUCE-level: setInterceptsMouseClicks(true, false) catches every event
+//      that travels through JUCE's component tree.
+//   2. macOS-native: an internal NSViewComponent wraps a custom NSView
+//      whose hitTest: returns self for any point in its frame and whose
+//      mouse/keyboard handlers are no-ops. This is required for AU and VST3
+//      plugin UIs whose events flow NSWindow → NSView hitTest: directly to
+//      the native view, bypassing JUCE entirely. The overlay's NSView is a
+//      sibling of the plugin's NSView in the JUCE peer's view, and since
+//      it's added later it sits on top in NSWindow's reverse-order
+//      hit-testing — see InspectorContentComponent::rebuildEditor.
+class LockedEditorOverlay : public Component
+{
+public:
+    LockedEditorOverlay()
+    {
+        // Eat every JUCE-level mouse event that lands on us, and don't pass
+        // through to siblings underneath. Keyboard focus stays off so we
+        // never become a tab stop.
+        setInterceptsMouseClicks (true, false);
+        setWantsKeyboardFocus (false);
+
+       #if JUCE_MAC
+        if (auto* nsView = mcfx::createInspectorClickBlockerNSView())
+            _nsViewBlocker.setView (nsView);
+        addAndMakeVisible (_nsViewBlocker);
+       #endif
+    }
+
+    void paint (Graphics& g) override
+    {
+        // Small badge in the top-right corner so the lock state is obvious
+        // without obscuring the plugin's UI.
+        auto badgeText = String (CharPointer_UTF8 ("\xf0\x9f\x94\x92")) + " read-only";
+        Font f (FontOptions (11.0f));
+        const int padX = 6;
+        const int padY = 3;
+        const int textW = GlyphArrangement::getStringWidthInt (f, badgeText);
+        Rectangle<int> badge (getWidth() - textW - 2 * padX - 4, 4,
+                              textW + 2 * padX, f.getHeight() + 2 * padY);
+
+        g.setColour (Colour (0xcc202020));
+        g.fillRoundedRectangle (badge.toFloat(), 4.0f);
+        g.setColour (Colour (0xffe06060));
+        g.drawRoundedRectangle (badge.toFloat(), 4.0f, 1.0f);
+        g.setColour (Colours::white);
+        g.setFont (f);
+        g.drawText (badgeText, badge, Justification::centred, false);
+    }
+
+    void resized() override
+    {
+       #if JUCE_MAC
+        _nsViewBlocker.setBounds (getLocalBounds());
+       #endif
+    }
+
+private:
+   #if JUCE_MAC
+    NSViewComponent _nsViewBlocker;
+   #endif
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (LockedEditorOverlay)
+};
+
+//==============================================================================
+// Popup window that shows a specific plugin instance's GUI for inspection.
+// The window is always read-only — interaction is blocked via LockedEditorOverlay
+// so the user can verify master→slave sync without being able to desync a
+// slave by editing its GUI directly.
 class InspectorContentComponent : public Component
 {
 public:
@@ -48,8 +123,14 @@ public:
         int toolbar = _hasCustomEditor ? toolbarHeight : 0;
         _toggleButton.setBounds (4, 2, 80, toolbarHeight - 4);
 
+        Rectangle<int> editorArea (0, toolbar, getWidth(), getHeight() - toolbar);
+
         if (_pluginEditor)
-            _pluginEditor->setBounds (0, toolbar, getWidth(), getHeight() - toolbar);
+            _pluginEditor->setBounds (editorArea);
+
+        // Overlay tracks the editor area exactly. Sized AFTER the editor so
+        // the JUCE-level mouse interception sits over the editor's content.
+        _overlay.setBounds (editorArea);
     }
 
     // Defers creation of the native plugin editor until the inspector window
@@ -105,6 +186,10 @@ private:
 
     void rebuildEditor()
     {
+        // Drop the overlay first so the editor swap doesn't briefly leave a
+        // stale overlay parented above a freshly-created editor.
+        removeChildComponent (&_overlay);
+
         _pluginEditor.reset();
 
         // Only create the native plugin editor once the inspector window has
@@ -120,11 +205,26 @@ private:
         {
             addAndMakeVisible (_pluginEditor.get());
 
+            // CRITICAL: add the overlay AFTER the editor. Its child
+            // NSViewComponent is then added to the JUCE peer's NSView AFTER
+            // the plugin editor's NSView, which puts our blocker NSView on
+            // top in NSWindow's hit-test order. Reversing this order would
+            // make the AU/VST3 native UI receive every event again.
+            addAndMakeVisible (_overlay);
+
+            // Disable JUCE-side input on the editor too — for plugin editors
+            // implemented in pure JUCE, this propagates to all slider/button
+            // children. This is belt-and-braces with the overlay; the
+            // overlay alone is sufficient, but disabled widgets give the
+            // user a clearer visual cue that the controls are inert.
+            _pluginEditor->setEnabled (false);
+
             int toolbar = _hasCustomEditor ? toolbarHeight : 0;
             int w = jmax (200, _pluginEditor->getWidth());
             int h = _pluginEditor->getHeight() + toolbar;
 
             _pluginEditor->setBounds (0, toolbar, w, _pluginEditor->getHeight());
+            _overlay.setBounds (0, toolbar, w, _pluginEditor->getHeight());
             _toggleButton.setBounds (4, 2, 80, toolbarHeight - 4);
             _toggleButton.setButtonText (_useGenericEditor ? "Custom UI" : "Generic UI");
 
@@ -138,6 +238,7 @@ private:
     bool _didPostShowRebuild = false;
     std::unique_ptr<Component> _pluginEditor;
     TextButton _toggleButton;
+    LockedEditorOverlay _overlay;
 
     JUCE_DECLARE_WEAK_REFERENCEABLE (InspectorContentComponent)
 };
@@ -150,7 +251,8 @@ public:
                              std::function<void(InstanceInspectorWindow*)> onClose = nullptr)
         : DocumentWindow ("Instance #" + String (instanceIndex + 1)
                           + " (ch " + String (instanceIndex * channelsPerInstance + 1)
-                          + "-" + String ((instanceIndex + 1) * channelsPerInstance) + ")",
+                          + "-" + String ((instanceIndex + 1) * channelsPerInstance) + ")"
+                          + String (CharPointer_UTF8 (" \xe2\x80\x94 read-only")),
                           Colour (0xff2a2a2a), DocumentWindow::closeButton),
           _onClose (std::move (onClose))
     {
