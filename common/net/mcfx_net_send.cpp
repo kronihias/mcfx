@@ -697,7 +697,7 @@ void SendStream::sendPeriodFromFifoToAllActive() noexcept
         if (fmt == SF_FLOAT32)
         {
             std::memcpy (payload, src,
-                         static_cast<size_t> (frames) * frameBytes);
+                         static_cast<size_t> (frames) * static_cast<size_t> (frameBytes));
         }
         else if (fmt == SF_INT16)
         {
@@ -724,7 +724,7 @@ void SendStream::sendPeriodFromFifoToAllActive() noexcept
         }
         else
         {
-            std::memset (payload, 0, static_cast<size_t> (frames) * frameBytes);
+            std::memset (payload, 0, static_cast<size_t> (frames) * static_cast<size_t> (frameBytes));
         }
 
         const int totalBytes = kDataHeaderBytes + frames * frameBytes;
@@ -875,7 +875,7 @@ void SendStream::tickInviteRetries() noexcept
         }
         // Erase from back to front to keep indices valid.
         for (auto it = toErase.rbegin(); it != toErase.rend(); ++it)
-            targets.erase (targets.begin() + *it);
+            targets.erase (targets.begin() + static_cast<std::ptrdiff_t> (*it));
     }
 }
 

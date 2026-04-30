@@ -119,7 +119,7 @@ inline void tuneKernelUdpBuffers (int rawHandle, const char* tag = "mcfx_net") n
                       &kKernelUdpBufBytes, sizeof (kKernelUdpBufBytes));
        #endif
     };
-    auto getBuf = [rawHandle] (int opt) -> int {
+    [[maybe_unused]] auto getBuf = [rawHandle] (int opt) -> int {
         int actual = 0;
         socklen_t actualLen = sizeof (actual);
        #ifdef _WIN32
@@ -136,6 +136,7 @@ inline void tuneKernelUdpBuffers (int rawHandle, const char* tag = "mcfx_net") n
     DBG (juce::String (tag) + ": UDP buffer requested=" + juce::String (kKernelUdpBufBytes)
          + " SNDBUF granted=" + juce::String (getBuf (SO_SNDBUF))
          + " RCVBUF granted=" + juce::String (getBuf (SO_RCVBUF)));
+    juce::ignoreUnused (tag);
 }
 
 // Mark egress packets as high-priority.
@@ -143,25 +144,25 @@ inline void applyAudioQos (int rawHandle, const char* tag = "mcfx_net") noexcept
 {
    #if defined(__APPLE__)
     const int svc = NET_SERVICE_TYPE_VO;
-    int rc = ::setsockopt (rawHandle, SOL_SOCKET, SO_NET_SERVICE_TYPE,
-                           &svc, sizeof (svc));
+    [[maybe_unused]] int rc = ::setsockopt (rawHandle, SOL_SOCKET, SO_NET_SERVICE_TYPE,
+                                            &svc, sizeof (svc));
     DBG (juce::String (tag) + ": SO_NET_SERVICE_TYPE=VO rc=" + juce::String (rc));
    #elif defined(_WIN32)
     // IP_TOS without elevation is typically ignored on Windows, but
     // costs nothing to try. The proper fix would be qWave (qos2.h),
     // which adds a build dependency we don't want today.
     const DWORD tos = 0xB8; // DSCP-EF
-    int rc = ::setsockopt (static_cast<SOCKET> (rawHandle), IPPROTO_IP, IP_TOS,
-                           reinterpret_cast<const char*> (&tos), sizeof (tos));
+    [[maybe_unused]] int rc = ::setsockopt (static_cast<SOCKET> (rawHandle), IPPROTO_IP, IP_TOS,
+                                            reinterpret_cast<const char*> (&tos), sizeof (tos));
     DBG (juce::String (tag) + ": IP_TOS=0xB8 rc=" + juce::String (rc));
    #else
     const int tos = 0xB8; // DSCP 46 (Expedited Forwarding) << 2
-    int rc4 = ::setsockopt (rawHandle, IPPROTO_IP,   IP_TOS,      &tos, sizeof (tos));
-    int rc6 = -1;
+    [[maybe_unused]] int rc4 = ::setsockopt (rawHandle, IPPROTO_IP,   IP_TOS,      &tos, sizeof (tos));
+    [[maybe_unused]] int rc6 = -1;
    #ifdef IPV6_TCLASS
     rc6 = ::setsockopt (rawHandle, IPPROTO_IPV6, IPV6_TCLASS, &tos, sizeof (tos));
    #endif
-    int rcp = -1;
+    [[maybe_unused]] int rcp = -1;
    #ifdef SO_PRIORITY
     const int prio = 6; // 802.1q VO
     rcp = ::setsockopt (rawHandle, SOL_SOCKET, SO_PRIORITY, &prio, sizeof (prio));
@@ -170,6 +171,7 @@ inline void applyAudioQos (int rawHandle, const char* tag = "mcfx_net") noexcept
          + " v6rc=" + juce::String (rc6)
          + " SO_PRIORITY=6 rc=" + juce::String (rcp));
    #endif
+    juce::ignoreUnused (tag);
 }
 
 // (Multicast helpers removed — mcfx_net is single-cast unicast only.)

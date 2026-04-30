@@ -173,14 +173,16 @@ struct RecvStream::PeerStream
                              std::memory_order_release);
     }
 
-    // Multiplicative bump on packet-loss gap events: at least 20 ms, at
-    // most double the current extra, capped at 200 ms total. Used for
-    // network-loss events where a graduated response is appropriate (a
-    // one-off lost packet shouldn't lock the buffer to maximum).
+    // Multiplicative bump on packet-loss / underrun events: at least
+    // 10 ms, at most current value, capped at 200 ms total. Used for
+    // events where a graduated response is appropriate (a one-off
+    // glitch shouldn't lock the buffer to maximum). Smaller minimum
+    // step (was 20 ms) means slower latency growth — the user can
+    // observe how bumpy their network is before maxing out.
     int bumpAutoExtra (int floorMs, double nowSec) noexcept
     {
         const int cur  = autoExtraMs.load (std::memory_order_relaxed);
-        const int bump = juce::jmax (20, cur / 2);
+        const int bump = juce::jmax (10, cur / 2);
         const int neu  = juce::jmin (200, cur + bump);
         autoExtraMs.store (neu, std::memory_order_relaxed);
         lastLossTimeSec.store (nowSec, std::memory_order_relaxed);
@@ -282,6 +284,16 @@ struct RecvStream::PeerStream
     int    rcMuteStableConsec    = 0;     // consecutive stable blocks
     int    rcMuteMinBlocksLeft   = 0;     // count down min-mute time first
     int    rcMuteBlocksRemaining = 0;     // safety-cap countdown
+
+    // Time of last (re)prime — used to gate autoExtra bumps. Underruns
+    // and anti-windup events that fire within this grace window are
+    // treated as the loop's natural convergence transient (and hidden
+    // by the mute mechanism), not as evidence the buffer needs to be
+    // bigger. Past the grace window, normal bump behaviour kicks in.
+    // This keeps steady-state latency = floor on stable networks
+    // (the "low latency first" path) while still letting autoExtra
+    // grow for genuinely problematic networks.
+    double rcPrimeTimeSec        = 0.0;
 
     // Scratch buffers used by the audio thread to stage interleaved
     // input out of the circular ring (resampler can't read across the
@@ -1058,7 +1070,7 @@ void RecvStream::tickInviteRetries() noexcept
         }
     }
     for (auto it = toErase.rbegin(); it != toErase.rend(); ++it)
-        accepted.erase (accepted.begin() + *it);
+        accepted.erase (accepted.begin() + static_cast<std::ptrdiff_t> (*it));
 }
 
 void RecvStream::handleInvitePacket (const sockaddr_in& from,
@@ -1460,8 +1472,8 @@ RecvStream::PeerStream* RecvStream::findOrCreatePeer (uint32_t uid,
     const int maxInPerBlock  = (outputBlockSize > 0)
                                  ? (int) std::ceil ((double) outputBlockSize / 0.90)
                                  : 0;
-    entry->resInScratch.assign  ((size_t) (maxInPerBlock + entry->resTaps) * entry->nchan, 0.0f);
-    entry->resOutScratch.assign ((size_t) outputBlockSize * entry->nchan, 0.0f);
+    entry->resInScratch.assign  ((size_t) (maxInPerBlock + entry->resTaps) * (size_t) entry->nchan, 0.0f);
+    entry->resOutScratch.assign ((size_t) outputBlockSize * (size_t) entry->nchan, 0.0f);
 
     // Publish to the peers list under the lock. The audio thread reads
     // peersSnapshot lock-free and refreshes opportunistically.
@@ -1782,7 +1794,7 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
                           << " uid=" << std::hex << peer->uid << std::dec
                           << " fill=" << fill << " > ringFrames=" << cap
                           << " (sender is producing > realtime; dropping "
-                          << (fill - keep) << " frames)" << std::endl;
+                          << (fill - static_cast<uint64_t> (keep)) << " frames)" << std::endl;
         }
     }
 
@@ -2113,6 +2125,10 @@ void RecvStream::pullAndMix (float* const* out,
                 p->rcMuteMinBlocksLeft   = 375;
                 p->rcMuteBlocksRemaining = 7500;
             }
+            // Mark prime time. Underruns / anti-windup within the
+            // first second post-prime are treated as transient
+            // convergence artifacts and won't bump autoExtra.
+            p->rcPrimeTimeSec = nowSec;
         }
 
         // Snapshot the latest DLL anchor and shift our two-anchor pair
@@ -2171,12 +2187,16 @@ void RecvStream::pullAndMix (float* const* out,
         // the DLL path drives mean(fillNow) down to prefill (= the priming
         // threshold), risking underrun on every minor jitter.
         double err;
-        if (p->dllAudioPrimed && p->dllAT1 != p->dllAT0)
+        // Guard the DLL path on a non-zero d2 to avoid a divide-by-zero
+        // before the audio thread has shifted past the seed-anchor
+        // pair. Direct float != would warn; explicit > 0 epsilon comparison
+        // is what we want anyway.
+        const double d2 = p->dllAT1 - p->dllAT0;
+        if (p->dllAudioPrimed && d2 > 1e-12)
         {
             const double tNow = std::chrono::duration<double> (
                 std::chrono::steady_clock::now().time_since_epoch()).count();
             const double d1   = tNow      - p->dllAT0;
-            const double d2   = p->dllAT1 - p->dllAT0;
             const double kSpan = (double) (int64_t) (p->dllAK1 - p->dllAK0);
             const double predictedWriteNow =
                 (double) p->dllAK0 + kSpan * (d1 / d2);
@@ -2252,12 +2272,14 @@ void RecvStream::pullAndMix (float* const* out,
                       << std::endl;
             p->resetRateLoop();
             p->primed.store (false, std::memory_order_release);
-            // Geometric autoExtra bump (20 ms minimum). The output mute
-            // mechanism hides convergence transients audibly, so we
-            // don't need to jump to the cap on the first event — gradual
-            // growth keeps steady-state latency low on clean networks
-            // where jitter is small (e.g. wired LAN).
-            p->bumpAutoExtra (floorMs, nowSec);
+            // Don't grow autoExtra for anti-windup events that fire
+            // within the first second after (re)prime — those are the
+            // loop's natural convergence transient and the mute
+            // mechanism is already hiding them audibly. Past the
+            // grace window, treat anti-windup as a real signal that
+            // the buffer needs more headroom.
+            if (nowSec - p->rcPrimeTimeSec > 1.0)
+                p->bumpAutoExtra (floorMs, nowSec);
             continue;
         }
 
@@ -2296,12 +2318,13 @@ void RecvStream::pullAndMix (float* const* out,
                           << " target=" << loopTarget
                           << std::endl;
             p->primed.store (false, std::memory_order_release);
-            // Geometric autoExtra bump. Mute mechanism hides the brief
-            // convergence transient after re-prime, so we don't need
-            // to jump to cap; gradual growth keeps wired-LAN latency
-            // low while still climbing fast enough to handle bursty
-            // senders within a few events.
-            p->bumpAutoExtra (floorMs, nowSec);
+            // Same grace logic as anti-windup: underruns within the
+            // first second post-prime are convergence artifacts (mute
+            // is hiding them); past that window, bump autoExtra
+            // because the buffer is genuinely too small for the
+            // sender's actual jitter.
+            if (nowSec - p->rcPrimeTimeSec > 1.0)
+                p->bumpAutoExtra (floorMs, nowSec);
             continue;
         }
 
@@ -2319,12 +2342,12 @@ void RecvStream::pullAndMix (float* const* out,
         const int secondChunk = (int) wantIn - firstChunk;
 
         std::memcpy (p->resInScratch.data(),
-                     p->ring.data() + (size_t) srcBase * chans,
-                     (size_t) firstChunk * chans * sizeof (float));
+                     p->ring.data() + (size_t) srcBase * (size_t) chans,
+                     (size_t) firstChunk * (size_t) chans * sizeof (float));
         if (secondChunk > 0)
-            std::memcpy (p->resInScratch.data() + (size_t) firstChunk * chans,
+            std::memcpy (p->resInScratch.data() + (size_t) firstChunk * (size_t) chans,
                          p->ring.data(),
-                         (size_t) secondChunk * chans * sizeof (float));
+                         (size_t) secondChunk * (size_t) chans * sizeof (float));
 
         // Resample.
         const ResampleResult rr = resampleProcessInterleaved (

@@ -270,9 +270,18 @@ function(apply_juce_patch target_file patch_file)
         endif()
         message(STATUS "Applied patch: ${patch_file}")
     else()
-        string(FIND "${dry_output}${dry_error}" "already applied" already_idx)
-        string(FIND "${dry_output}${dry_error}" "Reversed"        reversed_idx)
-        if (already_idx GREATER -1 OR reversed_idx GREATER -1)
+        # GNU patch reports the "no-op" condition with several different
+        # phrasings depending on version: "already applied", "previously
+        # applied", "Reversed (or previously applied)". Detect any.
+        set(combined "${dry_output}${dry_error}")
+        string(FIND "${combined}" "already applied"   already_idx)
+        string(FIND "${combined}" "previously applied" previously_idx)
+        string(FIND "${combined}" "Reversed"          reversed_idx)
+        string(FIND "${combined}" "reversed"          reversed_lc_idx)
+        if (already_idx GREATER -1
+            OR previously_idx GREATER -1
+            OR reversed_idx GREATER -1
+            OR reversed_lc_idx GREATER -1)
             message(STATUS "Patch already applied: ${patch_file}")
         else()
             message(FATAL_ERROR
