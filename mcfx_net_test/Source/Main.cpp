@@ -89,6 +89,11 @@ struct Options
     int          channels      = 4;
     double       burstMultiplier = 1.0;   // sender push rate as multiple of realtime, scenario-specific
     double       burstDurationSec = 0.0;  // how long the burst lasts (then back to 1×)
+    // Capture buffer length, in seconds. Default keeps a short ring for
+    // the smoke / passthrough fidelity tests; the pitch-stability test
+    // bumps it up to cover the full duration. Capped per-scenario to
+    // avoid 11 GB allocations on the 4-hour soak run.
+    double       captureSeconds = 10.0;
     juce::String metricsOut    = {};
     bool         verbose       = false;
 
@@ -241,7 +246,8 @@ struct Driver
         // Pre-size the capture buffer for the passthrough fidelity test
         // (10 s max). Larger scenarios will just stop appending past
         // captureMaxFrames; we only need the first few seconds for FFTs.
-        captureMaxFrames = (int) (opts.recvSampleRate * juce::jmin (opts.durationSec, 10.0));
+        captureMaxFrames = (int) (opts.recvSampleRate
+                                  * juce::jmin (opts.durationSec, opts.captureSeconds));
         capture.assign ((size_t) opts.channels, std::vector<float> ((size_t) captureMaxFrames, 0.0f));
         return true;
     }
@@ -468,6 +474,98 @@ struct Driver
         }
         return bestHz;
     }
+
+    // High-precision fundamental frequency measurement on one window.
+    // Uses an FFT-magnitude spectrum and parabolic interpolation around
+    // the peak bin to recover sub-bin precision. With N = 131072 at
+    // 48 kHz, raw bin width = 0.366 Hz; parabolic fit on a clean sine
+    // gives ≈ 1/100 bin precision = 4 mHz = 4 ppm at 1 kHz.
+    double measurePreciseHzAt (int channel, int offsetSamples, int N) const
+    {
+        if (channel < 0 || channel >= (int) capture.size()) return -1.0;
+        if (offsetSamples < 0 || offsetSamples + N > captureFramesNow) return -1.0;
+        // N must be a power of two for juce::dsp::FFT.
+        const int log2N = (int) std::round (std::log2 ((double) N));
+        if ((1 << log2N) != N) return -1.0;
+
+        std::vector<float> buf ((size_t) (2 * N), 0.0f);   // real-imag interleaved scratch
+        const float* src = capture[(size_t) channel].data() + offsetSamples;
+        for (int n = 0; n < N; ++n)
+            buf[(size_t) n] = src[n];
+
+        juce::dsp::FFT fft (log2N);
+        // Frequency-only forward transform: writes magnitudes into buf[0..N/2-1].
+        fft.performFrequencyOnlyForwardTransform (buf.data());
+
+        const double sr = opts.recvSampleRate;
+        const int    loBin = juce::jmax (1, (int) std::floor (500.0  * N / sr));
+        const int    hiBin = juce::jmin (N / 2 - 2,
+                                         (int) std::ceil  (5000.0 * N / sr));
+        int    peakBin = loBin;
+        float  peakMag = 0.0f;
+        for (int b = loBin; b <= hiBin; ++b)
+        {
+            const float m = buf[(size_t) b];
+            if (m > peakMag) { peakMag = m; peakBin = b; }
+        }
+        if (peakBin <= 0 || peakBin >= N / 2 - 1)
+            return (double) peakBin * sr / (double) N;
+
+        // Parabolic interpolation on the log magnitudes (more accurate
+        // than linear-magnitude fit for sinusoidal peaks under a flat-top
+        // window's mainlobe). For a clean sine in a rectangular window,
+        // linear-magnitude works fine too; we use linear here for
+        // simplicity and add a tiny epsilon to avoid div-by-zero.
+        const double y0 = buf[(size_t) (peakBin - 1)];
+        const double y1 = buf[(size_t) peakBin];
+        const double y2 = buf[(size_t) (peakBin + 1)];
+        const double denom = y0 - 2.0 * y1 + y2;
+        const double delta = (std::abs (denom) > 1e-30)
+                                ? 0.5 * (y0 - y2) / denom : 0.0;
+        return ((double) peakBin + delta) * sr / (double) N;
+    }
+
+    // Measure fundamental frequency in `numWindows` evenly-spaced
+    // non-overlapping windows of size N starting after `skipSec` of
+    // priming. Returns the array of measured Hz; empty on insufficient
+    // capture.
+    std::vector<double> measurePreciseHzWindowed (int channel, int N,
+                                                  int numWindows,
+                                                  double skipSec) const
+    {
+        std::vector<double> out;
+        if (channel < 0 || channel >= (int) capture.size()) return out;
+        const int skip = (int) (opts.recvSampleRate * skipSec);
+        if (skip + N > captureFramesNow) return out;
+
+        const int usableStart = skip;
+        const int usableEnd   = captureFramesNow - N;
+        if (usableEnd <= usableStart) return out;
+
+        // Distribute numWindows starts evenly across the usable range,
+        // ensuring non-overlap (start_i+1 - start_i >= N).
+        const int span     = usableEnd - usableStart;
+        const int strideMin = N;
+        if (numWindows < 1) numWindows = 1;
+        if (numWindows > 1)
+        {
+            const int maxNumWindows = juce::jmax (1, span / strideMin + 1);
+            if (numWindows > maxNumWindows) numWindows = maxNumWindows;
+        }
+
+        out.reserve ((size_t) numWindows);
+        for (int w = 0; w < numWindows; ++w)
+        {
+            const int offset = usableStart
+                             + (numWindows == 1 ? span / 2
+                                                : (int) ((double) w
+                                                         * (span - strideMin)
+                                                         / (double) (numWindows - 1)));
+            const double f = measurePreciseHzAt (channel, offset, N);
+            if (f > 0.0) out.push_back (f);
+        }
+        return out;
+    }
 };
 
 // ---------------------------------------------------------------------------
@@ -487,6 +585,16 @@ void scn_smoke (Options& o)
 void scn_passthrough (Options& o)
 {
     if (o.durationSec <= 0.0) o.durationSec = 10.0;
+}
+void scn_pitch_stability (Options& o)
+{
+    // Long-window pitch stability check. Run at matched rate for 60 s
+    // and capture the entire receiver output so the harness can run
+    // multiple FFTs across the duration and verify the fundamental
+    // doesn't drift or wobble. Capture buffer is sized to the full
+    // duration (60 s × 4 ch × float = 46 MB at 48 k — fine).
+    if (o.durationSec   <= 0.0) o.durationSec   = 60.0;
+    if (o.captureSeconds < o.durationSec) o.captureSeconds = o.durationSec;
 }
 void scn_drift_match (Options& o)
 {
@@ -541,6 +649,7 @@ void scn_soak (Options& o)
 const Scenario kScenarios[] = {
     { "smoke",          scn_smoke,          "5 s minimal connect + audio" },
     { "passthrough",    scn_passthrough,    "10 s sine fidelity check" },
+    { "pitch_stability",scn_pitch_stability,"60 s long-term pitch-stability FFT" },
     { "drift_match",    scn_drift_match,    "30 s matched SR" },
     { "drift_small",    scn_drift_small,    "60 s ~200 ppm mismatch" },
     { "drift_large",    scn_drift_large,    "60 s ~2000 ppm mismatch" },
@@ -562,7 +671,8 @@ const Scenario* findScenario (const juce::String& name)
 // Metrics JSON output. Keep the shape stable so the pytest wrapper can
 // rely on it across versions.
 // ---------------------------------------------------------------------------
-void writeMetricsJson (const Driver& d, double measuredFreqCh0Hz)
+void writeMetricsJson (const Driver& d, double measuredFreqCh0Hz,
+                       const std::vector<double>& fundHzWindows)
 {
     if (d.opts.metricsOut.isEmpty()) return;
 
@@ -596,6 +706,12 @@ void writeMetricsJson (const Driver& d, double measuredFreqCh0Hz)
     root->setProperty ("final_rcNominalRatio", d.finalRcNominal);
 
     root->setProperty ("measured_fundamental_hz", measuredFreqCh0Hz);
+
+    // Per-window fundamental frequency (channel 0) for the long-term
+    // pitch-stability test. Empty for scenarios that don't request it.
+    juce::Array<juce::var> fundArr;
+    for (double f : fundHzWindows) fundArr.add (juce::var (f));
+    root->setProperty ("fundamental_hz_windows", fundArr);
 
     // Trace as an array of objects. Pytest can use these for ramp/converge
     // analysis.
@@ -656,14 +772,23 @@ int main (int argc, char** argv)
     {
         d.internalError = true;
         std::cerr << "setup failed: " << d.errorMsg.toStdString() << "\n";
-        writeMetricsJson (d, -1.0);
+        writeMetricsJson (d, -1.0, {});
         return 1;
     }
 
     d.run();
 
-    const double measuredHz = (opts.scenario == "passthrough")
+    const double measuredHz = (opts.scenario == "passthrough"
+                               || opts.scenario == "pitch_stability")
                                 ? d.measureFundamentalHz (0) : -1.0;
+
+    // Long-term pitch stability — only for the pitch_stability scenario.
+    // 131072 = 2^17 samples (~2.7 s at 48 kHz). 8 non-overlapping windows
+    // span ~22 s of audio; we skip the first 5 s to give the rate loop
+    // time to settle past its fast-bw lock-in phase.
+    std::vector<double> fundHzWindows;
+    if (opts.scenario == "pitch_stability")
+        fundHzWindows = d.measurePreciseHzWindowed (0, 131072, 8, 5.0);
 
     d.teardown();
 
@@ -676,6 +801,6 @@ int main (int argc, char** argv)
               << " recvPkts=" << d.finalRecvPackets
               << "\n";
 
-    writeMetricsJson (d, measuredHz);
+    writeMetricsJson (d, measuredHz, fundHzWindows);
     return 0;
 }

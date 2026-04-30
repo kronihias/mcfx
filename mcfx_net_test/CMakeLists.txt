@@ -50,6 +50,7 @@ target_link_libraries(mcfx_net_loopback_test PRIVATE
     juce::juce_core
     juce::juce_data_structures
     juce::juce_audio_basics
+    juce::juce_dsp
     juce::juce_events
     juce::juce_cryptography
     juce::juce_recommended_config_flags

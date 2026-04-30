@@ -252,6 +252,17 @@ execute_process(COMMAND patch --forward
     OUTPUT_VARIABLE vst3_patch_result)
 message ("${vst3_patch_result}")
 
+# Implement IPAddress::getInterfaceBroadcastAddress on Windows (upstream JUCE
+# leaves it as a TODO that returns 0.0.0.0). Without this, the
+# NetworkServiceDiscovery::Advertiser silently sends to 0.0.0.0 and Windows
+# peers never appear on remote machines (mcfx_send/receive discovery).
+message ("-- Patching JUCE Windows network implementation")
+execute_process(COMMAND patch --forward
+    ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_core/native/juce_Network_windows.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_Network_windows.cpp.patch
+    OUTPUT_VARIABLE patch_result)
+message("${patch_result}")
+
 include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
 
 
