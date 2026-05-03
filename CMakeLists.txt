@@ -230,15 +230,72 @@ IF(UNIX AND NOT APPLE AND NOT ANDROID)
 	find_package(FFTW3 COMPONENTS single threads)
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
+# Locate GNU patch. On Windows it ships with Git for Windows under usr/bin but
+# isn't on PowerShell's PATH by default, so probe the usual install locations.
+find_program(PATCH_EXECUTABLE
+    NAMES patch
+    HINTS
+        "$ENV{ProgramFiles}/Git/usr/bin"
+        "$ENV{ProgramFiles\(x86\)}/Git/usr/bin"
+        "$ENV{LOCALAPPDATA}/Programs/Git/usr/bin"
+    DOC "GNU patch executable used to apply JUCE patches")
+
+if (NOT PATCH_EXECUTABLE)
+    message(FATAL_ERROR
+        "Could not find the `patch` executable, needed to apply the JUCE patches "
+        "in JUCE_patches/. On Windows, install Git for Windows (which ships "
+        "patch.exe in <install>/usr/bin) or add patch.exe to PATH.")
+endif()
+
+# Apply a patch idempotently: dry-run first so an already-applied patch on a
+# re-configure is reported as a no-op instead of a hard failure.
+function(apply_juce_patch target_file patch_file)
+    execute_process(
+        COMMAND "${PATCH_EXECUTABLE}" --binary --forward --dry-run --silent
+                "${target_file}" "${patch_file}"
+        RESULT_VARIABLE dry_result
+        OUTPUT_VARIABLE dry_output
+        ERROR_VARIABLE  dry_error)
+
+    if (dry_result EQUAL 0)
+        execute_process(
+            COMMAND "${PATCH_EXECUTABLE}" --binary --forward
+                    "${target_file}" "${patch_file}"
+            RESULT_VARIABLE apply_result
+            OUTPUT_VARIABLE apply_output
+            ERROR_VARIABLE  apply_error)
+        if (NOT apply_result EQUAL 0)
+            message(FATAL_ERROR
+                "Failed to apply ${patch_file}:\n${apply_output}\n${apply_error}")
+        endif()
+        message(STATUS "Applied patch: ${patch_file}")
+    else()
+        # GNU patch reports the "no-op" condition with several different
+        # phrasings depending on version: "already applied", "previously
+        # applied", "Reversed (or previously applied)". Detect any.
+        set(combined "${dry_output}${dry_error}")
+        string(FIND "${combined}" "already applied"   already_idx)
+        string(FIND "${combined}" "previously applied" previously_idx)
+        string(FIND "${combined}" "Reversed"          reversed_idx)
+        string(FIND "${combined}" "reversed"          reversed_lc_idx)
+        if (already_idx GREATER -1
+            OR previously_idx GREATER -1
+            OR reversed_idx GREATER -1
+            OR reversed_lc_idx GREATER -1)
+            message(STATUS "Patch already applied: ${patch_file}")
+        else()
+            message(FATAL_ERROR
+                "Patch ${patch_file} cannot be applied to ${target_file}:\n"
+                "${dry_output}\n${dry_error}")
+        endif()
+    endif()
+endfunction()
+
 IF (JUCE_JACK)
     find_package(Jack REQUIRED)
-
-    message ("-- Patching JUCE Jack implementation")
-    execute_process(COMMAND patch --forward
-        ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_devices/native/juce_JackAudio.cpp
-        ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_JackAudio.cpp.patch
-        OUTPUT_VARIABLE patch_result)
-    message("${patch_result}")
+    apply_juce_patch(
+        "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_devices/native/juce_JackAudio.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_JackAudio.cpp.patch")
 ENDIF (JUCE_JACK)
 
 # Always apply: relax the JUCE 8 VST3 host's strict bus-arrangement roundtrip
@@ -251,6 +308,14 @@ execute_process(COMMAND patch --forward
     ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3PluginFormatImpl.h.patch
     OUTPUT_VARIABLE vst3_patch_result)
 message ("${vst3_patch_result}")
+
+# Implement IPAddress::getInterfaceBroadcastAddress on Windows (upstream JUCE
+# leaves it as a TODO that returns 0.0.0.0). Without this, the
+# NetworkServiceDiscovery::Advertiser silently sends to 0.0.0.0 and Windows
+# peers never appear on remote machines (mcfx_send/receive discovery).
+apply_juce_patch(
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_core/native/juce_Network_windows.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_Network_windows.cpp.patch")
 
 include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
 
@@ -266,6 +331,8 @@ ADD_SUBDIRECTORY ( mcfx_meter )
 ADD_SUBDIRECTORY ( mcfx_mimoeq )
 ADD_SUBDIRECTORY ( mcfx_anything )
 ADD_SUBDIRECTORY ( mcfx_graph )
+ADD_SUBDIRECTORY ( mcfx_send )
+ADD_SUBDIRECTORY ( mcfx_receive )
 
 ################################################
 # Optional: offline CLI test harness for Python-driven regression tests.
@@ -275,3 +342,15 @@ IF(BUILD_TESTHOST)
     message("-- Building mcfx_testhost test harness")
     ADD_SUBDIRECTORY( mcfx_testhost )
 ENDIF(BUILD_TESTHOST)
+
+################################################
+# Optional: single-process loopback test for mcfx_send + mcfx_receive.
+# Drives both stream classes directly (no plugin wrapper, no DAW) over
+# localhost UDP so the network audio path can be verified by the
+# Python tests in /tests/test_net_loopback.py.
+# Build with:  cmake -B _build -DBUILD_NET_TESTS=ON
+OPTION(BUILD_NET_TESTS "Build mcfx_net_loopback_test (network audio integration tests)" OFF)
+IF(BUILD_NET_TESTS)
+    message("-- Building mcfx_net_loopback_test")
+    ADD_SUBDIRECTORY( mcfx_net_test )
+ENDIF(BUILD_NET_TESTS)
