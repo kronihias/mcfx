@@ -1,13 +1,16 @@
 /*
   ==============================================================================
 
-   Out-of-process plugin scanner for mcfx_anything.
+   Out-of-process plugin scanner (shared by mcfx_anything, mcfx_graph, ...).
 
    OutOfProcessPluginScanner  — KnownPluginList::CustomScanner that spawns a
                                  child process per plugin (crash isolation).
 
    ParallelPluginScanner      — Thread that scans all plugin files in parallel
                                  using multiple child processes.
+
+   The scanner executable name is injected by the caller (see
+   findScannerExecutable.h) so this header has no per-plugin dependencies.
 
   ==============================================================================
 */

@@ -16,6 +16,7 @@ A suite of multichannel VST/VST3/AU plug-ins and standalone applications for mac
 - [Plug-ins](#plug-ins)
   - [mcfx_convolver](#mcfx_convolver)
   - [mcfx_anything](#mcfx_anything)
+  - [mcfx_graph](#mcfx_graph)
   - [mcfx_mimoeq](#mcfx_mimoeq)
   - [mcfx_delay](#mcfx_delay)
   - [mcfx_filter](#mcfx_filter)
@@ -69,6 +70,20 @@ Transforms (almost) any audio plug-in into a multichannel plug-in.
 - Exposes up to 256 host-automatable forwarding parameters so DAW automation works transparently across all instances
 - Supports sidechain routing: any input channel can be routed to the plug-in's sidechain bus
 - Saves and restores the full plug-in state (including which plug-in is loaded) with the DAW project
+
+---
+
+### mcfx_graph
+
+Flexible plug-in graph / patchbay. Load VST2 / VST3 / AU plug-ins as nodes, wire them together with bezier connections, and build entire signal flows inside one mcfx_graph instance. Multiple connections feeding the same input are summed automatically.
+
+- **Native nodes:** Gain, Mute / Phase invert, Matrix Mixer (NxM), Delay, and recursive Subgraph nodes
+- **Editor:** drag-to-connect pins, multi-select + group drag, snapshot undo / redo, Cmd-scroll zoom, drag-drop JSON load/save
+- **Hosting:** VST2 / VST3 / AU with out-of-process scanning shared with mcfx_anything; per-node channel count probed against the plug-in's actual accepted layouts
+- **DAW automation:** 256 forwarding parameters dynamically bindable to any inner-plug-in parameter
+- **State:** human-readable JSON, embedded in the DAW project state and exportable as a `.json` file
+
+See [mcfx_graph/README.md](mcfx_graph/README.md) for the full feature list and the keyboard / mouse shortcut reference.
 
 ---
 
@@ -218,6 +233,11 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+
+### Unreleased
+
+- **New:** `mcfx_graph` — flexible plug-in graph / patchbay. Host any number of VST2/VST3/AU plug-ins as nodes, connect them with wires, summing on shared inputs, with native gain / mute-phase / matrix mixer / delay nodes, nested subgraphs, multi-select + chain-connect, undo/redo, drag-drop JSON load/save, 256 DAW-automatable forwarding parameters, and a searchable plug-in selector with format filters
+- Refactor: out-of-process plug-in scanner code (`OutOfProcessPluginScanner.h`, `findScannerExecutable`, scanner `Main.cpp`) moved to `common/PluginHost/` and is shared between `mcfx_anything` and `mcfx_graph`
 
 ### 0.7.0 (2026-04-19)
 

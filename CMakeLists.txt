@@ -241,6 +241,17 @@ IF (JUCE_JACK)
     message("${patch_result}")
 ENDIF (JUCE_JACK)
 
+# Always apply: relax the JUCE 8 VST3 host's strict bus-arrangement roundtrip
+# check so plugins that rewrite their layout internally (mcfx-style multichannel
+# plug-ins) can be resized via setBusesLayout. See the patch's comment for
+# detail.
+message ("-- Patching JUCE VST3 host bus-arrangement roundtrip check")
+execute_process(COMMAND patch --forward
+    ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3PluginFormatImpl.h.patch
+    OUTPUT_VARIABLE vst3_patch_result)
+message ("${vst3_patch_result}")
+
 include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
 
 
@@ -254,6 +265,7 @@ ADD_SUBDIRECTORY ( mcfx_gain_delay )
 ADD_SUBDIRECTORY ( mcfx_meter )
 ADD_SUBDIRECTORY ( mcfx_mimoeq )
 ADD_SUBDIRECTORY ( mcfx_anything )
+ADD_SUBDIRECTORY ( mcfx_graph )
 
 ################################################
 # Optional: offline CLI test harness for Python-driven regression tests.

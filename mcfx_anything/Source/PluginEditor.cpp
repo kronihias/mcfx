@@ -18,7 +18,7 @@
  */
 
 #include "PluginEditor.h"
-#include "OutOfProcessPluginScanner.h"
+#include "PluginHost/OutOfProcessPluginScanner.h"
 
 #define Q(x) #x
 #define QUOTE(x) Q(x)

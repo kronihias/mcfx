@@ -1,9 +1,13 @@
 /*
   ==============================================================================
 
-   Out-of-process plugin scanner for mcfx_anything.
+   Out-of-process plugin scanner entry point.
 
-   Usage:  mcfx_plugin_scanner <formatName> <fileOrIdentifier>
+   Each mcfx plugin that hosts other plugins (mcfx_anything, mcfx_graph, ...)
+   builds its own copy of this scanner as a separate executable embedded in its
+   bundle. The exe name is set per-plugin in CMake via juce_add_gui_app(name).
+
+   Usage:  <scanner_exe> <formatName> <fileOrIdentifier>
 
    Scans a single plugin file using the specified format, writes the resulting
    PluginDescription(s) as XML to stdout, and exits.
@@ -37,7 +41,8 @@ public:
 
         if (args.size() < 2)
         {
-            std::cerr << "Usage: mcfx_plugin_scanner <formatName> <fileOrIdentifier>" << std::endl;
+            std::cerr << "Usage: " << getApplicationName().toStdString()
+                      << " <formatName> <fileOrIdentifier>" << std::endl;
             setApplicationReturnValue (1);
             quit();
             return;
