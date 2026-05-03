@@ -1,22 +1,15 @@
 #!/bin/bash
 # Build mcfx plugins for macOS
 #
-# Usage: ./build_osx.sh [--vst2] [--vst3] [--au] [--standalone]
-#        With no flags, builds all formats.
+# Usage: ./build_osx.sh [--vst2] [--vst3] [--au] [--standalone] [--no-sign]
+#        With no format flags, builds all formats.
+#        --no-sign skips codesigning, notarization and stapling (for CI dry runs).
 
 set -e
 
 ROOT=$(cd "$(dirname "$0")/.."; pwd)
 BUILD_DIR=$ROOT/build
 VERSION=$(<"$ROOT/VERSION")
-
-# Load codesigning credentials
-CODESIGN_ENV="$ROOT/scripts/codesign.env"
-if [ ! -f "$CODESIGN_ENV" ]; then
-    echo "Error: $CODESIGN_ENV not found. Create it with your codesigning credentials."
-    exit 1
-fi
-source "$CODESIGN_ENV"
 
 # =========================================================
 # Parse arguments
@@ -26,6 +19,7 @@ BUILD_VST2=false
 BUILD_VST3=false
 BUILD_AU=false
 BUILD_STANDALONE=false
+NO_SIGN=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -33,12 +27,13 @@ while [[ $# -gt 0 ]]; do
         --vst3)       BUILD_VST3=true ;;
         --au)         BUILD_AU=true ;;
         --standalone) BUILD_STANDALONE=true ;;
-        *)            echo "Unknown option: $1"; echo "Usage: $0 [--vst2] [--vst3] [--au] [--standalone]"; exit 1 ;;
+        --no-sign)    NO_SIGN=true ;;
+        *)            echo "Unknown option: $1"; echo "Usage: $0 [--vst2] [--vst3] [--au] [--standalone] [--no-sign]"; exit 1 ;;
     esac
     shift
 done
 
-# If no flags given, build all
+# If no format flags given, build all
 if ! $BUILD_VST2 && ! $BUILD_VST3 && ! $BUILD_AU && ! $BUILD_STANDALONE; then
     BUILD_VST2=true
     BUILD_VST3=true
@@ -46,11 +41,22 @@ if ! $BUILD_VST2 && ! $BUILD_VST3 && ! $BUILD_AU && ! $BUILD_STANDALONE; then
     BUILD_STANDALONE=true
 fi
 
+# Load codesigning credentials (only required when actually signing)
+if ! $NO_SIGN; then
+    CODESIGN_ENV="$ROOT/scripts/codesign.env"
+    if [ ! -f "$CODESIGN_ENV" ]; then
+        echo "Error: $CODESIGN_ENV not found. Create it with your codesigning credentials, or pass --no-sign."
+        exit 1
+    fi
+    source "$CODESIGN_ENV"
+fi
+
 # =========================================================
 # Helper functions
 # =========================================================
 
 codesign_bundles() {
+    $NO_SIGN && return 0
     local dir="$1"
     local ext="$2"
     find "$dir" -type d -name "*.$ext" -print0 2>/dev/null | while IFS= read -r -d '' bundle; do
@@ -65,6 +71,12 @@ build_installer() {
     local identifier="$2"
     local install_location="$3"
     local installer_name="$4"
+
+    if $NO_SIGN; then
+        pkgbuild --root "${pkg_root}" --identifier "${identifier}" --version ${VERSION} --install-location "${install_location}" "${installer_name}"
+        return 0
+    fi
+
     local unsigned="${BUILD_DIR}/$(basename "$installer_name" .pkg)_unsigned.pkg"
 
     pkgbuild --root "${pkg_root}" --identifier "${identifier}" --version ${VERSION} --install-location "${install_location}" "${unsigned}"

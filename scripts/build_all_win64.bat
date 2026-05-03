@@ -3,19 +3,26 @@ setlocal
 cd /d "%~dp0"
 
 set BUILD_DIR=..\build
-set MSBUILD="C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\MSBuild.exe"
-set MAKENSIS="C:\Program Files (x86)\NSIS\makensis.exe"
+if not defined MSBUILD set MSBUILD="C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\MSBuild.exe"
+if not defined MAKENSIS set MAKENSIS="C:\Program Files (x86)\NSIS\makensis.exe"
 set MSBUILD_FLAGS=/t:Build /p:Configuration=Release /p:PreBuildEvent= /p:PostBuildEvent=
 set CMAKE_COMMON=-DFFTW3_INCLUDE_DIR="../win-libs/" -DFFTW3F_LIBRARY="../win-libs/x64/libfftw3f-3.lib"
+
+REM VST2SDKPATH is needed for VST2 hosting in mcfx_anything (and for VST2 plugin
+REM builds). When provided via env (e.g. by GitHub Actions) propagate it to cmake.
+if defined VST2SDKPATH set CMAKE_COMMON=%CMAKE_COMMON% -DVST2SDKPATH="%VST2SDKPATH%"
 
 REM ── Code signing configuration ───────────────────────────────────────────────
 REM   Set SIGN_CERT to the .p12 certificate file and SIGN_PASS to its password.
 REM   Pass "sign" as a build argument to enable signing.
-set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe"
-set SIGN_CERT=DevIDApplication.p12
-set SIGN_PASS=
-set INSTALLER_CERT=DevIDInstaller.p12
-set INSTALLER_PASS=
+REM   All of SIGNTOOL / SIGN_CERT / SIGN_PASS / INSTALLER_CERT / INSTALLER_PASS
+REM   can be pre-set in the environment (e.g. by CI) — defaults below only apply
+REM   if the variable is not already defined.
+if not defined SIGNTOOL set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe"
+if not defined SIGN_CERT set SIGN_CERT=DevIDApplication.p12
+if not defined SIGN_PASS set SIGN_PASS=
+if not defined INSTALLER_CERT set INSTALLER_CERT=DevIDInstaller.p12
+if not defined INSTALLER_PASS set INSTALLER_PASS=
 
 REM ── Parse arguments ──────────────────────────────────────────────────────────
 REM Usage: build_all_win64.bat [vst2] [vst3] [standalone] [sign]

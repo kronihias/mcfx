@@ -3,3 +3,8 @@
 _*
 build*/
 .claude
+
+# Codesigning secrets (never commit)
+scripts/codesign.env
+scripts/*.p12
+scripts/*.pfx
