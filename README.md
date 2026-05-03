@@ -22,6 +22,7 @@ A suite of multichannel VST/VST3/AU plug-ins and standalone applications for mac
   - [mcfx_filter](#mcfx_filter)
   - [mcfx_gain_delay](#mcfx_gain_delay)
   - [mcfx_meter](#mcfx_meter)
+  - [mcfx_send / mcfx_receive](#mcfx_send--mcfx_receive)
 - [Prerequisites for Building](#prerequisites-for-building)
 - [How to Build](#how-to-build)
 - [Build Parameters](#build-parameters)
@@ -139,6 +140,16 @@ Multichannel level meter with RMS, peak, and peak hold.
 
 ---
 
+### mcfx_send / mcfx_receive
+
+Simply send multichannel audio via network, with low latency, auto-discovery and optional password protection.
+
+Note: Don't use for sensitive audio content, there is no encryption for lowest CPU load and latency.
+
+Stream multichannel audio between machines on a LAN over UDP. `mcfx_send` packetises its input bus (up to 64 channels via VST3, 128 in AU/Standalone) as PCM 16-bit, 24-bit, or 32-bit float and unicasts it to one or more `mcfx_receive` instances; `mcfx_receive` decodes incoming streams and mixes them into its output bus through an adaptive jitter buffer and per-peer variable-ratio resampler that keeps it phase-locked to each sender even when the hardware audio clocks drift. Peers find each other automatically via Bonjour (or by typing IP and port directly), connections are symmetric and gated by an INVITE handshake with an optional shared password, and packets are marked DSCP-EF / WMM Voice for high-priority delivery on Wi-Fi and managed networks. See [mcfx_send/README.md](mcfx_send/README.md) and [mcfx_receive/README.md](mcfx_receive/README.md) for protocol and tuning details.
+
+---
+
 ## Prerequisites for Building
 
 CMake and a working build environment are required.
@@ -234,9 +245,11 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 ## Changelog
 
-### Unreleased
+### 0.8.0 (2026-05-03)
 
-- **New:** `mcfx_graph` — flexible plug-in graph / patchbay. Host any number of VST2/VST3/AU plug-ins as nodes, connect them with wires, summing on shared inputs, with native gain / mute-phase / matrix mixer / delay nodes, nested subgraphs, multi-select + chain-connect, undo/redo, drag-drop JSON load/save, 256 DAW-automatable forwarding parameters, and a searchable plug-in selector with format filters
+- improved `mcfx_anything` robustness, disable editing of children's GUI - all parameters should stay in sync with the main plugin instance. use `mcfx_graph` if you want to have different parameters for each plugin instance.
+- **New:** (beta version) `mcfx_graph` — flexible plug-in graph / patchbay. Host any number of VST2/VST3/AU plug-ins as nodes, connect them with wires, summing on shared inputs, with native gain / mute-phase / matrix mixer / delay nodes, nested subgraphs, multi-select + chain-connect, undo/redo, drag-drop JSON load/save, 256 DAW-automatable forwarding parameters, and a searchable plug-in selector with format filters
+- **New:** (beta version) `mcfx_send` and `mcfx_receive` - send/receive multichannel audio via local network, with low latency and auto-discovery - for really fast setup eg. in computer music ensembles, spatial audio concerts, ...
 - Refactor: out-of-process plug-in scanner code (`OutOfProcessPluginScanner.h`, `findScannerExecutable`, scanner `Main.cpp`) moved to `common/PluginHost/` and is shared between `mcfx_anything` and `mcfx_graph`
 
 ### 0.7.0 (2026-04-19)
