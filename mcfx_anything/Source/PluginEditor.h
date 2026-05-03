@@ -31,17 +31,18 @@
 // slave's GUI desyncs that slave from everything else (see
 // Mcfx_anythingAudioProcessor::syncParametersFromMaster).
 //
-// The overlay has two layers, both invisible to rendering and opaque to input:
-//   1. JUCE-level: setInterceptsMouseClicks(true, false) catches every event
-//      that travels through JUCE's component tree.
-//   2. macOS-native: an internal NSViewComponent wraps a custom NSView
-//      whose hitTest: returns self for any point in its frame and whose
-//      mouse/keyboard handlers are no-ops. This is required for AU and VST3
-//      plugin UIs whose events flow NSWindow → NSView hitTest: directly to
-//      the native view, bypassing JUCE entirely. The overlay's NSView is a
-//      sibling of the plugin's NSView in the JUCE peer's view, and since
-//      it's added later it sits on top in NSWindow's reverse-order
-//      hit-testing — see InspectorContentComponent::rebuildEditor.
+// The overlay catches JUCE-level events via setInterceptsMouseClicks. Native
+// plugin UIs (AU/VST3) route events directly to their native view, bypassing
+// JUCE — those need platform-specific blocking, applied in
+// InspectorContentComponent::rebuildEditor:
+//   - macOS: an NSView click-blocker (this class's _nsViewBlocker) is
+//     placed as a sibling above the plugin's NSView in NSWindow's
+//     reverse-order hit-test list.
+//   - Windows: EnableWindow(FALSE) is called on the plugin's HWND. A
+//     transparent overlay HWND was tried first, but child layered
+//     windows don't reliably composite over sibling HWNDs that have
+//     WS_CLIPSIBLINGS, leaving the plugin GUI invisible. Disabling the
+//     HWND blocks input without touching pixels.
 class LockedEditorOverlay : public Component
 {
 public:
@@ -205,11 +206,12 @@ private:
         {
             addAndMakeVisible (_pluginEditor.get());
 
-            // CRITICAL: add the overlay AFTER the editor. Its child
-            // NSViewComponent is then added to the JUCE peer's NSView AFTER
-            // the plugin editor's NSView, which puts our blocker NSView on
-            // top in NSWindow's hit-test order. Reversing this order would
-            // make the AU/VST3 native UI receive every event again.
+            // CRITICAL on macOS: add the overlay AFTER the editor. Its
+            // NSViewComponent is then attached to the JUCE peer AFTER
+            // the plugin editor's NSView, which puts our blocker NSView
+            // on top in NSWindow's reverse-order hit-testing. Reversing
+            // this would let the AU/VST3 native UI receive every event
+            // again.
             addAndMakeVisible (_overlay);
 
             // Disable JUCE-side input on the editor too — for plugin editors
@@ -218,6 +220,22 @@ private:
             // overlay alone is sufficient, but disabled widgets give the
             // user a clearer visual cue that the controls are inert.
             _pluginEditor->setEnabled (false);
+
+           #if JUCE_WINDOWS
+            // Win32 child HWNDs (i.e. the plugin's native UI) receive
+            // mouse/keyboard messages directly via OS hit-testing, which
+            // bypasses JUCE's setEnabled. Disable each child HWND of the
+            // peer so the plugin can't receive input. EnableWindow(FALSE)
+            // doesn't affect painting, so the GUI continues to animate
+            // and reflect the master plugin's parameter changes.
+            //
+            // Only safe to do here when the editor is the real custom
+            // editor — JUCE's GenericAudioProcessorEditor has no native
+            // HWND, so there's nothing to disable in that path.
+            if (canMakeCustom)
+                if (auto* peer = getPeer())
+                    mcfx::disableNativeChildHWNDs (peer->getNativeHandle());
+           #endif
 
             int toolbar = _hasCustomEditor ? toolbarHeight : 0;
             int w = jmax (200, _pluginEditor->getWidth());
