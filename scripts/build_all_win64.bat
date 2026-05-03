@@ -1,16 +1,158 @@
-set BUILD_DIR="..\build-VSC++-windows-x86_64"
+@echo off
+setlocal
+cd /d "%~dp0"
 
-for %%x in (2 4 8 16 24 32 36 50 64 128) do (
-@REM for %%x in (2) do (
-	echo
-	echo BUILDING %%x CHANNEL VERSION
+set BUILD_DIR=..\build
+set MSBUILD="C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\MSBuild.exe"
+set MAKENSIS="C:\Program Files (x86)\NSIS\makensis.exe"
+set MSBUILD_FLAGS=/t:Build /p:Configuration=Release /p:PreBuildEvent= /p:PostBuildEvent=
+set CMAKE_COMMON=-DFFTW3_INCLUDE_DIR="../win-libs/" -DFFTW3F_LIBRARY="../win-libs/x64/libfftw3f-3.lib"
 
-	pushd %BUILD_DIR%
-		cmake ..  -DBUILD_VST3=TRUE -DFFTW3_INCLUDE_DIR="../win-libs/"  -DFFTW3F_LIBRARY="../win-libs/x64/libfftw3f-3.lib" -DBUILD_VST=TRUE -DNUM_CHANNELS:STRING=%%x
-		"C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\MSBuild.exe" mcfx_plugin_suite.sln /t:Build /p:Configuration=Release  /p:PreBuildEvent= /p:PostBuildEvent=
-	popd
+REM ── Code signing configuration ───────────────────────────────────────────────
+REM   Set SIGN_CERT to the .p12 certificate file and SIGN_PASS to its password.
+REM   Pass "sign" as a build argument to enable signing.
+set SIGNTOOL="C:\Program Files (x86)\Windows Kits\10\bin\10.0.19041.0\x64\signtool.exe"
+set SIGN_CERT=DevIDApplication.p12
+set SIGN_PASS=
+set INSTALLER_CERT=DevIDInstaller.p12
+set INSTALLER_PASS=
+
+REM ── Parse arguments ──────────────────────────────────────────────────────────
+REM Usage: build_all_win64.bat [vst2] [vst3] [standalone] [sign]
+REM Default (no args): build all three formats without signing
+
+set BUILD_VST2=0
+set BUILD_VST3=0
+set BUILD_SA=0
+set SIGN=0
+
+if "%~1"=="" (
+    set BUILD_VST2=1
+    set BUILD_VST3=1
+    set BUILD_SA=1
+    goto :start_build
 )
-@REM Download Nullsoft's Scriptable Install System (NSIS)
-@REM https://sourceforge.net/projects/nsis/
-"C:\Program Files (x86)\NSIS\makensis.exe" /V4 mcfx_win64_VST3.nsi
-"C:\Program Files (x86)\NSIS\makensis.exe" /V4 mcfx_win64_VST2.nsi
+:parse_loop
+if /i "%~1"=="vst2"       set BUILD_VST2=1
+if /i "%~1"=="vst3"       set BUILD_VST3=1
+if /i "%~1"=="standalone" set BUILD_SA=1
+if /i "%~1"=="sign"       set SIGN=1
+shift
+if not "%~1"=="" goto :parse_loop
+
+:start_build
+echo.
+echo Build targets:  VST2=%BUILD_VST2%  VST3=%BUILD_VST3%  Standalone=%BUILD_SA%  Sign=%SIGN%
+echo.
+
+REM ── VST3 + Standalone universal builds (single binary, up to 64 channels) ────
+REM   When both are requested they share one cmake configure + MSBuild pass.
+if "%BUILD_VST3%%BUILD_SA%"=="11" (
+    echo ================================================================
+    echo  BUILDING VST3 + Standalone  ^(universal, up to 64 channels^)
+    echo ================================================================
+    pushd "%BUILD_DIR%"
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
+    popd
+) else if "%BUILD_VST3%"=="1" (
+    echo ================================================================
+    echo  BUILDING VST3  ^(universal, up to 64 channels^)
+    echo ================================================================
+    pushd "%BUILD_DIR%"
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=FALSE -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
+    popd
+) else if "%BUILD_SA%"=="1" (
+    echo ================================================================
+    echo  BUILDING Standalone  ^(universal, up to 64 channels^)
+    echo ================================================================
+    pushd "%BUILD_DIR%"
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
+    popd
+)
+
+REM mcfx_anything uses an out-of-process plugin scanner (mcfx_plugin_scanner.exe)
+REM that must sit alongside the plugin binary at runtime. JUCE's
+REM JUCE_COPY_PLUGIN_AFTER_BUILD races the scanner's POST_BUILD, so the copied
+REM bundle in ..\build\vst3 and the staged standalone dir may not contain it.
+REM Copy it explicitly from the scanner's artefacts dir before signing/packaging.
+if "%BUILD_VST3%"=="1" if exist "..\build\vst3\mcfx_anything.vst3\Contents\x86_64-win" (
+    for /r "..\build\mcfx_anything\mcfx_plugin_scanner_artefacts" %%f in (mcfx_plugin_scanner.exe) do copy /Y "%%f" "..\build\vst3\mcfx_anything.vst3\Contents\x86_64-win\" >nul
+)
+if "%BUILD_SA%"=="1" if exist "..\build\standalone" (
+    for /r "..\build\mcfx_anything\mcfx_plugin_scanner_artefacts" %%f in (mcfx_plugin_scanner.exe) do copy /Y "%%f" "..\build\standalone\" >nul
+)
+
+REM Sign VST3 bundles: JUCE on Windows builds VST3 as a directory bundle;
+REM the signable PE is the inner *.vst3 file under Contents\x86_64-win\.
+REM Also sign any *.exe siblings inside the bundle (mcfx_plugin_scanner.exe).
+REM "for /r" matches only files, so the outer bundle directory is skipped.
+if "%BUILD_VST3%"=="1" if "%SIGN%"=="1" (
+    echo Signing VST3 plugins...
+    for /r "..\build\vst3" %%f in (*.vst3 *.exe) do call :do_sign "%%f"
+)
+
+REM Sign standalone executables (includes mcfx_plugin_scanner.exe)
+if "%BUILD_SA%"=="1" if "%SIGN%"=="1" (
+    echo Signing Standalone executables...
+    call :do_sign "..\build\standalone\*.exe"
+)
+
+REM ── VST2 per-channel builds (one MSBuild pass per channel count) ─────────────
+if "%BUILD_VST2%"=="1" (
+    for %%x in (2 4 8 16 24 32 36 50 64 84 128) do (
+        echo.
+        echo ================================================================
+        echo  BUILDING VST2  %%x channels
+        echo ================================================================
+        pushd "%BUILD_DIR%"
+        cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=FALSE -DMCFX_BUILD_MC=OFF -DMCFX_BUILD_VST2_PER_CHANNEL=ON -DNUM_CHANNELS:STRING=%%x
+        %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
+        popd
+    )
+)
+
+REM Sign all VST2 DLLs once after the loop completes
+if "%BUILD_VST2%"=="1" if "%SIGN%"=="1" (
+    echo Signing VST2 plugins...
+    call :do_sign "..\build\vst\*.dll"
+)
+
+REM ── Package installers ────────────────────────────────────────────────────────
+REM   Download Nullsoft's Scriptable Install System (NSIS) from:
+REM   https://sourceforge.net/projects/nsis/
+echo.
+if "%BUILD_VST3%"=="1" (
+    echo Packaging VST3 installer...
+    %MAKENSIS% /V4 mcfx_win64_VST3.nsi
+)
+if "%BUILD_SA%"=="1" (
+    echo Packaging Standalone installer...
+    %MAKENSIS% /V4 mcfx_win64_Standalone.nsi
+)
+if "%BUILD_VST2%"=="1" (
+    echo Packaging VST2 installer...
+    %MAKENSIS% /V4 mcfx_win64_VST2.nsi
+)
+
+REM Sign the packaged installers
+if "%SIGN%"=="1" (
+    echo Signing installers...
+    call :do_sign_installer "..\_WIN_RELEASE\*_win64.exe"
+)
+
+goto :eof
+
+REM ── Subroutine: two-pass signing (SHA1 legacy + SHA256 dual-sign) ─────────────
+REM   Usage: call :do_sign <path-or-glob>
+:do_sign
+%SIGNTOOL% sign /f "%SIGN_CERT%" /p "%SIGN_PASS%" /t http://timestamp.comodoca.com %*
+%SIGNTOOL% sign /f "%SIGN_CERT%" /p "%SIGN_PASS%" /fd sha256 /tr http://timestamp.comodoca.com/?td=sha256 /td sha256 /as /v %*
+goto :eof
+
+:do_sign_installer
+%SIGNTOOL% sign /f "%INSTALLER_CERT%" /p "%INSTALLER_PASS%" /t http://timestamp.comodoca.com %*
+%SIGNTOOL% sign /f "%INSTALLER_CERT%" /p "%INSTALLER_PASS%" /fd sha256 /tr http://timestamp.comodoca.com/?td=sha256 /td sha256 /as /v %*
+goto :eof

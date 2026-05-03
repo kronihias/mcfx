@@ -19,7 +19,7 @@ OutFile ${OUTFILE}
 Unicode True
 
 ; The default installation directory
-InstallDir "$PROGRAMFILES64\Common Files\VST3\mcfx_v${VERSION}_win64\"
+InstallDir "$PROGRAMFILES64\Common Files\VST3\mcfx"
 
 ; Request application privileges for Windows Vista
 RequestExecutionLevel admin
@@ -32,64 +32,17 @@ RequestExecutionLevel admin
 
 !insertmacro MUI_PAGE_LICENSE "../README.md"
 !insertmacro MUI_LANGUAGE "English"
-Page components SelectComponents
 Page directory
 Page instfiles
-
-Function SelectComponents 
-  ; SetBrandingImage C:\Users\cimil\Desktop\test.png
-FunctionEnd
 
 ;--------------------------------
 
 ; The stuff to install
-; Installer sections
-
-
-
-; mcfx_convolver
-Section "MCFX Convolver VST3" mcfx_convolver
+Section
     SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
-    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_convolver*.vst3"
+    File /r "..\build\vst3\*.vst3"
     ${DisableX64FSRedirection}
-SectionEnd
 
-
-; mcfx_delay
-Section "MCFX Delay VST3" mcfx_delay
-    SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
-    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_delay*.vst3"
-    ${DisableX64FSRedirection}
-SectionEnd
-
-; mcfx_filter
-Section "MCFX Filter VST3" mcfx_filter
-    SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
-    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_filter*.vst3"
-    ${DisableX64FSRedirection}
-SectionEnd
-
-; mcfx_gain_delay
-Section "MCFX Gain Delay VST3" mcfx_gain_delay
-    SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
-    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_gain_delay*.vst3"
-    ${DisableX64FSRedirection}
-SectionEnd
-
-; mcfx_meter
-Section "MCFX Meter VST3" mcfx_meter
-    SetOutPath "$INSTDIR"
-    ; File /r "..\build-VSC++-windows-x86_64\vst3\*.vst3"
-    File /r "..\build-VSC++-windows-x86_64\vst3\mcfx_meter*.vst3"
-    ${DisableX64FSRedirection}
-SectionEnd
-
-; libfftw3f-3.dll
-Section "FFTW3f library" libfftw3f-3.dll
     SetOutPath "$SYSDIR"
     File "..\win-libs\x64\libfftw3f-3.dll"
 SectionEnd
