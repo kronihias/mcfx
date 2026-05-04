@@ -245,6 +245,10 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 ## Changelog
 
+### 0.8.1 (2026-05-04)
+- mcfx_graph: build for windows, add copy/paste, fix vst3 channel count selection, make json files portable by not saving the absolute plugin path, save/recall input/output node positions, add scrolling to matrix parameter view
+- mcfx_convolver: add individual ir .wav export to inspector
+
 ### 0.8.0 (2026-05-03)
 
 - improved `mcfx_anything` robustness, disable editing of children's GUI - all parameters should stay in sync with the main plugin instance. use `mcfx_graph` if you want to have different parameters for each plugin instance.
