@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "Graph/GraphClipboard.h"
 
 namespace
 {
@@ -55,6 +56,14 @@ namespace
                 "  Cmd / Ctrl + Z          Undo\n"
                 "  Cmd / Ctrl + Shift + Z  Redo\n"
                 "  Cmd / Ctrl + Y          Redo (alternative)\n"
+                "  Cmd / Ctrl + C          Copy selected nodes (with internal\n"
+                "                          connections preserved). Some hosts\n"
+                "                          (e.g. Reaper) intercept Cmd+C — use\n"
+                "                          right-click → Copy / Duplicate instead.\n"
+                "  Cmd / Ctrl + V          Paste at the cursor (or offset from\n"
+                "                          the originals if cursor is off-canvas).\n"
+                "                          Right-click empty canvas → Paste also\n"
+                "                          works in hosts that intercept Cmd+V.\n"
                 "  Backspace / Delete      Delete selected nodes / wires\n"
                 "  Esc                     Clear selection\n"
                 "\n"
@@ -255,6 +264,46 @@ bool Mcfx_graphAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
     if (key == juce::KeyPress ('z', cmd, 0))                                 { onUndoClicked(); return true; }
     if (key == juce::KeyPress ('z', cmd | juce::ModifierKeys::shiftModifier, 0)) { onRedoClicked(); return true; }
     if (key == juce::KeyPress ('y', cmd, 0))                                 { onRedoClicked(); return true; }
+
+    if (key == juce::KeyPress ('c', cmd, 0))
+    {
+        GraphClipboard::copySelection (canvas_.getActiveController(),
+                                       canvas_.getSelection());
+        return true;
+    }
+
+    if (key == juce::KeyPress ('v', cmd, 0))
+    {
+        // Mouse-driven paste position only when the cursor is over the visible
+        // canvas viewport. World coords = canvas-local / zoom (node positions
+        // are in world coords; node-component placement multiplies by zoom).
+        std::optional<juce::Point<int>> origin;
+        const auto mouseScreen = juce::Desktop::getMousePosition();
+        const auto vpLocal     = canvasViewport_.getLocalPoint (nullptr, mouseScreen);
+        if (canvasViewport_.getLocalBounds().contains (vpLocal))
+        {
+            const auto canvasLocal = canvas_.getLocalPoint (nullptr, mouseScreen);
+            const float zoom       = juce::jmax (0.001f, canvas_.getZoom());
+            origin = juce::Point<int> { (int) std::round (canvasLocal.x / zoom),
+                                        (int) std::round (canvasLocal.y / zoom) };
+        }
+
+        const auto newUuids = GraphClipboard::pasteFromClipboard (
+            canvas_.getActiveController(),
+            processor_.getPluginList().getFormatManager(),
+            &processor_.getPluginList().getKnownPluginList(),
+            origin);
+
+        if (! newUuids.empty())
+        {
+            canvas_.clearSelection();
+            for (const auto& u : newUuids)
+                canvas_.addToSelection (u);
+            processor_.commitHistorySnapshot();
+        }
+        return true;
+    }
+
     if (key == juce::KeyPress (juce::KeyPress::backspaceKey)
         || key == juce::KeyPress (juce::KeyPress::deleteKey))
     {

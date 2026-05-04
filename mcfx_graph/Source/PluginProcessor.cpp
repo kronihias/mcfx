@@ -17,26 +17,26 @@ namespace
         return { 100, 100 };
     }
 
-    // True iff two plugin descriptions refer to the same plug-in (same format,
-    // UID, name) — the fast undo path requires the binary identity to match
-    // because we re-use the existing instance and only swap its state.
-    bool pluginIdentitiesMatch (const juce::PluginDescription& a,
-                                 const juce::PluginDescription& b)
-    {
-        return a.createIdentifierString() == b.createIdentifierString();
-    }
-
-    std::unique_ptr<juce::PluginDescription> readPluginDesc (const juce::var& nv)
+    // Read the saved plugin identity as a string suitable for comparison
+    // against PluginDescription::createIdentifierString(). Prefers the new
+    // location-independent "pluginIdentifier" field; falls back to parsing
+    // the legacy "pluginDescriptionXml" for older saves. Returns an empty
+    // string if neither is present or the XML can't be parsed.
+    juce::String readPluginIdentifier (const juce::var& nv)
     {
         auto* o = nv.getDynamicObject();
-        if (o == nullptr) return nullptr;
+        if (o == nullptr) return {};
+
+        const auto id = o->getProperty ("pluginIdentifier").toString();
+        if (id.isNotEmpty()) return id;
+
         const auto descXml = o->getProperty ("pluginDescriptionXml").toString();
-        if (descXml.isEmpty()) return nullptr;
+        if (descXml.isEmpty()) return {};
         auto xml = juce::parseXML (descXml);
-        if (xml == nullptr) return nullptr;
-        auto pd = std::make_unique<juce::PluginDescription>();
-        if (! pd->loadFromXml (*xml)) return nullptr;
-        return pd;
+        if (xml == nullptr) return {};
+        juce::PluginDescription pd;
+        if (! pd.loadFromXml (*xml)) return {};
+        return pd.createIdentifierString();
     }
 
     // Structural-equality check between an incoming rootGraph var and the
@@ -80,9 +80,10 @@ namespace
 
             if (kind == NodeKind::Plugin)
             {
-                auto incoming = readPluginDesc (nv);
-                if (incoming == nullptr || gn->pluginDescription == nullptr) return false;
-                if (! pluginIdentitiesMatch (*incoming, *gn->pluginDescription)) return false;
+                if (gn->pluginDescription == nullptr) return false;
+                const auto incomingId = readPluginIdentifier (nv);
+                if (incomingId.isEmpty()) return false;
+                if (incomingId != gn->pluginDescription->createIdentifierString()) return false;
             }
         }
         return true;
@@ -295,7 +296,8 @@ bool Mcfx_graphAudioProcessor::importFromVar (const juce::var& v, juce::String* 
             fp->unbind();
 
         ok = GraphSerializer::topLevelFromVar (
-                 v, *graph_, pluginList_.getFormatManager(), errorOut);
+                 v, *graph_, pluginList_.getFormatManager(),
+                 &pluginList_.getKnownPluginList(), errorOut);
 
         // After rebuild, re-prepare any newly-added nodes with the current rate/bs.
         if (getSampleRate() > 0.0 && getBlockSize() > 0)

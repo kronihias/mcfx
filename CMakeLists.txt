@@ -309,6 +309,15 @@ execute_process(COMMAND patch --forward
     OUTPUT_VARIABLE vst3_patch_result)
 message ("${vst3_patch_result}")
 
+# Always apply: extend getVst3SpeakerArrangement to synthesise an arrangement
+# for AudioChannelSet::discreteChannels(N) at any N. Without this the JUCE
+# VST3 host wrapper rejects setBusesLayout for arbitrary N (only canonical
+# and ambisonic layouts go through), which manifested as the channel-count
+# popup in mcfx_graph offering only 1..9 + N^2 values for mcfx VST3 plug-ins.
+apply_juce_patch(
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_processors_headless/format_types/juce_VST3Common.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3Common.h.patch")
+
 # Implement IPAddress::getInterfaceBroadcastAddress on Windows (upstream JUCE
 # leaves it as a TODO that returns 0.0.0.0). Without this, the
 # NetworkServiceDiscovery::Advertiser silently sends to 0.0.0.0 and Windows

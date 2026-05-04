@@ -6,6 +6,7 @@
 #include "../NativeNodes/DelayNode.h"
 #include "../Graph/SubgraphNode.h"
 #include "../Hosting/PluginInstanceFactory.h"
+#include "../Graph/GraphClipboard.h"
 #include "PluginSearchPopup.h"
 
 GraphEditorComponent::GraphEditorComponent (Mcfx_graphAudioProcessor& processor,
@@ -568,6 +569,33 @@ void GraphEditorComponent::drawConnection (juce::Graphics& g,
 void GraphEditorComponent::showAddNodeMenu (juce::Point<int> localPos)
 {
     juce::PopupMenu m;
+
+    // Paste at the right-click position when the clipboard holds an mcfx_graph
+    // payload. localPos is in canvas-local (zoomed) coords; world = local / zoom.
+    const bool canPaste = GraphClipboard::clipboardHasGraphData();
+    m.addItem ("Paste", canPaste, false,
+               [this, localPos]
+               {
+                   const float zoom = juce::jmax (0.001f, zoom_);
+                   const juce::Point<int> worldPos {
+                       (int) std::round (localPos.x / zoom),
+                       (int) std::round (localPos.y / zoom) };
+
+                   const auto newUuids = GraphClipboard::pasteFromClipboard (
+                       *activeController_,
+                       processor_.getPluginList().getFormatManager(),
+                       &processor_.getPluginList().getKnownPluginList(),
+                       worldPos);
+
+                   if (newUuids.empty()) return;
+
+                   clearSelection();
+                   for (const auto& u : newUuids)
+                       addToSelection (u);
+                   processor_.commitHistorySnapshot();
+               });
+    m.addSeparator();
+
     juce::PopupMenu nativeMenu;
 
     auto addNativeNode = [this, localPos] (auto factory, NodeKind kind,

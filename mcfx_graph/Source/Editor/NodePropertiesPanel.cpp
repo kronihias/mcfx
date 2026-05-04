@@ -997,7 +997,10 @@ NodePropertiesPanel::NodePropertiesPanel (GraphEditorComponent& editor)
     addAndMakeVisible (subtitleLabel_);
 
     viewport_ = std::make_unique<juce::Viewport>();
-    viewport_->setScrollBarsShown (true, false);
+    // Horizontal scroll is enabled because the matrix-mixer body width grows
+    // linearly with output count and routinely exceeds the panel; other
+    // parameter views have a fixed natural width and won't trigger the bar.
+    viewport_->setScrollBarsShown (true, true);
     addAndMakeVisible (*viewport_);
 
     rebuildContent();

@@ -8,6 +8,7 @@
 #include "../NativeNodes/MatrixMixerNode.h"
 #include "../NativeNodes/DelayNode.h"
 #include "../Hosting/PluginInstanceFactory.h"
+#include "../Graph/GraphClipboard.h"
 #include "../PluginProcessor.h"
 
 namespace
@@ -376,8 +377,10 @@ void NodeComponent::descendIntoSubgraph()
 
 namespace
 {
-    // Floating-window content: title + body component built by the properties
-    // panel factory. Sized to fit the body's preferred size.
+    // Floating-window content: title + body wrapped in a Viewport so the body
+    // can keep its natural size (matrix-mixer bodies grow linearly with output
+    // count and easily exceed the screen) while the window itself is bounded
+    // to fit and scrollbars handle overflow.
     class FloatingNodeEditor : public juce::Component
     {
     public:
@@ -399,12 +402,34 @@ namespace
             addAndMakeVisible (subtitle_);
 
             body_ = NodePropertiesPanel::createBodyForNode (editor, node);
-            if (body_ != nullptr)
-                addAndMakeVisible (*body_);
 
-            const int bodyW = body_ ? juce::jmax (body_->getWidth(), 280)  : 280;
-            const int bodyH = body_ ? juce::jmax (body_->getHeight(), 80) : 60;
-            setSize (bodyW + 16, 18 + 14 + bodyH + 16);
+            viewport_.setScrollBarsShown (true, true);
+            if (body_ != nullptr)
+                viewport_.setViewedComponent (body_.get(), false);
+            addAndMakeVisible (viewport_);
+
+            // Initial window size: prefer the body's natural size, but cap at
+            // the available display so wide matrix mixers don't spawn windows
+            // larger than the screen. Scrollbars handle the overflow.
+            const int bodyW = body_ ? juce::jmax (body_->getWidth(),  280) : 280;
+            const int bodyH = body_ ? juce::jmax (body_->getHeight(),  80) :  60;
+
+            const auto userArea = juce::Desktop::getInstance().getDisplays()
+                                    .getPrimaryDisplay() != nullptr
+                                ? juce::Desktop::getInstance().getDisplays()
+                                      .getPrimaryDisplay()->userArea
+                                : juce::Rectangle<int> { 1280, 800 };
+
+            // Leave some margin off each edge for the title bar / dock and add
+            // ~20 px for the scrollbar thicknesses.
+            const int maxW = juce::jmax (320, userArea.getWidth()  - 80);
+            const int maxH = juce::jmax (240, userArea.getHeight() - 120);
+
+            const int chrome = 8 + 18 + 14 + 4 + 8; // padding + title + subtitle + gap + padding
+            const int wantedW = juce::jmin (bodyW + 16 + 20, maxW);
+            const int wantedH = juce::jmin (bodyH + chrome + 20, maxH);
+
+            setSize (wantedW, wantedH);
         }
 
         void paint (juce::Graphics& g) override
@@ -418,12 +443,24 @@ namespace
             title_.setBounds    (area.removeFromTop (18));
             subtitle_.setBounds (area.removeFromTop (14));
             area.removeFromTop (4);
+            viewport_.setBounds (area);
+            // body_ keeps its natural size; the Viewport scrolls when needed.
+            // Grow the body to fill the viewport when it would otherwise be
+            // smaller (so narrow bodies still look right at any window size).
             if (body_ != nullptr)
-                body_->setBounds (area);
+            {
+                const int sbThick = viewport_.getScrollBarThickness();
+                const int innerW = juce::jmax (body_->getWidth(),
+                                               viewport_.getWidth()  - sbThick - 4);
+                const int innerH = juce::jmax (body_->getHeight(),
+                                               viewport_.getHeight() - sbThick - 4);
+                body_->setSize (innerW, innerH);
+            }
         }
 
     private:
         juce::Label title_, subtitle_;
+        juce::Viewport viewport_;
         std::unique_ptr<juce::Component> body_;
     };
 }
@@ -452,6 +489,44 @@ void NodeComponent::showContextMenu()
     juce::PopupMenu m;
     const bool isTerminal = node_.kind == NodeKind::InputTerminal
                          || node_.kind == NodeKind::OutputTerminal;
+
+    // Copy / Duplicate target: the existing selection if this node is part of
+    // it (so the user can right-click a member of a multi-select), otherwise
+    // just this node.
+    const auto& currentSel = editor_.getSelection();
+    std::vector<juce::Uuid> targetSel;
+    if (std::find (currentSel.begin(), currentSel.end(), node_.uuid) != currentSel.end())
+        targetSel = currentSel;
+    else
+        targetSel.push_back (node_.uuid);
+
+    m.addItem ("Copy", ! isTerminal, false,
+               [this, targetSel]
+               {
+                   GraphClipboard::copySelection (editor_.getController(), targetSel);
+               });
+
+    m.addItem ("Duplicate", ! isTerminal, false,
+               [this, targetSel]
+               {
+                   if (! GraphClipboard::copySelection (editor_.getController(), targetSel))
+                       return;
+
+                   const auto newUuids = GraphClipboard::pasteFromClipboard (
+                       editor_.getController(),
+                       editor_.getProcessor().getPluginList().getFormatManager(),
+                       &editor_.getProcessor().getPluginList().getKnownPluginList(),
+                       std::nullopt /* use +30/+30 default offset */);
+
+                   if (newUuids.empty()) return;
+
+                   editor_.clearSelection();
+                   for (const auto& u : newUuids)
+                       editor_.addToSelection (u);
+                   editor_.getProcessor().commitHistorySnapshot();
+               });
+
+    m.addSeparator();
 
     m.addItem ("Delete node", ! isTerminal, false,
                [this]
