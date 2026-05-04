@@ -534,7 +534,7 @@ void Mcfx_graphAudioProcessor::audioProcessorParameterChanged (juce::AudioProces
 }
 
 void Mcfx_graphAudioProcessor::audioProcessorChanged (juce::AudioProcessor*,
-                                                       const ChangeDetails&) {}
+                                                       const juce::AudioProcessorListener::ChangeDetails&) {}
 
 void Mcfx_graphAudioProcessor::audioProcessorParameterChangeGestureBegin
     (juce::AudioProcessor*, int) {}

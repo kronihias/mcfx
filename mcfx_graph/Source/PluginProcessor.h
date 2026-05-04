@@ -132,7 +132,7 @@ private:
 
     // AudioProcessorListener — fires when any hosted node's parameters change.
     void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override;
-    void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override;
+    void audioProcessorChanged (juce::AudioProcessor*, const juce::AudioProcessorListener::ChangeDetails&) override;
     void audioProcessorParameterChangeGestureBegin (juce::AudioProcessor*, int) override;
     void audioProcessorParameterChangeGestureEnd   (juce::AudioProcessor*, int) override;
 

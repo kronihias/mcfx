@@ -70,7 +70,7 @@ private:
     // those are handled by Mcfx_graphAudioProcessor's listener attached to
     // the inner directly.
     void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
-    void audioProcessorChanged (juce::AudioProcessor*, const ChangeDetails&) override;
+    void audioProcessorChanged (juce::AudioProcessor*, const juce::AudioProcessorListener::ChangeDetails&) override;
 
     std::unique_ptr<juce::AudioProcessor> inner_;
     std::atomic<bool> bypassed_ { false };

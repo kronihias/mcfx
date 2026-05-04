@@ -49,7 +49,7 @@ void BypassMuteWrapper::prepareToPlay (double sampleRate, int blockSize)
 }
 
 void BypassMuteWrapper::audioProcessorChanged (juce::AudioProcessor*,
-                                                const ChangeDetails& details)
+                                                const juce::AudioProcessorListener::ChangeDetails& details)
 {
     if (details.latencyChanged)
         setLatencySamples (inner_->getLatencySamples());
