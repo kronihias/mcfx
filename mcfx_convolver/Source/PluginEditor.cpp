@@ -621,6 +621,7 @@ void Mcfx_convolverAudioProcessorEditor::buttonClicked (Button* buttonThatWasCli
         {
             irInspectorWindow_ = std::make_unique<IrInspectorWindow>(*ourProcessor);
             irInspectorWindow_->setTopLeftPosition(getScreenX() + getWidth() + 10, getScreenY());
+            irInspectorWindow_->toFront(true);
         }
         else
         {

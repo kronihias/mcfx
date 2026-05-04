@@ -826,6 +826,13 @@ IrInspectorComponent::IrInspectorComponent(Mcfx_convolverAudioProcessor& proc)
     };
     addAndMakeVisible(viewToggleBtn_);
 
+    exportIrBtn_.setButtonText("Export IR...");
+    exportIrBtn_.setColour(TextButton::buttonColourId, Colour(0xff2a2a3a));
+    exportIrBtn_.setColour(TextButton::textColourOffId, Colours::white.withAlpha(0.8f));
+    exportIrBtn_.setEnabled(false);
+    exportIrBtn_.onClick = [this]() { exportIrToWav(selectedIn_, selectedOut_); };
+    addAndMakeVisible(exportIrBtn_);
+
     processor_.addChangeListener(this);
 
     refresh();
@@ -869,6 +876,10 @@ void IrInspectorComponent::resized()
     leftViewport_.setBounds(leftArea);
 
     area.removeFromLeft(8);
+
+    auto plotTopRow = area.removeFromTop(22);
+    exportIrBtn_.setBounds(plotTopRow.removeFromRight(95));
+    area.removeFromTop(4);
     plotComponent_.setBounds(area);
 }
 
@@ -885,6 +896,9 @@ void IrInspectorComponent::refresh()
     plotComponent_.clearIR();
     matrixComponent_.setSelectedCell(-1, -1);
     wireComponent_.setSelectedWire(-1, -1);
+    selectedIn_ = -1;
+    selectedOut_ = -1;
+    exportIrBtn_.setEnabled(false);
     infoLabel_.setText("Click a wire or cell to inspect the impulse response", dontSendNotification);
     resized();
     repaint();
@@ -911,9 +925,64 @@ void IrInspectorComponent::onIrSelected(int inCh, int outCh)
             // Sync selection on both views
             matrixComponent_.setSelectedCell(inCh, outCh);
             wireComponent_.setSelectedWire(inCh, outCh);
+            selectedIn_ = inCh;
+            selectedOut_ = outCh;
+            exportIrBtn_.setEnabled(irBuf != nullptr);
             return;
         }
     }
+}
+
+void IrInspectorComponent::exportIrToWav(int inCh, int outCh)
+{
+    if (inCh < 0 || outCh < 0)
+        return;
+
+    auto& convData = processor_.getConvolverData();
+    const AudioBuffer<float>* irBuf = nullptr;
+    int irLen = 0;
+    for (int i = 0; i < convData.getNumIRs(); ++i)
+    {
+        if (convData.getInCh(i) == inCh && convData.getOutCh(i) == outCh)
+        {
+            irBuf = convData.getIR(i);
+            irLen = convData.getLength(i);
+            break;
+        }
+    }
+    if (irBuf == nullptr || irLen <= 0)
+        return;
+
+    String defaultName = "IR_In" + String(inCh + 1) + "_Out" + String(outCh + 1) + ".wav";
+    File defaultFile = processor_.lastDir.getChildFile(defaultName);
+
+    FileChooser chooser("Export IR to .wav...", defaultFile, "*.wav");
+    if (!chooser.browseForFileToSave(true))
+        return;
+
+    File outFile = chooser.getResult();
+    if (outFile.getFileExtension().isEmpty())
+        outFile = outFile.withFileExtension(".wav");
+
+    auto outStream = std::make_unique<FileOutputStream>(outFile);
+    if (!outStream->openedOk())
+        return;
+    outStream->setPosition(0);
+    outStream->truncate();
+
+    WavAudioFormat wav;
+    StringPairArray metadata;
+    // 32-bit float WAV preserves the IR exactly (no clipping at +/-1.0).
+    std::unique_ptr<AudioFormatWriter> writer(
+        wav.createWriterFor(outStream.get(), convData.getSampleRate(), 1, 32, metadata, 0));
+
+    if (writer == nullptr)
+        return;
+
+    outStream.release(); // writer takes ownership
+    writer->writeFromAudioSampleBuffer(*irBuf, 0, irLen);
+
+    processor_.lastDir = outFile.getParentDirectory();
 }
 
 //==============================================================================

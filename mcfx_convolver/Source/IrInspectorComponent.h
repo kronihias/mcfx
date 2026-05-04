@@ -181,9 +181,13 @@ private:
     Label titleLabel_;
     Label infoLabel_;
     TextButton viewToggleBtn_;
+    TextButton exportIrBtn_;
     bool showingWires_ = false;
+    int selectedIn_ = -1;
+    int selectedOut_ = -1;
 
     void onIrSelected(int inCh, int outCh);
+    void exportIrToWav(int inCh, int outCh);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(IrInspectorComponent)
 };
