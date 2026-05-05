@@ -99,7 +99,10 @@ void McfxSendAudioProcessor::refreshSenderAdvertise()
     senderAdvertiser->setPublish (stream.getListenPort(), info);
 }
 
-McfxSendAudioProcessor::~McfxSendAudioProcessor() = default;
+McfxSendAudioProcessor::~McfxSendAudioProcessor()
+{
+    stopTimer();
+}
 
 void McfxSendAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
@@ -157,8 +160,9 @@ void McfxSendAudioProcessor::releaseResources()
     stream.releaseResources();
 }
 
-void McfxSendAudioProcessor::setSendTarget (const juce::String& host, int port)
+void McfxSendAudioProcessor::setSendTarget (const juce::String& host, int port, bool isUserAction)
 {
+    if (isUserAction) cancelAutoReconnect();
     {
         const juce::ScopedLock sl (paramLock);
         if (host == sendHost && port == sendPort) return;
@@ -167,6 +171,353 @@ void McfxSendAudioProcessor::setSendTarget (const juce::String& host, int port)
         targetDirty = true;
     }
     applyTargetIfChanged();
+}
+
+void McfxSendAudioProcessor::addTarget (const juce::String& host, int port,
+                                        std::uint32_t wireUid, bool isUserAction)
+{
+    if (isUserAction)
+    {
+        cancelAutoReconnect();
+        // Capture Bonjour identity at connect time so the next project
+        // load can rematch by computer-name if the peer's ip/port drifts.
+        if (wireUid != 0)
+        {
+            const auto hint = lookupBonjourHint (wireUid);
+            const juce::ScopedLock sl (bonjourHintsLock);
+            if (! hint.host.isEmpty())
+                lastBonjour[std::make_pair (host, port)] = hint;
+            else
+                lastBonjour.erase (std::make_pair (host, port));
+        }
+        else
+        {
+            const juce::ScopedLock sl (bonjourHintsLock);
+            lastBonjour.erase (std::make_pair (host, port));
+        }
+    }
+    stream.addTarget (host, port, wireUid);
+}
+
+void McfxSendAudioProcessor::removeTarget (const juce::String& host, int port, bool isUserAction)
+{
+    if (isUserAction)
+    {
+        cancelAutoReconnect();
+        const juce::ScopedLock sl (bonjourHintsLock);
+        lastBonjour.erase (std::make_pair (host, port));
+    }
+    // Auto-reconnect rematch path leaves lastBonjour intact — the timer
+    // moves the hint to the new (host, port) key explicitly.
+    stream.removeTarget (host, port);
+}
+
+void McfxSendAudioProcessor::clearTargets (bool isUserAction)
+{
+    if (isUserAction)
+    {
+        cancelAutoReconnect();
+        const juce::ScopedLock sl (bonjourHintsLock);
+        lastBonjour.clear();
+    }
+    stream.clearTargets();
+}
+
+McfxSendAudioProcessor::BonjourHint
+McfxSendAudioProcessor::lookupBonjourHint (std::uint32_t wireUid) const
+{
+    BonjourHint h;
+    if (wireUid == 0 || ! discovery) return h;
+    for (const auto& s : discovery->getServices())
+    {
+        if (s.wireUid == wireUid)
+        {
+            h.host    = s.host;
+            h.project = s.project;
+            h.track   = s.track;
+            break;
+        }
+    }
+    return h;
+}
+
+void McfxSendAudioProcessor::setAutoReconnectEnabled (bool on)
+{
+    autoReconnectEnabled.store (on, std::memory_order_release);
+    if (! on) cancelAutoReconnect();
+}
+
+int McfxSendAudioProcessor::getArmedPeerCount() const
+{
+    const juce::ScopedLock sl (armedLock);
+    return static_cast<int> (armedPeers.size());
+}
+
+int McfxSendAudioProcessor::getAutoReconnectSecondsRemaining() const
+{
+    const juce::ScopedLock sl (armedLock);
+    if (armedPeers.empty()) return 0;
+    const auto nowT = juce::Time::getCurrentTime();
+    int maxRem = 0;
+    for (const auto& p : armedPeers)
+    {
+        const int rem = 60 - static_cast<int> ((nowT - p.armedAt).inSeconds());
+        if (rem > maxRem) maxRem = rem;
+    }
+    return juce::jmax (0, maxRem);
+}
+
+void McfxSendAudioProcessor::cancelAutoReconnect()
+{
+    {
+        const juce::ScopedLock sl (armedLock);
+        armedPeers.clear();
+    }
+    stopTimer();
+}
+
+void McfxSendAudioProcessor::timerCallback()
+{
+    // 1 Hz auto-reconnect tick. For each armed peer:
+    //   1. If we're already connected to this peer (by host:port, by UID,
+    //      or by Bonjour-hint match against any Active target), uninvite
+    //      any stale (host, port) entry and drop the armed peer.
+    //   2. If the 60 s window expired, uninvite the stale (host, port)
+    //      entry to clear the duplicate from the UI, then drop.
+    //   3. Otherwise update (host, port) to the discovered service's
+    //      current address (if Bonjour rematch hits) and re-issue the
+    //      INVITE — refreshes the SendStream's per-target retry.
+    //
+    // When armedPeers empties, the timer stops.
+    if (! autoReconnectEnabled.load (std::memory_order_acquire))
+    {
+        cancelAutoReconnect();
+        return;
+    }
+
+    enum class Kind : std::uint8_t { Replace, Invite, Uninvite };
+    struct Action
+    {
+        Kind         kind = Kind::Invite;
+        juce::String oldHost;
+        int          oldPort = 0;
+        juce::String newHost;
+        int          newPort = 0;
+        std::uint32_t wireUid = 0;
+    };
+    std::vector<Action> actions;
+
+    const auto nowT     = juce::Time::getCurrentTime();
+    const auto targets  = stream.getTargets();
+    const auto services = discovery ? discovery->getServices()
+                                    : std::vector<mcfx::net::Discovery::Service>{};
+
+    {
+        const juce::ScopedLock sl (armedLock);
+
+        auto isActiveAt = [&] (const juce::String& h, int p, std::uint32_t uid) {
+            for (const auto& t : targets)
+            {
+                const bool addrMatch = (t.host == h && t.port == p);
+                const bool uidMatch  = (uid != 0 && t.receiverUid == uid);
+                if ((addrMatch || uidMatch)
+                    && t.state == mcfx::net::SendStream::TargetState::Active)
+                    return true;
+            }
+            return false;
+        };
+
+        // Hint-based match: if any Bonjour service matches our saved
+        // identity, then any Active target with that service's wireUid
+        // counts as "we're connected to the right peer" — even if the
+        // target's host:port doesn't match our saved (host, port).
+        // Returns the wireUid we matched on, or 0.
+        auto activeUidByHint = [&] (const ArmedPeer& ap) -> std::uint32_t {
+            if (ap.hint.host.isEmpty()) return 0;
+            for (const auto& s : services)
+            {
+                if (s.host != ap.hint.host) continue;
+                if (! ap.hint.project.isEmpty() && s.project != ap.hint.project) continue;
+                if (! ap.hint.track  .isEmpty() && s.track   != ap.hint.track)   continue;
+                if (s.wireUid == 0) continue;
+                for (const auto& t : targets)
+                    if (t.receiverUid == s.wireUid
+                        && t.state == mcfx::net::SendStream::TargetState::Active)
+                        return s.wireUid;
+            }
+            return 0;
+        };
+
+        // Loose fallback for the case where the peer's connection was
+        // initiated by the other side (e.g. their auto-reconnect's
+        // INVITE landed on our listen port and we accepted) and we
+        // can't use Bonjour hints to confirm identity (no hint stored,
+        // or hint can't be paired against a current service).
+        // If any Active target exists at the same IP host as our
+        // saved (host, port), call it good — saves the user the
+        // 60 s spinner when both sides are auto-reconnecting at once.
+        auto activeAtSameHost = [&] (const ArmedPeer& ap) {
+            for (const auto& t : targets)
+                if (t.host == ap.host
+                    && t.receiverUid != 0
+                    && t.state == mcfx::net::SendStream::TargetState::Active)
+                    return true;
+            return false;
+        };
+
+        for (auto it = armedPeers.begin(); it != armedPeers.end(); )
+        {
+            // Direct match by (host, port) or currentWireUid.
+            if (isActiveAt (it->host, it->port, it->currentWireUid))
+            {
+                it = armedPeers.erase (it);
+                continue;
+            }
+
+            // Hint-based match — sender re-bound to a different ephemeral
+            // port and is Active under that new address.
+            if (auto matchedUid = activeUidByHint (*it))
+            {
+                // Cleanup: drop the stale (host, port) target entry that
+                // never ACKed, otherwise the UI would carry a "(direct)
+                // … Inviting" row in parallel with the green Bonjour row.
+                Action u;
+                u.kind = Kind::Uninvite;
+                u.oldHost = it->host;
+                u.oldPort = it->port;
+                actions.push_back (u);
+                (void) matchedUid;
+                it = armedPeers.erase (it);
+                continue;
+            }
+
+            // Same-host fallback — connection initiated by the other
+            // side, our hint can't confirm identity but the IP matches.
+            // Stop trying.
+            if (activeAtSameHost (*it))
+            {
+                Action u;
+                u.kind = Kind::Uninvite;
+                u.oldHost = it->host;
+                u.oldPort = it->port;
+                actions.push_back (u);
+                it = armedPeers.erase (it);
+                continue;
+            }
+
+            // 60 s window expired — give up. Clean up the stale entry so
+            // the editor list isn't littered with a dead Pending row for
+            // another 30 s of normal Timeout-display.
+            if ((nowT - it->armedAt).inSeconds() >= 60)
+            {
+                Action u;
+                u.kind = Kind::Uninvite;
+                u.oldHost = it->host;
+                u.oldPort = it->port;
+                actions.push_back (u);
+                it = armedPeers.erase (it);
+                continue;
+            }
+
+            // Bonjour rematch — if a service matching our saved identity
+            // is up at a different (ip, port) than what we have armed,
+            // swap to the discovered address.
+            if (! it->hint.host.isEmpty())
+            {
+                for (const auto& s : services)
+                {
+                    if (s.host != it->hint.host) continue;
+                    if (! it->hint.project.isEmpty() && s.project != it->hint.project) continue;
+                    if (! it->hint.track  .isEmpty() && s.track   != it->hint.track)   continue;
+
+                    const auto newIp = s.ip.toString();
+                    if (newIp != it->host || s.port != it->port)
+                    {
+                        Action a;
+                        a.kind    = Kind::Replace;
+                        a.oldHost = it->host;
+                        a.oldPort = it->port;
+                        a.newHost = newIp;
+                        a.newPort = s.port;
+                        a.wireUid = s.wireUid;
+                        actions.push_back (a);
+                        it->host = newIp;
+                        it->port = s.port;
+                        it->currentWireUid = s.wireUid;
+                    }
+                    else
+                    {
+                        // Same address — capture the UID so the editor's
+                        // row-pairing finds the entry on the very next
+                        // refresh, and so isActiveAt by uid hits.
+                        it->currentWireUid = s.wireUid;
+                        Action a;
+                        a.kind    = Kind::Invite;
+                        a.newHost = it->host;
+                        a.newPort = it->port;
+                        a.wireUid = it->currentWireUid;
+                        actions.push_back (a);
+                    }
+                    goto next_armed;
+                }
+            }
+
+            // No rematch — just re-issue the saved (host, port).
+            {
+                Action a;
+                a.kind    = Kind::Invite;
+                a.newHost = it->host;
+                a.newPort = it->port;
+                a.wireUid = it->currentWireUid;
+                actions.push_back (a);
+            }
+        next_armed:
+            ++it;
+        }
+    }
+
+    for (const auto& a : actions)
+    {
+        switch (a.kind)
+        {
+            case Kind::Replace:
+            {
+                // Carry the Bonjour hint from old (host, port) → new key
+                // so a subsequent project save still records the peer's
+                // identity.
+                BonjourHint hint;
+                {
+                    const juce::ScopedLock sl (bonjourHintsLock);
+                    auto it = lastBonjour.find (std::make_pair (a.oldHost, a.oldPort));
+                    if (it != lastBonjour.end())
+                    {
+                        hint = it->second;
+                        lastBonjour.erase (it);
+                    }
+                }
+                removeTarget (a.oldHost, a.oldPort, /*isUserAction=*/false);
+                if (! hint.host.isEmpty())
+                {
+                    const juce::ScopedLock sl (bonjourHintsLock);
+                    lastBonjour[std::make_pair (a.newHost, a.newPort)] = hint;
+                }
+                addTarget (a.newHost, a.newPort, a.wireUid, /*isUserAction=*/false);
+                break;
+            }
+            case Kind::Invite:
+                addTarget (a.newHost, a.newPort, a.wireUid, /*isUserAction=*/false);
+                break;
+            case Kind::Uninvite:
+                removeTarget (a.oldHost, a.oldPort, /*isUserAction=*/false);
+                break;
+        }
+    }
+
+    {
+        const juce::ScopedLock sl (armedLock);
+        if (armedPeers.empty())
+            stopTimer();
+    }
 }
 
 void McfxSendAudioProcessor::applyTargetIfChanged()
@@ -236,12 +587,42 @@ void McfxSendAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
     juce::ValueTree state ("mcfx_send");
     {
         const juce::ScopedLock sl (paramLock);
+        // Legacy single-target attrs retained for older versions reading
+        // back a state saved by this build. We mirror the first target.
         state.setProperty ("host", sendHost, nullptr);
         state.setProperty ("port", sendPort, nullptr);
         state.setProperty ("ch_cap", sendChannelsCap, nullptr);
     }
     state.setProperty ("fmt", static_cast<int> (getWireFormat()), nullptr);
     state.setProperty ("password", getPassword(), nullptr);
+    state.setProperty ("auto_reconnect",
+                       isAutoReconnectEnabled() ? 1 : 0, nullptr);
+
+    // Persist every currently-tracked target (Active or Pending) plus
+    // any captured Bonjour identity hints. On reload we re-arm one entry
+    // per saved <target>.
+    const auto targets = stream.getTargets();
+    for (const auto& t : targets)
+    {
+        if (t.state != mcfx::net::SendStream::TargetState::Active
+            && t.state != mcfx::net::SendStream::TargetState::Pending)
+            continue;
+        juce::ValueTree node ("target");
+        node.setProperty ("host", t.host, nullptr);
+        node.setProperty ("port", t.port, nullptr);
+
+        BonjourHint hint;
+        {
+            const juce::ScopedLock sl (bonjourHintsLock);
+            auto it = lastBonjour.find (std::make_pair (t.host, t.port));
+            if (it != lastBonjour.end()) hint = it->second;
+        }
+        if (! hint.host.isEmpty())    node.setProperty ("bj_host",    hint.host,    nullptr);
+        if (! hint.project.isEmpty()) node.setProperty ("bj_project", hint.project, nullptr);
+        if (! hint.track.isEmpty())   node.setProperty ("bj_track",   hint.track,   nullptr);
+        state.appendChild (node, nullptr);
+    }
+
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, dest);
 }
@@ -251,19 +632,101 @@ void McfxSendAudioProcessor::setStateInformation (const void* data, int sizeInBy
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
     {
         auto t = juce::ValueTree::fromXml (*xml);
-        if (t.isValid() && t.hasType ("mcfx_send"))
+        if (! (t.isValid() && t.hasType ("mcfx_send"))) return;
+
+        if (t.hasProperty ("fmt"))
         {
-            setSendTarget (t.getProperty ("host", "").toString(),
-                           static_cast<int> (t.getProperty ("port", 0)));
-            if (t.hasProperty ("fmt"))
+            const int f = juce::jlimit (1, 3, static_cast<int> (t.getProperty ("fmt", 3)));
+            setWireFormat (static_cast<mcfx::net::SampleFormat> (f));
+        }
+        if (t.hasProperty ("ch_cap"))
+            setSendChannels (static_cast<int> (t.getProperty ("ch_cap", 0)));
+        if (t.hasProperty ("password"))
+            setPassword (t.getProperty ("password", "").toString());
+
+        const bool autoOn = t.hasProperty ("auto_reconnect")
+                              ? static_cast<int> (t.getProperty ("auto_reconnect", 1)) != 0
+                              : true;
+        autoReconnectEnabled.store (autoOn, std::memory_order_release);
+
+        // Build the list of peers to (re-)connect. New format: <target>
+        // children. Legacy: single host/port attrs. Either way we feed
+        // the result through addTarget(... isUserAction=false) so the
+        // auto-reconnect arm doesn't immediately cancel itself.
+        struct Saved { juce::String host; int port; BonjourHint hint; };
+        std::vector<Saved> saved;
+
+        for (int i = 0; i < t.getNumChildren(); ++i)
+        {
+            auto c = t.getChild (i);
+            if (! c.hasType ("target")) continue;
+            Saved s;
+            s.host = c.getProperty ("host", "").toString();
+            s.port = static_cast<int> (c.getProperty ("port", 0));
+            if (s.host.isEmpty() || s.port <= 0) continue;
+            s.hint.host    = c.getProperty ("bj_host",    "").toString();
+            s.hint.project = c.getProperty ("bj_project", "").toString();
+            s.hint.track   = c.getProperty ("bj_track",   "").toString();
+            saved.push_back (std::move (s));
+        }
+
+        // Back-compat: no <target> children but legacy host/port attrs.
+        if (saved.empty() && t.hasProperty ("host"))
+        {
+            const auto h = t.getProperty ("host", "").toString();
+            const int  p = static_cast<int> (t.getProperty ("port", 0));
+            if (h.isNotEmpty() && p > 0)
+                saved.push_back ({ h, p, {} });
+        }
+
+        // Mirror the first saved target into the legacy single-target
+        // sendHost/sendPort fields for getSendHost/getSendPort callers.
+        if (! saved.empty())
+        {
+            const juce::ScopedLock sl (paramLock);
+            sendHost = saved.front().host;
+            sendPort = saved.front().port;
+        }
+
+        // Stash the captured Bonjour hints for the targets we're about
+        // to (re)create — getStateInformation needs them for next save.
+        {
+            const juce::ScopedLock sl (bonjourHintsLock);
+            lastBonjour.clear();
+            for (const auto& s : saved)
+                if (! s.hint.host.isEmpty())
+                    lastBonjour[std::make_pair (s.host, s.port)] = s.hint;
+        }
+
+        // Replace whatever's currently in the targets list with the saved
+        // set — matches the original setSendTarget→setSingleTarget
+        // semantics for hosts that re-call setStateInformation on an
+        // already-running plugin (preset switch).
+        clearTargets (/*isUserAction=*/false);
+
+        // (Re)issue the connects. isUserAction=false so we don't cancel
+        // ourselves before we even start the timer.
+        for (const auto& s : saved)
+            addTarget (s.host, s.port, /*wireUid=*/0, /*isUserAction=*/false);
+
+        // Arm the auto-reconnect retry loop.
+        if (autoOn && ! saved.empty())
+        {
+            const auto nowT = juce::Time::getCurrentTime();
             {
-                const int f = juce::jlimit (1, 3, static_cast<int> (t.getProperty ("fmt", 3)));
-                setWireFormat (static_cast<mcfx::net::SampleFormat> (f));
+                const juce::ScopedLock sl (armedLock);
+                armedPeers.clear();
+                for (const auto& s : saved)
+                {
+                    ArmedPeer ap;
+                    ap.host    = s.host;
+                    ap.port    = s.port;
+                    ap.hint    = s.hint;
+                    ap.armedAt = nowT;
+                    armedPeers.push_back (std::move (ap));
+                }
             }
-            if (t.hasProperty ("ch_cap"))
-                setSendChannels (static_cast<int> (t.getProperty ("ch_cap", 0)));
-            if (t.hasProperty ("password"))
-                setPassword (t.getProperty ("password", "").toString());
+            startTimer (1000);
         }
     }
 }

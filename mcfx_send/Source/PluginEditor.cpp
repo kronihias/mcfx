@@ -14,6 +14,7 @@
 */
 
 #include "PluginEditor.h"
+#include "mcfx_net_socket.h"  // mcfx::net::getLocalIPv4Addresses
 
 #define MCFX_NET_Q(x)     #x
 #define MCFX_NET_QUOTE(x) MCFX_NET_Q(x)
@@ -144,6 +145,18 @@ McfxSendAudioProcessorEditor::McfxSendAudioProcessorEditor (McfxSendAudioProcess
     pwEditor.setTextToShowWhenEmpty ("none", juce::Colours::grey);
     pwEditor.onFocusLost = [this]() { processor.setPassword (pwEditor.getText()); };
     pwEditor.onReturnKey = [this]() { processor.setPassword (pwEditor.getText()); };
+
+    addAndMakeVisible (autoReconnectToggle);
+    autoReconnectToggle.setTooltip (
+        "When a project is reopened, automatically retry the last\n"
+        "connected receiver(s) for ~60 s, so the audio link comes\n"
+        "back as soon as the remote side is up. The retry stops the\n"
+        "moment you click Connect or Disconnect on any peer.");
+    autoReconnectToggle.setToggleState (processor.isAutoReconnectEnabled(),
+                                        juce::dontSendNotification);
+    autoReconnectToggle.onClick = [this]() {
+        processor.setAutoReconnectEnabled (autoReconnectToggle.getToggleState());
+    };
 
     addAndMakeVisible (boundLabel);
     boundLabel.setJustificationType (juce::Justification::centredLeft);
@@ -445,6 +458,8 @@ void McfxSendAudioProcessorEditor::resized()
     auto rowPw = area.removeFromTop (28);
     pwLabel.setBounds (rowPw.removeFromLeft (140));
     pwEditor.setBounds (rowPw.removeFromLeft (200));
+    rowPw.removeFromLeft (16);
+    autoReconnectToggle.setBounds (rowPw.removeFromLeft (juce::jmax (200, rowPw.getWidth())));
     area.removeFromTop (6);
 
     // Listening-port label first (mirrors the receiver's boundLabel
@@ -501,27 +516,58 @@ void McfxSendAudioProcessorEditor::timerCallback()
     // Local listen-port label. Updated every tick because the port can
     // change across releaseResources / prepareToPlay cycles (the host
     // tearing down and re-arming the plugin), and we want the displayed
-    // value to follow the current binding.
+    // value to follow the current binding. Also enumerate this
+    // machine's IPv4 interface addresses so the user can read the IP
+    // off the screen and give it to a peer who needs to type it into
+    // Direct IP on their side (no Bonjour link between subnets, etc.).
     {
         const int bound = processor.getListenPort();
-        boundLabel.setText ((bound > 0)
-            ? "Listening on UDP port " + juce::String (bound)
-            : juce::String ("Not bound"),
-            juce::dontSendNotification);
+        const auto ips  = mcfx::net::getLocalIPv4Addresses();
+        juce::String txt;
+        if (bound > 0)
+        {
+            txt = "Listening on UDP port " + juce::String (bound);
+            if (! ips.isEmpty())
+                txt += juce::String::fromUTF8 ("  \xE2\x80\x94  this machine: ")
+                     + ips.joinIntoString (", ");
+        }
+        else
+        {
+            txt = "Not bound";
+        }
+        boundLabel.setText (txt, juce::dontSendNotification);
         boundLabel.setColour (juce::Label::textColourId,
             (bound > 0) ? juce::Colours::white : juce::Colours::orange);
     }
 
     const int active = processor.getActiveTargetCount();
-    statusLabel.setText (active > 0
-        ? juce::String (active) + " active target"
-            + (active == 1 ? juce::String() : juce::String ("s"))
-            + "  uid=" + juce::String::toHexString ((juce::int64) processor.getSenderUid())
-        : juce::String ("No active targets  uid=")
-            + juce::String::toHexString ((juce::int64) processor.getSenderUid()),
-        juce::dontSendNotification);
-    statusLabel.setColour (juce::Label::textColourId,
-                           active > 0 ? juce::Colours::white : juce::Colours::orange);
+    const int armed  = processor.getArmedPeerCount();
+    juce::String statusText;
+    juce::Colour statusColour;
+    if (armed > 0)
+    {
+        const int rem = processor.getAutoReconnectSecondsRemaining();
+        statusText = "Reconnecting to " + juce::String (armed)
+                   + (armed == 1 ? juce::String (" peer") : juce::String (" peers"))
+                   + juce::String::fromUTF8 ("\xE2\x80\xA6 ")  // ellipsis
+                   + juce::String (rem) + " s remaining";
+        statusColour = juce::Colour (0xffd9b438); // amber, same as Inviting dot
+    }
+    else if (active > 0)
+    {
+        statusText = juce::String (active) + " active target"
+                   + (active == 1 ? juce::String() : juce::String ("s"))
+                   + "  uid=" + juce::String::toHexString ((juce::int64) processor.getSenderUid());
+        statusColour = juce::Colours::white;
+    }
+    else
+    {
+        statusText = juce::String ("No active targets  uid=")
+                   + juce::String::toHexString ((juce::int64) processor.getSenderUid());
+        statusColour = juce::Colours::orange;
+    }
+    statusLabel.setText (statusText, juce::dontSendNotification);
+    statusLabel.setColour (juce::Label::textColourId, statusColour);
 
     const auto pkts  = processor.getSentPackets();
     const auto bytes = processor.getSentBytes();

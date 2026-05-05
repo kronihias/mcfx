@@ -84,6 +84,8 @@ private:
     juce::Label    pwLabel { {}, "Password (optional):" };
     juce::TextEditor pwEditor;
 
+    juce::ToggleButton autoReconnectToggle { "Auto-reconnect on load" };
+
     juce::Label boundLabel;
     juce::Label connectionStatusLabel;
 

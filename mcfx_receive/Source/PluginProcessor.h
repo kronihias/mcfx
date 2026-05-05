@@ -31,11 +31,13 @@
 #include "mcfx_net_reaper.h"
 #include "mcfx_net_meter.h"
 
+#include <map>
 #include <memory>
 #include <vector>
 
 class McfxReceiveAudioProcessor : public juce::AudioProcessor,
-                                  public juce::ChangeBroadcaster
+                                  public juce::ChangeBroadcaster,
+                                  private juce::Timer
 {
 public:
     McfxReceiveAudioProcessor();
@@ -53,11 +55,14 @@ public:
 
     // ----- Bidirectional connect -------------------------------------------
 
-    bool inviteSender    (const juce::String& host, int port, std::uint32_t wireUid = 0)
-                          { return stream.inviteSender (host, port, wireUid); }
-    void uninviteSender  (const juce::String& host, int port, std::uint32_t wireUid = 0)
-                          { stream.uninviteSender (host, port, wireUid); }
-    void uninviteAllSenders() { stream.uninviteAllSenders(); }
+    // isUserAction=true (default, from editor) cancels any pending
+    // auto-reconnect attempt; the auto-reconnect timer passes false when
+    // re-issuing INVITEs on its own ticks.
+    bool inviteSender    (const juce::String& host, int port, std::uint32_t wireUid = 0,
+                          bool isUserAction = true);
+    void uninviteSender  (const juce::String& host, int port, std::uint32_t wireUid = 0,
+                          bool isUserAction = true);
+    void uninviteAllSenders (bool isUserAction = true);
     std::vector<mcfx::net::RecvStream::AcceptedSender> getAcceptedSenders() const
     {
         return stream.getAcceptedSenders();
@@ -150,8 +155,27 @@ public:
     void getStateInformation (juce::MemoryBlock& dest) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // ----- Auto-reconnect on project load ----------------------------------
+
+    void setAutoReconnectEnabled (bool on);
+    bool isAutoReconnectEnabled() const noexcept { return autoReconnectEnabled.load (std::memory_order_acquire); }
+
+    int getArmedPeerCount() const;
+    int getAutoReconnectSecondsRemaining() const;
+
 private:
     void refreshDiscoveryAdvertise();
+
+    void cancelAutoReconnect();
+    void timerCallback() override;
+
+    struct BonjourHint
+    {
+        juce::String host;
+        juce::String project;
+        juce::String track;
+    };
+    BonjourHint lookupBonjourHint (std::uint32_t wireUid) const;
 
     mcfx::net::RecvStream stream;
     mutable juce::CriticalSection paramLock;
@@ -170,6 +194,24 @@ private:
     // the advertiser comes up shortly after first prepareToPlay.
     std::unique_ptr<mcfx::net::Discovery> discovery;        // publish self as receiver
     std::unique_ptr<mcfx::net::Discovery> senderBrowser;    // browse senders
+
+    // ----- Auto-reconnect state -------------------------------------------
+
+    struct ArmedPeer
+    {
+        juce::String  host;
+        int           port = 0;
+        BonjourHint   hint;
+        juce::Time    armedAt;
+        std::uint32_t currentWireUid = 0;
+    };
+    mutable juce::CriticalSection armedLock;
+    std::vector<ArmedPeer> armedPeers;
+
+    mutable juce::CriticalSection bonjourHintsLock;
+    std::map<std::pair<juce::String, int>, BonjourHint> lastBonjour;
+
+    std::atomic<bool> autoReconnectEnabled { true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (McfxReceiveAudioProcessor)
 };

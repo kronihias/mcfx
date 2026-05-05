@@ -14,6 +14,7 @@
 */
 
 #include "PluginEditor.h"
+#include "mcfx_net_socket.h"  // mcfx::net::getLocalIPv4Addresses
 
 #define MCFX_NET_Q(x)     #x
 #define MCFX_NET_QUOTE(x) MCFX_NET_Q(x)
@@ -138,6 +139,18 @@ McfxReceiveAudioProcessorEditor::McfxReceiveAudioProcessorEditor (McfxReceiveAud
     pwEditor.setTextToShowWhenEmpty ("none", juce::Colours::grey);
     pwEditor.onFocusLost = [this]() { processor.setPassword (pwEditor.getText()); };
     pwEditor.onReturnKey = [this]() { processor.setPassword (pwEditor.getText()); };
+
+    addAndMakeVisible (autoReconnectToggle);
+    autoReconnectToggle.setTooltip (
+        "When a project is reopened, automatically retry the last\n"
+        "connected sender(s) for ~60 s, so the audio link comes\n"
+        "back as soon as the remote side is up. The retry stops the\n"
+        "moment you click Connect or Disconnect on any peer.");
+    autoReconnectToggle.setToggleState (processor.isAutoReconnectEnabled(),
+                                        juce::dontSendNotification);
+    autoReconnectToggle.onClick = [this]() {
+        processor.setAutoReconnectEnabled (autoReconnectToggle.getToggleState());
+    };
 
     addAndMakeVisible (boundLabel);
     boundLabel.setJustificationType (juce::Justification::centredLeft);
@@ -436,6 +449,8 @@ void McfxReceiveAudioProcessorEditor::resized()
     auto rowPw = area.removeFromTop (28);
     pwLabel.setBounds (rowPw.removeFromLeft (140));
     pwEditor.setBounds (rowPw.removeFromLeft (200));
+    rowPw.removeFromLeft (16);
+    autoReconnectToggle.setBounds (rowPw.removeFromLeft (juce::jmax (200, rowPw.getWidth())));
     area.removeFromTop (6);
 
     boundLabel.setBounds (area.removeFromTop (24));
@@ -480,10 +495,17 @@ void McfxReceiveAudioProcessorEditor::timerCallback()
 {
     processor.pollHostState();
 
+    // Local listen-port + this machine's IPv4 addresses. The user can
+    // read the IP off the screen and give it to a sender peer who has
+    // to type it into Direct IP (no Bonjour across subnets etc.).
     {
         const int bound = processor.getBoundPort();
-        boundLabel.setText ("Listening on UDP port " + juce::String (bound),
-                            juce::dontSendNotification);
+        const auto ips  = mcfx::net::getLocalIPv4Addresses();
+        juce::String txt = "Listening on UDP port " + juce::String (bound);
+        if (! ips.isEmpty())
+            txt += juce::String::fromUTF8 ("  \xE2\x80\x94  this machine: ")
+                 + ips.joinIntoString (", ");
+        boundLabel.setText (txt, juce::dontSendNotification);
         boundLabel.setColour (juce::Label::textColourId, juce::Colours::white);
     }
 
@@ -613,6 +635,21 @@ void McfxReceiveAudioProcessorEditor::timerCallback()
         bannerColour = juce::Colour (0xff80c080);
         banner = "Connection healthy";
     }
+
+    // Auto-reconnect status takes precedence — it's the action currently
+    // happening, and the lastAttempt banner would otherwise be stale
+    // info from before the project closed.
+    const int armed = processor.getArmedPeerCount();
+    if (armed > 0)
+    {
+        const int rem = processor.getAutoReconnectSecondsRemaining();
+        bannerColour = juce::Colour (0xffd9b438); // amber, same as Inviting dot
+        banner = "Reconnecting to " + juce::String (armed)
+               + (armed == 1 ? juce::String (" peer") : juce::String (" peers"))
+               + juce::String::fromUTF8 ("\xE2\x80\xA6 ")
+               + juce::String (rem) + " s remaining";
+    }
+
     connectionStatusLabel.setText (banner, juce::dontSendNotification);
     connectionStatusLabel.setColour (juce::Label::textColourId, bannerColour);
 }

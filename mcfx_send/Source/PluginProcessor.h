@@ -32,10 +32,13 @@
 #include "mcfx_net_meter.h"
 
 #include <functional>
+#include <map>
 #include <memory>
+#include <vector>
 
 class McfxSendAudioProcessor : public juce::AudioProcessor,
-                               public juce::ChangeBroadcaster
+                               public juce::ChangeBroadcaster,
+                               private juce::Timer
 {
 public:
     McfxSendAudioProcessor();
@@ -44,16 +47,20 @@ public:
     // Editor-facing: configure the sender's destination. The "Apply" button
     // calls this — it replaces all existing targets with a single one.
     // Empty host clears (Disconnect button uses host="" port=0).
-    void setSendTarget (const juce::String& host, int port);
+    // isUserAction=true (default, from editor) cancels any pending
+    // auto-reconnect attempt; setStateInformation passes false.
+    void setSendTarget (const juce::String& host, int port, bool isUserAction = true);
     juce::String getSendHost() const { const juce::ScopedLock sl (paramLock); return sendHost; }
     int          getSendPort() const { const juce::ScopedLock sl (paramLock); return sendPort; }
 
     // Multi-target additions: clicking a discovered receiver in the editor
     // ADDS that receiver to the targets list (additive), not REPLACES.
-    void addTarget    (const juce::String& host, int port, std::uint32_t wireUid = 0)
-                       { stream.addTarget (host, port, wireUid); }
-    void removeTarget (const juce::String& host, int port) { stream.removeTarget (host, port); }
-    void clearTargets() { stream.clearTargets(); }
+    // isUserAction=true (default) cancels auto-reconnect; the auto-reconnect
+    // timer passes false when re-issuing connects on its own ticks.
+    void addTarget    (const juce::String& host, int port, std::uint32_t wireUid = 0,
+                       bool isUserAction = true);
+    void removeTarget (const juce::String& host, int port, bool isUserAction = true);
+    void clearTargets (bool isUserAction = true);
     std::vector<mcfx::net::SendStream::Target> getTargets() const
     {
         return stream.getTargets();
@@ -157,10 +164,39 @@ public:
     void getStateInformation (juce::MemoryBlock& dest) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // ----- Auto-reconnect on project load ----------------------------------
+
+    // User-visible toggle persisted in plugin state. When off,
+    // setStateInformation skips arming the auto-reconnect retry loop.
+    void setAutoReconnectEnabled (bool on);
+    bool isAutoReconnectEnabled() const noexcept { return autoReconnectEnabled.load (std::memory_order_acquire); }
+
+    // Editor uses these to render a "Reconnecting to N peers… X s" banner.
+    int getArmedPeerCount() const;
+    int getAutoReconnectSecondsRemaining() const;
+
 private:
     void applyTargetIfChanged();
 
     void refreshSenderAdvertise();
+
+    // Cancel any in-flight auto-reconnect attempt. Called from any user-
+    // driven connect/disconnect to hand control back to the user.
+    void cancelAutoReconnect();
+
+    // juce::Timer — drives the 1 Hz auto-reconnect tick on the message
+    // thread. Only running while armedPeers is non-empty.
+    void timerCallback() override;
+
+    // Look up the current Discovery service matching wireUid. Returns
+    // nullopt if no Bonjour entry currently has that UID.
+    struct BonjourHint
+    {
+        juce::String host;     // Bonjour-advertised computer name
+        juce::String project;
+        juce::String track;
+    };
+    BonjourHint lookupBonjourHint (std::uint32_t wireUid) const;
 
 public:
     // VST3-only hook: hand REAPER our integration object so we can pull
@@ -193,6 +229,31 @@ private:
     double currentSampleRate = 48000.0;
 
     mcfx::net::MeterBank meters;
+
+    // ----- Auto-reconnect state -------------------------------------------
+
+    // One entry per peer the previous session was connected to. Drained as
+    // each entry's underlying Target reaches Active, or as the 60 s window
+    // expires. All access on the message thread under armedLock.
+    struct ArmedPeer
+    {
+        juce::String  host;
+        int           port = 0;
+        BonjourHint   hint;            // empty fields if not Bonjour-paired
+        juce::Time    armedAt;
+        std::uint32_t currentWireUid = 0; // last UID we resolved via Bonjour
+    };
+    mutable juce::CriticalSection armedLock;
+    std::vector<ArmedPeer> armedPeers;
+
+    // Captured at the moment the user clicks Connect on a Bonjour-discovered
+    // row, keyed by the resulting target's (host, port). State save reads
+    // this so the next session can re-arm by Bonjour identity if the peer's
+    // ephemeral IP/port has drifted.
+    mutable juce::CriticalSection bonjourHintsLock;
+    std::map<std::pair<juce::String, int>, BonjourHint> lastBonjour;
+
+    std::atomic<bool> autoReconnectEnabled { true };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (McfxSendAudioProcessor)
 };

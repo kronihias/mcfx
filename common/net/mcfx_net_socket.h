@@ -97,6 +97,23 @@ inline juce::String getFriendlyComputerName()
     return juce::SystemStats::getComputerName();
 }
 
+// Returns this machine's IPv4 interface addresses in dotted-quad form,
+// minus 127.0.0.1. Order is whatever the OS reports — typically the
+// active LAN interface comes first. Used by the editors' "Listening on…"
+// label so a user can read off the address to give to a peer connecting
+// via Direct IP.
+inline juce::StringArray getLocalIPv4Addresses()
+{
+    juce::StringArray out;
+    for (const auto& a : juce::IPAddress::getAllAddresses (/*includeIPv6=*/false))
+    {
+        const auto s = a.toString();
+        if (s.isEmpty() || s == "127.0.0.1") continue;
+        out.addIfNotAlreadyThere (s);
+    }
+    return out;
+}
+
 }} // namespace mcfx::net
 
 namespace mcfx { namespace net {

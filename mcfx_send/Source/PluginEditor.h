@@ -74,6 +74,8 @@ private:
     juce::Label    pwLabel { {}, "Password (optional):" };
     juce::TextEditor pwEditor;
 
+    juce::ToggleButton autoReconnectToggle { "Auto-reconnect on load" };
+
     // Mirrors the receiver's boundLabel — shows the sender's locally
     // bound UDP port, so the user can paste it into a Direct-IP form
     // on a peer that can't see Bonjour.
