@@ -79,7 +79,15 @@ enum class IIRSubType
     CrossoverLP,
     CrossoverHP,
     CrossoverAP,
-    RawBiquad
+    RawBiquad,
+    Chebyshev1LP,
+    Chebyshev1HP,
+    Chebyshev2LP,
+    Chebyshev2HP,
+    EllipticLP,
+    EllipticHP,
+    BesselLP,
+    BesselHP
 };
 
 class EqBand
@@ -110,6 +118,16 @@ public:
 
     int getCrossoverOrder() const { return crossoverOrder_; }
     void setCrossoverOrder(int lrOrder);
+
+    // --- Higher-order IIR family parameters (Chebyshev I/II, Bessel) ---
+    int getAnalogOrder() const { return analogOrder_; }
+    void setAnalogOrder(int order);
+
+    float getRipplePassDB() const { return ripplePassDB_; }
+    void setRipplePassDB(float db);
+
+    float getRippleStopDB() const { return rippleStopDB_; }
+    void setRippleStopDB(float db);
 
     // --- FIR ---
     const std::vector<float>& getFIRCoefficients() const { return firCoeffs_; }
@@ -223,6 +241,11 @@ private:
     BiquadCoeffs rawCoeffs_ = { 1.f, 0.f, 0.f, 1.f, 0.f, 0.f };
     int butterworthOrder_ = 2;
     int crossoverOrder_ = 4;  // LR order: 2, 4, 6, 8
+
+    // Chebyshev / Bessel cascade parameters
+    int   analogOrder_   = 4;
+    float ripplePassDB_  = 1.0f;     // Chebyshev I passband ripple
+    float rippleStopDB_  = 60.0f;    // Chebyshev II stopband attenuation (positive dB)
     std::vector<std::array<float, 5>> cascadeCoeffs_;  // [b0,b1,b2,a1,a2] per section (for freq response)
 
     // Standard-form coefficients (for frequency response display)

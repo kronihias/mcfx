@@ -18,6 +18,7 @@
  */
 
 #include "EqBand.h"
+#include "AnalogPrototypeDesigner.h"
 
 EqBand::EqBand()
 {
@@ -112,7 +113,23 @@ bool EqBand::usesCascade() const
         || iirSubType_ == IIRSubType::ButterworthHP
         || iirSubType_ == IIRSubType::CrossoverLP
         || iirSubType_ == IIRSubType::CrossoverHP
-        || iirSubType_ == IIRSubType::CrossoverAP;
+        || iirSubType_ == IIRSubType::CrossoverAP
+        || iirSubType_ == IIRSubType::Chebyshev1LP
+        || iirSubType_ == IIRSubType::Chebyshev1HP
+        || iirSubType_ == IIRSubType::Chebyshev2LP
+        || iirSubType_ == IIRSubType::Chebyshev2HP
+        || iirSubType_ == IIRSubType::EllipticLP
+        || iirSubType_ == IIRSubType::EllipticHP
+        || iirSubType_ == IIRSubType::BesselLP
+        || iirSubType_ == IIRSubType::BesselHP;
+}
+
+static bool isAnalogPrototypeSubType (IIRSubType st)
+{
+    return st == IIRSubType::Chebyshev1LP || st == IIRSubType::Chebyshev1HP
+        || st == IIRSubType::Chebyshev2LP || st == IIRSubType::Chebyshev2HP
+        || st == IIRSubType::EllipticLP   || st == IIRSubType::EllipticHP
+        || st == IIRSubType::BesselLP     || st == IIRSubType::BesselHP;
 }
 
 bool EqBand::isBiquadStable(float a1, float a2)
@@ -157,6 +174,31 @@ void EqBand::setCrossoverOrder(int lrOrder)
     if (type_ == EqBandType::IIR && !hasRawCoeffs_
         && (iirSubType_ == IIRSubType::CrossoverLP || iirSubType_ == IIRSubType::CrossoverHP
             || iirSubType_ == IIRSubType::CrossoverAP))
+        updateIIRCoefficients();
+}
+
+void EqBand::setAnalogOrder(int order)
+{
+    analogOrder_ = jlimit(1, 12, order);
+    if (type_ == EqBandType::IIR && !hasRawCoeffs_ && isAnalogPrototypeSubType(iirSubType_))
+        updateIIRCoefficients();
+}
+
+void EqBand::setRipplePassDB(float db)
+{
+    ripplePassDB_ = jlimit(0.001f, 12.0f, db);
+    if (type_ == EqBandType::IIR && !hasRawCoeffs_
+        && (iirSubType_ == IIRSubType::Chebyshev1LP || iirSubType_ == IIRSubType::Chebyshev1HP
+            || iirSubType_ == IIRSubType::EllipticLP || iirSubType_ == IIRSubType::EllipticHP))
+        updateIIRCoefficients();
+}
+
+void EqBand::setRippleStopDB(float db)
+{
+    rippleStopDB_ = jlimit(20.0f, 120.0f, db);
+    if (type_ == EqBandType::IIR && !hasRawCoeffs_
+        && (iirSubType_ == IIRSubType::Chebyshev2LP || iirSubType_ == IIRSubType::Chebyshev2HP
+            || iirSubType_ == IIRSubType::EllipticLP || iirSubType_ == IIRSubType::EllipticHP))
         updateIIRCoefficients();
 }
 
@@ -488,6 +530,9 @@ void EqBand::syncParametersFrom(const EqBand& source)
             linearGain_ = source.linearGain_;
             butterworthOrder_ = source.butterworthOrder_;
             crossoverOrder_ = source.crossoverOrder_;
+            analogOrder_   = source.analogOrder_;
+            ripplePassDB_  = source.ripplePassDB_;
+            rippleStopDB_  = source.rippleStopDB_;
 
             if (needsCoeffUpdate || usesCascade())
             {
@@ -688,6 +733,44 @@ void EqBand::updateIIRCoefficients()
                     float a1 = c[3], a2 = c[4];
                     cascadeCoeffs_[i] = { a2, a1, 1.0f, a1, a2 };
                 }
+            }
+            break;
+        }
+
+        case IIRSubType::Chebyshev1LP:
+        case IIRSubType::Chebyshev1HP:
+        case IIRSubType::Chebyshev2LP:
+        case IIRSubType::Chebyshev2HP:
+        case IIRSubType::EllipticLP:
+        case IIRSubType::EllipticHP:
+        case IIRSubType::BesselLP:
+        case IIRSubType::BesselHP:
+        {
+            using namespace EqDesign;
+            Family fam = Family::Bessel;
+            switch (iirSubType_)
+            {
+                case IIRSubType::Chebyshev1LP:
+                case IIRSubType::Chebyshev1HP: fam = Family::Chebyshev1; break;
+                case IIRSubType::Chebyshev2LP:
+                case IIRSubType::Chebyshev2HP: fam = Family::Chebyshev2; break;
+                case IIRSubType::EllipticLP:
+                case IIRSubType::EllipticHP:   fam = Family::Elliptic;   break;
+                default: fam = Family::Bessel; break;
+            }
+            Mode mode = (iirSubType_ == IIRSubType::Chebyshev1HP
+                      || iirSubType_ == IIRSubType::Chebyshev2HP
+                      || iirSubType_ == IIRSubType::EllipticHP
+                      || iirSubType_ == IIRSubType::BesselHP)
+                ? Mode::Highpass : Mode::Lowpass;
+
+            auto sos = designDigitalCascade(fam, mode, analogOrder_, f, sampleRate_,
+                                              ripplePassDB_, rippleStopDB_);
+            cascadeCoeffs_.resize(sos.size());
+            for (int i = 0; i < (int)sos.size(); ++i)
+            {
+                cascadeCoeffs_[i] = { (float)sos[i].b0, (float)sos[i].b1, (float)sos[i].b2,
+                                       (float)sos[i].a1, (float)sos[i].a2 };
             }
             break;
         }
@@ -1029,6 +1112,14 @@ static String iirSubTypeToString(IIRSubType st)
         case IIRSubType::CrossoverHP:   return "crossover_hp";
         case IIRSubType::CrossoverAP:   return "crossover_ap";
         case IIRSubType::RawBiquad:     return "raw_biquad";
+        case IIRSubType::Chebyshev1LP:  return "chebyshev1_lp";
+        case IIRSubType::Chebyshev1HP:  return "chebyshev1_hp";
+        case IIRSubType::Chebyshev2LP:  return "chebyshev2_lp";
+        case IIRSubType::Chebyshev2HP:  return "chebyshev2_hp";
+        case IIRSubType::EllipticLP:    return "elliptic_lp";
+        case IIRSubType::EllipticHP:    return "elliptic_hp";
+        case IIRSubType::BesselLP:      return "bessel_lp";
+        case IIRSubType::BesselHP:      return "bessel_hp";
     }
     return "peak";
 }
@@ -1048,6 +1139,14 @@ static IIRSubType stringToIIRSubType(const String& s)
     if (s == "crossover_hp")  return IIRSubType::CrossoverHP;
     if (s == "crossover_ap")  return IIRSubType::CrossoverAP;
     if (s == "raw_biquad")   return IIRSubType::RawBiquad;
+    if (s == "chebyshev1_lp") return IIRSubType::Chebyshev1LP;
+    if (s == "chebyshev1_hp") return IIRSubType::Chebyshev1HP;
+    if (s == "chebyshev2_lp") return IIRSubType::Chebyshev2LP;
+    if (s == "chebyshev2_hp") return IIRSubType::Chebyshev2HP;
+    if (s == "elliptic_lp")   return IIRSubType::EllipticLP;
+    if (s == "elliptic_hp")   return IIRSubType::EllipticHP;
+    if (s == "bessel_lp")     return IIRSubType::BesselLP;
+    if (s == "bessel_hp")     return IIRSubType::BesselHP;
     return IIRSubType::Peak;
 }
 
@@ -1088,6 +1187,17 @@ var EqBand::toJson() const
                     else if (iirSubType_ == IIRSubType::CrossoverLP || iirSubType_ == IIRSubType::CrossoverHP
                              || iirSubType_ == IIRSubType::CrossoverAP)
                         params->setProperty("order", crossoverOrder_);
+                    else if (isAnalogPrototypeSubType(iirSubType_))
+                    {
+                        params->setProperty("order", analogOrder_);
+                        bool isCheby1 = iirSubType_ == IIRSubType::Chebyshev1LP || iirSubType_ == IIRSubType::Chebyshev1HP;
+                        bool isCheby2 = iirSubType_ == IIRSubType::Chebyshev2LP || iirSubType_ == IIRSubType::Chebyshev2HP;
+                        bool isElliptic = iirSubType_ == IIRSubType::EllipticLP || iirSubType_ == IIRSubType::EllipticHP;
+                        if (isCheby1 || isElliptic)
+                            params->setProperty("ripple_pass_db", ripplePassDB_);
+                        if (isCheby2 || isElliptic)
+                            params->setProperty("ripple_stop_db", rippleStopDB_);
+                    }
                     else
                     {
                         params->setProperty("Q", q_);
@@ -1269,6 +1379,19 @@ EqBand* EqBand::fromJson(const var& json)
                 else if (subType == IIRSubType::CrossoverLP || subType == IIRSubType::CrossoverHP
                          || subType == IIRSubType::CrossoverAP)
                     band->setCrossoverOrder((int)params.getProperty("order", 4));
+                else if (isAnalogPrototypeSubType(subType))
+                {
+                    bool isCheby1 = subType == IIRSubType::Chebyshev1LP || subType == IIRSubType::Chebyshev1HP;
+                    bool isCheby2 = subType == IIRSubType::Chebyshev2LP || subType == IIRSubType::Chebyshev2HP;
+                    bool isElliptic = subType == IIRSubType::EllipticLP || subType == IIRSubType::EllipticHP;
+                    if (isCheby1 || isElliptic)
+                        band->setRipplePassDB((float)params.getProperty("ripple_pass_db", 1.0));
+                    if (isCheby2 || isElliptic)
+                        band->setRippleStopDB((float)params.getProperty("ripple_stop_db", 60.0));
+                    // setAnalogOrder triggers the coefficient rebuild — call it last so
+                    // ripple values are in place when coefficients are computed.
+                    band->setAnalogOrder((int)params.getProperty("order", 4));
+                }
                 else
                 {
                     band->setQ((float)params.getProperty("Q", 0.707));

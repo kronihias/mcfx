@@ -538,6 +538,14 @@ static bool bandStructureMatchesJson(const EqBand* band, const var& json)
     else if (typeStr == "crossover_lp")   targetSub = IIRSubType::CrossoverLP;
     else if (typeStr == "crossover_hp")   targetSub = IIRSubType::CrossoverHP;
     else if (typeStr == "crossover_ap")   targetSub = IIRSubType::CrossoverAP;
+    else if (typeStr == "chebyshev1_lp")  targetSub = IIRSubType::Chebyshev1LP;
+    else if (typeStr == "chebyshev1_hp")  targetSub = IIRSubType::Chebyshev1HP;
+    else if (typeStr == "chebyshev2_lp")  targetSub = IIRSubType::Chebyshev2LP;
+    else if (typeStr == "chebyshev2_hp")  targetSub = IIRSubType::Chebyshev2HP;
+    else if (typeStr == "elliptic_lp")    targetSub = IIRSubType::EllipticLP;
+    else if (typeStr == "elliptic_hp")    targetSub = IIRSubType::EllipticHP;
+    else if (typeStr == "bessel_lp")      targetSub = IIRSubType::BesselLP;
+    else if (typeStr == "bessel_hp")      targetSub = IIRSubType::BesselHP;
     else return false; // unknown type
 
     if (targetSub != band->getIIRSubType()) return false;
@@ -553,6 +561,16 @@ static bool bandStructureMatchesJson(const EqBand* band, const var& json)
     {
         int targetOrder = (int)params.getProperty("order", 4);
         if (targetOrder != band->getCrossoverOrder()) return false;
+    }
+    else if (targetSub == IIRSubType::Chebyshev1LP || targetSub == IIRSubType::Chebyshev1HP
+          || targetSub == IIRSubType::Chebyshev2LP || targetSub == IIRSubType::Chebyshev2HP
+          || targetSub == IIRSubType::EllipticLP   || targetSub == IIRSubType::EllipticHP
+          || targetSub == IIRSubType::BesselLP     || targetSub == IIRSubType::BesselHP)
+    {
+        // Order changes the section count → structural; ripple changes the
+        // coefficients only → can sync.
+        int targetOrder = (int)params.getProperty("order", 4);
+        if (targetOrder != band->getAnalogOrder()) return false;
     }
 
     return true;
