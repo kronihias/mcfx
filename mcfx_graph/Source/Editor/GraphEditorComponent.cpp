@@ -336,11 +336,6 @@ void GraphEditorComponent::mouseUp (const juce::MouseEvent& e)
     for (auto* nc : nodeComps_)
     {
         if (! nc->getBounds().intersects (rect)) continue;
-        // Don't include terminals in marquee selections by default — they
-        // tend to be left in fixed positions.
-        const auto kind = nc->getNode().kind;
-        if (kind == NodeKind::InputTerminal || kind == NodeKind::OutputTerminal) continue;
-
         addToSelection (nc->getNode().uuid);
     }
 
