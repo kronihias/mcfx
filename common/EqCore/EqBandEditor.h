@@ -69,6 +69,10 @@ public:
     void setCoefficients(const std::vector<float>& coeffs)
     {
         coeffs_ = coeffs;
+        // Reset view to the full FIR. Mouse-wheel zoom / horizontal drag / double-click
+        // (in mouse handlers below) let the user inspect a sub-range without resampling.
+        viewStart_ = 0.f;
+        viewEnd_   = jmax (1.f, (float) ((int) coeffs_.size() - 1));
         repaint();
     }
 
@@ -97,7 +101,7 @@ public:
         else
         {
 
-        const float padT = 6.f, padB = 6.f, padR = 6.f;
+        const float padT = 6.f, padB = 16.f, padR = 6.f;   // padB leaves room for x-axis labels
         const float axisW = 38.f; // left margin for Y-axis labels
         auto plotArea = Rectangle<float>(area.getX() + axisW, area.getY() + padT,
                                           area.getWidth() - axisW - padR,
@@ -107,10 +111,24 @@ public:
         float x0 = plotArea.getX();
         float y0 = plotArea.getY();
 
-        // Find peak for scaling — round up to a "nice" value
+        // ---- View range ----
+        const int n = (int) coeffs_.size();
+        float viewStart = jlimit (0.f, (float)(n - 1), viewStart_);
+        float viewEnd   = jlimit (viewStart + 1.f, (float)(n - 1),
+                                   viewEnd_ > viewStart ? viewEnd_ : (float)(n - 1));
+        const float visible = viewEnd - viewStart;
+        auto sampleToX = [&] (float s) {
+            return x0 + (s - viewStart) / visible * w;
+        };
+
+        // Find peak for scaling — over the visible range only, so zoom-to-tail
+        // shows useful detail of the small ringing samples instead of being
+        // dwarfed by the (off-screen) main impulse.
+        int iStart = jmax (0, (int) std::floor (viewStart));
+        int iEnd   = jmin (n - 1, (int) std::ceil  (viewEnd));
         float rawPeak = 0.f;
-        for (auto c : coeffs_)
-            rawPeak = jmax(rawPeak, std::abs(c));
+        for (int i = iStart; i <= iEnd; ++i)
+            rawPeak = jmax (rawPeak, std::abs (coeffs_[(size_t) i]));
         if (rawPeak < 1e-10f) rawPeak = 1.f;
 
         // Choose a nice axis range: find smallest nice number >= rawPeak
@@ -186,102 +204,109 @@ public:
             }
         }
 
+        // --- X-axis grid + sample-number labels ---
+        // Pick a "nice" sample step based on the visible range — aim for ~5–8 ticks.
+        {
+            double rawStep = (double) visible / 6.0;
+            double mag10 = std::pow (10.0, std::floor (std::log10 (jmax (1.0, rawStep))));
+            double norm  = rawStep / mag10;
+            double nice  = norm < 1.5 ? 1.0 : norm < 3.5 ? 2.0 : norm < 7.5 ? 5.0 : 10.0;
+            int step = jmax (1, (int) std::round (nice * mag10));
+            int firstTick = ((int) std::ceil (viewStart / step)) * step;
+
+            g.setColour (Colour (0xff2a2a2a));
+            for (int s = firstTick; s <= (int) viewEnd; s += step)
+            {
+                float xp = sampleToX ((float) s);
+                g.drawVerticalLine ((int) xp, y0, y0 + h);
+            }
+
+            g.setFont (Font (FontOptions (9.f)));
+            g.setColour (Colours::white.withAlpha (0.45f));
+            for (int s = firstTick; s <= (int) viewEnd; s += step)
+            {
+                float xp = sampleToX ((float) s);
+                g.drawText (String (s), (int) xp - 24, (int) (y0 + h + 1), 48, 12,
+                            Justification::centred, false);
+            }
+        }
+
         // --- Waveform ---
-        int n = (int)coeffs_.size();
-        int plotPoints = jmin(n, (int)w * 2); // at most 2 points per pixel
-        float sampleW = w / (float)jmax(1, n - 1);
+        // Decimate when there are more visible samples than 2× the pixel width.
+        int visibleCount = iEnd - iStart + 1;
+        bool decimated = (float) visibleCount > w * 2.f;
 
-        // For large FIR: use min/max decimation per pixel column to show envelope
-        bool decimated = plotPoints < n;
-
-        // Fill area under curve
-        Path fillPath;
-        Path linePath;
+        Path fillPath, linePath;
         bool started = false;
 
-        if (!decimated)
+        if (! decimated)
         {
-            // Small enough to draw every sample
-            for (int i = 0; i < n; ++i)
+            for (int i = iStart; i <= iEnd; ++i)
             {
-                float xp = x0 + (float)i * sampleW;
-                float yp = midY - coeffs_[i] * scale;
-                if (!started) { fillPath.startNewSubPath(xp, midY); started = true; }
-                fillPath.lineTo(xp, yp);
-                if (i == 0) linePath.startNewSubPath(xp, yp);
-                else linePath.lineTo(xp, yp);
+                float xp = sampleToX ((float) i);
+                float yp = midY - coeffs_[(size_t) i] * scale;
+                if (! started) { fillPath.startNewSubPath (xp, midY); started = true; }
+                fillPath.lineTo (xp, yp);
+                if (i == iStart) linePath.startNewSubPath (xp, yp);
+                else             linePath.lineTo (xp, yp);
             }
-            fillPath.lineTo(x0 + (float)(n - 1) * sampleW, midY);
+            fillPath.lineTo (sampleToX ((float) iEnd), midY);
         }
         else
         {
-            // Decimate: for each pixel column, find min and max sample values
-            int numCols = (int)w;
+            // Stick plot: per-pixel column, draw min..max range from this column's samples.
+            int numCols = (int) w;
             for (int col = 0; col < numCols; ++col)
             {
-                int i0 = (int)((float)col / w * n);
-                int i1 = jmin(n - 1, (int)((float)(col + 1) / w * n));
-                float vmin = coeffs_[i0], vmax = coeffs_[i0];
+                float colXf = (float) col;
+                float sStart = viewStart + (colXf       / w) * visible;
+                float sEnd   = viewStart + ((colXf + 1) / w) * visible;
+                int i0 = jmax (0,     (int) std::floor (sStart));
+                int i1 = jmin (n - 1, (int) std::ceil  (sEnd));
+                if (i1 < i0) continue;
+                float vmin = coeffs_[(size_t) i0], vmax = vmin;
                 for (int i = i0 + 1; i <= i1; ++i)
                 {
-                    vmin = jmin(vmin, coeffs_[i]);
-                    vmax = jmax(vmax, coeffs_[i]);
+                    vmin = jmin (vmin, coeffs_[(size_t) i]);
+                    vmax = jmax (vmax, coeffs_[(size_t) i]);
                 }
-                float xp = x0 + (float)col;
+                float xp = x0 + colXf;
                 float ypMin = midY - vmin * scale;
                 float ypMax = midY - vmax * scale;
-
-                if (!started)
-                {
-                    fillPath.startNewSubPath(xp, midY);
-                    linePath.startNewSubPath(xp, ypMax);
-                    started = true;
-                }
-                // Draw envelope: top edge then bottom edge on way back
-                linePath.lineTo(xp, ypMax);
-                fillPath.lineTo(xp, ypMax);
+                if (vmax > 0.f) { fillPath.startNewSubPath (xp, midY); fillPath.lineTo (xp, ypMax); }
+                if (vmin < 0.f) { fillPath.startNewSubPath (xp, midY); fillPath.lineTo (xp, ypMin); }
+                linePath.startNewSubPath (xp, ypMin);
+                linePath.lineTo (xp, ypMax);
             }
-            // Close the envelope by going back along the bottom
-            for (int col = numCols - 1; col >= 0; --col)
-            {
-                int i0 = (int)((float)col / w * n);
-                int i1 = jmin(n - 1, (int)((float)(col + 1) / w * n));
-                float vmin = coeffs_[i0];
-                for (int i = i0 + 1; i <= i1; ++i)
-                    vmin = jmin(vmin, coeffs_[i]);
-                float xp = x0 + (float)col;
-                float ypMin = midY - vmin * scale;
-                linePath.lineTo(xp, ypMin);
-            }
-            fillPath.lineTo(x0 + w, midY);
         }
 
-        fillPath.closeSubPath();
-        g.setColour(Colours::white.withAlpha(0.08f));
-        g.fillPath(fillPath);
+        if (! decimated)
+            fillPath.closeSubPath();
+        g.setColour (Colours::white.withAlpha (0.08f));
+        g.fillPath (fillPath);
 
-        g.setColour(Colours::white.withAlpha(decimated ? 0.4f : 0.7f));
-        g.strokePath(linePath, PathStrokeType(decimated ? 0.5f : 1.2f));
+        g.setColour (Colours::white.withAlpha (decimated ? 0.55f : 0.7f));
+        g.strokePath (linePath, PathStrokeType (decimated ? 1.f : 1.2f));
 
-        // Draw sample dots if not too many
-        if (n <= 200)
+        // Draw sample dots when zoomed enough that they don't cluster
+        if (visibleCount <= 200 && ! decimated)
         {
-            float dotR = (n <= 64) ? 2.f : 1.2f;
-            g.setColour(Colours::white.withAlpha(0.9f));
-            for (int i = 0; i < n; ++i)
+            float dotR = (visibleCount <= 64) ? 2.f : 1.2f;
+            g.setColour (Colours::white.withAlpha (0.9f));
+            for (int i = iStart; i <= iEnd; ++i)
             {
-                float xp = x0 + (float)i * sampleW;
-                float yp = midY - coeffs_[i] * scale;
-                g.fillEllipse(xp - dotR, yp - dotR, dotR * 2.f, dotR * 2.f);
+                float xp = sampleToX ((float) i);
+                float yp = midY - coeffs_[(size_t) i] * scale;
+                g.fillEllipse (xp - dotR, yp - dotR, dotR * 2.f, dotR * 2.f);
             }
         }
 
         // Label: tap count
-        g.setColour(Colours::white.withAlpha(0.35f));
-        g.setFont(Font(FontOptions(10.f)));
-        g.drawText(String(n) + " taps",
-                   (int)(x0), (int)(y0 + h - 14.f), (int)w - 4, 14,
-                   Justification::bottomRight);
+        g.setColour (Colours::white.withAlpha (0.35f));
+        g.setFont (Font (FontOptions (10.f)));
+        g.drawText (String (n) + " taps",
+                    (int) (x0), (int) (y0 + h - 14.f), (int) w - 4, 14,
+                    Justification::bottomRight);
         } // end of else (non-empty coefficients)
 
         // Drag-over highlight
@@ -296,9 +321,85 @@ public:
         }
     }
 
+    void mouseWheelMove (const MouseEvent& e, const MouseWheelDetails& wheel) override
+    {
+        const int n = (int) coeffs_.size();
+        if (n < 4) return;
+        const float axisW = 38.f, padR = 6.f;
+        float plotX0 = (float) axisW;
+        float plotW  = (float) getWidth() - axisW - padR;
+        if (plotW <= 1.f) return;
+
+        float vs = jlimit (0.f, (float)(n - 1), viewStart_);
+        float ve = jlimit (vs + 1.f, (float)(n - 1),
+                            viewEnd_ > vs ? viewEnd_ : (float)(n - 1));
+        float visible = ve - vs;
+
+        float zoom = jlimit (0.6f, 1.5f, 1.f - wheel.deltaY * 0.25f);
+        float newVisible = jlimit (3.f, (float)(n - 1), visible * zoom);
+
+        // Zoom around the sample under the cursor
+        float frac = jlimit (0.f, 1.f, ((float) e.getPosition().getX() - plotX0) / plotW);
+        float cursorSample = vs + frac * visible;
+
+        viewStart_ = cursorSample - frac * newVisible;
+        viewEnd_   = cursorSample + (1.f - frac) * newVisible;
+
+        clampView (n);
+        repaint();
+    }
+
+    void mouseDown (const MouseEvent&) override
+    {
+        dragStartViewStart_ = viewStart_;
+        dragStartViewEnd_   = viewEnd_;
+    }
+
+    void mouseDrag (const MouseEvent& e) override
+    {
+        const int n = (int) coeffs_.size();
+        if (n < 4) return;
+        const float axisW = 38.f, padR = 6.f;
+        float plotW = (float) getWidth() - axisW - padR;
+        if (plotW <= 1.f) return;
+
+        float visible = dragStartViewEnd_ - dragStartViewStart_;
+        if (visible <= 0.f) return;
+        float dxSamples = -(float) e.getDistanceFromDragStartX() * visible / plotW;
+        viewStart_ = dragStartViewStart_ + dxSamples;
+        viewEnd_   = dragStartViewEnd_   + dxSamples;
+        clampView (n);
+        repaint();
+    }
+
+    void mouseDoubleClick (const MouseEvent&) override
+    {
+        viewStart_ = 0.f;
+        viewEnd_   = jmax (1.f, (float) ((int) coeffs_.size() - 1));
+        repaint();
+    }
+
 private:
+    void clampView (int n)
+    {
+        float maxEnd = (float) (n - 1);
+        float visible = viewEnd_ - viewStart_;
+        if (visible < 3.f) visible = 3.f;
+        if (visible > maxEnd) visible = maxEnd;
+        if (viewStart_ < 0.f)        { viewStart_ = 0.f;          viewEnd_ = visible; }
+        if (viewEnd_   > maxEnd)     { viewEnd_   = maxEnd;       viewStart_ = maxEnd - visible; }
+        if (viewStart_ < 0.f) viewStart_ = 0.f;
+    }
+
     std::vector<float> coeffs_;
     bool dragOver_ = false;
+
+    // X-axis view range (in samples). Mouse-wheel zooms, horizontal drag pans,
+    // double-click resets. setCoefficients() also resets to the full FIR.
+    float viewStart_ = 0.f;
+    float viewEnd_   = 0.f;
+    float dragStartViewStart_ = 0.f;
+    float dragStartViewEnd_   = 0.f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(FIRPlot)
 };
@@ -410,7 +511,8 @@ private:
     TextButton btnCopyCoeffs_  { "Copy" };
     TextButton btnPasteCoeffs_ { "Paste" };
 
-    TextButton btnLoadFIR_ { "Load FIR..." };
+    TextButton btnLoadFIR_   { "Load FIR..." };
+    TextButton btnDesignFIR_ { "Design..." };
     Label lblFIRInfo_ { {}, "" };
     FIRPlot firPlot_;
     void loadFIRFile(const File& file);
