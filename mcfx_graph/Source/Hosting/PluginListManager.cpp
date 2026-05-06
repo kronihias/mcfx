@@ -53,7 +53,20 @@ void PluginListManager::startRescan (std::function<void (float, juce::String, in
 {
     cancelRescan();
 
-    if (! scannerExe_.existsAsFile()) return;
+    if (! scannerExe_.existsAsFile())
+    {
+        // Fire the progress callback so the editor can surface the failure
+        // instead of getting stuck on "Scanning…". Deferred via callAsync so
+        // the caller can still set its own pre-scan UI state immediately
+        // after this returns.
+        if (progressCb)
+            juce::MessageManager::callAsync ([cb = std::move (progressCb)]()
+            {
+                cb (1.0f, "Scanner helper not found in plugin bundle", 0);
+            });
+
+        return;
+    }
 
     scanner_ = std::make_unique<ParallelPluginScanner> (formatManager_,
                                                         knownPluginList_,

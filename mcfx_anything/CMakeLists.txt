@@ -56,30 +56,48 @@ target_link_libraries(mcfx_plugin_scanner PRIVATE
     juce::juce_audio_utils
     juce::juce_recommended_config_flags)
 
-# Copy scanner into plugin bundles so the plugin can find it at runtime
+# Copy scanner into plugin bundles so the plugin can find it at runtime.
+#
+# The post-build is hooked on the *host plugin* target rather than the scanner,
+# with an explicit add_dependencies edge: this guarantees the scanner exists
+# before the plugin's post-build chain runs, and — crucially — places the copy
+# AFTER JUCE's own JUCE_COPY_PLUGIN_AFTER_BUILD post-build (registered inside
+# juce_add_plugin). Hooking it on the scanner target instead races with JUCE's
+# copy and produces installer bundles missing Contents/Helpers/.
 foreach(tgt IN LISTS MCFX_TARGETS)
     if(TARGET ${tgt}_VST3)
+        add_dependencies(${tgt}_VST3 mcfx_plugin_scanner)
         if(APPLE)
-            # macOS: <bundle>/Contents/Helpers/
-            add_custom_command(TARGET mcfx_plugin_scanner POST_BUILD
+            # macOS: <bundle>/Contents/Helpers/ — populate both the artefacts
+            # bundle and the JUCE_VST3_COPY_DIR copy that pkgbuild will pick up.
+            add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory
                     "$<TARGET_BUNDLE_DIR:${tgt}_VST3>/Contents/Helpers"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_FILE:mcfx_plugin_scanner>"
                     "$<TARGET_BUNDLE_DIR:${tgt}_VST3>/Contents/Helpers/"
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "${BIN_DIR}/vst3/${tgt}.vst3/Contents/Helpers"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:mcfx_plugin_scanner>"
+                    "${BIN_DIR}/vst3/${tgt}.vst3/Contents/Helpers/"
                 VERBATIM)
         else()
             # Windows/Linux: alongside the plugin binary
-            add_custom_command(TARGET mcfx_plugin_scanner POST_BUILD
+            add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_FILE:mcfx_plugin_scanner>"
                     "$<TARGET_FILE_DIR:${tgt}_VST3>/"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:mcfx_plugin_scanner>"
+                    "${BIN_DIR}/vst3/"
                 VERBATIM)
         endif()
     endif()
     if(TARGET ${tgt}_AU)
         # AU is macOS-only
-        add_custom_command(TARGET mcfx_plugin_scanner POST_BUILD
+        add_dependencies(${tgt}_AU mcfx_plugin_scanner)
+        add_custom_command(TARGET ${tgt}_AU POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory
                 "$<TARGET_BUNDLE_DIR:${tgt}_AU>/Contents/Helpers"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -88,8 +106,9 @@ foreach(tgt IN LISTS MCFX_TARGETS)
             VERBATIM)
     endif()
     if(TARGET ${tgt}_Standalone)
+        add_dependencies(${tgt}_Standalone mcfx_plugin_scanner)
         if(APPLE)
-            add_custom_command(TARGET mcfx_plugin_scanner POST_BUILD
+            add_custom_command(TARGET ${tgt}_Standalone POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E make_directory
                     "$<TARGET_BUNDLE_DIR:${tgt}_Standalone>/Contents/Helpers"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -97,7 +116,7 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                     "$<TARGET_BUNDLE_DIR:${tgt}_Standalone>/Contents/Helpers/"
                 VERBATIM)
         else()
-            add_custom_command(TARGET mcfx_plugin_scanner POST_BUILD
+            add_custom_command(TARGET ${tgt}_Standalone POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_FILE:mcfx_plugin_scanner>"
                     "$<TARGET_FILE_DIR:${tgt}_Standalone>/"
