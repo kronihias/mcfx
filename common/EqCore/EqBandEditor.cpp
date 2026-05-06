@@ -49,14 +49,49 @@ EqBandEditor::EqBandEditor()
     cbIIRSubType_.addItem("Crossover HP", 12);
     cbIIRSubType_.addItem("Crossover AP", 13);
     cbIIRSubType_.addItem("Raw Biquad", 14);
+    // Higher-order analog-prototype families — also added to the internal item list so
+    // setSelectedId() finds the display text, but presented in a "High-Order" submenu by
+    // IIRSubTypeCombo::showPopup() below to keep the top-level list manageable.
+    cbIIRSubType_.addItem("Chebyshev I LP", 15);
+    cbIIRSubType_.addItem("Chebyshev I HP", 16);
+    cbIIRSubType_.addItem("Chebyshev II LP", 17);
+    cbIIRSubType_.addItem("Chebyshev II HP", 18);
+    cbIIRSubType_.addItem("Elliptic LP", 19);
+    cbIIRSubType_.addItem("Elliptic HP", 20);
+    cbIIRSubType_.addItem("Bessel LP", 21);
+    cbIIRSubType_.addItem("Bessel HP", 22);
     cbIIRSubType_.setTooltip("IIR filter type");
     cbIIRSubType_.addListener(this);
 
-    // Order combo (populated dynamically for Butterworth vs Crossover)
+    // Order combo (populated dynamically for Butterworth vs Crossover vs analog prototype)
     addAndMakeVisible(lblOrder_);
     addAndMakeVisible(cbOrder_);
-    populateOrderCombo(false); // default: Butterworth items
+    populateOrderCombo(OrderComboKind::Butterworth);
     cbOrder_.addListener(this);
+
+    // Ripple sliders (Chebyshev I passband ripple / Chebyshev II stopband attenuation)
+    addAndMakeVisible(lblRipplePass_);
+    addAndMakeVisible(sldRipplePass_);
+    sldRipplePass_.setRange(0.01, 6.0, 0.01);
+    sldRipplePass_.setSkewFactorFromMidPoint(1.0);
+    sldRipplePass_.setNumDecimalPlacesToDisplay(2);
+    sldRipplePass_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldRipplePass_.setSliderStyle(Slider::LinearHorizontal);
+    sldRipplePass_.setDoubleClickReturnValue(true, 1.0);
+    sldRipplePass_.setTextValueSuffix(" dB");
+    sldRipplePass_.setTooltip("Passband ripple (Chebyshev I)");
+    sldRipplePass_.addListener(this);
+
+    addAndMakeVisible(lblRippleStop_);
+    addAndMakeVisible(sldRippleStop_);
+    sldRippleStop_.setRange(20.0, 120.0, 0.1);
+    sldRippleStop_.setNumDecimalPlacesToDisplay(1);
+    sldRippleStop_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldRippleStop_.setSliderStyle(Slider::LinearHorizontal);
+    sldRippleStop_.setDoubleClickReturnValue(true, 60.0);
+    sldRippleStop_.setTextValueSuffix(" dB");
+    sldRippleStop_.setTooltip("Stopband attenuation (Chebyshev II / Inverse Chebyshev)");
+    sldRippleStop_.addListener(this);
 
     // Frequency slider
     addAndMakeVisible(lblFreq_);
@@ -183,7 +218,7 @@ EqBandEditor::EqBandEditor()
     cbSampleRate_.addListener(this);
 
     // Set label styles
-    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_, &lblSampleRate_ })
+    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblRipplePass_, &lblRippleStop_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_, &lblSampleRate_ })
     {
         lbl->setFont(Font(FontOptions(13.f, Font::plain)));
         lbl->setColour(Label::textColourId, Colours::white);
@@ -249,26 +284,44 @@ void EqBandEditor::updateFromBand()
             case IIRSubType::CrossoverHP:   cbIIRSubType_.setSelectedId(12, dontSendNotification); break;
             case IIRSubType::CrossoverAP:   cbIIRSubType_.setSelectedId(13, dontSendNotification); break;
             case IIRSubType::RawBiquad:    cbIIRSubType_.setSelectedId(14, dontSendNotification); break;
+            case IIRSubType::Chebyshev1LP:  cbIIRSubType_.setSelectedId(15, dontSendNotification); break;
+            case IIRSubType::Chebyshev1HP:  cbIIRSubType_.setSelectedId(16, dontSendNotification); break;
+            case IIRSubType::Chebyshev2LP:  cbIIRSubType_.setSelectedId(17, dontSendNotification); break;
+            case IIRSubType::Chebyshev2HP:  cbIIRSubType_.setSelectedId(18, dontSendNotification); break;
+            case IIRSubType::EllipticLP:    cbIIRSubType_.setSelectedId(19, dontSendNotification); break;
+            case IIRSubType::EllipticHP:    cbIIRSubType_.setSelectedId(20, dontSendNotification); break;
+            case IIRSubType::BesselLP:      cbIIRSubType_.setSelectedId(21, dontSendNotification); break;
+            case IIRSubType::BesselHP:      cbIIRSubType_.setSelectedId(22, dontSendNotification); break;
         }
         sldFreq_.setValue(band_->getFrequency(), dontSendNotification);
         sldQ_.setValue(band_->getQ(), dontSendNotification);
         sldGain_.setValue(band_->getGainDB(), dontSendNotification);
+        sldRipplePass_.setValue(band_->getRipplePassDB(), dontSendNotification);
+        sldRippleStop_.setValue(band_->getRippleStopDB(), dontSendNotification);
 
-        bool isCrossover = band_->getIIRSubType() == IIRSubType::CrossoverLP
-                        || band_->getIIRSubType() == IIRSubType::CrossoverHP
-                        || band_->getIIRSubType() == IIRSubType::CrossoverAP;
-        bool isBW = band_->getIIRSubType() == IIRSubType::ButterworthLP
-                 || band_->getIIRSubType() == IIRSubType::ButterworthHP;
+        auto st = band_->getIIRSubType();
+        bool isCrossover = st == IIRSubType::CrossoverLP || st == IIRSubType::CrossoverHP
+                        || st == IIRSubType::CrossoverAP;
+        bool isBW = st == IIRSubType::ButterworthLP || st == IIRSubType::ButterworthHP;
+        bool isAnalogProto = st == IIRSubType::Chebyshev1LP || st == IIRSubType::Chebyshev1HP
+                          || st == IIRSubType::Chebyshev2LP || st == IIRSubType::Chebyshev2HP
+                          || st == IIRSubType::EllipticLP   || st == IIRSubType::EllipticHP
+                          || st == IIRSubType::BesselLP     || st == IIRSubType::BesselHP;
         if (isCrossover)
         {
-            bool isAP = band_->getIIRSubType() == IIRSubType::CrossoverAP;
-            populateOrderCombo(true, isAP);
+            bool isAP = st == IIRSubType::CrossoverAP;
+            populateOrderCombo(OrderComboKind::Crossover, isAP);
             cbOrder_.setSelectedId(band_->getCrossoverOrder(), dontSendNotification);
         }
         else if (isBW)
         {
-            populateOrderCombo(false);
+            populateOrderCombo(OrderComboKind::Butterworth);
             cbOrder_.setSelectedId(band_->getButterworthOrder(), dontSendNotification);
+        }
+        else if (isAnalogProto)
+        {
+            populateOrderCombo(OrderComboKind::AnalogPrototype);
+            cbOrder_.setSelectedId(band_->getAnalogOrder(), dontSendNotification);
         }
     }
     else if (type == EqBandType::Gain)
@@ -321,10 +374,10 @@ void EqBandEditor::updateFromBand()
     updating_ = false;
 }
 
-void EqBandEditor::populateOrderCombo(bool isCrossover, bool isAP)
+void EqBandEditor::populateOrderCombo(OrderComboKind kind, bool isAP)
 {
     cbOrder_.clear(dontSendNotification);
-    if (isCrossover)
+    if (kind == OrderComboKind::Crossover)
     {
         if (!isAP)
             cbOrder_.addItem("12 dB/oct (LR2)", 2);
@@ -335,6 +388,14 @@ void EqBandEditor::populateOrderCombo(bool isCrossover, bool isAP)
         cbOrder_.addItem("96 dB/oct (LR16)", 16);
         cbOrder_.setTooltip(isAP ? "Linkwitz-Riley allpass compensation order (LR4, LR8, LR16)."
                                  : "Linkwitz-Riley crossover order. LP+HP at same freq/order will sum flat.");
+    }
+    else if (kind == OrderComboKind::AnalogPrototype)
+    {
+        // Order 1..12 (no slope label since asymptotic slope is N·6 dB/oct only beyond
+        // the transition band — meaningful for any of the prototype families).
+        for (int n = 1; n <= 12; ++n)
+            cbOrder_.addItem(String(n), n);
+        cbOrder_.setTooltip("Filter order (1-12). Higher = steeper transition.");
     }
     else
     {
@@ -368,14 +429,25 @@ void EqBandEditor::showControlsForType(EqBandType type)
             || band_->getIIRSubType() == IIRSubType::CrossoverHP
             || band_->getIIRSubType() == IIRSubType::CrossoverAP);
 
-    bool hasOrder = isButterworth || isCrossover;
+    auto subType = (band_ != nullptr) ? band_->getIIRSubType() : IIRSubType::Peak;
+    bool isCheby1 = !isBiquad && isIIR
+        && (subType == IIRSubType::Chebyshev1LP || subType == IIRSubType::Chebyshev1HP);
+    bool isCheby2 = !isBiquad && isIIR
+        && (subType == IIRSubType::Chebyshev2LP || subType == IIRSubType::Chebyshev2HP);
+    bool isElliptic = !isBiquad && isIIR
+        && (subType == IIRSubType::EllipticLP || subType == IIRSubType::EllipticHP);
+    bool isBessel = !isBiquad && isIIR
+        && (subType == IIRSubType::BesselLP || subType == IIRSubType::BesselHP);
+    bool isAnalogProto = isCheby1 || isCheby2 || isElliptic || isBessel;
+
+    bool hasOrder = isButterworth || isCrossover || isAnalogProto;
 
     bool iirUsesGain = !isBiquad && isIIR && band_ != nullptr
-        && band_->getIIRSubType() != IIRSubType::BandPass
-        && band_->getIIRSubType() != IIRSubType::Notch
-        && band_->getIIRSubType() != IIRSubType::AllPass
-        && band_->getIIRSubType() != IIRSubType::LowPass
-        && band_->getIIRSubType() != IIRSubType::HighPass
+        && subType != IIRSubType::BandPass
+        && subType != IIRSubType::Notch
+        && subType != IIRSubType::AllPass
+        && subType != IIRSubType::LowPass
+        && subType != IIRSubType::HighPass
         && !hasOrder;
 
     lblSubType_.setVisible(isIIR || isBiquad);
@@ -388,6 +460,11 @@ void EqBandEditor::showControlsForType(EqBandType type)
 
     lblOrder_.setVisible(hasOrder);
     cbOrder_.setVisible(hasOrder);
+
+    lblRipplePass_.setVisible(isCheby1 || isElliptic);
+    sldRipplePass_.setVisible(isCheby1 || isElliptic);
+    lblRippleStop_.setVisible(isCheby2 || isElliptic);
+    sldRippleStop_.setVisible(isCheby2 || isElliptic);
 
     bool gainIsLinear = isGain && band_ != nullptr && band_->getUseLinearGain();
     bool gainIsDB = isGain && !gainIsLinear;
@@ -476,6 +553,20 @@ void EqBandEditor::resized()
     lblOrder_.setBounds(x, y, lblW, rowH);
     cbOrder_.setBounds(x + lblW + 4, y, 140, rowH);
     if (cbOrder_.isVisible()) y += rowH + gap;
+
+    // Ripple sliders (Cheby I passband / Cheby II stopband / Elliptic shows both)
+    if (sldRipplePass_.isVisible())
+    {
+        lblRipplePass_.setBounds(x, y, lblW, rowH);
+        sldRipplePass_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
+        y += rowH + gap;
+    }
+    if (sldRippleStop_.isVisible())
+    {
+        lblRippleStop_.setBounds(x, y, lblW, rowH);
+        sldRippleStop_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
+        y += rowH + gap;
+    }
 
     // Frequency
     lblFreq_.setBounds(x, y, lblW, rowH);
@@ -607,6 +698,10 @@ void EqBandEditor::sliderValueChanged(Slider* s)
         band_->setFrequency((float)sldFreq_.getValue());
     else if (s == &sldQ_)
         band_->setQ((float)sldQ_.getValue());
+    else if (s == &sldRipplePass_)
+        band_->setRipplePassDB((float)sldRipplePass_.getValue());
+    else if (s == &sldRippleStop_)
+        band_->setRippleStopDB((float)sldRippleStop_.getValue());
     else if (s == &sldGain_)
         band_->setGainDB((float)sldGain_.getValue());
     else if (s == &sldLinearGain_)
@@ -675,17 +770,29 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
                 band_->setIIRSubType(IIRSubType::RawBiquad);
                 band_->setRawCoefficients(1.f, 0.f, 0.f, 1.f, 0.f, 0.f); // identity pass-through
                 break;
+            case 15: band_->setIIRSubType(IIRSubType::Chebyshev1LP); break;
+            case 16: band_->setIIRSubType(IIRSubType::Chebyshev1HP); break;
+            case 17: band_->setIIRSubType(IIRSubType::Chebyshev2LP); break;
+            case 18: band_->setIIRSubType(IIRSubType::Chebyshev2HP); break;
+            case 19: band_->setIIRSubType(IIRSubType::EllipticLP); break;
+            case 20: band_->setIIRSubType(IIRSubType::EllipticHP); break;
+            case 21: band_->setIIRSubType(IIRSubType::BesselLP); break;
+            case 22: band_->setIIRSubType(IIRSubType::BesselHP); break;
         }
 
-        // Repopulate order combo when switching between Butterworth and Crossover
+        // Repopulate order combo for the selected family
         auto st = band_->getIIRSubType();
         bool isCrossover = st == IIRSubType::CrossoverLP || st == IIRSubType::CrossoverHP
                         || st == IIRSubType::CrossoverAP;
         bool isBW = st == IIRSubType::ButterworthLP || st == IIRSubType::ButterworthHP;
+        bool isAnalogProto = st == IIRSubType::Chebyshev1LP || st == IIRSubType::Chebyshev1HP
+                          || st == IIRSubType::Chebyshev2LP || st == IIRSubType::Chebyshev2HP
+                          || st == IIRSubType::EllipticLP   || st == IIRSubType::EllipticHP
+                          || st == IIRSubType::BesselLP     || st == IIRSubType::BesselHP;
         if (isCrossover)
         {
             bool isAP = st == IIRSubType::CrossoverAP;
-            populateOrderCombo(true, isAP);
+            populateOrderCombo(OrderComboKind::Crossover, isAP);
             int curOrder = band_->getCrossoverOrder();
             if (isAP && (curOrder == 2 || curOrder == 6))
                 band_->setCrossoverOrder(4);
@@ -693,8 +800,13 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
         }
         else if (isBW)
         {
-            populateOrderCombo(false);
+            populateOrderCombo(OrderComboKind::Butterworth);
             cbOrder_.setSelectedId(band_->getButterworthOrder(), dontSendNotification);
+        }
+        else if (isAnalogProto)
+        {
+            populateOrderCombo(OrderComboKind::AnalogPrototype);
+            cbOrder_.setSelectedId(band_->getAnalogOrder(), dontSendNotification);
         }
 
         showControlsForType(band_->getType());
@@ -706,6 +818,11 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
         if (st == IIRSubType::CrossoverLP || st == IIRSubType::CrossoverHP
             || st == IIRSubType::CrossoverAP)
             band_->setCrossoverOrder(cbOrder_.getSelectedId());
+        else if (st == IIRSubType::Chebyshev1LP || st == IIRSubType::Chebyshev1HP
+              || st == IIRSubType::Chebyshev2LP || st == IIRSubType::Chebyshev2HP
+              || st == IIRSubType::EllipticLP   || st == IIRSubType::EllipticHP
+              || st == IIRSubType::BesselLP     || st == IIRSubType::BesselHP)
+            band_->setAnalogOrder(cbOrder_.getSelectedId());
         else
             band_->setButterworthOrder(cbOrder_.getSelectedId());
         isStructuralChange = true; // order changes cascade section count
@@ -1092,4 +1209,67 @@ void EqBandEditor::updateDelayDisplay()
         sldDelay_.setTooltip("Delay in samples");
         lblSamples_.setText("smpls", dontSendNotification);
     }
+}
+
+//==============================================================================
+void EqBandEditor::IIRSubTypeCombo::showPopup()
+{
+    if (! isEnabled())
+        return;
+
+    PopupMenu menu;
+    int sel = getSelectedId();
+
+    auto add = [&] (int id, const String& text) {
+        menu.addItem (id, text, true, sel == id);
+    };
+
+    // Standard biquads — order 1/2, used most often
+    add (1, "Low Pass");
+    add (2, "High Pass");
+    add (3, "Band Pass");
+    add (4, "Notch");
+    add (5, "All Pass");
+    add (6, "Low Shelf");
+    add (7, "High Shelf");
+    add (8, "Peak");
+    menu.addSeparator();
+
+    // Higher-order Butterworth + Linkwitz-Riley crossover
+    add (9,  "Butterworth LP");
+    add (10, "Butterworth HP");
+    add (11, "Crossover LP");
+    add (12, "Crossover HP");
+    add (13, "Crossover AP");
+    menu.addSeparator();
+
+    // Analog-prototype families tucked into a submenu
+    PopupMenu highOrder;
+    auto addHO = [&] (int id, const String& text) {
+        highOrder.addItem (id, text, true, sel == id);
+    };
+    addHO (15, "Chebyshev I LP");
+    addHO (16, "Chebyshev I HP");
+    addHO (17, "Chebyshev II LP");
+    addHO (18, "Chebyshev II HP");
+    addHO (19, "Elliptic LP");
+    addHO (20, "Elliptic HP");
+    addHO (21, "Bessel LP");
+    addHO (22, "Bessel HP");
+    bool inSubmenu = (sel >= 15 && sel <= 22);
+    menu.addSubMenu ("High-Order", highOrder, true, nullptr, inSubmenu, 0);
+
+    menu.addSeparator();
+    add (14, "Raw Biquad");
+
+    auto& lf = getLookAndFeel();
+    menu.setLookAndFeel (&lf);
+    menu.showMenuAsync (PopupMenu::Options().withTargetComponent (this).withItemThatMustBeVisible (sel),
+                        [safe = SafePointer<ComboBox> (this)] (int result)
+                        {
+                            if (safe == nullptr) return;
+                            safe->hidePopup();
+                            if (result != 0)
+                                safe->setSelectedId (result);
+                        });
 }

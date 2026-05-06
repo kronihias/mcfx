@@ -338,20 +338,32 @@ public:
     void labelTextChanged(Label* l) override;
 
 private:
+    enum class OrderComboKind { Butterworth, Crossover, AnalogPrototype };
     void showControlsForType(EqBandType type);
-    void populateOrderCombo(bool isCrossover, bool isAP = false);
+    void populateOrderCombo(OrderComboKind kind, bool isAP = false);
     void updateDelayDisplay();
 
     EqBand* band_ = nullptr;
     int bandIndex_ = -1;
     Listener* listener_ = nullptr;
 
+    /** ComboBox variant that groups the higher-order analog-prototype filter types
+        (Chebyshev I/II, Elliptic, Bessel) into a "High-Order" submenu so the everyday
+        biquad list isn't drowned by them. */
+    class IIRSubTypeCombo : public ComboBox
+    {
+    public:
+        void showPopup() override;
+    };
+
     ComboBox cbBandType_;       // IIR, FIR, Gain, Delay
-    ComboBox cbIIRSubType_;     // low_pass, high_pass, etc.
+    IIRSubTypeCombo cbIIRSubType_; // low_pass, high_pass, etc., with submenu for analog prototypes
     ComboBox cbOrder_;          // Butterworth order (1-8)
 
     Slider sldFreq_;
     Slider sldQ_;
+    Slider sldRipplePass_;     // Chebyshev I passband ripple (dB)
+    Slider sldRippleStop_;     // Chebyshev II stopband attenuation (dB)
     Slider sldGain_;
     Slider sldLinearGain_;
     ToggleButton btnGainLinear_ { "Linear" };
@@ -367,6 +379,8 @@ private:
     Label lblFreq_    { {}, "Freq:" };
     Label lblQ_       { {}, "Q:" };
     Label lblOrder_   { {}, "Order:" };
+    Label lblRipplePass_ { {}, "Ripple:" };
+    Label lblRippleStop_ { {}, "Atten:" };
     Label lblGain_    { {}, "Gain:" };
     Label lblDelay_   { {}, "Delay:" };
     Label lblSampleRate_ { {}, "Rate:" };
