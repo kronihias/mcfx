@@ -19,6 +19,7 @@
 
 #include "EqBandEditor.h"
 #include "EqGraph.h"
+#include "FIRDesignDialog.h"
 
 EqBandEditor::EqBandEditor()
 {
@@ -193,10 +194,13 @@ EqBandEditor::EqBandEditor()
     btnPasteCoeffs_.setTooltip("Paste coefficients from clipboard (space or comma separated: b0 b1 b2 a0 a1 a2)");
     btnPasteCoeffs_.addListener(this);
 
-    // FIR load button and plot
+    // FIR load + design buttons and plot
     addAndMakeVisible(btnLoadFIR_);
     btnLoadFIR_.setTooltip("Load FIR coefficients from a text or audio file");
     btnLoadFIR_.addListener(this);
+    addAndMakeVisible(btnDesignFIR_);
+    btnDesignFIR_.setTooltip("Design a linear-phase FIR (LP/HP/peak/shelf) and load it into this band");
+    btnDesignFIR_.addListener(this);
     addAndMakeVisible(lblFIRInfo_);
     addAndMakeVisible(firPlot_);
     firPlot_.onFileDropped = [this](const File& f) { loadFIRFile(f); };
@@ -488,6 +492,7 @@ void EqBandEditor::showControlsForType(EqBandType type)
     cbSampleRate_.setVisible(showSR);
 
     btnLoadFIR_.setVisible(isFIR);
+    btnDesignFIR_.setVisible(isFIR);
     lblFIRInfo_.setVisible(isFIR);
     firPlot_.setVisible(isFIR);
 
@@ -615,19 +620,20 @@ void EqBandEditor::resized()
     // Sample rate selector (for IIR raw biquad and FIR — placed before FIR load or biquad coeffs)
     if (cbSampleRate_.isVisible() && !lblBiquad_.isVisible())
     {
-        // FIR mode: show sample rate on same row as FIR load button
+        // FIR mode: show sample rate on same row as FIR load + design buttons
         lblSampleRate_.setBounds(x, y, lblW, rowH);
         cbSampleRate_.setBounds(x + lblW + 4, y, 110, rowH);
-        // FIR load button and info on same row, after the sample rate
-        btnLoadFIR_.setBounds(x + lblW + 120, y, 100, rowH);
-        lblFIRInfo_.setBounds(x + lblW + 226, y, 130, rowH);
+        btnLoadFIR_.setBounds(x + lblW + 120, y, 80, rowH);
+        btnDesignFIR_.setBounds(x + lblW + 204, y, 75, rowH);
+        lblFIRInfo_.setBounds(x + lblW + 283, y, 100, rowH);
         if (btnLoadFIR_.isVisible()) y += rowH + gap;
     }
     else if (!cbSampleRate_.isVisible())
     {
         // FIR (shares same y as delay since they're mutually exclusive)
-        btnLoadFIR_.setBounds(x + lblW + 4, y, 100, rowH);
-        lblFIRInfo_.setBounds(x + lblW + 110, y, 100, rowH);
+        btnLoadFIR_.setBounds(x + lblW + 4, y, 80, rowH);
+        btnDesignFIR_.setBounds(x + lblW + 88, y, 75, rowH);
+        lblFIRInfo_.setBounds(x + lblW + 167, y, 100, rowH);
         if (btnLoadFIR_.isVisible()) y += rowH + gap;
     }
 
@@ -913,6 +919,27 @@ void EqBandEditor::buttonClicked(Button* b)
         FileChooser chooser("Load FIR coefficients", File(), "*.txt;*.csv;*.dat;*.wav;*.aif;*.aiff");
         if (chooser.browseForFileToOpen())
             loadFIRFile(chooser.getResult());
+    }
+    else if (b == &btnDesignFIR_)
+    {
+        if (band_ == nullptr) return;
+        // Use the band's processing sample rate (or fall back to 48k if not yet prepared).
+        double sr = band_->getSampleRate();
+        if (sr <= 0.0) sr = 48000.0;
+
+        // Pre-populate from the band's stored designer state (if any).
+        var initialState = band_->getDesignerState();
+
+        FIRDesignDialog::launch (sr, initialState,
+            [this] (const std::vector<float>& coeffs, double sampleRate, const var& state)
+            {
+                if (band_ == nullptr) return;
+                band_->setFIRCoefficientsWithSampleRate (coeffs, sampleRate);
+                band_->setDesignerState (state);
+                updateFromBand();
+                if (listener_ != nullptr)
+                    listener_->bandStructureChanged (bandIndex_);
+            });
     }
 }
 

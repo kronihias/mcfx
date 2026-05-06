@@ -317,29 +317,22 @@ void EqBand::rebuildFIRFrequencyResponse()
         fftOrder++;
     }
 
-    // JUCE FFT expects interleaved real/imag pairs — size 2*fftSize
-    std::vector<float> fftData(fftSize * 2, 0.f);
+    // performRealOnlyForwardTransform reads N real samples from the first half
+    // of the buffer (fftData[0..N-1]) and writes back ((N/2)+1) complex bins
+    // (interleaved real,imag) into the full 2*N-sized buffer.
+    std::vector<float> fftData((size_t)(fftSize * 2), 0.f);
     for (int i = 0; i < n; ++i)
-        fftData[i * 2] = firCoeffs_[i]; // real part only
+        fftData[(size_t) i] = firCoeffs_[(size_t) i];
 
     juce::dsp::FFT fft(fftOrder);
-    fft.performFrequencyOnlyForwardTransform(fftData.data(), true);
+    fft.performRealOnlyForwardTransform(fftData.data(), true);
 
-    // Store as complex half-spectrum (N/2+1 bins)
     int numBins = fftSize / 2 + 1;
     firFFT_.resize(numBins);
     firFFTSize_ = fftSize;
-
-    // performFrequencyOnlyForwardTransform stores magnitudes in the real parts
-    // We need the full complex spectrum, so redo with performRealOnlyForwardTransform
-    std::fill(fftData.begin(), fftData.end(), 0.f);
-    for (int i = 0; i < n; ++i)
-        fftData[i * 2] = firCoeffs_[i];
-
-    fft.performRealOnlyForwardTransform(fftData.data(), true);
-
     for (int i = 0; i < numBins; ++i)
-        firFFT_[i] = std::complex<float>(fftData[i * 2], fftData[i * 2 + 1]);
+        firFFT_[i] = std::complex<float>(fftData[(size_t) (i * 2)],
+                                           fftData[(size_t) (i * 2 + 1)]);
 }
 
 void EqBand::setOriginalSampleRate(double sr)
@@ -937,14 +930,42 @@ void EqBand::rebuildConvolver()
         return;
 
     int firLen = (int)firCoeffs_.size();
+
+    // Symmetric (linear-phase) FIRs have an intrinsic group delay of (N-1)/2
+    // samples — the impulse-response peak sits at the centre of the kernel, so
+    // the host must compensate for that delay via PDC. Asymmetric FIRs have no
+    // single well-defined "latency" (the energy isn't concentrated at one tap),
+    // so we report 0 group delay for them — matching the pre-existing behaviour.
+    bool symmetric = true;
+    {
+        constexpr float tol = 1e-6f;
+        for (int i = 0; i < firLen / 2; ++i)
+        {
+            if (std::abs (firCoeffs_[(size_t) i] - firCoeffs_[(size_t) (firLen - 1 - i)]) > tol)
+            {
+                symmetric = false;
+                break;
+            }
+        }
+    }
+    int groupDelay = symmetric ? (firLen - 1) / 2 : 0;
+
     if (firLen <= kConvolverThreshold)
-        return;  // short FIR — direct convolution is cheaper and zero-latency
+    {
+        // Short FIR — direct convolution. No convolver overhead, only the FIR's
+        // own group delay (if symmetric).
+        convolverLatency_ = groupDelay;
+        return;
+    }
 
     convolver_ = std::make_unique<MtxConvMaster>();
     int maxPart = jmax(8192, maxBlockSize_);
     if (!convolver_->Configure(1, 1, maxBlockSize_, firLen, maxBlockSize_, maxPart))
     {
         convolver_.reset();
+        // Convolver setup failed; still report group delay since the audio
+        // path won't run at all in that case.
+        convolverLatency_ = groupDelay;
         return;
     }
 
@@ -958,7 +979,7 @@ void EqBand::rebuildConvolver()
     convolverIn_.clear();
     convolverOut_.clear();
     useConvolver_ = true;
-    convolverLatency_ = maxBlockSize_;
+    convolverLatency_ = maxBlockSize_ + groupDelay;
 }
 
 void EqBand::applyFIR(float* data, int numSamples)
@@ -1060,22 +1081,29 @@ std::complex<float> EqBand::getFrequencyResponse(double freqHz, bool alwaysCompu
             if (firFFT_.empty() || firFFTSize_ <= 0)
                 return std::complex<float>(1.f, 0.f);
 
-            // Look up the precomputed FFT spectrum via linear interpolation
+            // Look up the precomputed FFT spectrum. We interpolate *magnitude*
+            // between adjacent bins, not the complex (real,imag) pair: for long
+            // symmetric (linear-phase) FIRs the phase rotates by ~π per bin
+            // (group delay (N-1)/2), so linear interpolation of complex pairs
+            // would give wildly wrong magnitudes — visible as a comb-filter
+            // mess when you sweep frequency across bins.
             double binFreq = sampleRate_ / (double)firFFTSize_;
             double binIdx = freqHz / binFreq;
             int numBins = (int)firFFT_.size();
 
             if (binIdx <= 0.0)
-                return firFFT_[0];
+                return std::complex<float>(std::abs(firFFT_[0]), 0.f);
             if (binIdx >= numBins - 1)
-                return firFFT_[numBins - 1];
+                return std::complex<float>(std::abs(firFFT_[numBins - 1]), 0.f);
 
             int i0 = (int)binIdx;
             float frac = (float)(binIdx - i0);
-            auto& v0 = firFFT_[i0];
-            auto& v1 = firFFT_[i0 + 1];
-            return std::complex<float>(v0.real() + frac * (v1.real() - v0.real()),
-                                       v0.imag() + frac * (v1.imag() - v0.imag()));
+            float mag0 = std::abs(firFFT_[i0]);
+            float mag1 = std::abs(firFFT_[i0 + 1]);
+            float mag  = mag0 + frac * (mag1 - mag0);
+            // Magnitude-only return (zero phase). Chain multiplication keeps
+            // |∏ H_i| = ∏ |H_i| consistent for the displayed dB curve.
+            return std::complex<float>(mag, 0.f);
         }
 
         case EqBandType::Gain:
@@ -1226,6 +1254,8 @@ var EqBand::toJson() const
                         arr.add(c);
                     params->setProperty("coefficients", arr);
                 }
+                if (designerState_.isObject())
+                    params->setProperty("designer", designerState_);
                 break;
             }
             case EqBandType::Gain:
@@ -1350,6 +1380,9 @@ EqBand* EqBand::fromJson(const var& json)
                 else
                     band->setFIRCoefficients(coeffs);
             }
+
+            if (params.hasProperty("designer"))
+                band->setDesignerState(params["designer"]);
         }
         else
         {
