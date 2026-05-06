@@ -245,7 +245,14 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 ## Changelog
 
+### 0.8.2 (2026-05-07)
+
+- mcfx_graph/anything: make sure plugin scanner is included in build, avoid having plugin scanner ghost processes, include input/output nodes in marque selection
+
+- mcfx_send/receive: auto-reconnect when reloading session, report IP address in GUI, avoid duplicate entries in connection list
+
 ### 0.8.1 (2026-05-04)
+
 - mcfx_graph: build for windows, add copy/paste, fix vst3 channel count selection, make json files portable by not saving the absolute plugin path, save/recall input/output node positions, add scrolling to matrix parameter view
 - mcfx_convolver: add individual ir .wav export to inspector
 
