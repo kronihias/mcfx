@@ -245,6 +245,11 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 ## Changelog
 
+### 0.8.3 (2026-05-07)
+
+- mcfx_graph/anything: make sure plugin scanner is included in win build as well
+
+
 ### 0.8.2 (2026-05-07)
 
 - mcfx_graph/anything: make sure plugin scanner is included in build, avoid having plugin scanner ghost processes, include input/output nodes in marque selection
