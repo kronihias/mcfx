@@ -83,14 +83,17 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                     "${BIN_DIR}/vst3/${tgt}.vst3/Contents/Helpers/"
                 VERBATIM)
         else()
-            # Windows/Linux: alongside the plugin binary
+            # Windows: VST3 is a directory bundle; the runtime DLL lives in
+            # Contents\x86_64-win\, and the scanner exe must sit beside it.
             add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_FILE:mcfx_plugin_scanner>"
                     "$<TARGET_FILE_DIR:${tgt}_VST3>/"
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "${BIN_DIR}/vst3/${tgt}.vst3/Contents/x86_64-win"
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_FILE:mcfx_plugin_scanner>"
-                    "${BIN_DIR}/vst3/"
+                    "${BIN_DIR}/vst3/${tgt}.vst3/Contents/x86_64-win/"
                 VERBATIM)
         endif()
     endif()

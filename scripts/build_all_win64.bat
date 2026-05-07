@@ -80,16 +80,20 @@ if "%BUILD_VST3%%BUILD_SA%"=="11" (
     popd
 )
 
-REM mcfx_anything uses an out-of-process plugin scanner (mcfx_plugin_scanner.exe)
-REM that must sit alongside the plugin binary at runtime. JUCE's
+REM mcfx_anything / mcfx_graph use an out-of-process plugin scanner that must
+REM sit alongside the plugin binary at runtime. JUCE's
 REM JUCE_COPY_PLUGIN_AFTER_BUILD races the scanner's POST_BUILD, so the copied
 REM bundle in ..\build\vst3 and the staged standalone dir may not contain it.
 REM Copy it explicitly from the scanner's artefacts dir before signing/packaging.
 if "%BUILD_VST3%"=="1" if exist "..\build\vst3\mcfx_anything.vst3\Contents\x86_64-win" (
     for /r "..\build\mcfx_anything\mcfx_plugin_scanner_artefacts" %%f in (mcfx_plugin_scanner.exe) do copy /Y "%%f" "..\build\vst3\mcfx_anything.vst3\Contents\x86_64-win\" >nul
 )
+if "%BUILD_VST3%"=="1" if exist "..\build\vst3\mcfx_graph.vst3\Contents\x86_64-win" (
+    for /r "..\build\mcfx_graph\mcfx_graph_plugin_scanner_artefacts" %%f in (mcfx_graph_plugin_scanner.exe) do copy /Y "%%f" "..\build\vst3\mcfx_graph.vst3\Contents\x86_64-win\" >nul
+)
 if "%BUILD_SA%"=="1" if exist "..\build\standalone" (
     for /r "..\build\mcfx_anything\mcfx_plugin_scanner_artefacts" %%f in (mcfx_plugin_scanner.exe) do copy /Y "%%f" "..\build\standalone\" >nul
+    for /r "..\build\mcfx_graph\mcfx_graph_plugin_scanner_artefacts" %%f in (mcfx_graph_plugin_scanner.exe) do copy /Y "%%f" "..\build\standalone\" >nul
 )
 
 REM Sign VST3 bundles: JUCE on Windows builds VST3 as a directory bundle;
