@@ -23,6 +23,7 @@
 #include "JuceHeader.h"
 #include "PluginProcessor.h"
 #include "EqGraph.h"
+#include "EqPhaseGraph.h"
 #include "EqBandEditor.h"
 #include "RoutingOverview.h"
 
@@ -120,12 +121,15 @@ private:
     void updateDiagChannelButton();
 
     EqGraph graph_;
+    EqPhaseGraph phaseGraph_;
     EqBandEditor bandEditor_;
     EqTabBar tabs_;
 
     ToggleButton btnAnalyzer_ { "Analyzer" };
+    ToggleButton btnPhase_    { "Phase" };
     void updateAnalyzerState();
     void showAnalyzerSettingsPopup();
+    void updatePhaseGraphVisibility();
     Component::SafePointer<CallOutBox> analyzerSettingsCallOut_;
 
     TextButton btnAdd_ { "+" };

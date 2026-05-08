@@ -391,6 +391,10 @@ void Mcfx_mimoeqAudioProcessor::getStateInformation(MemoryBlock& destData)
         root->setProperty("diag_channels", maskArray);
     }
 
+    // Editor view state — only the bits worth round-tripping with the host.
+    if (editorPhaseOn)
+        root->setProperty("editor_phase_on", true);
+
     String jsonStr = JSON::toString(var(root));
     destData.append(jsonStr.toRawUTF8(), jsonStr.getNumBytesAsUTF8());
 }
@@ -415,6 +419,9 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
     if (diagCh.isArray())
         for (int i = 0; i < diagCh.size(); ++i)
             diagChannelMask_.insert((int)diagCh[i]);
+
+    // Editor view state
+    editorPhaseOn = (bool) parsed.getProperty("editor_phase_on", false);
 
     // Clear model
     diagonalChain_.fromJson(var(Array<var>()), sr);

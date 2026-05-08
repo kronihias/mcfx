@@ -71,6 +71,8 @@ public:
     void mouseUp(const MouseEvent& e) override;
     void mouseDoubleClick(const MouseEvent& e) override;
     void mouseDrag(const MouseEvent& e) override;
+    void mouseMove(const MouseEvent& e) override;
+    void mouseExit(const MouseEvent& e) override;
     void mouseWheelMove(const MouseEvent& e, const MouseWheelDetails& wheel) override;
     bool keyPressed(const KeyPress& key) override;
 
@@ -95,6 +97,9 @@ private:
     float dragStartMinDb_ = 0.f;
     float dragStartMaxDb_ = 0.f;
     int dragStartY_ = 0;
+
+    // Hover-cursor freq/mag readout in the bottom-right corner
+    int hoverX_ = -1;
 
     float minf_ = 20.f;
     float maxf_ = 20000.f;

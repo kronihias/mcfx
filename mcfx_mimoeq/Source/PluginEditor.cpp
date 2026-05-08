@@ -91,10 +91,18 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     btnAnalyzer_.addListener(this);
     btnAnalyzer_.setTooltip("Toggle spectrum analyzer overlay. Right-click to select channel.");
 
+    // Phase toggle — shows a separate phase-response graph below the magnitude.
+    addAndMakeVisible(btnPhase_);
+    btnPhase_.setClickingTogglesState(true);
+    btnPhase_.addListener(this);
+    btnPhase_.setTooltip("Show phase-response graph below the magnitude graph.");
+
     addAndMakeVisible(graph_);
     graph_.setListener(this);
     graph_.setAnalyzers(&processor->getInputAnalyzer(), &processor->getOutputAnalyzer());
     graph_.setTooltip("Drag handles to adjust frequency/gain. Mouse wheel to adjust Q.\nDouble-click to add a band. Double-click a handle to toggle enable. Press E to toggle enable.\nDrop a .json file to load configuration.");
+
+    addChildComponent(phaseGraph_);   // hidden by default; updatePhaseGraphVisibility() flips it on
 
     addAndMakeVisible(bandEditor_);
     bandEditor_.setListener(this);
@@ -136,7 +144,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     // Point graph at the active chain
     auto* chain = getActiveChain();
-    graph_.setChain(chain);
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
     int restoredBand = processor->editorSelectedBand;
     if (chain != nullptr && restoredBand >= 0 && restoredBand < chain->getNumBands())
@@ -150,12 +158,17 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     processor->getOutputAnalyzer().setAnalyzerChannel(processor->editorAnalyzerChannel);
     updateAnalyzerState();
 
+    // Restore phase-graph state
+    btnPhase_.setToggleState(processor->editorPhaseOn, dontSendNotification);
+    phaseGraph_.setChain(chain);
+    updatePhaseGraphVisibility();
+
     // Listen for mouse enter/exit on all child components for status bar
     addMouseListener(this, true);
 
     setResizable(true, true);
-    setResizeLimits(450, 400, 1200, 900);
-    setSize(700, 540);
+    setResizeLimits(500, 480, 1400, 1200);
+    setSize(800, 600);
 }
 
 Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
@@ -167,6 +180,7 @@ Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
     proc->editorSelectedBand = selectedBand_;
     proc->editorAnalyzerOn = btnAnalyzer_.getToggleState();
     proc->editorAnalyzerChannel = proc->getInputAnalyzer().getAnalyzerChannel();
+    proc->editorPhaseOn = btnPhase_.getToggleState();
 
     // Dismiss any still-open routing overview CallOutBox. It holds a raw
     // Listener* pointing back at this editor, so if it outlives us a
@@ -249,12 +263,36 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     btnAddPath_.setBounds(mx, pathY, 70, 22);        mx += 74;
     btnRemovePath_.setBounds(mx, pathY, 85, 22);     mx += 89;
     btnRouting_.setBounds(mx, pathY, 65, 22);        mx += 69;
-    btnAnalyzer_.setBounds(mx, pathY, 80, 22);
 
-    // Graph
+    // Right-anchored: Analyzer + Phase toggles
+    int rightX = w - 4;
+    int analyzerW = 80;
+    int phaseW    = 65;
+    btnAnalyzer_.setBounds(rightX - analyzerW,                pathY, analyzerW, 22);
+    btnPhase_   .setBounds(rightX - analyzerW - phaseW - 4,    pathY, phaseW,    22);
+
+    // Reserve fixed space for the bottom sections so the graph area absorbs
+    // any extra height (and shrinks first when the window gets smaller).
+    constexpr int statusH    = 42;
+    constexpr int tabBarH    = 32;     // 28-tall tab buttons + 4 gap
+    constexpr int editorH    = 200;    // fixed band-parameter area
+
     int graphTop = pathY + 28;
-    int graphHeight = (int)(h * 0.45f);
-    graph_.setBounds(4, graphTop, w - 8, graphHeight);
+    int reservedBelow = editorH + tabBarH + statusH;
+    int graphHeight = jmax (80, h - graphTop - reservedBelow);
+
+    // Graph(s) — magnitude on top; if phase enabled, an equal-sized phase strip
+    // sits directly below it.
+    if (phaseGraph_.isVisible())
+    {
+        int half = graphHeight / 2;
+        graph_     .setBounds(4, graphTop,            w - 8, half);
+        phaseGraph_.setBounds(4, graphTop + half + 2, w - 8, graphHeight - half - 2);
+    }
+    else
+    {
+        graph_.setBounds(4, graphTop, w - 8, graphHeight);
+    }
 
     // Tab bar
     int tabY = graphTop + graphHeight + 4;
@@ -264,12 +302,11 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     btnRemove_.setBounds(tabW + 42, tabY, 30, 28);
 
     // Status bar at bottom
-    int statusH = 42;
     statusBar_.setBounds(0, h - statusH, w, statusH);
 
-    // Band editor
-    int editorY = tabY + 32;
-    bandEditor_.setBounds(4, editorY, w - 8, h - editorY - statusH);
+    // Band editor — fixed height
+    int editorY = tabY + tabBarH;
+    bandEditor_.setBounds(4, editorY, w - 8, editorH);
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::updatePathSelector()
@@ -334,7 +371,7 @@ void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
         }
     }
     auto* chain = getActiveChain();
-    graph_.setChain(chain);
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
     if (selectedBand_ >= 0 && chain != nullptr && selectedBand_ < chain->getNumBands())
         bandEditor_.updateFromBand();
@@ -354,7 +391,7 @@ void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
     }
 
     auto* chain = getActiveChain();
-    graph_.setChain(chain);
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
     if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
@@ -536,7 +573,7 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float ga
     else
     {
         chain = getProcessor()->getOrCreateChainForPath(selectedPath_.first, selectedPath_.second);
-        graph_.setChain(chain);
+        graph_.setChain(chain); phaseGraph_.setChain(chain);
     }
 
     auto* band = chain->addBand();
@@ -593,7 +630,7 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
     {
         updatePathSelector();
         auto* chain = getActiveChain();
-        graph_.setChain(chain);
+        graph_.setChain(chain); phaseGraph_.setChain(chain);
         refreshTabs();
         if (chain != nullptr && chain->getNumBands() > 0)
             selectBand(0);
@@ -632,7 +669,7 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             notifyChainChanged();
 
             auto* chain = getActiveChain();
-            graph_.setChain(chain);
+            graph_.setChain(chain); phaseGraph_.setChain(chain);
             refreshTabs();
             if (chain != nullptr && chain->getNumBands() > 0)
                 selectBand(0);
@@ -651,6 +688,12 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
     if (b == &btnAnalyzer_)
     {
         updateAnalyzerState();
+        return;
+    }
+
+    if (b == &btnPhase_)
+    {
+        updatePhaseGraphVisibility();
         return;
     }
 
@@ -681,7 +724,7 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         else
         {
             chain = getProcessor()->getOrCreateChainForPath(selectedPath_.first, selectedPath_.second);
-            graph_.setChain(chain);
+            graph_.setChain(chain); phaseGraph_.setChain(chain);
         }
 
         auto* band = chain->addBand();
@@ -724,7 +767,7 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             updateUndoRedoButtons();
             getProcessor()->loadConfigFromFile(chooser.getResult());
             auto* chain = getActiveChain();
-            graph_.setChain(chain);
+            graph_.setChain(chain); phaseGraph_.setChain(chain);
             refreshTabs();
             if (chain != nullptr && chain->getNumBands() > 0)
                 selectBand(0);
@@ -761,7 +804,7 @@ void Mcfx_mimoeqAudioProcessorEditor::filesDropped(const StringArray& files, int
             updateUndoRedoButtons();
             getProcessor()->loadConfigFromFile(File(f));
             auto* chain = getActiveChain();
-            graph_.setChain(chain);
+            graph_.setChain(chain); phaseGraph_.setChain(chain);
             refreshTabs();
             if (chain != nullptr && chain->getNumBands() > 0)
                 selectBand(0);
@@ -814,7 +857,7 @@ void Mcfx_mimoeqAudioProcessorEditor::showAddPathPopup()
             notifyChainChanged();
 
             auto* chain = getActiveChain();
-            graph_.setChain(chain);
+            graph_.setChain(chain); phaseGraph_.setChain(chain);
             refreshTabs();
             selectBand(-1); // new path has no bands yet
         });
@@ -874,7 +917,7 @@ void Mcfx_mimoeqAudioProcessorEditor::routingPathSelected(int inCh, int outCh)
     rebuildPathDropdown();
 
     auto* chain = getActiveChain();
-    graph_.setChain(chain);
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
     if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
@@ -902,7 +945,7 @@ void Mcfx_mimoeqAudioProcessorEditor::routingPathCreated(int inCh, int outCh)
     notifyChainChanged();
 
     auto* chain = getActiveChain();
-    graph_.setChain(chain);
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
     selectBand(-1);
 
@@ -953,7 +996,7 @@ void Mcfx_mimoeqAudioProcessorEditor::routingPathRemoved(int inCh, int outCh)
     notifyChainChanged();
 
     auto* chain = getActiveChain();
-    graph_.setChain(chain);
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
     if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
@@ -999,7 +1042,7 @@ void Mcfx_mimoeqAudioProcessorEditor::routingDiagonalRequested()
     btnModeMIMO_.setToggleState(false, dontSendNotification);
     updatePathSelector();
     auto* chain = getActiveChain();
-    graph_.setChain(chain);
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
     if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
@@ -1090,7 +1133,7 @@ void Mcfx_mimoeqAudioProcessorEditor::performUndo()
             }
         }
         auto* chain = getActiveChain();
-        graph_.setChain(chain);
+        graph_.setChain(chain); phaseGraph_.setChain(chain);
         refreshTabs();
         if (chain != nullptr && chain->getNumBands() > 0)
             selectBand(jlimit(0, chain->getNumBands() - 1, selectedBand_));
@@ -1116,7 +1159,7 @@ void Mcfx_mimoeqAudioProcessorEditor::performRedo()
             }
         }
         auto* chain = getActiveChain();
-        graph_.setChain(chain);
+        graph_.setChain(chain); phaseGraph_.setChain(chain);
         refreshTabs();
         if (chain != nullptr && chain->getNumBands() > 0)
             selectBand(jlimit(0, chain->getNumBands() - 1, selectedBand_));
@@ -1189,6 +1232,15 @@ void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
         getProcessor()->getInputAnalyzer().reset();
         getProcessor()->getOutputAnalyzer().reset();
     }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::updatePhaseGraphVisibility()
+{
+    bool on = btnPhase_.getToggleState();
+    phaseGraph_.setVisible (on);
+    if (on)
+        phaseGraph_.setChain (getActiveChain());
+    resized();   // re-layout to allocate / reclaim space below the magnitude graph
 }
 
 //==============================================================================
