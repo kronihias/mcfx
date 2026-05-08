@@ -156,6 +156,35 @@ void EqGraph::paint(Graphics& g)
 
     // Draw band handles
     drawBandHandles(g);
+
+    // Hover readout — bottom-right of the plot, shows freq + magnitude under the cursor.
+    if (hoverX_ >= (int) xmargin_ && chain_ != nullptr)
+    {
+        float f = xpostohz (hoverX_);
+        if (f >= minf_ && f <= maxf_)
+        {
+            auto H = chain_->getFrequencyResponse ((double) f);
+            float mag = std::abs (H);
+            float magDb = (mag > 1e-12f) ? 20.f * std::log10 (mag) : -200.f;
+
+            String text;
+            if (f >= 1000.f) text << String (f / 1000.f, 2) << " kHz   ";
+            else              text << String (f, 1)         << " Hz    ";
+            text << String (magDb, 1) << " dB";
+
+            Font fnt (FontOptions ("Arial Rounded MT", 11.f, Font::plain));
+            g.setFont (fnt);
+            int textW = GlyphArrangement::getStringWidthInt (fnt, text);
+            int textH = 14;
+            int textX = getWidth() - textW - 6;
+            int textY = getHeight() - textH - 14;   // above the bottom freq labels
+            g.setColour (Colour (0xa0000000));
+            g.fillRoundedRectangle ((float) textX - 4, (float) textY - 1,
+                                      (float) textW + 8, (float) textH + 2, 3.f);
+            g.setColour (Colours::white.withAlpha (0.85f));
+            g.drawText (text, textX, textY, textW, textH, Justification::right, false);
+        }
+    }
 }
 
 void EqGraph::drawGrid(Graphics& g)
@@ -518,6 +547,25 @@ void EqGraph::mouseUp(const MouseEvent&)
     draggingYAxis_ = false;
 }
 
+void EqGraph::mouseMove(const MouseEvent& e)
+{
+    int x = e.getPosition().getX();
+    if (x != hoverX_)
+    {
+        hoverX_ = x;
+        repaint();
+    }
+}
+
+void EqGraph::mouseExit(const MouseEvent&)
+{
+    if (hoverX_ != -1)
+    {
+        hoverX_ = -1;
+        repaint();
+    }
+}
+
 bool EqGraph::keyPressed(const KeyPress& key)
 {
     if (key.getTextCharacter() == 'e' || key.getTextCharacter() == 'E')
@@ -629,6 +677,7 @@ void EqGraph::mouseDoubleClick(const MouseEvent& e)
 
 void EqGraph::mouseDrag(const MouseEvent& e)
 {
+    hoverX_ = e.getPosition().getX();
     if (draggingYAxis_)
     {
         // Pan the Y-axis: translate dB range by drag distance
