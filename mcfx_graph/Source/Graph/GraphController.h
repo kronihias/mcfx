@@ -83,6 +83,11 @@ public:
 
     void setNodePosition (const juce::Uuid& uuid, juce::Point<int> pos);
 
+    /** Update the user-customizable display name shown in the node tile,
+        properties panel, and (for subgraphs) the breadcrumb. Empty string
+        reverts to the processor-derived name. No-op on terminals. */
+    void setNodeDisplayName (const juce::Uuid& uuid, const juce::String& newName);
+
     /** Bypass: input passes through to output via JUCE's per-node bypass.
         For asymmetric channel layouts the JUCE engine maps as best it can. */
     void setNodeBypassed (const juce::Uuid& uuid, bool on);

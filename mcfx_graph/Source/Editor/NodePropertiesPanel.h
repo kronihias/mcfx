@@ -34,6 +34,7 @@ public:
 
 private:
     void rebuildContent();
+    void commitRename();
 
     GraphEditorComponent& editor_;
     GraphNode* selectedNode_ = nullptr;

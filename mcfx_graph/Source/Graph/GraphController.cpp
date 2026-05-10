@@ -345,6 +345,18 @@ void GraphController::setNodePosition (const juce::Uuid& uuid, juce::Point<int> 
         gn->editorPosition = pos;
 }
 
+void GraphController::setNodeDisplayName (const juce::Uuid& uuid, const juce::String& newName)
+{
+    auto* gn = getNode (uuid);
+    if (gn == nullptr || gn == &inputTerminalMeta_ || gn == &outputTerminalMeta_) return;
+
+    auto trimmed = newName.trim();
+    if (gn->displayName == trimmed) return;
+
+    gn->displayName = trimmed;
+    notifyTopologyChanged();
+}
+
 void GraphController::setNodeBypassed (const juce::Uuid& uuid, bool on)
 {
     auto* gn = getNode (uuid);

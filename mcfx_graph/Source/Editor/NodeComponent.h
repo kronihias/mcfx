@@ -43,6 +43,7 @@ private:
     void openNativePropertiesWindow();
     void descendIntoSubgraph();
     void showChangeChannelCountPopup();
+    void showRenamePopup();
     void changeNativeNodeChannelCount (int newChIn, int newChOut);
     void changePluginNodeMainBusChannels (int newMainCh);
 

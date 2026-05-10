@@ -990,6 +990,8 @@ NodePropertiesPanel::NodePropertiesPanel (GraphEditorComponent& editor)
 {
     titleLabel_.setFont (juce::Font (juce::FontOptions (15.0f, juce::Font::bold)));
     titleLabel_.setColour (juce::Label::textColourId, juce::Colours::white);
+    titleLabel_.setTooltip ("Double-click to rename this node");
+    titleLabel_.onTextChange = [this] { commitRename(); };
     addAndMakeVisible (titleLabel_);
 
     subtitleLabel_.setFont (juce::Font (juce::FontOptions (11.0f)));
@@ -1012,6 +1014,24 @@ void NodePropertiesPanel::setSelectedNode (GraphNode* node)
 {
     selectedNode_ = node;
     rebuildContent();
+}
+
+void NodePropertiesPanel::commitRename()
+{
+    if (selectedNode_ == nullptr) return;
+    const auto isTerminal = selectedNode_->kind == NodeKind::InputTerminal
+                         || selectedNode_->kind == NodeKind::OutputTerminal;
+    if (isTerminal) return;
+
+    const auto uuid = selectedNode_->uuid;
+    editor_.getActiveController().setNodeDisplayName (uuid, titleLabel_.getText());
+
+    // Reflect the trimmed/normalized name (and the kind-string fallback when
+    // the user cleared the field) back into the label without retriggering.
+    titleLabel_.setText (selectedNode_->displayName.isNotEmpty()
+                            ? selectedNode_->displayName
+                            : juce::String (nodeKindToString (selectedNode_->kind)),
+                         juce::dontSendNotification);
 }
 
 void NodePropertiesPanel::paint (juce::Graphics& g)
@@ -1044,6 +1064,7 @@ void NodePropertiesPanel::rebuildContent()
 
     if (selectedNode_ == nullptr)
     {
+        titleLabel_.setEditable (false, false, false);
         titleLabel_.setText ("(no selection)", juce::dontSendNotification);
         subtitleLabel_.setText ("Click a node to edit its properties.",
                                 juce::dontSendNotification);
@@ -1053,6 +1074,7 @@ void NodePropertiesPanel::rebuildContent()
 
     if (selSize > 1)
     {
+        titleLabel_.setEditable (false, false, false);
         titleLabel_.setText ("(" + juce::String ((int) selSize) + " nodes selected)",
                              juce::dontSendNotification);
         subtitleLabel_.setText ("Press C to chain-connect, Delete to remove all, "
@@ -1061,6 +1083,13 @@ void NodePropertiesPanel::rebuildContent()
         resized();
         return;
     }
+
+    const bool isTerminal = selectedNode_->kind == NodeKind::InputTerminal
+                         || selectedNode_->kind == NodeKind::OutputTerminal;
+
+    // Single-click does nothing (preserves selection click); double-click enters
+    // edit mode; loseFocusOnEnter=false so clicks elsewhere commit, not discard.
+    titleLabel_.setEditable (false, ! isTerminal, false);
 
     titleLabel_.setText (selectedNode_->displayName.isNotEmpty()
                             ? selectedNode_->displayName

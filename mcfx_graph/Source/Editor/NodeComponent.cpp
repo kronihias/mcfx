@@ -528,6 +528,9 @@ void NodeComponent::showContextMenu()
 
     m.addSeparator();
 
+    m.addItem ("Rename...", ! isTerminal, false,
+               [this] { showRenamePopup(); });
+
     m.addItem ("Delete node", ! isTerminal, false,
                [this]
                {
@@ -689,7 +692,118 @@ namespace
         juce::ComboBox   inCombo_, outCombo_;
         juce::TextButton applyButton_, cancelButton_;
     };
+
+    /** Modal popup to rename a node. Single text editor + Apply / Cancel.
+        Apply (or Return) commits the trimmed value via onApply; an empty
+        value clears the custom name and reverts the tile to the
+        processor-derived label. */
+    class RenamePopup : public juce::Component,
+                        private juce::TextEditor::Listener
+    {
+    public:
+        RenamePopup (const juce::String& currentName,
+                     const juce::String& fallbackName,
+                     std::function<void (juce::String)> onApply)
+            : onApply_ (std::move (onApply))
+        {
+            title_.setText ("Rename node", juce::dontSendNotification);
+            title_.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)));
+            title_.setColour (juce::Label::textColourId, juce::Colours::white);
+            addAndMakeVisible (title_);
+
+            editor_.setText (currentName, juce::dontSendNotification);
+            editor_.setTextToShowWhenEmpty (fallbackName,
+                                            juce::Colours::white.withAlpha (0.4f));
+            editor_.setSelectAllWhenFocused (true);
+            editor_.addListener (this);
+            addAndMakeVisible (editor_);
+
+            applyButton_.setButtonText ("Apply");
+            applyButton_.onClick = [this] { commit(); };
+            addAndMakeVisible (applyButton_);
+
+            cancelButton_.setButtonText ("Cancel");
+            cancelButton_.onClick = [this]
+            {
+                if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+                    box->dismiss();
+            };
+            addAndMakeVisible (cancelButton_);
+
+            setSize (300, 110);
+
+            juce::MessageManager::callAsync ([safe = juce::Component::SafePointer<RenamePopup> (this)]
+            {
+                if (safe != nullptr) safe->editor_.grabKeyboardFocus();
+            });
+        }
+
+        void paint (juce::Graphics& g) override
+        {
+            g.fillAll (juce::Colour (0xff2a2a2a));
+        }
+
+        void resized() override
+        {
+            auto area = getLocalBounds().reduced (10);
+            title_.setBounds  (area.removeFromTop (20));
+            area.removeFromTop (6);
+            editor_.setBounds (area.removeFromTop (26));
+            area.removeFromTop (8);
+            auto buttonRow = area.removeFromTop (28);
+            applyButton_ .setBounds (buttonRow.removeFromRight (80));
+            buttonRow.removeFromRight (6);
+            cancelButton_.setBounds (buttonRow.removeFromRight (80));
+        }
+
+    private:
+        void textEditorReturnKeyPressed (juce::TextEditor&) override { commit(); }
+        void textEditorEscapeKeyPressed (juce::TextEditor&) override
+        {
+            if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+                box->dismiss();
+        }
+
+        void commit()
+        {
+            auto cb = onApply_;
+            const auto value = editor_.getText();
+            if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+                box->dismiss();
+            if (cb) cb (value);
+        }
+
+        std::function<void (juce::String)> onApply_;
+
+        juce::Label      title_;
+        juce::TextEditor editor_;
+        juce::TextButton applyButton_, cancelButton_;
+    };
 } // namespace
+
+void NodeComponent::showRenamePopup()
+{
+    const bool isTerminal = node_.kind == NodeKind::InputTerminal
+                         || node_.kind == NodeKind::OutputTerminal;
+    if (isTerminal) return;
+
+    const auto fallback = node_.processor != nullptr
+                            ? juce::String (node_.processor->getName())
+                            : juce::String (nodeKindToString (node_.kind));
+
+    auto uuid = node_.uuid;
+    auto popup = std::make_unique<RenamePopup> (
+        node_.displayName, fallback,
+        [this, uuid] (juce::String newName)
+        {
+            editor_.getController().setNodeDisplayName (uuid, newName);
+        });
+
+    juce::CallOutBox::launchAsynchronously (
+        std::move (popup),
+        getScreenBounds(),
+        nullptr);
+}
 
 void NodeComponent::showChangeChannelCountPopup()
 {

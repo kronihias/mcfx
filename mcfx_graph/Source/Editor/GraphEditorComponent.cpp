@@ -883,11 +883,27 @@ void GraphEditorComponent::ascendToRoot()
 std::vector<GraphEditorComponent::BreadcrumbEntry>
 GraphEditorComponent::getBreadcrumbPath() const
 {
+    // Each non-root level's label = the displayName of the subgraph node that
+    // was entered to reach it. We derive that name live (not from the cached
+    // label captured at descent time) so renames — including those replayed
+    // by undo/redo — propagate to the breadcrumb without explicit refresh.
     std::vector<BreadcrumbEntry> out;
     out.reserve (navStack_.size() + 1);
-    for (const auto& e : navStack_)
-        out.push_back ({ e.controller, e.label });
-    out.push_back ({ activeController_, activeLabel_ });
+
+    auto* rootCtl = navStack_.empty() ? activeController_
+                                      : navStack_.front().controller;
+    out.push_back ({ rootCtl, "Root" });
+
+    for (std::size_t i = 0; i < navStack_.size(); ++i)
+    {
+        juce::String label ("Subgraph");
+        if (auto* gn = navStack_[i].controller->getNode (navStack_[i].enteredFromSubgraphUuid))
+            if (gn->displayName.isNotEmpty()) label = gn->displayName;
+
+        auto* nextCtl = (i + 1 < navStack_.size()) ? navStack_[i + 1].controller
+                                                   : activeController_;
+        out.push_back ({ nextCtl, label });
+    }
     return out;
 }
 
