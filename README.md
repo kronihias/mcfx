@@ -160,14 +160,14 @@ CMake and a working build environment are required.
 sudo apt install libasound2-dev libjack-jackd2-dev \
     ladspa-sdk \
     libcurl4-openssl-dev \
-    libfreetype6-dev \
+    libfreetype-dev libfontconfig1-dev \
     libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
-    libwebkit2gtk-4.0-dev \
+    libwebkit2gtk-4.1-dev \
     libglu1-mesa-dev mesa-common-dev \
-    libfftw3-dev \
-    libzita-convolver3 \
-    libzita-convolver-dev
+    libfftw3-dev
 ```
+
+> On older Ubuntu/Debian where `libwebkit2gtk-4.1-dev` is not available, substitute `libwebkit2gtk-4.0-dev` — JUCE 8 loads whichever is present at runtime. Likewise, fall back to `libfreetype6-dev` if `libfreetype-dev` is unavailable. If you intend to enable `WITH_ZITA_CONVOLVER` (off by default), also install `libzita-convolver-dev`.
 
 **Windows x64** — download [FFTW for Windows](https://www.fftw.org/install/windows.html) (64-bit) and generate the import library from the `x64 Native Tools Command Prompt for VS`:
 
@@ -210,7 +210,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
     make -j$(nproc) config=Release
     ```
 
-5. After a successful build, find the binaries in `BUILD/_bin/`, `BUILD/vst/`, or `BUILD/vst3/` and copy them to your system plug-in folder:
+5. After a successful build, find the binaries in `BUILD/vst/`, `BUILD/vst3/`, `BUILD/au/`, `BUILD/standalone/`, or `BUILD/lv2/` (depending on which formats you enabled) and copy them to your system plug-in folder:
 
     | Format | macOS | Windows | Linux |
     |--------|-------|---------|-------|
@@ -223,14 +223,20 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `NUM_CHANNELS` | Number of input/output channels per plugin | `36` |
-| `MAX_DELAYTIME_S` | Maximum delay time for mcfx_delay (seconds) | `0.5` |
+| `NUM_CHANNELS` | Channel count for the per-channel VST2 build | `36` |
+| `MCFX_MAX_CHANNELS` | Max channel count for the single-binary multichannel VST3/AU/Standalone build | `128` |
+| `MAX_DELAYTIME_S` | Maximum delay time for `mcfx_delay` (seconds) | `0.5` |
+| `BUILD_VST` | Build VST2 plugins (requires `VST2SDKPATH`) | **`ON`** |
+| `BUILD_VST3` | Build VST3 plugins | `OFF` |
+| `BUILD_AU` | Build AU plugins (macOS only) | `OFF` |
 | `BUILD_STANDALONE` | Build standalone applications | `OFF` |
-| `BUILD_VST3` | Build VST3 plugins | **`ON`** |
-| `BUILD_VST2` | Build VST2 plugins | `OFF` |
 | `BUILD_LV2` | Build LV2 plugins | `OFF` |
+| `MCFX_BUILD_VST2_PER_CHANNEL` | Build per-channel VST2 variants (legacy) | `ON` |
+| `MCFX_BUILD_MC` | Build single multichannel VST3/AU/Standalone | `ON` |
 | `VST2SDKPATH` | Path to the VST2 SDK | `~/SDKs/vstsdk2.4` |
-| `WITH_ZITA_CONVOLVER` | Use zita-convolver for better Linux performance | `OFF` |
+| `WITH_ZITA_CONVOLVER` | Use zita-convolver for better Linux performance (Linux only) | `OFF` |
+
+> Note: VST3 is the recommended format for new projects but currently defaults to OFF — pass `-DBUILD_VST3=ON` when configuring.
 
 **FFTW paths** (set manually if not found automatically):
 
