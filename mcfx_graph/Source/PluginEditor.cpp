@@ -95,7 +95,12 @@ namespace
                 "  Cmd + scroll on canvas  Zoom around cursor\n"
                 "\n"
                 "Toolbar\n"
-                "  Save / Load JSON        Export / import the entire graph\n"
+                "  Presets                 Save / load named presets, or import\n"
+                "                          / export a JSON file anywhere on disk.\n"
+                "                          Named presets live in:\n"
+                "                            ~/Library/Application Support/\n"
+                "                              mcfx_graph/presets   (macOS)\n"
+                "                            %APPDATA%\\mcfx_graph\\presets (Win)\n"
                 "  Scan plug-ins           Refresh the VST3 / VST / AU list\n"
                 "  -, 1:1, +               Zoom out, reset, zoom in\n"
                 "  P button on a parameter Expose to the DAW as one of 256\n"
@@ -114,8 +119,7 @@ Mcfx_graphAudioProcessorEditor::Mcfx_graphAudioProcessorEditor (Mcfx_graphAudioP
     setResizable (true, true);
     setResizeLimits (760, 420, 4000, 3000);
 
-    addAndMakeVisible (saveButton_);
-    addAndMakeVisible (loadButton_);
+    addAndMakeVisible (presetsButton_);
     addAndMakeVisible (scanButton_);
     addAndMakeVisible (undoButton_);
     addAndMakeVisible (redoButton_);
@@ -134,8 +138,7 @@ Mcfx_graphAudioProcessorEditor::Mcfx_graphAudioProcessorEditor (Mcfx_graphAudioP
     addAndMakeVisible (canvasViewport_);
 
     // Tooltips on every toolbar button so a hover explains what they do.
-    saveButton_      .setTooltip ("Save the entire graph (topology, plug-in states, parameter bindings) to a JSON file.");
-    loadButton_      .setTooltip ("Load a graph from a JSON file (replaces the current graph).");
+    presetsButton_   .setTooltip ("Save / load named graph presets (stored under the user's app-data folder), or import / export a JSON file anywhere on disk.");
     scanButton_      .setTooltip ("Scan the system for VST3 / VST / AU plug-ins and rebuild the picker list.");
     undoButton_      .setTooltip ("Undo the last graph change (Cmd+Z).");
     redoButton_      .setTooltip ("Redo (Cmd+Shift+Z).");
@@ -178,8 +181,7 @@ Mcfx_graphAudioProcessorEditor::Mcfx_graphAudioProcessorEditor (Mcfx_graphAudioP
         resized();
     }
 
-    saveButton_.onClick = [this] { onSaveClicked(); };
-    loadButton_.onClick = [this] { onLoadClicked(); };
+    presetsButton_.onClick = [this] { onPresetsClicked(); };
     scanButton_.onClick = [this] { onScanClicked(); };
     undoButton_.onClick = [this] { onUndoClicked(); };
     redoButton_.onClick = [this] { onRedoClicked(); };
@@ -225,8 +227,7 @@ void Mcfx_graphAudioProcessorEditor::resized()
     auto area = getLocalBounds();
 
     auto top  = area.removeFromTop (kToolbarHeight).reduced (4);
-    saveButton_.setBounds (top.removeFromLeft (90)); top.removeFromLeft (4);
-    loadButton_.setBounds (top.removeFromLeft (90)); top.removeFromLeft (4);
+    presetsButton_.setBounds (top.removeFromLeft (90)); top.removeFromLeft (4);
     scanButton_.setBounds (top.removeFromLeft (110)); top.removeFromLeft (10);
     undoButton_.setBounds (top.removeFromLeft (60)); top.removeFromLeft (4);
     redoButton_.setBounds (top.removeFromLeft (60)); top.removeFromLeft (10);
@@ -365,52 +366,261 @@ void Mcfx_graphAudioProcessorEditor::changeListenerCallback (juce::ChangeBroadca
     propertiesPanel_.setSelectedNode (canvas_.getSelectedNode());
 }
 
-void Mcfx_graphAudioProcessorEditor::onSaveClicked()
+//==============================================================================
+// Presets menu
+//
+// One toolbar button opens this menu (replaces the old Save JSON / Load JSON
+// pair). Named presets live as JSON files under
+//   userApplicationDataDirectory/mcfx_graph/presets
+// — same convention as PluginListManager's pluginList.xml cache. The popup is
+// rebuilt from disk every open, so external edits to the folder show up
+// without restart.
+
+void Mcfx_graphAudioProcessorEditor::savePresetFile (const juce::File& file)
 {
-    chooser_ = std::make_unique<juce::FileChooser> (
-                    "Save mcfx_graph as JSON",
-                    juce::File::getSpecialLocation (juce::File::userDocumentsDirectory)
-                        .getChildFile ("mcfx_graph.json"),
-                    "*.json");
-
-    auto flags = juce::FileBrowserComponent::saveMode
-               | juce::FileBrowserComponent::canSelectFiles
-               | juce::FileBrowserComponent::warnAboutOverwriting;
-
-    chooser_->launchAsync (flags, [this] (const juce::FileChooser& fc)
-    {
-        const auto file = fc.getResult();
-        if (file == juce::File()) return;
-
-        juce::String err;
-        if (! processor_.saveToJsonFile (file, &err))
-            statusLabel_.setText ("Save failed: " + err, juce::dontSendNotification);
-        else
-            statusLabel_.setText ("Saved " + file.getFileName(), juce::dontSendNotification);
-    });
+    juce::String err;
+    if (! processor_.saveToJsonFile (file, &err))
+        statusLabel_.setText ("Save failed: " + err, juce::dontSendNotification);
+    else
+        statusLabel_.setText ("Saved " + file.getFileName(), juce::dontSendNotification);
 }
 
-void Mcfx_graphAudioProcessorEditor::onLoadClicked()
+void Mcfx_graphAudioProcessorEditor::loadPresetFile (const juce::File& file)
 {
-    chooser_ = std::make_unique<juce::FileChooser> (
-                    "Load mcfx_graph JSON",
-                    juce::File::getSpecialLocation (juce::File::userDocumentsDirectory),
-                    "*.json");
+    juce::String err;
+    if (! processor_.loadFromJsonFile (file, &err))
+        statusLabel_.setText ("Load failed: " + err, juce::dontSendNotification);
+    else
+        statusLabel_.setText ("Loaded " + file.getFileName(), juce::dontSendNotification);
+}
 
-    auto flags = juce::FileBrowserComponent::openMode
-               | juce::FileBrowserComponent::canSelectFiles;
-
-    chooser_->launchAsync (flags, [this] (const juce::FileChooser& fc)
+namespace
+{
+    // Pick a sensible start directory for the file pickers: the user's preset
+    // folder when it exists (puts the chooser right where named presets live),
+    // otherwise ~/Documents (the legacy default).
+    juce::File pickStartDir (const PresetManager& pm)
     {
-        const auto file = fc.getResult();
-        if (file == juce::File()) return;
+        auto dir = pm.getPresetDir();
+        if (dir.isDirectory()) return dir;
+        return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
+    }
+}
 
-        juce::String err;
-        if (! processor_.loadFromJsonFile (file, &err))
-            statusLabel_.setText ("Load failed: " + err, juce::dontSendNotification);
-        else
-            statusLabel_.setText ("Loaded " + file.getFileName(), juce::dontSendNotification);
+void Mcfx_graphAudioProcessorEditor::onPresetsClicked()
+{
+    juce::PopupMenu m;
+
+    // ---- File-picker entries (the old Save JSON / Load JSON behaviour) ----
+
+    m.addItem ("Load from file...", [this]
+    {
+        chooser_ = std::make_unique<juce::FileChooser> (
+                        "Load mcfx_graph JSON",
+                        pickStartDir (presets_),
+                        "*.json");
+
+        auto flags = juce::FileBrowserComponent::openMode
+                   | juce::FileBrowserComponent::canSelectFiles;
+
+        chooser_->launchAsync (flags, [this] (const juce::FileChooser& fc)
+        {
+            const auto file = fc.getResult();
+            if (file == juce::File()) return;
+            loadPresetFile (file);
+        });
     });
+
+    m.addItem ("Save to file...", [this]
+    {
+        chooser_ = std::make_unique<juce::FileChooser> (
+                        "Save mcfx_graph as JSON",
+                        pickStartDir (presets_).getChildFile ("mcfx_graph.json"),
+                        "*.json");
+
+        auto flags = juce::FileBrowserComponent::saveMode
+                   | juce::FileBrowserComponent::canSelectFiles
+                   | juce::FileBrowserComponent::warnAboutOverwriting;
+
+        chooser_->launchAsync (flags, [this] (const juce::FileChooser& fc)
+        {
+            const auto file = fc.getResult();
+            if (file == juce::File()) return;
+            savePresetFile (file);
+        });
+    });
+
+    m.addSeparator();
+
+    // ---- Named-preset save + list ----
+
+    m.addItem ("Save as named preset...", [this] { promptSaveAsNamedPreset(); });
+
+    m.addSeparator();
+
+    const auto entries = presets_.listPresets();
+    if (entries.empty())
+    {
+        m.addItem ("(no presets yet)", false, false, [] {});
+    }
+    else
+    {
+        for (const auto& e : entries)
+        {
+            auto file = e.file;
+            m.addItem (e.name, [this, file] { loadPresetFile (file); });
+        }
+    }
+
+    m.addSeparator();
+
+    // ---- Manage submenus ----
+
+    juce::PopupMenu renameMenu;
+    juce::PopupMenu deleteMenu;
+    for (const auto& e : entries)
+    {
+        auto file = e.file;
+        renameMenu.addItem (e.name, [this, file] { promptRenamePreset (file); });
+        deleteMenu.addItem (e.name, [this, file] { confirmDeletePreset (file); });
+    }
+    m.addSubMenu ("Rename preset",  renameMenu, ! entries.empty());
+    m.addSubMenu ("Delete preset",  deleteMenu, ! entries.empty());
+
+    m.addSeparator();
+
+    m.addItem ("Reveal preset folder", [this]
+    {
+        // Create the folder so reveal does something meaningful even before the
+        // first save — Finder/Explorer just opens the new empty directory.
+        presets_.ensurePresetDirExists();
+        presets_.getPresetDir().revealToUser();
+    });
+
+    m.showMenuAsync (juce::PopupMenu::Options()
+                         .withTargetComponent (&presetsButton_));
+}
+
+void Mcfx_graphAudioProcessorEditor::promptSaveAsNamedPreset()
+{
+    alertWindow_ = std::make_unique<juce::AlertWindow> (
+                       "Save preset",
+                       "Enter a name for this preset:",
+                       juce::MessageBoxIconType::QuestionIcon);
+
+    alertWindow_->addTextEditor ("name", "", {}, false);
+    alertWindow_->addButton ("Save",   1, juce::KeyPress (juce::KeyPress::returnKey));
+    alertWindow_->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    alertWindow_->enterModalState (true,
+        juce::ModalCallbackFunction::create ([this] (int result)
+        {
+            if (result == 0 || alertWindow_ == nullptr) { alertWindow_.reset(); return; }
+
+            const auto raw   = alertWindow_->getTextEditorContents ("name");
+            const auto clean = PresetManager::sanitise (raw);
+            alertWindow_.reset();
+
+            if (clean.isEmpty())
+            {
+                statusLabel_.setText ("Preset name is empty", juce::dontSendNotification);
+                return;
+            }
+
+            if (! presets_.ensurePresetDirExists())
+            {
+                statusLabel_.setText ("Could not create preset folder", juce::dontSendNotification);
+                return;
+            }
+
+            const auto file = presets_.fileForName (clean);
+
+            // Confirm overwrite if a preset with the same name already exists.
+            if (file.existsAsFile())
+            {
+                alertWindow_ = std::make_unique<juce::AlertWindow> (
+                                   "Overwrite preset?",
+                                   "A preset named \"" + clean + "\" already exists.\n"
+                                   "Overwrite it?",
+                                   juce::MessageBoxIconType::WarningIcon);
+                alertWindow_->addButton ("Overwrite", 1, juce::KeyPress (juce::KeyPress::returnKey));
+                alertWindow_->addButton ("Cancel",    0, juce::KeyPress (juce::KeyPress::escapeKey));
+                alertWindow_->enterModalState (true,
+                    juce::ModalCallbackFunction::create ([this, file] (int r)
+                    {
+                        alertWindow_.reset();
+                        if (r != 1) return;
+                        savePresetFile (file);
+                    }), false);
+                return;
+            }
+
+            savePresetFile (file);
+        }), false);
+}
+
+void Mcfx_graphAudioProcessorEditor::promptRenamePreset (const juce::File& file)
+{
+    const auto oldName = file.getFileNameWithoutExtension();
+
+    alertWindow_ = std::make_unique<juce::AlertWindow> (
+                       "Rename preset",
+                       "Enter a new name for \"" + oldName + "\":",
+                       juce::MessageBoxIconType::QuestionIcon);
+
+    alertWindow_->addTextEditor ("name", oldName, {}, false);
+    alertWindow_->addButton ("Rename", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    alertWindow_->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    alertWindow_->enterModalState (true,
+        juce::ModalCallbackFunction::create ([this, file, oldName] (int result)
+        {
+            if (result == 0 || alertWindow_ == nullptr) { alertWindow_.reset(); return; }
+
+            const auto raw   = alertWindow_->getTextEditorContents ("name");
+            const auto clean = PresetManager::sanitise (raw);
+            alertWindow_.reset();
+
+            if (clean.isEmpty() || clean == oldName) return;
+
+            const auto target = presets_.fileForName (clean);
+            if (target.existsAsFile())
+            {
+                statusLabel_.setText ("A preset named \"" + clean + "\" already exists",
+                                      juce::dontSendNotification);
+                return;
+            }
+
+            if (file.moveFileTo (target))
+                statusLabel_.setText ("Renamed to " + target.getFileName(),
+                                      juce::dontSendNotification);
+            else
+                statusLabel_.setText ("Rename failed", juce::dontSendNotification);
+        }), false);
+}
+
+void Mcfx_graphAudioProcessorEditor::confirmDeletePreset (const juce::File& file)
+{
+    alertWindow_ = std::make_unique<juce::AlertWindow> (
+                       "Delete preset?",
+                       "Delete preset \"" + file.getFileNameWithoutExtension() + "\"?\n"
+                       "This cannot be undone.",
+                       juce::MessageBoxIconType::WarningIcon);
+    alertWindow_->addButton ("Delete", 1, juce::KeyPress (juce::KeyPress::returnKey));
+    alertWindow_->addButton ("Cancel", 0, juce::KeyPress (juce::KeyPress::escapeKey));
+
+    alertWindow_->enterModalState (true,
+        juce::ModalCallbackFunction::create ([this, file] (int result)
+        {
+            alertWindow_.reset();
+            if (result != 1) return;
+
+            if (file.deleteFile())
+                statusLabel_.setText ("Deleted " + file.getFileName(),
+                                      juce::dontSendNotification);
+            else
+                statusLabel_.setText ("Delete failed", juce::dontSendNotification);
+        }), false);
 }
 
 void Mcfx_graphAudioProcessorEditor::onScanClicked()

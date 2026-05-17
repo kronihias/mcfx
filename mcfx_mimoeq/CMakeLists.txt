@@ -23,9 +23,13 @@ IF(NOT APPLE)
     SET(WITH_FFTW3 TRUE)
 ENDIF()
 
-# Pass EqCore + MtxConv to both variants via the MCFX_EXTRA_* hooks
-SET(MCFX_EXTRA_SOURCES  ${EQCORE_SOURCE} ${EQCORE_HEADER} ${MTXCONV_SOURCES})
-SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/EqCore ${SRC_DIR}/mcfx_convolver/Source)
+# Pass EqCore + MtxConv + shared PresetManager to both variants via the
+# MCFX_EXTRA_* hooks. PresetManager is shared with mcfx_graph.
+SET(MCFX_EXTRA_SOURCES  ${EQCORE_SOURCE} ${EQCORE_HEADER} ${MTXCONV_SOURCES}
+                        ${SRC_DIR}/common/Presets/PresetManager.cpp
+                        ${SRC_DIR}/common/Presets/PresetManager.h)
+SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/EqCore ${SRC_DIR}/mcfx_convolver/Source
+                        ${SRC_DIR}/common/Presets)
 
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 

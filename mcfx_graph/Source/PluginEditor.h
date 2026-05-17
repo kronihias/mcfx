@@ -14,6 +14,7 @@
 #include "Editor/GraphEditorComponent.h"
 #include "Editor/NodePropertiesPanel.h"
 #include "Editor/BreadcrumbBar.h"
+#include "PresetManager.h"
 
 class Mcfx_graphAudioProcessorEditor : public juce::AudioProcessorEditor,
                                        public juce::FileDragAndDropTarget,
@@ -35,17 +36,25 @@ public:
 private:
     void changeListenerCallback (juce::ChangeBroadcaster*) override;
 
-    void onSaveClicked();
-    void onLoadClicked();
+    void onPresetsClicked();
     void onScanClicked();
     void onUndoClicked();
     void onRedoClicked();
     void onHelpClicked();
 
-    Mcfx_graphAudioProcessor& processor_;
+    // Shared by the file-picker menu items and the named-preset list.
+    void loadPresetFile (const juce::File& file);
+    void savePresetFile (const juce::File& file);
 
-    juce::TextButton saveButton_   { "Save JSON" };
-    juce::TextButton loadButton_   { "Load JSON" };
+    // Named-preset prompts (all async, drive juce::AlertWindow).
+    void promptSaveAsNamedPreset();
+    void promptRenamePreset (const juce::File& file);
+    void confirmDeletePreset (const juce::File& file);
+
+    Mcfx_graphAudioProcessor& processor_;
+    PresetManager presets_ { "mcfx_graph" };
+
+    juce::TextButton presetsButton_ { "Presets" };
     juce::TextButton scanButton_   { "Scan plugins" };
     juce::TextButton undoButton_   { "Undo" };
     juce::TextButton redoButton_   { "Redo" };
@@ -69,4 +78,7 @@ private:
     std::unique_ptr<juce::StretchableLayoutResizerBar> resizerBar_;
 
     std::unique_ptr<juce::FileChooser> chooser_;
+    // Reused across the named-preset prompts (save/rename/delete/overwrite).
+    // Held as a member so the async modal callback can clean it up safely.
+    std::unique_ptr<juce::AlertWindow> alertWindow_;
 };

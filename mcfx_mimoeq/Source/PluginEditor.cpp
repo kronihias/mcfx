@@ -124,12 +124,9 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     btnRedo_.addListener(this);
     btnRedo_.setTooltip("Redo (Cmd+Shift+Z)");
     btnRedo_.setEnabled(false);
-    addAndMakeVisible(btnLoad_);
-    btnLoad_.addListener(this);
-    btnLoad_.setTooltip("Load EQ configuration from JSON file");
-    addAndMakeVisible(btnSave_);
-    btnSave_.addListener(this);
-    btnSave_.setTooltip("Save EQ configuration to JSON file");
+    addAndMakeVisible(btnPresets_);
+    btnPresets_.addListener(this);
+    btnPresets_.setTooltip("Save / load named EQ presets (stored under the user's app-data folder), or import / export a JSON file anywhere on disk.");
 
     processor->addChangeListener(this);
 
@@ -245,10 +242,11 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     int h = getHeight();
 
     lblTitle_.setBounds(4, 2, 150, 20);
-    btnUndo_.setBounds(w - 210, 2, 40, 20);
-    btnRedo_.setBounds(w - 168, 2, 40, 20);
-    btnLoad_.setBounds(w - 115, 2, 55, 20);
-    btnSave_.setBounds(w - 58, 2, 55, 20);
+    btnUndo_   .setBounds(w - 210, 2, 40, 20);
+    btnRedo_   .setBounds(w - 168, 2, 40, 20);
+    // One Presets button replaces the old Load + Save pair, taking their
+    // combined footprint (55 + 2 gap + 55 = 112 px).
+    btnPresets_.setBounds(w - 115, 2, 112, 20);
 
     // Mode & path selector row
     int pathY = 26;
@@ -757,31 +755,9 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             notifyChainChanged();
         }
     }
-    else if (b == &btnLoad_)
+    else if (b == &btnPresets_)
     {
-        FileChooser chooser("Load EQ Config", File(), "*.json");
-        if (chooser.browseForFileToOpen())
-        {
-            dragUndoPushed_ = false;
-            getProcessor()->pushUndoState();
-            updateUndoRedoButtons();
-            getProcessor()->loadConfigFromFile(chooser.getResult());
-            auto* chain = getActiveChain();
-            graph_.setChain(chain); phaseGraph_.setChain(chain);
-            refreshTabs();
-            if (chain != nullptr && chain->getNumBands() > 0)
-                selectBand(0);
-            else
-                selectBand(-1);
-        }
-    }
-    else if (b == &btnSave_)
-    {
-        FileChooser chooser("Save EQ Config", File(), "*.json");
-        if (chooser.browseForFileToSave(true))
-        {
-            getProcessor()->saveConfigToFile(chooser.getResult());
-        }
+        showPresetsMenu();
     }
 }
 
@@ -799,17 +775,7 @@ void Mcfx_mimoeqAudioProcessorEditor::filesDropped(const StringArray& files, int
     {
         if (f.endsWithIgnoreCase(".json"))
         {
-            dragUndoPushed_ = false;
-            getProcessor()->pushUndoState();
-            updateUndoRedoButtons();
-            getProcessor()->loadConfigFromFile(File(f));
-            auto* chain = getActiveChain();
-            graph_.setChain(chain); phaseGraph_.setChain(chain);
-            refreshTabs();
-            if (chain != nullptr && chain->getNumBands() > 0)
-                selectBand(0);
-            else
-                selectBand(-1);
+            loadPresetFile(File(f));
             break;
         }
     }
@@ -1360,4 +1326,260 @@ void Mcfx_mimoeqAudioProcessorEditor::showAnalyzerSettingsPopup()
         btnAnalyzer_.getScreenBounds(),
         nullptr);
     analyzerSettingsCallOut_ = &box;
+}
+
+//==============================================================================
+// Presets menu
+//
+// One toolbar button replaces the old Load + Save pair. Named presets live as
+// JSON files under userApplicationDataDirectory/mcfx_mimoeq/presets and are
+// listed in the menu directly so the user can load one in a single click.
+// All the prompts are async (juce::AlertWindow::enterModalState), keeping the
+// audio thread / host UI responsive.
+
+void Mcfx_mimoeqAudioProcessorEditor::savePresetFile(const File& file)
+{
+    if (getProcessor()->saveConfigToFile(file))
+        statusBar_.setText("Saved " + file.getFileName(), dontSendNotification);
+    else
+        statusBar_.setText("Save failed", dontSendNotification);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::loadPresetFile(const File& file)
+{
+    // Mirror the pre-load ritual that the old btnLoad_ handler and the
+    // drag-and-drop handler both did: push an undo snapshot, swap chains,
+    // refresh the tabs, and reselect band 0 (or -1 when the chain is empty).
+    dragUndoPushed_ = false;
+    getProcessor()->pushUndoState();
+    updateUndoRedoButtons();
+
+    if (! getProcessor()->loadConfigFromFile(file))
+    {
+        statusBar_.setText("Load failed", dontSendNotification);
+        return;
+    }
+
+    auto* chain = getActiveChain();
+    graph_.setChain(chain); phaseGraph_.setChain(chain);
+    refreshTabs();
+    selectBand((chain != nullptr && chain->getNumBands() > 0) ? 0 : -1);
+    statusBar_.setText("Loaded " + file.getFileName(), dontSendNotification);
+}
+
+namespace
+{
+    // Start the file pickers in the user's preset folder when it exists, so
+    // the chooser drops them right where named presets live; otherwise fall
+    // back to the home directory (matches the previous default of File()).
+    File pickStartDir(const PresetManager& pm)
+    {
+        auto dir = pm.getPresetDir();
+        if (dir.isDirectory()) return dir;
+        return File::getSpecialLocation(File::userHomeDirectory);
+    }
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::showPresetsMenu()
+{
+    PopupMenu m;
+
+    m.addItem("Load from file...", [this]
+    {
+        chooser_ = std::make_unique<FileChooser>(
+                       "Load EQ Config",
+                       pickStartDir(presets_),
+                       "*.json");
+
+        auto flags = FileBrowserComponent::openMode
+                   | FileBrowserComponent::canSelectFiles;
+
+        chooser_->launchAsync(flags, [this](const FileChooser& fc)
+        {
+            const auto file = fc.getResult();
+            if (file == File()) return;
+            loadPresetFile(file);
+        });
+    });
+
+    m.addItem("Save to file...", [this]
+    {
+        chooser_ = std::make_unique<FileChooser>(
+                       "Save EQ Config",
+                       pickStartDir(presets_).getChildFile("mcfx_mimoeq.json"),
+                       "*.json");
+
+        auto flags = FileBrowserComponent::saveMode
+                   | FileBrowserComponent::canSelectFiles
+                   | FileBrowserComponent::warnAboutOverwriting;
+
+        chooser_->launchAsync(flags, [this](const FileChooser& fc)
+        {
+            const auto file = fc.getResult();
+            if (file == File()) return;
+            savePresetFile(file);
+        });
+    });
+
+    m.addSeparator();
+
+    m.addItem("Save as named preset...", [this] { promptSaveAsNamedPreset(); });
+
+    m.addSeparator();
+
+    const auto entries = presets_.listPresets();
+    if (entries.empty())
+    {
+        m.addItem("(no presets yet)", false, false, [] {});
+    }
+    else
+    {
+        for (const auto& e : entries)
+        {
+            auto file = e.file;
+            m.addItem(e.name, [this, file] { loadPresetFile(file); });
+        }
+    }
+
+    m.addSeparator();
+
+    PopupMenu renameMenu, deleteMenu;
+    for (const auto& e : entries)
+    {
+        auto file = e.file;
+        renameMenu.addItem(e.name, [this, file] { promptRenamePreset(file); });
+        deleteMenu.addItem(e.name, [this, file] { confirmDeletePreset(file); });
+    }
+    m.addSubMenu("Rename preset", renameMenu, ! entries.empty());
+    m.addSubMenu("Delete preset", deleteMenu, ! entries.empty());
+
+    m.addSeparator();
+
+    m.addItem("Reveal preset folder", [this]
+    {
+        presets_.ensurePresetDirExists();
+        presets_.getPresetDir().revealToUser();
+    });
+
+    m.showMenuAsync(PopupMenu::Options().withTargetComponent(&btnPresets_));
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::promptSaveAsNamedPreset()
+{
+    alertWindow_ = std::make_unique<AlertWindow>(
+                       "Save preset",
+                       "Enter a name for this preset:",
+                       MessageBoxIconType::QuestionIcon);
+
+    alertWindow_->addTextEditor("name", "", {}, false);
+    alertWindow_->addButton("Save",   1, KeyPress(KeyPress::returnKey));
+    alertWindow_->addButton("Cancel", 0, KeyPress(KeyPress::escapeKey));
+
+    alertWindow_->enterModalState(true,
+        ModalCallbackFunction::create([this](int result)
+        {
+            if (result == 0 || alertWindow_ == nullptr) { alertWindow_.reset(); return; }
+
+            const auto raw   = alertWindow_->getTextEditorContents("name");
+            const auto clean = PresetManager::sanitise(raw);
+            alertWindow_.reset();
+
+            if (clean.isEmpty())
+            {
+                statusBar_.setText("Preset name is empty", dontSendNotification);
+                return;
+            }
+
+            if (! presets_.ensurePresetDirExists())
+            {
+                statusBar_.setText("Could not create preset folder", dontSendNotification);
+                return;
+            }
+
+            const auto file = presets_.fileForName(clean);
+
+            if (file.existsAsFile())
+            {
+                alertWindow_ = std::make_unique<AlertWindow>(
+                                   "Overwrite preset?",
+                                   "A preset named \"" + clean + "\" already exists.\n"
+                                   "Overwrite it?",
+                                   MessageBoxIconType::WarningIcon);
+                alertWindow_->addButton("Overwrite", 1, KeyPress(KeyPress::returnKey));
+                alertWindow_->addButton("Cancel",    0, KeyPress(KeyPress::escapeKey));
+                alertWindow_->enterModalState(true,
+                    ModalCallbackFunction::create([this, file](int r)
+                    {
+                        alertWindow_.reset();
+                        if (r != 1) return;
+                        savePresetFile(file);
+                    }), false);
+                return;
+            }
+
+            savePresetFile(file);
+        }), false);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::promptRenamePreset(const File& file)
+{
+    const auto oldName = file.getFileNameWithoutExtension();
+
+    alertWindow_ = std::make_unique<AlertWindow>(
+                       "Rename preset",
+                       "Enter a new name for \"" + oldName + "\":",
+                       MessageBoxIconType::QuestionIcon);
+
+    alertWindow_->addTextEditor("name", oldName, {}, false);
+    alertWindow_->addButton("Rename", 1, KeyPress(KeyPress::returnKey));
+    alertWindow_->addButton("Cancel", 0, KeyPress(KeyPress::escapeKey));
+
+    alertWindow_->enterModalState(true,
+        ModalCallbackFunction::create([this, file, oldName](int result)
+        {
+            if (result == 0 || alertWindow_ == nullptr) { alertWindow_.reset(); return; }
+
+            const auto raw   = alertWindow_->getTextEditorContents("name");
+            const auto clean = PresetManager::sanitise(raw);
+            alertWindow_.reset();
+
+            if (clean.isEmpty() || clean == oldName) return;
+
+            const auto target = presets_.fileForName(clean);
+            if (target.existsAsFile())
+            {
+                statusBar_.setText("A preset named \"" + clean + "\" already exists",
+                                   dontSendNotification);
+                return;
+            }
+
+            if (file.moveFileTo(target))
+                statusBar_.setText("Renamed to " + target.getFileName(),
+                                   dontSendNotification);
+            else
+                statusBar_.setText("Rename failed", dontSendNotification);
+        }), false);
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::confirmDeletePreset(const File& file)
+{
+    alertWindow_ = std::make_unique<AlertWindow>(
+                       "Delete preset?",
+                       "Delete preset \"" + file.getFileNameWithoutExtension() + "\"?\n"
+                       "This cannot be undone.",
+                       MessageBoxIconType::WarningIcon);
+    alertWindow_->addButton("Delete", 1, KeyPress(KeyPress::returnKey));
+    alertWindow_->addButton("Cancel", 0, KeyPress(KeyPress::escapeKey));
+
+    alertWindow_->enterModalState(true,
+        ModalCallbackFunction::create([this, file](int result)
+        {
+            alertWindow_.reset();
+            if (result != 1) return;
+
+            if (file.deleteFile())
+                statusBar_.setText("Deleted " + file.getFileName(), dontSendNotification);
+            else
+                statusBar_.setText("Delete failed", dontSendNotification);
+        }), false);
 }

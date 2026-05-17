@@ -24,6 +24,12 @@ IF(BUILD_VST OR MCFX_VST2_SDK_AVAILABLE)
     LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_VST=1)
 ENDIF()
 
+# Shared preset-folder helper used by both mcfx_graph and mcfx_mimoeq.
+SET(MCFX_EXTRA_SOURCES
+    ${SRC_DIR}/common/Presets/PresetManager.cpp
+    ${SRC_DIR}/common/Presets/PresetManager.h)
+SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/Presets)
+
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 
 #------------------------------------------------------------------------------
@@ -124,3 +130,5 @@ foreach(tgt IN LISTS MCFX_TARGETS)
 endforeach()
 
 UNSET(MCFX_EXTRA_DEFS)
+UNSET(MCFX_EXTRA_SOURCES)
+UNSET(MCFX_EXTRA_INCLUDES)

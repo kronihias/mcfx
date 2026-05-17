@@ -26,6 +26,7 @@
 #include "EqPhaseGraph.h"
 #include "EqBandEditor.h"
 #include "RoutingOverview.h"
+#include "PresetManager.h"
 
 class Mcfx_mimoeqAudioProcessorEditor;
 
@@ -136,8 +137,25 @@ private:
     TextButton btnRemove_ { "-" };
     TextButton btnUndo_ { "Undo" };
     TextButton btnRedo_ { "Redo" };
-    TextButton btnLoad_ { "Load" };
-    TextButton btnSave_ { "Save" };
+    TextButton btnPresets_ { "Presets" };
+
+    // Presets menu + named-preset prompts. The menu is built fresh each open
+    // from the contents of presets_.getPresetDir() so external edits to the
+    // folder show up without restart.
+    PresetManager presets_ { "mcfx_mimoeq" };
+    std::unique_ptr<FileChooser> chooser_;
+    std::unique_ptr<AlertWindow> alertWindow_;
+
+    void showPresetsMenu();
+    void promptSaveAsNamedPreset();
+    void promptRenamePreset (const File& file);
+    void confirmDeletePreset (const File& file);
+
+    // Shared by drag-and-drop, the file-picker entries, and the named-preset
+    // list — they all need the same pre-load ritual (push undo, refresh tabs,
+    // re-select band 0).
+    void loadPresetFile (const File& file);
+    void savePresetFile (const File& file);
 
     Label lblTitle_;
 
