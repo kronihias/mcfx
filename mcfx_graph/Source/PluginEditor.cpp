@@ -227,10 +227,7 @@ void Mcfx_graphAudioProcessorEditor::resized()
     auto area = getLocalBounds();
 
     auto top  = area.removeFromTop (kToolbarHeight).reduced (4);
-    presetsButton_.setBounds (top.removeFromLeft (90)); top.removeFromLeft (4);
     scanButton_.setBounds (top.removeFromLeft (110)); top.removeFromLeft (10);
-    undoButton_.setBounds (top.removeFromLeft (60)); top.removeFromLeft (4);
-    redoButton_.setBounds (top.removeFromLeft (60)); top.removeFromLeft (10);
     zoomOutButton_  .setBounds (top.removeFromLeft (28));
     resetZoomButton_.setBounds (top.removeFromLeft (44));
     zoomInButton_   .setBounds (top.removeFromLeft (28));
@@ -238,12 +235,26 @@ void Mcfx_graphAudioProcessorEditor::resized()
     helpButton_     .setBounds (top.removeFromLeft (28));
     top.removeFromLeft (10);
 
-    // Right-aligned: name + version. Status label uses what's left in between.
+    // Right-aligned group (mirrors mcfx_mimoeq's toolbar):
+    //   …status…  Undo Redo  Presets  mcfx_graph  v0.8.3
+    // Undo / Redo / Presets cluster together at the right so the title +
+    // version read as the anchor, with the editing-history + preset actions
+    // immediately adjacent to them rather than scattered across the bar.
     const int versionW = 60;
     const int titleW   = 96;
-    versionLabel_.setBounds (top.removeFromRight (versionW));
-    titleLabel_  .setBounds (top.removeFromRight (titleW));
-    statusLabel_ .setBounds (top);
+    const int presetsW = 90;
+    const int undoW    = 60;
+    const int redoW    = 60;
+    versionLabel_ .setBounds (top.removeFromRight (versionW));
+    titleLabel_   .setBounds (top.removeFromRight (titleW));
+    top.removeFromRight (6); // small gap between title and Presets
+    presetsButton_.setBounds (top.removeFromRight (presetsW));
+    top.removeFromRight (10);
+    redoButton_   .setBounds (top.removeFromRight (redoW));
+    top.removeFromRight (4);
+    undoButton_   .setBounds (top.removeFromRight (undoW));
+    top.removeFromRight (10);
+    statusLabel_  .setBounds (top);
 
     breadcrumbBar_.setBounds (area.removeFromTop (kBreadcrumbHeight));
 

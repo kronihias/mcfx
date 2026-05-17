@@ -60,6 +60,27 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     btnModeDiag_.setTooltip("Diagonal: apply the same EQ chain to all selected channels (input-to-output) independently");
     btnModeMIMO_.setTooltip("MIMO: configure individual EQ paths between input/output channels");
 
+    // Make the active mode unmistakable at a glance: each mode gets its own
+    // bright background colour (aquamarine for Diagonal — matches the title;
+    // warm orange for MIMO), with dark text on the active one. The inactive
+    // button recedes to a dim grey with low-contrast text. Without this the
+    // two buttons look identical under JUCE's default LookAndFeel and the
+    // user has to read them to know which mode they're in.
+    const Colour kDiagColour { 0xff5fdbb4 };  // aquamarine, matches lblTitle_
+    const Colour kMimoColour { 0xffe88a3a };  // warm orange, distinct
+    const Colour kInactiveBg { 0xff2a2a2a };  // recedes into toolbar
+    const Colour kInactiveTx { Colours::white.withAlpha(0.55f) };
+
+    btnModeDiag_.setColour(TextButton::buttonOnColourId,  kDiagColour);
+    btnModeDiag_.setColour(TextButton::buttonColourId,    kInactiveBg);
+    btnModeDiag_.setColour(TextButton::textColourOnId,    Colours::black);
+    btnModeDiag_.setColour(TextButton::textColourOffId,   kInactiveTx);
+
+    btnModeMIMO_.setColour(TextButton::buttonOnColourId,  kMimoColour);
+    btnModeMIMO_.setColour(TextButton::buttonColourId,    kInactiveBg);
+    btnModeMIMO_.setColour(TextButton::textColourOnId,    Colours::black);
+    btnModeMIMO_.setColour(TextButton::textColourOffId,   kInactiveTx);
+
     // Diagonal channel selector
     addAndMakeVisible(btnDiagChans_);
     btnDiagChans_.addListener(this);
@@ -132,6 +153,21 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     // Restore editor view state from processor
     diagonalMode_ = processor->editorDiagonalMode;
+
+    // If the user only ever populates MIMO paths, the saved editorDiagonalMode
+    // can still be `true` (the factory default) and we'd land them on the empty
+    // Diagonal page. Override to MIMO when diagonal is empty AND at least one
+    // MIMO path is configured; the empty-both case (truly fresh instance) keeps
+    // the Diagonal default. Re-evaluated at every editor open from live state
+    // rather than persisted, so adding a single band to diagonal flips us back
+    // next reopen.
+    if (diagonalMode_
+        && processor->getDiagonalChain().getNumBands() == 0
+        && ! processor->getPathKeys().empty())
+    {
+        diagonalMode_ = false;
+    }
+
     selectedPath_ = processor->editorSelectedPath;
     btnModeDiag_.setToggleState(diagonalMode_, dontSendNotification);
     btnModeMIMO_.setToggleState(!diagonalMode_, dontSendNotification);
