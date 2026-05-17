@@ -251,6 +251,13 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 ## Changelog
 
+### 0.8.4 (2026-05-17)
+
+- `mcfx_mimoeq`: add advanced iir filters, add linearphase fir designer, add phase display
+- `mcfx_mimoeq`, `mcfx_graph`: add preset factory, some gui improvements
+- `mcfx_graph`: allow to rename nodes
+
+
 ### 0.8.3 (2026-05-07)
 
 - mcfx_graph/anything: make sure plugin scanner is included in win build as well
