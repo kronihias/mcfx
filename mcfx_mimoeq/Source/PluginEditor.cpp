@@ -1414,6 +1414,27 @@ namespace
         if (dir.isDirectory()) return dir;
         return File::getSpecialLocation(File::userHomeDirectory);
     }
+
+    // After an AlertWindow with a text-editor field enters its modal state,
+    // focus that text editor and select its contents so the user can start
+    // typing immediately. Has to be posted via callAsync because
+    // grabKeyboardFocus() only takes effect once the AlertWindow is on
+    // screen, and the modal-state machinery may still be settling when
+    // enterModalState() returns. SafePointer protects against the user
+    // dismissing the popup before the async callback runs.
+    void focusAlertTextEditor(AlertWindow* aw, const String& editorName)
+    {
+        Component::SafePointer<AlertWindow> safe(aw);
+        MessageManager::callAsync([safe, editorName]
+        {
+            if (auto* w = safe.getComponent())
+                if (auto* ed = w->getTextEditor(editorName))
+                {
+                    ed->grabKeyboardFocus();
+                    ed->selectAll();
+                }
+        });
+    }
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::showPresetsMenu()
@@ -1555,6 +1576,8 @@ void Mcfx_mimoeqAudioProcessorEditor::promptSaveAsNamedPreset()
 
             savePresetFile(file);
         }), false);
+
+    focusAlertTextEditor(alertWindow_.get(), "name");
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::promptRenamePreset(const File& file)
@@ -1595,6 +1618,8 @@ void Mcfx_mimoeqAudioProcessorEditor::promptRenamePreset(const File& file)
             else
                 statusBar_.setText("Rename failed", dontSendNotification);
         }), false);
+
+    focusAlertTextEditor(alertWindow_.get(), "name");
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::confirmDeletePreset(const File& file)

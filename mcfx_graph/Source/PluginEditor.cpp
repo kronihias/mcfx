@@ -416,6 +416,27 @@ namespace
         if (dir.isDirectory()) return dir;
         return juce::File::getSpecialLocation (juce::File::userDocumentsDirectory);
     }
+
+    // After an AlertWindow with a text-editor field enters its modal state,
+    // focus that text editor and select its contents so the user can start
+    // typing immediately. Has to be posted via callAsync because
+    // grabKeyboardFocus() only takes effect once the AlertWindow is on
+    // screen, and the modal-state machinery may still be settling when
+    // enterModalState() returns. SafePointer protects against the user
+    // dismissing the popup before the async callback runs.
+    void focusAlertTextEditor (juce::AlertWindow* aw, const juce::String& editorName)
+    {
+        juce::Component::SafePointer<juce::AlertWindow> safe (aw);
+        juce::MessageManager::callAsync ([safe, editorName]
+        {
+            if (auto* w = safe.getComponent())
+                if (auto* ed = w->getTextEditor (editorName))
+                {
+                    ed->grabKeyboardFocus();
+                    ed->selectAll();
+                }
+        });
+    }
 }
 
 void Mcfx_graphAudioProcessorEditor::onPresetsClicked()
@@ -568,6 +589,8 @@ void Mcfx_graphAudioProcessorEditor::promptSaveAsNamedPreset()
 
             savePresetFile (file);
         }), false);
+
+    focusAlertTextEditor (alertWindow_.get(), "name");
 }
 
 void Mcfx_graphAudioProcessorEditor::promptRenamePreset (const juce::File& file)
@@ -608,6 +631,8 @@ void Mcfx_graphAudioProcessorEditor::promptRenamePreset (const juce::File& file)
             else
                 statusLabel_.setText ("Rename failed", juce::dontSendNotification);
         }), false);
+
+    focusAlertTextEditor (alertWindow_.get(), "name");
 }
 
 void Mcfx_graphAudioProcessorEditor::confirmDeletePreset (const juce::File& file)
