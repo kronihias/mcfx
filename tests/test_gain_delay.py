@@ -209,6 +209,72 @@ def test_delay_ch2_unaffected(plugin_gain_delay, noise_2ch):
 
 
 # ===========================================================================
+# Solo
+# ===========================================================================
+
+def test_solo_ch1_silences_ch2(plugin_gain_delay, noise_2ch):
+    """Soloing ch1 silences every non-soloed channel; ch1 itself unchanged."""
+    set_unity(plugin_gain_delay)
+    plugin_gain_delay["Ch 1 solo"] = 1.0
+
+    out = run_with_settle(plugin_gain_delay, noise_2ch)
+
+    np.testing.assert_allclose(out[0], noise_2ch[0], atol=1e-5,
+        err_msg="Soloed channel should pass through unchanged")
+    np.testing.assert_allclose(out[1], 0.0, atol=1e-6,
+        err_msg="Non-soloed channel should be silenced when another ch is solo")
+
+
+# ===========================================================================
+# Signal generator
+# ===========================================================================
+#
+# Global params (see mcfx_gain_delay/Source/MySignalGenerator.cpp):
+#   SigGenGain        : jmap(param, -99, +6) dB        →  param ≈ 0.943 ⇒ 0 dB
+#   SigGenSignaltype  : floor(param * 6) ∈ {white, pink, sine, sawtooth,
+#                       square, dirac, toneburst}      →  param = 2/6 ⇒ sine
+#   SigGen Freq       : 2^(param*11.07 + 3.33) Hz      →  param ≈ 0.600 ⇒ 1 kHz
+# Per-channel: "Ch N signalgenerator" >0.5 → SUMMED into ch N (input is not muted)
+
+def siggen_gain_param_for_db(db: float) -> float:
+    return (db - (-99.0)) / (6.0 - (-99.0))
+
+
+def siggen_freq_param_for_hz(hz: float) -> float:
+    return (np.log2(hz) - 3.33) / 11.07
+
+
+SIGGEN_TYPE_SINE = 2.0 / 6.0  # white=0, pink=1, sine=2, sawtooth=3, ...
+
+
+def test_signal_generator_sine_appears_on_target_channel(plugin_gain_delay):
+    """Enabling siggen on ch1 with a known sine frequency produces a peak at
+    that frequency in ch1's output; ch2 stays silent (no siggen, silent input)."""
+    set_unity(plugin_gain_delay)
+    plugin_gain_delay["SigGenSignaltype"]   = SIGGEN_TYPE_SINE
+    plugin_gain_delay["SigGenGain"]         = siggen_gain_param_for_db(0.0)
+    plugin_gain_delay["SigGen Freq"]        = siggen_freq_param_for_hz(1000.0)
+    plugin_gain_delay["Ch 1 signalgenerator"] = 1.0
+
+    silence = np.zeros((2, BLOCK), dtype=np.float32)
+    out = run_with_settle(plugin_gain_delay, silence)
+
+    # FFT ch0 — only enough samples to get a clean peak (use power-of-two)
+    fft_n = 16384
+    spectrum = np.abs(np.fft.rfft(out[0, :fft_n]))
+    peak_bin = int(np.argmax(spectrum))
+    peak_hz  = peak_bin * SR / fft_n
+
+    assert abs(peak_hz - 1000.0) < SR / fft_n + 1.0, (
+        f"Expected siggen peak near 1000 Hz, got {peak_hz:.1f} Hz "
+        f"(bin resolution {SR/fft_n:.1f} Hz)"
+    )
+    # Untargeted channel: input was silence, siggen is off → output silence.
+    np.testing.assert_allclose(out[1], 0.0, atol=1e-5,
+        err_msg="Non-targeted channel should remain silent")
+
+
+# ===========================================================================
 # Golden regression
 # ===========================================================================
 

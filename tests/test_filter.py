@@ -299,6 +299,19 @@ def test_unity_passthrough(plugin_filter, noise_2ch):
 GOLDEN_TAG = "filter_peak1_1k_9dB"
 
 
+def _check_or_update_golden(tag: str, out: np.ndarray, request) -> None:
+    if request.config.getoption("--update-golden", default=False):
+        save_golden(tag, out)
+        pytest.skip("Golden updated")
+    elif not golden_exists(tag):
+        save_golden(tag, out)
+        pytest.skip("Golden created — re-run to compare")
+    else:
+        golden = load_golden(tag)
+        np.testing.assert_allclose(out, golden, atol=1e-5,
+                                   err_msg=f"Golden regression failed: {tag}")
+
+
 def test_peak1_golden_regression(plugin_filter, impulse_2ch, request):
     """Regression: peak1 at 1kHz +9dB output must match stored golden."""
     reset_filter(plugin_filter)
@@ -307,19 +320,50 @@ def test_peak1_golden_regression(plugin_filter, impulse_2ch, request):
     plugin_filter["Peak 1 Gain"] = db2param(9.0)
 
     out = run_with_settle(plugin_filter, impulse_2ch)
-
-    if request.config.getoption("--update-golden", default=False):
-        save_golden(GOLDEN_TAG, out)
-        pytest.skip("Golden updated")
-    elif not golden_exists(GOLDEN_TAG):
-        save_golden(GOLDEN_TAG, out)
-        pytest.skip("Golden created — re-run to compare")
-    else:
-        golden = load_golden(GOLDEN_TAG)
-        np.testing.assert_allclose(out, golden, atol=1e-5,
-                                   err_msg="Golden regression failed")
+    _check_or_update_golden(GOLDEN_TAG, out, request)
 
 
-def pytest_addoption(parser):
-    parser.addoption("--update-golden", action="store_true", default=False,
-                     help="Overwrite golden reference files")
+def test_lowcut_golden_regression(plugin_filter, impulse_2ch, request):
+    """Regression: 4th-order low-cut at 200 Hz."""
+    reset_filter(plugin_filter)
+    plugin_filter["LowCut On"]    = 1.0
+    plugin_filter["LowCut Freq"]  = freq2param(200)
+    plugin_filter["LowCut Order"] = 1.0   # 4th order
+
+    out = run_with_settle(plugin_filter, impulse_2ch)
+    _check_or_update_golden("filter_lowcut_4th_200Hz", out, request)
+
+
+def test_highcut_golden_regression(plugin_filter, impulse_2ch, request):
+    """Regression: 4th-order high-cut at 5 kHz."""
+    reset_filter(plugin_filter)
+    plugin_filter["HighCut On"]    = 1.0
+    plugin_filter["HighCut Freq"]  = freq2param(5000)
+    plugin_filter["HighCut Order"] = 1.0   # 4th order
+
+    out = run_with_settle(plugin_filter, impulse_2ch)
+    _check_or_update_golden("filter_highcut_4th_5kHz", out, request)
+
+
+def test_lowshelf_golden_regression(plugin_filter, impulse_2ch, request):
+    """Regression: low-shelf at 300 Hz, Q=0.7, +6 dB."""
+    reset_filter(plugin_filter)
+    plugin_filter["LowShelf Freq"] = freq2param(300)
+    plugin_filter["LowShelf Q"]    = q2param(0.7)
+    plugin_filter["LowShelf Gain"] = db2param(6.0)
+
+    out = run_with_settle(plugin_filter, impulse_2ch)
+    _check_or_update_golden("filter_lowshelf_300Hz_6dB", out, request)
+
+
+def test_highshelf_golden_regression(plugin_filter, impulse_2ch, request):
+    """Regression: high-shelf at 6 kHz, Q=0.7, -6 dB."""
+    reset_filter(plugin_filter)
+    plugin_filter["HighShelf Freq"] = freq2param(6000)
+    plugin_filter["HighShelf Q"]    = q2param(0.7)
+    plugin_filter["HighShelf Gain"] = db2param(-6.0)
+
+    out = run_with_settle(plugin_filter, impulse_2ch)
+    _check_or_update_golden("filter_highshelf_6kHz_-6dB", out, request)
+
+

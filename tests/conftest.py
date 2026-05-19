@@ -143,6 +143,16 @@ def golden_exists(name: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# CLI flag for refreshing golden files (must live in conftest so it registers
+# before pytest argument parsing — test modules load too late).
+# ---------------------------------------------------------------------------
+
+def pytest_addoption(parser):
+    parser.addoption("--update-golden", action="store_true", default=False,
+                     help="Overwrite golden reference files")
+
+
+# ---------------------------------------------------------------------------
 # Tier-2 CLI host helper
 # ---------------------------------------------------------------------------
 
