@@ -51,7 +51,8 @@ void BreadcrumbBar::resized()
     {
         const auto label = buttons_[i]->getButtonText();
         const int  w = juce::jmax (50,
-                          juce::Font (juce::FontOptions (14.0f)).getStringWidth (label) + 16);
+                          juce::GlyphArrangement::getStringWidthInt (
+                              juce::Font (juce::FontOptions (14.0f)), label) + 16);
         buttons_[i]->setBounds (area.removeFromLeft (w));
 
         if (i + 1 < buttons_.size())

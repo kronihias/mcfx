@@ -40,7 +40,7 @@ public:
     double getTailLengthSeconds() const override                { return inner_->getTailLengthSeconds(); }
 
     bool hasEditor() const override                             { return inner_->hasEditor(); }
-    juce::AudioProcessorEditor* createEditor() override         { return inner_->createEditor(); }
+    juce::AudioProcessorEditor* createEditor() override         { return inner_->createEditorAndMakeActive(); }
 
     int  getNumPrograms() override                              { return inner_->getNumPrograms(); }
     int  getCurrentProgram() override                           { return inner_->getCurrentProgram(); }

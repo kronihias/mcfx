@@ -10,6 +10,7 @@ mcfx_testhost CLI binary is used for Tier-2 multichannel tests.
 
 import os
 import shutil
+import sys
 import numpy as np
 import pytest
 
@@ -21,7 +22,9 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VST3_DIR  = os.path.join(REPO_ROOT, "_build", "vst3")
 
 # mcfx_testhost binary (built with BUILD_TESTHOST=ON)
-TESTHOST_BIN = os.path.join(REPO_ROOT, "_build", "testhost", "mcfx_testhost")
+_EXE_SUFFIX = ".exe" if sys.platform == "win32" else ""
+TESTHOST_BIN = os.path.join(REPO_ROOT, "_build", "testhost",
+                            f"mcfx_testhost{_EXE_SUFFIX}")
 
 GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden")
 

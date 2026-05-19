@@ -198,7 +198,7 @@ private:
         const bool canMakeCustom = _hasCustomEditor && ! _useGenericEditor && _didPostShowRebuild;
 
         if (canMakeCustom)
-            _pluginEditor.reset (_instance->createEditor());
+            _pluginEditor.reset (_instance->createEditorAndMakeActive());
         else
             _pluginEditor.reset (new GenericAudioProcessorEditor (*_instance));
 

@@ -32,7 +32,10 @@ import numpy as np
 import pytest
 
 from reference.convolver_ref import convolve_matrix, make_dirac
-from conftest import SR, BLOCK, save_golden, load_golden, golden_exists, run_testhost
+from conftest import (
+    SR, BLOCK, TESTHOST_BIN,
+    save_golden, load_golden, golden_exists, run_testhost,
+)
 
 # soundfile import deferred — skip if not installed
 try:
@@ -44,11 +47,6 @@ except ImportError:
 pytestmark = pytest.mark.skipif(
     not HAS_SOUNDFILE,
     reason="soundfile not installed — pip install soundfile"
-)
-
-TESTHOST_BIN = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "_build", "testhost", "mcfx_testhost"
 )
 
 # ---------------------------------------------------------------------------

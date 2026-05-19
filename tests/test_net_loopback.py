@@ -36,11 +36,13 @@ import json
 import os
 import statistics
 import subprocess
+import sys
 import pytest
 
 REPO_ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_EXE       = ".exe" if sys.platform == "win32" else ""
 LOOPBACK   = os.path.join(REPO_ROOT, "_build", "testhost",
-                          "mcfx_net_loopback_test")
+                          f"mcfx_net_loopback_test{_EXE}")
 
 
 def _need_binary():

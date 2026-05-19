@@ -894,7 +894,7 @@ void Mcfx_anythingAudioProcessorEditor::updateHostedEditor()
         else
         {
             if (! _hostedCustomEditor)
-                _hostedCustomEditor.reset (master->createEditor());
+                _hostedCustomEditor.reset (master->createEditorAndMakeActive());
             _hostedEditor = _hostedCustomEditor.get();
         }
 

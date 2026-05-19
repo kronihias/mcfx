@@ -957,7 +957,7 @@ namespace
         {
             auto* p = node_.processor;
             if (p == nullptr || ! p->hasEditor()) return;
-            auto* ed = p->createEditor();
+            auto* ed = p->createEditorAndMakeActive();
             if (ed == nullptr) return;
 
             const auto title = node_.displayName.isNotEmpty() ? node_.displayName : p->getName();

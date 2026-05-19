@@ -101,7 +101,7 @@ void NodeComponent::paint (juce::Graphics& g)
     {
         const auto fmt = node_.pluginDescription->pluginFormatName;
         const auto chipFont = juce::Font (juce::FontOptions (9.5f, juce::Font::bold));
-        const int  textW = chipFont.getStringWidth (fmt);
+        const int  textW = juce::GlyphArrangement::getStringWidthInt (chipFont, fmt);
         const float chipW = (float) (textW + 10);
         const float chipH = 14.0f;
 
@@ -179,7 +179,7 @@ void NodeComponent::paint (juce::Graphics& g)
 
         // Center label
         const auto chipFont = juce::Font (juce::FontOptions (11.0f, juce::Font::bold));
-        const int  textW = chipFont.getStringWidth (label);
+        const int  textW = juce::GlyphArrangement::getStringWidthInt (chipFont, label);
         const float chipW = (float) (textW + 14);
         const float chipH = 18.0f;
         auto chipRect = juce::Rectangle<float> (
@@ -349,7 +349,7 @@ void NodeComponent::openPluginEditor()
     auto* p = node_.processor;
     if (p == nullptr || ! p->hasEditor()) return;
 
-    auto* ed = p->createEditor();
+    auto* ed = p->createEditorAndMakeActive();
     if (ed == nullptr) return;
 
     const auto title = node_.displayName.isNotEmpty() ? node_.displayName : p->getName();
