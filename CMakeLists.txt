@@ -15,7 +15,7 @@ ADD_DEFINITIONS(-DVERSION=${VERSION})
 SET(NUM_CHANNELS 36 CACHE STRING "number of channels for each plugin (per-channel VST2 build)")
 SET(MAX_DELAYTIME_S 0.5 CACHE STRING "maximum delaytime for mcfx_delay in seconds")
 
-SET(BUILD_VST3 FALSE CACHE BOOL "build VST3 plugins")
+SET(BUILD_VST3 TRUE CACHE BOOL "build VST3 plugins")
 SET(BUILD_VST TRUE CACHE BOOL "build VST2 plugins")
 SET(BUILD_AU FALSE CACHE BOOL "build AU plugins (macOS only)")
 SET(BUILD_STANDALONE FALSE CACHE BOOL "build standalone application (for those with editor)")
@@ -129,9 +129,10 @@ if (BUILD_STANDALONE)
     list (APPEND MCFX_FORMATS_MC Standalone)
 
     IF(WIN32)
-        SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (you need the Steinberg ASIO SDK)")
-        SET(ASIO_SDK_DIR ${CMAKE_CURRENT_SOURCE_DIR}/SDKs/ASIOSDK2.3 CACHE PATH "specify the path of the ASIO 2.3 SDK")
-        INCLUDE_DIRECTORIES(BEFORE ${ASIO_SDK_DIR}/common)
+        # JUCE 8.0.13+ ships the ASIO SDK headers under
+        # JUCE/modules/juce_audio_devices/native/asio/, so no external SDK
+        # path is needed. JUCE_ASIO=1 is enough.
+        SET(JUCE_ASIO TRUE CACHE BOOL "build standalone app with ASIO support (bundled with JUCE)")
     ENDIF(WIN32)
 
     IF(UNIX AND NOT APPLE AND NOT ANDROID)
@@ -302,12 +303,9 @@ ENDIF (JUCE_JACK)
 # check so plugins that rewrite their layout internally (mcfx-style multichannel
 # plug-ins) can be resized via setBusesLayout. See the patch's comment for
 # detail.
-message ("-- Patching JUCE VST3 host bus-arrangement roundtrip check")
-execute_process(COMMAND patch --forward
-    ${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3PluginFormatImpl.h.patch
-    OUTPUT_VARIABLE vst3_patch_result)
-message ("${vst3_patch_result}")
+apply_juce_patch(
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3PluginFormatImpl.h.patch")
 
 # Always apply: extend getVst3SpeakerArrangement to synthesise an arrangement
 # for AudioChannelSet::discreteChannels(N) at any N. Without this the JUCE
