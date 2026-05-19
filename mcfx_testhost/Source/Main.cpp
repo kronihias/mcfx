@@ -65,6 +65,7 @@ public:
 
         // ---- Parse arguments -------------------------------------------
         String pluginPath, paramsPath, inputPath, outputPath;
+        String loadStatePath, saveStatePath;
         int    numChannels = 2;
         int    blockSize   = 512;
         double sampleRate  = 48000.0;
@@ -80,6 +81,8 @@ public:
             else if (a == "--channels"   && i + 1 < args.size()) numChannels = args[++i].getIntValue();
             else if (a == "--blocksize"  && i + 1 < args.size()) blockSize   = args[++i].getIntValue();
             else if (a == "--samplerate" && i + 1 < args.size()) sampleRate  = args[++i].getDoubleValue();
+            else if (a == "--load-state" && i + 1 < args.size()) loadStatePath = args[++i];
+            else if (a == "--save-state" && i + 1 < args.size()) saveStatePath = args[++i];
             else if (a == "--no-output")                          noOutput    = true;
         }
 
@@ -93,6 +96,8 @@ public:
                 "                     [--channels 2]\n"
                 "                     [--blocksize 512]\n"
                 "                     [--samplerate 48000]\n"
+                "                     [--load-state <state.bin>]  (call setStateInformation with raw bytes)\n"
+                "                     [--save-state <state.bin>]  (write getStateInformation bytes after processing)\n"
                 "                     [--no-output]  (skip writing output WAV; for benchmarking)\n";
             std::exit(1);
         }
@@ -152,6 +157,21 @@ public:
         // so the subsequent prepareToPlay call (after WAV reading) will see the
         // same values and won't trigger a second async reload.
         plugin->prepareToPlay(sampleRate, blockSize);
+
+        // ---- Load raw state blob if requested --------------------------
+        if (loadStatePath.isNotEmpty())
+        {
+            File stateFile(loadStatePath);
+            if (! stateFile.existsAsFile())
+                die("State file not found: " + loadStatePath);
+            MemoryBlock stateBytes;
+            if (! stateFile.loadFileAsData(stateBytes))
+                die("Could not read state file: " + loadStatePath);
+            plugin->setStateInformation(stateBytes.getData(),
+                                        (int) stateBytes.getSize());
+            std::cerr << "mcfx_testhost: loaded state (" << stateBytes.getSize()
+                      << " bytes) from " << loadStatePath << "\n";
+        }
 
         // ---- Apply parameters from JSON --------------------------------
         if (paramsPath.isNotEmpty())
@@ -310,6 +330,19 @@ public:
         }
 
         plugin->releaseResources();
+
+        // ---- Save raw state blob if requested --------------------------
+        if (saveStatePath.isNotEmpty())
+        {
+            MemoryBlock stateBytes;
+            plugin->getStateInformation(stateBytes);
+            File outFile(saveStatePath);
+            outFile.deleteFile();
+            if (! outFile.replaceWithData(stateBytes.getData(), stateBytes.getSize()))
+                die("Could not write state file: " + saveStatePath);
+            std::cerr << "mcfx_testhost: wrote state (" << stateBytes.getSize()
+                      << " bytes) to " << saveStatePath << "\n";
+        }
 
         // ---- Write output WAV -----------------------------------------
         if (noOutput)
