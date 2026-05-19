@@ -1,0 +1,6 @@
+# Python dependencies for mcfx plugin test suite
+pedalboard>=0.9      # Tier-1: VST3/AU plugin host (stereo / ≤8 ch)
+pytest>=7.0
+numpy>=1.24
+scipy>=1.10
+soundfile>=0.12      # Tier-2: WAV I/O for mcfx_testhost CLI
