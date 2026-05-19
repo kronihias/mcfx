@@ -65,7 +65,8 @@ public:
 
         // ---- Parse arguments -------------------------------------------
         String pluginPath, paramsPath, inputPath, outputPath;
-        String loadStatePath, saveStatePath;
+        String loadStatePath, saveStatePath, loadInnerStatePath;
+        String describePluginPath;
         int    numChannels = 2;
         int    blockSize   = 512;
         double sampleRate  = 48000.0;
@@ -81,9 +82,41 @@ public:
             else if (a == "--channels"   && i + 1 < args.size()) numChannels = args[++i].getIntValue();
             else if (a == "--blocksize"  && i + 1 < args.size()) blockSize   = args[++i].getIntValue();
             else if (a == "--samplerate" && i + 1 < args.size()) sampleRate  = args[++i].getDoubleValue();
-            else if (a == "--load-state" && i + 1 < args.size()) loadStatePath = args[++i];
-            else if (a == "--save-state" && i + 1 < args.size()) saveStatePath = args[++i];
+            else if (a == "--load-state"       && i + 1 < args.size()) loadStatePath      = args[++i];
+            else if (a == "--save-state"       && i + 1 < args.size()) saveStatePath      = args[++i];
+            else if (a == "--load-inner-state" && i + 1 < args.size()) loadInnerStatePath = args[++i];
+            else if (a == "--describe-plugin"  && i + 1 < args.size()) describePluginPath = args[++i];
             else if (a == "--no-output")                          noOutput    = true;
+        }
+
+        // ---- One-shot mode: print PluginDescription XML and exit -------
+        // Used by tests that need to construct a plugin's description blob
+        // (e.g. mcfx_anything's CURRENT_PLUGIN child) without re-implementing
+        // JUCE's scanner in Python.
+        if (describePluginPath.isNotEmpty())
+        {
+            AudioPluginFormatManager fm;
+#if JUCE_PLUGINHOST_VST3
+            fm.addFormat(new VST3PluginFormat());
+#endif
+#if JUCE_PLUGINHOST_AU
+            fm.addFormat(new AudioUnitPluginFormat());
+#endif
+            OwnedArray<PluginDescription> found;
+            KnownPluginList kpl;
+            for (auto* fmt : fm.getFormats())
+            {
+                kpl.scanAndAddFile(describePluginPath, false, found, *fmt);
+                if (! found.isEmpty())
+                    break;
+            }
+            if (found.isEmpty())
+                die("Could not scan plugin: " + describePluginPath, 2);
+
+            std::unique_ptr<XmlElement> descXml(found[0]->createXml());
+            std::cout << descXml->toString().toRawUTF8();
+            quit();
+            return;
         }
 
         if (pluginPath.isEmpty() || inputPath.isEmpty() || (outputPath.isEmpty() && ! noOutput))
@@ -96,8 +129,10 @@ public:
                 "                     [--channels 2]\n"
                 "                     [--blocksize 512]\n"
                 "                     [--samplerate 48000]\n"
-                "                     [--load-state <state.bin>]  (call setStateInformation with raw bytes)\n"
-                "                     [--save-state <state.bin>]  (write getStateInformation bytes after processing)\n"
+                "                     [--load-state <state.bin>]        (call setStateInformation with raw bytes)\n"
+                "                     [--save-state <state.bin>]        (write getStateInformation bytes after processing)\n"
+                "                     [--load-inner-state <state.bin>]  (wrap raw bytes in VST3PluginState envelope, then load)\n"
+                "                     [--describe-plugin <path.vst3>]   (one-shot: print PluginDescription XML and exit)\n"
                 "                     [--no-output]  (skip writing output WAV; for benchmarking)\n";
             std::exit(1);
         }
@@ -171,6 +206,33 @@ public:
                                         (int) stateBytes.getSize());
             std::cerr << "mcfx_testhost: loaded state (" << stateBytes.getSize()
                       << " bytes) from " << loadStatePath << "\n";
+        }
+
+        // ---- Load *inner* state, wrapping in the VST3 envelope ---------
+        // The file contains the JUCE-binary form of the plugin's own state
+        // (what its setStateInformation expects). VST3PluginInstance::
+        // setStateInformation requires the outer VST3PluginState/IComponent
+        // wrapper, so we add it here — same pattern as the Config File path.
+        if (loadInnerStatePath.isNotEmpty())
+        {
+            File innerFile(loadInnerStatePath);
+            if (! innerFile.existsAsFile())
+                die("Inner-state file not found: " + loadInnerStatePath);
+            MemoryBlock innerBin;
+            if (! innerFile.loadFileAsData(innerBin))
+                die("Could not read inner-state file: " + loadInnerStatePath);
+
+            XmlElement outerXml("VST3PluginState");
+            outerXml.createNewChildElement("IComponent")
+                    ->addTextElement(innerBin.toBase64Encoding());
+            MemoryBlock outerBin;
+            juce::AudioProcessor::copyXmlToBinary(outerXml, outerBin);
+            plugin->setStateInformation(outerBin.getData(),
+                                        (int) outerBin.getSize());
+            std::cerr << "mcfx_testhost: loaded inner state (" << innerBin.getSize()
+                      << " bytes) from " << loadInnerStatePath << "\n";
+            // Give async loaders (mcfx_anything deferred plugin load) time.
+            Thread::sleep(3000);
         }
 
         // ---- Apply parameters from JSON --------------------------------
