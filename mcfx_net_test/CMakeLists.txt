@@ -42,6 +42,10 @@ target_compile_definitions(mcfx_net_loopback_test PRIVATE
     JUCE_USE_CURL=0
     JUCE_WEB_BROWSER=0
     JUCE_MODAL_LOOPS_PERMITTED=1
+    # MSVC only exposes M_PI from <cmath> when this is defined before any
+    # C math header is parsed. Set it as a target-wide define so it applies
+    # before JUCE's headers (transitively) pull in <math.h>.
+    _USE_MATH_DEFINES=1
     # Streams use juce::SHA256 for password hashing — pull in cryptography.
     # Discovery is not built in (we use Direct-IP only).
 )

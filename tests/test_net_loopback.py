@@ -39,6 +39,17 @@ import subprocess
 import sys
 import pytest
 
+# These tests run two sleep_until-paced threads in one process and assert
+# on tight audio-scheduling bounds (underruns, pitch stability, control-loop
+# convergence). Shared GitHub-hosted runner VMs don't provide the scheduler
+# determinism that requires — even the smoke test's 1 kHz sine comes back at
+# 500 Hz under CPU starvation. Skip the whole module on CI.
+if os.environ.get("GITHUB_ACTIONS") or os.environ.get("CI"):
+    pytest.skip(
+        "net_loopback tests need real-time scheduling stability; "
+        "skipped on CI runners",
+        allow_module_level=True)
+
 REPO_ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _EXE       = ".exe" if sys.platform == "win32" else ""
 LOOPBACK   = os.path.join(REPO_ROOT, "_build", "testhost",
