@@ -71,6 +71,7 @@ public:
         int    blockSize   = 512;
         double sampleRate  = 48000.0;
         bool   noOutput    = false;
+        bool   compensateLatency = true;
 
         for (int i = 0; i < args.size(); ++i)
         {
@@ -87,6 +88,7 @@ public:
             else if (a == "--load-inner-state" && i + 1 < args.size()) loadInnerStatePath = args[++i];
             else if (a == "--describe-plugin"  && i + 1 < args.size()) describePluginPath = args[++i];
             else if (a == "--no-output")                          noOutput    = true;
+            else if (a == "--no-latency-compensation")            compensateLatency = false;
         }
 
         // ---- One-shot mode: print PluginDescription XML and exit -------
@@ -133,7 +135,8 @@ public:
                 "                     [--save-state <state.bin>]        (write getStateInformation bytes after processing)\n"
                 "                     [--load-inner-state <state.bin>]  (wrap raw bytes in VST3PluginState envelope, then load)\n"
                 "                     [--describe-plugin <path.vst3>]   (one-shot: print PluginDescription XML and exit)\n"
-                "                     [--no-output]  (skip writing output WAV; for benchmarking)\n";
+                "                     [--no-output]  (skip writing output WAV; for benchmarking)\n"
+                "                     [--no-latency-compensation]  (write raw output; default: strip plugin's reported latency)\n";
             std::exit(1);
         }
 
@@ -232,7 +235,11 @@ public:
             std::cerr << "mcfx_testhost: loaded inner state (" << innerBin.getSize()
                       << " bytes) from " << loadInnerStatePath << "\n";
             // Give async loaders (mcfx_anything deferred plugin load) time.
-            Thread::sleep(3000);
+            // Pump the message loop while waiting — JUCE's VST3 host bridge
+            // uses AsyncUpdaters on the message thread to propagate plugin
+            // state changes like setLatencySamples (kLatencyChanged). A plain
+            // Thread::sleep would block those updates from being applied.
+            MessageManager::getInstance()->runDispatchLoopUntil(3000);
         }
 
         // ---- Apply parameters from JSON --------------------------------
@@ -284,7 +291,11 @@ public:
                         // The plugin is wrapped by JUCE's VST3PluginInstance so
                         // we can't cast it to Thread*.  Sleep to allow loading.
                         std::cerr << "mcfx_testhost: waiting 3 s for IR loading\n";
-                        Thread::sleep(3000);
+                        // Pump the message loop while waiting — JUCE's VST3 host bridge
+            // uses AsyncUpdaters on the message thread to propagate plugin
+            // state changes like setLatencySamples (kLatencyChanged). A plain
+            // Thread::sleep would block those updates from being applied.
+            MessageManager::getInstance()->runDispatchLoopUntil(3000);
                     }
                     else
                     {
@@ -353,7 +364,21 @@ public:
             die("Cannot open input WAV: " + inputPath);
 
         const int64 totalSamples = reader->lengthInSamples;
-        AudioBuffer<float> inputBuf(numChannels, (int)totalSamples);
+
+        // ---- Prepare and query reported latency ------------------------
+        // Query after the final prepareToPlay because some plugins (mcfx_convolver)
+        // only call setLatencySamples() once configuration loading completes.
+        plugin->prepareToPlay(sampleRate, blockSize);
+        const int latency = compensateLatency ? jmax(0, plugin->getLatencySamples()) : 0;
+
+        // Run latency extra samples of silence through the plugin so the output
+        // we keep is aligned to the input.  Without this, plugins that report a
+        // non-zero latency (mcfx_convolver in safemode) emit `latency` samples
+        // of startup zeros and tests see a shifted result.  This is what a real
+        // host's latency compensation does.
+        const int processSamples = (int)totalSamples + latency;
+
+        AudioBuffer<float> inputBuf(numChannels, processSamples);
         inputBuf.clear();
 
         {
@@ -365,18 +390,15 @@ public:
         }
         reader.reset();
 
-        // ---- Prepare and process ---------------------------------------
-        plugin->prepareToPlay(sampleRate, blockSize);
-
-        AudioBuffer<float> outputBuf(numChannels, (int)totalSamples);
+        AudioBuffer<float> outputBuf(numChannels, processSamples);
         outputBuf.clear();
 
         MidiBuffer midi;
         int pos = 0;
 
-        while (pos < (int)totalSamples)
+        while (pos < processSamples)
         {
-            const int thisBlock = jmin(blockSize, (int)totalSamples - pos);
+            const int thisBlock = jmin(blockSize, processSamples - pos);
             AudioBuffer<float> block(numChannels, thisBlock);
 
             for (int ch = 0; ch < numChannels; ++ch)
@@ -431,7 +453,7 @@ public:
             if (writer == nullptr)
                 die("Cannot create output WAV: " + outputPath);
 
-            writer->writeFromAudioSampleBuffer(outputBuf, 0, (int)totalSamples);
+            writer->writeFromAudioSampleBuffer(outputBuf, latency, (int)totalSamples);
             writer->flush();
             writer.reset();
 

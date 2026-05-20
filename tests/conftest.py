@@ -33,6 +33,17 @@ def vst3(name: str) -> str:
     return os.path.join(VST3_DIR, f"{name}.vst3")
 
 
+def vst3_load_path(bundle_path: str) -> str:
+    # Pedalboard on Windows fails to recognise a JUCE-built VST3 bundle dir
+    # (no desktop.ini marker), but loads the inner DLL fine. Resolve to it.
+    if sys.platform == "win32" and os.path.isdir(bundle_path):
+        inner = os.path.join(bundle_path, "Contents", "x86_64-win",
+                             os.path.basename(bundle_path))
+        if os.path.isfile(inner):
+            return inner
+    return bundle_path
+
+
 # ---------------------------------------------------------------------------
 # pedalboard plugin fixtures (Tier-1)
 # ---------------------------------------------------------------------------
@@ -83,7 +94,7 @@ def _load(name: str):
     path = vst3(name)
     if not os.path.exists(path):
         pytest.skip(f"Plugin not built: {path}")
-    return PluginWrapper(pedalboard.load_plugin(path))
+    return PluginWrapper(pedalboard.load_plugin(vst3_load_path(path)))
 
 
 @pytest.fixture(scope="session")
@@ -160,7 +171,7 @@ def pytest_addoption(parser):
 # ---------------------------------------------------------------------------
 
 def run_testhost(plugin_name: str, params: dict, audio: np.ndarray,
-                 fs: int = SR) -> np.ndarray:
+                 fs: int = SR, compensate_latency: bool = True) -> np.ndarray:
     """
     Call the mcfx_testhost CLI binary, return processed audio as numpy array.
 
@@ -192,14 +203,17 @@ def run_testhost(plugin_name: str, params: dict, audio: np.ndarray,
         with open(par_json, "w") as f:
             json.dump(params, f)
 
-        subprocess.run([
+        cmd = [
             TESTHOST_BIN,
             "--plugin",   plugin_path,
             "--params",   par_json,
             "--input",    in_wav,
             "--channels", str(audio.shape[0]),
             "--output",   out_wav,
-        ], check=True, capture_output=True)
+        ]
+        if not compensate_latency:
+            cmd.append("--no-latency-compensation")
+        subprocess.run(cmd, check=True, capture_output=True)
 
         data, _ = sf.read(out_wav, dtype="float32")
         return data.T  # (channels, samples)

@@ -51,11 +51,9 @@ from reference.mimoeq_ref import (
     freq_to_norm, q_to_norm, gain_to_norm,
     norm_to_freq, db_to_linear,
 )
-from conftest import SR, BLOCK, save_golden, load_golden, golden_exists, run_testhost
-
-TESTHOST_BIN = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "_build", "testhost", "mcfx_testhost"
+from conftest import (
+    SR, BLOCK, save_golden, load_golden, golden_exists, run_testhost,
+    TESTHOST_BIN,
 )
 
 # ---------------------------------------------------------------------------
@@ -67,11 +65,11 @@ def _load(name: str):
         import pedalboard
     except ImportError:
         pytest.skip("pedalboard not installed — run: pip install pedalboard")
-    from conftest import vst3, PluginWrapper
+    from conftest import vst3, vst3_load_path, PluginWrapper
     path = vst3(name)
     if not os.path.exists(path):
         pytest.skip(f"Plugin not built: {path}")
-    return PluginWrapper(pedalboard.load_plugin(path))
+    return PluginWrapper(pedalboard.load_plugin(vst3_load_path(path)))
 
 
 @pytest.fixture(scope="module")
@@ -145,7 +143,8 @@ def reset_mimoeq(plugin) -> None:
 # ---------------------------------------------------------------------------
 
 def run_mimoeq_json(config: dict, audio: np.ndarray,
-                   n_channels: int = 2) -> np.ndarray:
+                   n_channels: int = 2,
+                   compensate_latency: bool = True) -> np.ndarray:
     """
     Write *config* to a temp JSON file, then run mcfx_mimoeq via testhost
     with "Mimoeq Config File" pointing to it.
@@ -163,7 +162,8 @@ def run_mimoeq_json(config: dict, audio: np.ndarray,
         with os.fdopen(fd, "w") as fp:
             json.dump(config, fp)
         params = {"Mimoeq Config File": cfg_path}
-        return run_testhost("mcfx_mimoeq", params, audio, SR)
+        return run_testhost("mcfx_mimoeq", params, audio, SR,
+                            compensate_latency=compensate_latency)
     finally:
         if os.path.exists(cfg_path):
             os.unlink(cfg_path)
@@ -481,7 +481,10 @@ def test_fir_band_diagonal_short():
     rng = np.random.default_rng(42)
     audio = rng.standard_normal((2, BLOCK)).astype(np.float32)
 
-    out = run_mimoeq_json(config, audio)
+    # Compare raw plugin output to scipy at the same sample positions, so disable
+    # the testhost's latency compensation (which would strip the FIR's group delay
+    # from the front of the output).
+    out = run_mimoeq_json(config, audio, compensate_latency=False)
 
     for ch in range(2):
         ref = fftconvolve(audio[ch].astype(np.float64),
@@ -1130,7 +1133,10 @@ def test_symmetric_fir_group_delay_matches_centre_tap():
         }
         audio = np.zeros((2, BLOCK), dtype=np.float32)
         audio[:, 0] = 1.0
-        out = run_mimoeq_json(config, audio)
+        # The whole point of this test is to verify the plugin's intrinsic FIR
+        # group delay by locating the peak in raw output, so disable the
+        # testhost's latency compensation.
+        out = run_mimoeq_json(config, audio, compensate_latency=False)
         ir = out[0]
 
         peak_idx = int(np.argmax(np.abs(ir)))

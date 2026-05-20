@@ -96,14 +96,16 @@ def cmake_build() -> None:
 
     if IS_WINDOWS:
         # On Windows the FFTW3 DLL has to sit alongside any binary that links
-        # against it (mcfx_convolver.vst3 / mcfx_testhost) — Windows resolves
-        # imports from the executable directory, not the lib search path.
+        # against it — Windows resolves imports from the loaded module's
+        # directory, not the lib search path. mcfx_convolver, mcfx_filter, and
+        # mcfx_mimoeq all use the FFTW-backed MtxConv engine.
         dll = WIN_LIBS / "x64" / "libfftw3f-3.dll"
         if dll.is_file():
-            for dst in [
-                BUILD_DIR / "testhost",
-                BUILD_DIR / "vst3" / "mcfx_convolver.vst3" / "Contents" / "x86_64-win",
-            ]:
+            fftw_plugins = ["mcfx_convolver", "mcfx_filter", "mcfx_mimoeq"]
+            dsts = [BUILD_DIR / "testhost"]
+            dsts += [BUILD_DIR / "vst3" / f"{p}.vst3" / "Contents" / "x86_64-win"
+                     for p in fftw_plugins]
+            for dst in dsts:
                 if dst.is_dir():
                     shutil.copy2(dll, dst)
 

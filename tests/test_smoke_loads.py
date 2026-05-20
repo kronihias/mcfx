@@ -13,7 +13,7 @@ import os
 import numpy as np
 import pytest
 
-from conftest import VST3_DIR, SR
+from conftest import VST3_DIR, SR, vst3_load_path
 
 PLUGIN_PATHS = sorted(glob.glob(os.path.join(VST3_DIR, "mcfx_*.vst3")))
 
@@ -31,7 +31,7 @@ def test_plugin_loads_and_processes_impulse(plugin_path):
     if not PLUGIN_PATHS:
         pytest.skip(f"No built mcfx VST3 plugins found in {VST3_DIR}")
 
-    plugin = pedalboard.load_plugin(plugin_path)
+    plugin = pedalboard.load_plugin(vst3_load_path(plugin_path))
 
     audio = np.zeros((2, SR), dtype=np.float32)
     audio[0, 0] = 1.0
