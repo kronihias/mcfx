@@ -249,11 +249,13 @@ if (NOT PATCH_EXECUTABLE)
 endif()
 
 # Apply a patch idempotently: dry-run first so an already-applied patch on a
-# re-configure is reported as a no-op instead of a hard failure.
-function(apply_juce_patch target_file patch_file)
+# re-configure is reported as a no-op instead of a hard failure. Applies with
+# -p1 rooted at the JUCE submodule so a single patch can touch multiple files.
+function(apply_juce_patch patch_file)
+    set(juce_root "${CMAKE_CURRENT_SOURCE_DIR}/JUCE")
     execute_process(
         COMMAND "${PATCH_EXECUTABLE}" --binary --forward --dry-run --silent
-                "${target_file}" "${patch_file}"
+                -p1 -d "${juce_root}" -i "${patch_file}"
         RESULT_VARIABLE dry_result
         OUTPUT_VARIABLE dry_output
         ERROR_VARIABLE  dry_error)
@@ -261,7 +263,7 @@ function(apply_juce_patch target_file patch_file)
     if (dry_result EQUAL 0)
         execute_process(
             COMMAND "${PATCH_EXECUTABLE}" --binary --forward
-                    "${target_file}" "${patch_file}"
+                    -p1 -d "${juce_root}" -i "${patch_file}"
             RESULT_VARIABLE apply_result
             OUTPUT_VARIABLE apply_output
             ERROR_VARIABLE  apply_error)
@@ -286,7 +288,7 @@ function(apply_juce_patch target_file patch_file)
             message(STATUS "Patch already applied: ${patch_file}")
         else()
             message(FATAL_ERROR
-                "Patch ${patch_file} cannot be applied to ${target_file}:\n"
+                "Patch ${patch_file} cannot be applied under ${juce_root}:\n"
                 "${dry_output}\n${dry_error}")
         endif()
     endif()
@@ -295,7 +297,6 @@ endfunction()
 IF (JUCE_JACK)
     find_package(Jack REQUIRED)
     apply_juce_patch(
-        "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_devices/native/juce_JackAudio.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_JackAudio.cpp.patch")
 ENDIF (JUCE_JACK)
 
@@ -304,7 +305,6 @@ ENDIF (JUCE_JACK)
 # plug-ins) can be resized via setBusesLayout. See the patch's comment for
 # detail.
 apply_juce_patch(
-    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_processors_headless/format_types/juce_VST3PluginFormatImpl.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3PluginFormatImpl.h.patch")
 
 # Always apply: extend getVst3SpeakerArrangement to synthesise an arrangement
@@ -313,16 +313,15 @@ apply_juce_patch(
 # and ambisonic layouts go through), which manifested as the channel-count
 # popup in mcfx_graph offering only 1..9 + N^2 values for mcfx VST3 plug-ins.
 apply_juce_patch(
-    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_audio_processors_headless/format_types/juce_VST3Common.h"
     "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3Common.h.patch")
 
 # Implement IPAddress::getInterfaceBroadcastAddress on Windows (upstream JUCE
-# leaves it as a TODO that returns 0.0.0.0). Without this, the
-# NetworkServiceDiscovery::Advertiser silently sends to 0.0.0.0 and Windows
-# peers never appear on remote machines (mcfx_send/receive discovery).
+# leaves it as a TODO that returns 0.0.0.0) and add an explicit loopback
+# broadcast in NetworkServiceDiscovery::Advertiser. Without this, Windows peers
+# never appear on remote machines and same-host listeners miss advertisements
+# (mcfx_send ↔ mcfx_receive discovery).
 apply_juce_patch(
-    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/modules/juce_core/native/juce_Network_windows.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_Network_windows.cpp.patch")
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_network_discovery.patch")
 
 include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
 
