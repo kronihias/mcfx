@@ -396,6 +396,11 @@ public:
         MidiBuffer midi;
         int pos = 0;
 
+        // Time the processBlock loop only — excludes plugin load, IR loading,
+        // prepareToPlay, WAV read/write. Reported on stderr so benchmark
+        // scripts can isolate the audio-thread cost.
+        const auto procStartMs = juce::Time::getMillisecondCounterHiRes();
+
         while (pos < processSamples)
         {
             const int thisBlock = jmin(blockSize, processSamples - pos);
@@ -411,6 +416,16 @@ public:
                 outputBuf.copyFrom(ch, pos, block, ch, 0, thisBlock);
 
             pos += thisBlock;
+        }
+
+        const auto procEndMs = juce::Time::getMillisecondCounterHiRes();
+        {
+            const double procSeconds  = (procEndMs - procStartMs) * 1.0e-3;
+            const double audioSeconds = (double) totalSamples / sampleRate;
+            const double rtf = procSeconds > 0.0 ? audioSeconds / procSeconds : 0.0;
+            std::cerr << "mcfx_testhost: process_seconds=" << procSeconds
+                      << " audio_seconds="    << audioSeconds
+                      << " realtime_factor="  << rtf << "\n";
         }
 
         plugin->releaseResources();
