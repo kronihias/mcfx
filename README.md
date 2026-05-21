@@ -169,15 +169,21 @@ sudo apt install libasound2-dev libjack-jackd2-dev \
 
 > On older Ubuntu/Debian where `libwebkit2gtk-4.1-dev` is not available, substitute `libwebkit2gtk-4.0-dev` — JUCE 8 loads whichever is present at runtime. Likewise, fall back to `libfreetype6-dev` if `libfreetype-dev` is unavailable. If you intend to enable `WITH_ZITA_CONVOLVER` (off by default), also install `libzita-convolver-dev`.
 
-**Windows x64** — download [FFTW for Windows](https://www.fftw.org/install/windows.html) (64-bit) and generate the import library from the `x64 Native Tools Command Prompt for VS`:
+**Windows x64** — FFTW3 is fetched and built by **vcpkg** (declared in [`vcpkg.json`](vcpkg.json) with SSE2/AVX/AVX2/threads features, statically linked). Bootstrap vcpkg once:
 
 ```
-lib /machine:x64 /def:libfftw3f-3.def
+git clone https://github.com/microsoft/vcpkg "%USERPROFILE%\vcpkg"
+"%USERPROFILE%\vcpkg\bootstrap-vcpkg.bat"
+setx VCPKG_ROOT "%USERPROFILE%\vcpkg"
 ```
 
-> Note: running `lib /def:libfftw3f-3.def` from the default Developer Command Prompt generates a 32-bit library and will fail to link.
+Then point CMake at the toolchain when configuring:
 
-Use fftw-3.3.6-pl2 or later — earlier versions lack `fftwf_make_planner_thread_safe()`.
+```
+cmake -B build -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static-md ...
+```
+
+`tests/run_tests.py` does this automatically when `VCPKG_ROOT` (or GH Actions' `VCPKG_INSTALLATION_ROOT`) is set; otherwise it falls back to the pre-built DLL under `win-libs/` (legacy path, requires shipping the FFTW DLL alongside the plug-in).
 
 Clone the repository including submodules:
 
