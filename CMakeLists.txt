@@ -223,17 +223,24 @@ INCLUDE_DIRECTORIES ( BEFORE ${CMAKE_CURRENT_SOURCE_DIR}/common/EqCore )
 # additional cmake find packages
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# Force MODULE mode so our cmake/FindFFTW3.cmake is used (sets FFTW3F_LIBRARY
-# and FFTW3F_THREADS_LIBRARY). vcpkg installs FFTW3Config.cmake files which
-# would otherwise win CONFIG-mode resolution and our targets would see empty
-# library variables.
-IF (WITH_ZITA_CONVOLVER OR WIN32)
-	find_package(FFTW3 MODULE COMPONENTS single)
-ENDIF (WITH_ZITA_CONVOLVER OR WIN32)
+# FFT backend
+# -----------
+# macOS: Apple Accelerate (vDSP) — selected via #if JUCE_MAC in MtxConv / mcfx_filter.
+# Windows/Linux/BSD: chowdsp_fft, built from the in-tree submodule.
+# zita-convolver (optional, Linux only) brings its own system-FFTW dependency
+# and is unaffected by this swap.
+IF (NOT APPLE)
+    IF (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/external/chowdsp_fft/CMakeLists.txt")
+        message(FATAL_ERROR
+            "external/chowdsp_fft submodule missing — run:  "
+            "git submodule update --init --recursive")
+    ENDIF()
+    add_subdirectory(external/chowdsp_fft EXCLUDE_FROM_ALL)
+ENDIF()
 
-IF(UNIX AND NOT APPLE AND NOT ANDROID)
-	find_package(FFTW3 MODULE COMPONENTS single threads)
-ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
+IF (WITH_ZITA_CONVOLVER)
+    find_package(FFTW3 MODULE COMPONENTS single)
+ENDIF()
 
 # Locate GNU patch. On Windows it ships with Git for Windows under usr/bin but
 # isn't on PowerShell's PATH by default, so probe the usual install locations.
@@ -327,7 +334,7 @@ apply_juce_patch(
 apply_juce_patch(
     "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_network_discovery.patch")
 
-include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
+include_directories(${JACK_INCLUDE_DIRS})
 
 
 ################################################

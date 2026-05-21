@@ -6,7 +6,8 @@ set BUILD_DIR=..\build
 if not defined MSBUILD set MSBUILD="C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\MSBuild.exe"
 if not defined MAKENSIS set MAKENSIS="C:\Program Files (x86)\NSIS\makensis.exe"
 set MSBUILD_FLAGS=/t:Build /p:Configuration=Release /p:PreBuildEvent= /p:PostBuildEvent=
-set CMAKE_COMMON=-DFFTW3_INCLUDE_DIR="../win-libs/" -DFFTW3F_LIBRARY="../win-libs/x64/libfftw3f-3.lib"
+REM FFTW3 is gone — Windows builds use chowdsp_fft from external/chowdsp_fft.
+set CMAKE_COMMON=
 
 REM VST2SDKPATH is needed for VST2 hosting in mcfx_anything (and for VST2 plugin
 REM builds). When provided via env (e.g. by GitHub Actions) propagate it to cmake.

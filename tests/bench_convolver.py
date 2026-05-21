@@ -3,9 +3,8 @@ mcfx_convolver performance benchmark.
 
 Drives the testhost with representative configurations and reports the audio
 processing wall-time (excluding plugin load, IR loading, and WAV I/O) and the
-resulting realtime factor. Intended for bracketing FFT-implementation swaps
-(FFTW vs chowdsp_fft / pffft / ...) — capture the table before and after,
-diff the numbers.
+resulting realtime factor. Intended for bracketing FFT-implementation swaps — capture the table before
+and after, diff the numbers. (See tests/BENCHMARKS.md for the run log.)
 
 Skipped by default. Run with:
 

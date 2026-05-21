@@ -34,8 +34,7 @@
 
     #define SPLIT_COMPLEX 1
 #else
-    #include <fftw3.h>
-    const int fftwopt = FFTW_MEASURE; // FFTW_ESTIMATE || FFTW_MEASURE
+    #include <chowdsp_fft.h>
 
     #define SPLIT_COMPLEX 0
 #endif
@@ -277,9 +276,9 @@ private:
     float               *fft_im_;            // N+1
     int                 vdsp_log2_;      // vDSP needs the exponent of two
 #else
-    fftwf_plan          fftwf_plan_r2c_;     // FFTWF forward plan
-    float               *fftwf_t_data_;      // FFTWF buffer for time domain signal (2*N)
-    fftwf_complex       *fft_c_;             // FFTWF buffer for complex signal (N+1)
+    void                *fft_setup_;         // chowdsp_fft setup (ordered REAL transform)
+    float               *fft_freq_;          // FFT_LENGTH floats — ordered freq-domain output
+    float               *fft_work_;          // FFT_LENGTH floats — work buffer
 #endif
 
     //==============================================================================

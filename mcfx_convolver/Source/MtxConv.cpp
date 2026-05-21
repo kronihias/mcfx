@@ -43,9 +43,8 @@ MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
 	debug_out_ = new FileOutputStream(file);
 #endif
 
-#if !SPLIT_COMPLEX
-    fftwf_make_planner_thread_safe(); // this works since fftw-3.3.6-pl2
-#endif
+    // chowdsp_fft has no global planner state, so no thread-safety
+    // initialisation is needed (unlike FFTW pre-3.3.6-pl2).
 }
 
 MtxConvMaster::~MtxConvMaster()
@@ -430,10 +429,14 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
 
 #else
 
-    fft_c_ = reinterpret_cast<fftwf_complex*>( aligned_malloc( (partitionsize+1)*sizeof(fftwf_complex), 16 ) );
-
-    fftwf_plan_r2c_ = fftwf_plan_dft_r2c_1d (2*partitionsize_, fft_t_, fft_c_, fftwopt);
-    fftwf_plan_c2r_ = fftwf_plan_dft_c2r_1d (2*partitionsize_, fft_c_, fft_t_, fftwopt);
+    // chowdsp_fft: real transform of length 2*partitionsize_. Setup is
+    // thread-safe and shared between forward and inverse calls.  use_avx=true
+    // lets the runtime dispatcher pick the best ISA available on the host.
+    fft_setup_ = chowdsp::fft::fft_new_setup(2 * partitionsize_,
+                                             chowdsp::fft::FFT_REAL,
+                                             true);
+    fft_work_  = reinterpret_cast<float*>( aligned_malloc(
+                     2 * partitionsize_ * sizeof(float), 32 ) ); // 32-byte aligned for AVX
 
 #endif
 
@@ -530,12 +533,16 @@ void MtxConvSlave::Cleanup()
     aligned_free(fft_im_);
 
 #else
-    if (fftwf_plan_r2c_)
-        fftwf_destroy_plan(fftwf_plan_r2c_);
-    if (fftwf_plan_c2r_)
-        fftwf_destroy_plan(fftwf_plan_c2r_);
-
-    aligned_free(fft_c_);
+    if (fft_setup_)
+    {
+        chowdsp::fft::fft_destroy_setup(fft_setup_);
+        fft_setup_ = nullptr;
+    }
+    if (fft_work_)
+    {
+        aligned_free(fft_work_);
+        fft_work_ = nullptr;
+    }
 #endif
 
     aligned_free(fft_t_);
@@ -562,7 +569,7 @@ void MtxConvSlave::Reset()
             FloatVectorOperations::clear(innode->a_re_[j], partitionsize_+1);
             FloatVectorOperations::clear(innode->a_im_[j], partitionsize_+1);
 #else
-            FloatVectorOperations::clear((float*)innode->a_c_[j], 2*(partitionsize_+1));
+            FloatVectorOperations::clear(innode->a_c_[j], 2*partitionsize_);
 #endif
         }
     }
@@ -653,10 +660,10 @@ bool MtxConvSlave::AddFilter(int in, int out, const juce::AudioSampleBuffer &dat
             // FloatVectorOperations::copy(filternode->b_im_[i], fft_im_, partitionsize_+1);
 
 #else
-            fftwf_execute_dft_r2c (fftwf_plan_r2c_, fft_t_, filternode->b_c_[i]);
-
-            // copy the fft filter data to the filternode
-            // FloatVectorOperations::copy((float*)filternode->b_c_[i], (float*)fft_c_, 2*(partitionsize_+1));
+            chowdsp::fft::fft_transform_unordered(fft_setup_, fft_t_,
+                                                  filternode->b_c_[i],
+                                                  fft_work_,
+                                                  chowdsp::fft::FFT_FORWARD);
 #endif
         }
 
@@ -811,8 +818,10 @@ void MtxConvSlave::TransformInput(bool skip)
 
 
 #else
-            fftwf_execute_dft_r2c(fftwf_plan_r2c_, fft_t_, innode->a_c_[part_idx_]);
-
+            chowdsp::fft::fft_transform_unordered(fft_setup_, fft_t_,
+                                                  innode->a_c_[part_idx_],
+                                                  fft_work_,
+                                                  chowdsp::fft::FFT_FORWARD);
 #endif
 
         } // iterate over number of inputs
@@ -829,7 +838,7 @@ void MtxConvSlave::TransformInput(bool skip)
             FloatVectorOperations::clear(innode->a_re_[part_idx_], partitionsize_ + 1);
             FloatVectorOperations::clear(innode->a_im_[part_idx_], partitionsize_ + 1);
 #else
-            FloatVectorOperations::clear((float*)innode->a_c_[part_idx_], 2 * (partitionsize_ + 1));
+            FloatVectorOperations::clear(innode->a_c_[part_idx_], 2 * partitionsize_);
 #endif
         }
 
@@ -861,7 +870,11 @@ void MtxConvSlave::TransformOutput(bool skip)
             vDSP_fft_zrip(vdsp_fft_setup_, &splitcomplex, 1, vdsp_log2_, FFT_INVERSE); // ifft
             vDSP_ztoc(&splitcomplex, 1, reinterpret_cast<COMPLEX*>(fft_t_), 2, partitionsize_); // reorder
 #else
-            fftwf_execute_dft_c2r(fftwf_plan_c2r_, outnode->c_c_[part_idx_], fft_t_);
+            chowdsp::fft::fft_transform_unordered(fft_setup_,
+                                                  outnode->c_c_[part_idx_],
+                                                  fft_t_,
+                                                  fft_work_,
+                                                  chowdsp::fft::FFT_BACKWARD);
 #endif
 
             outnode->outbuf_.copyFrom(0, 0, fft_t_ + partitionsize_ - 1, partitionsize_);
@@ -871,7 +884,7 @@ void MtxConvSlave::TransformOutput(bool skip)
             FloatVectorOperations::clear(outnode->c_re_[part_idx_], partitionsize_ + 1);
             FloatVectorOperations::clear(outnode->c_im_[part_idx_], partitionsize_ + 1);
 #else
-            FloatVectorOperations::clear((float*)outnode->c_c_[part_idx_], 2 * (partitionsize_ + 1));
+            FloatVectorOperations::clear(outnode->c_c_[part_idx_], 2 * partitionsize_);
 #endif
         } // end iterate over all outputs
 
@@ -890,7 +903,7 @@ void MtxConvSlave::TransformOutput(bool skip)
             FloatVectorOperations::clear(outnode->c_re_[part_idx_], partitionsize_ + 1);
             FloatVectorOperations::clear(outnode->c_im_[part_idx_], partitionsize_ + 1);
 #else
-            FloatVectorOperations::clear((float*)outnode->c_c_[part_idx_], 2 * (partitionsize_ + 1));
+            FloatVectorOperations::clear(outnode->c_c_[part_idx_], 2 * partitionsize_);
 #endif
         } // end iterate over all outputs
     }
@@ -1056,55 +1069,15 @@ void MtxConvSlave::Process(int filt_part_idx)
                 }
     #endif
 #else
-    #if JUCE_USE_SSE_INTRINSICS
-                // Intel Win/Linux
-				// sse 3 from http://yangkunlun.blogspot.de/2011/09/fast-complex-multiply-with-sse.html
-
-				float *A = (float *) filternode->innode_->a_c_[part_idx_];
-				float *B = (float *) filternode->b_c_[filt_part_idx];
-				float *D = (float *) outnode->c_c_[out_part_idx];
-
-
-				for (int i=0; i < partitionsize_; i+=2)
-				{
-					// complex multiplication
-					__m128 aa, bb, dc, x0, x1, out;
-					__m128 ab = _mm_load_ps(A);
-					__m128 cd = _mm_load_ps(B);
-					aa = _mm_moveldup_ps(ab); // duplicate A to R1 R1 R2 R2
-					bb = _mm_movehdup_ps(ab); // duplicate A to I1 I1 I2 I2
-
-					// the upper part can be done during initialization -> but double the need of space!
-
-					x0 = _mm_mul_ps(aa, cd);    //ac ad
-					dc = _mm_shuffle_ps(cd, cd, _MM_SHUFFLE(2,3,0,1));
-					x1 = _mm_mul_ps(bb, dc);    //bd bc
-
-
-					// adding result to output
-					out = _mm_load_ps(D);
-					out = _mm_add_ps(out, _mm_addsub_ps(x0, x1));
-					_mm_store_ps(D, out);
-
-					A += 4;
-					B += 4;
-					D += 4;
-				}
-				// treat last bin separately
-				outnode->c_c_[out_part_idx][partitionsize_][0] += filternode->innode_->a_c_[part_idx_] [partitionsize_][0] * filternode->b_c_[filt_part_idx] [partitionsize_][0];
-				// fft_c_ [partitionsize_][1] = 0; // should be zero anyway
-    #else
-            // fallback to not simd
-            fftwf_complex *A = filternode->innode_->a_c_[part_idx_];
-            fftwf_complex *B = filternode->b_c_[filt_part_idx];
-            fftwf_complex *C = outnode->c_c_[out_part_idx];
-
-            for (int k = 0; k <= partitionsize_; k++)
-            {
-                C[k][0] += A[k][0] * B[k][0] - A[k][1] * B[k][1];
-                C[k][1] += A[k][0] * B[k][1] + A[k][1] * B[k][0];
-            }
-    #endif
+            // chowdsp_fft handles the spectral multiply-accumulate in one call,
+            // dispatching internally to AVX/SSE/NEON. Replaces the previous
+            // hand-rolled SSE complex MAC loop.
+            chowdsp::fft::fft_convolve_unordered(
+                fft_setup_,
+                filternode->innode_->a_c_[part_idx_],
+                filternode->b_c_[filt_part_idx],
+                outnode->c_c_[out_part_idx],
+                1.0f);
 #endif
 
 			}
@@ -1287,7 +1260,7 @@ FilterNode::FilterNode(InNode *innode, int numpartitions, int partitionsize)
     b_re_ = new float* [numpartitions_];
     b_im_ = new float* [numpartitions_];
 #else
-    b_c_ = new fftwf_complex* [numpartitions_];
+    b_c_ = new float* [numpartitions_];
 #endif
 
     for (int i=0; i<numpartitions_; i++)
@@ -1303,10 +1276,10 @@ FilterNode::FilterNode(InNode *innode, int numpartitions, int partitionsize)
         FloatVectorOperations::clear(b_im_[i], partitionsize+1);
 
 #else
-        // fftw needs N+1 complex samples
-        b_c_[i] = reinterpret_cast<fftwf_complex*>( aligned_malloc( (partitionsize+1)*sizeof(fftwf_complex), 16 ) );
+        // chowdsp_fft unordered real spectrum: 2N floats (packed), 32-byte aligned for AVX.
+        b_c_[i] = reinterpret_cast<float*>( aligned_malloc( 2*partitionsize*sizeof(float), 32 ) );
 
-        FloatVectorOperations::clear((float*)b_c_[i], 2*(partitionsize+1));
+        FloatVectorOperations::clear(b_c_[i], 2*partitionsize);
 #endif
     }
 
@@ -1351,7 +1324,7 @@ InNode::InNode(int in, int numpartitions, int partitionsize)
     a_re_ = new float* [numpartitions_];
     a_im_ = new float* [numpartitions_];
 #else
-    a_c_ = new fftwf_complex* [numpartitions_];
+    a_c_ = new float* [numpartitions_];
 #endif
 
     for (int i=0; i<numpartitions_; i++)
@@ -1365,11 +1338,10 @@ InNode::InNode(int in, int numpartitions, int partitionsize)
         FloatVectorOperations::clear(a_re_[i], partitionsize+1);
         FloatVectorOperations::clear(a_im_[i], partitionsize+1);
 #else
-        // fftw needs N+1 complex samples
-        a_c_[i] = reinterpret_cast<fftwf_complex*>( aligned_malloc( (partitionsize+1)*sizeof(fftwf_complex), 16 ) );
+        // chowdsp_fft unordered real spectrum: 2N floats (packed), 32-byte aligned for AVX.
+        a_c_[i] = reinterpret_cast<float*>( aligned_malloc( 2*partitionsize*sizeof(float), 32 ) );
 
-        FloatVectorOperations::clear((float*)a_c_[i], 2*(partitionsize+1));
-        // memset(a_c_[i], 0, (partitionsize+1)*sizeof(fftwf_complex));
+        FloatVectorOperations::clear(a_c_[i], 2*partitionsize);
 #endif
     }
 
@@ -1415,7 +1387,7 @@ OutNode::OutNode(int out, int partitionsize, int numpartitions)
     c_re_ = new float* [numpartitions_];
     c_im_ = new float* [numpartitions_];
 #else
-    c_c_ = new fftwf_complex* [numpartitions_];
+    c_c_ = new float* [numpartitions_];
 #endif
 
     for (int i=0; i<numpartitions_; i++)
@@ -1431,10 +1403,10 @@ OutNode::OutNode(int out, int partitionsize, int numpartitions)
         FloatVectorOperations::clear(c_im_[i], partitionsize+1);
 
 #else
-        // fftw needs N+1 complex samples
-        c_c_[i] = reinterpret_cast<fftwf_complex*>( aligned_malloc( (partitionsize+1)*sizeof(fftwf_complex), 16 ) );
+        // chowdsp_fft unordered real spectrum: 2N floats (packed), 32-byte aligned for AVX.
+        c_c_[i] = reinterpret_cast<float*>( aligned_malloc( 2*partitionsize*sizeof(float), 32 ) );
 
-        FloatVectorOperations::clear((float*)c_c_[i], 2*(partitionsize+1));
+        FloatVectorOperations::clear(c_c_[i], 2*partitionsize);
 #endif
     }
 

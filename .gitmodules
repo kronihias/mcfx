@@ -1,3 +1,6 @@
 [submodule "JUCE"]
 	path = JUCE
 	url = https://github.com/juce-framework/JUCE.git
+[submodule "external/chowdsp_fft"]
+	path = external/chowdsp_fft
+	url = https://github.com/Chowdhury-DSP/chowdsp_fft.git

@@ -30,9 +30,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_DIR = REPO_ROOT / "_build"
-WIN_LIBS  = REPO_ROOT / "win-libs"
 IS_WINDOWS = sys.platform == "win32"
-IS_MACOS   = sys.platform == "darwin"
 
 
 def run(cmd: list[str], cwd: Path | None = None) -> None:
@@ -53,30 +51,6 @@ def cmake_configure() -> None:
         "-DBUILD_TESTHOST=ON",
         "-DBUILD_NET_TESTS=ON",
     ]
-
-    if IS_WINDOWS:
-        # Prefer vcpkg when available — manifest-mode installs the deps listed
-        # in vcpkg.json (FFTW3 with SSE2/AVX/AVX2/threads, statically linked).
-        # GitHub Actions Windows runners expose VCPKG_INSTALLATION_ROOT; local
-        # dev boxes set VCPKG_ROOT after bootstrapping vcpkg.
-        # Fallback: the pre-built FFTW3 DLL under win-libs/ — kept for users
-        # who can't run vcpkg.
-        vcpkg_root = os.environ.get("VCPKG_ROOT") or os.environ.get("VCPKG_INSTALLATION_ROOT")
-        if vcpkg_root and (Path(vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
-            # Use the in-tree overlay triplet so vcpkg only builds the Release
-            # variant of FFTW3 (we don't link a debug fftw3f.lib). Halves the
-            # first-time vcpkg build cost.
-            overlay = (REPO_ROOT / "vcpkg-triplets").as_posix()
-            args += [
-                f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_root}/scripts/buildsystems/vcpkg.cmake",
-                f"-DVCPKG_OVERLAY_TRIPLETS={overlay}",
-                "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md-release",
-            ]
-        else:
-            args += [
-                f"-DFFTW3_INCLUDE_DIR={WIN_LIBS.as_posix()}/",
-                f"-DFFTW3F_LIBRARY={WIN_LIBS.as_posix()}/x64/libfftw3f-3.lib",
-            ]
 
     # Prefer Ninja on macOS/Linux when available — much faster than make.
     if not IS_WINDOWS and shutil.which("ninja"):
@@ -109,21 +83,6 @@ def cmake_build() -> None:
     args = ["cmake", "--build", str(BUILD_DIR), "--config", "Release",
             "--parallel", "--target", *BUILD_TARGETS]
     run(args)
-
-    if IS_WINDOWS:
-        # On Windows the FFTW3 DLL has to sit alongside any binary that links
-        # against it — Windows resolves imports from the loaded module's
-        # directory, not the lib search path. mcfx_convolver, mcfx_filter, and
-        # mcfx_mimoeq all use the FFTW-backed MtxConv engine.
-        dll = WIN_LIBS / "x64" / "libfftw3f-3.dll"
-        if dll.is_file():
-            fftw_plugins = ["mcfx_convolver", "mcfx_filter", "mcfx_mimoeq"]
-            dsts = [BUILD_DIR / "testhost"]
-            dsts += [BUILD_DIR / "vst3" / f"{p}.vst3" / "Contents" / "x86_64-win"
-                     for p in fftw_plugins]
-            for dst in dsts:
-                if dst.is_dir():
-                    shutil.copy2(dll, dst)
 
 
 def pip_install() -> None:

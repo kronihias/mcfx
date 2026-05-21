@@ -1,8 +1,6 @@
 SET (SPECIFIC_SOURE_DIR ${SRC_DIR}/mcfx_filter)
 
-IF(NOT APPLE)
-	SET (WITH_FFTW3 TRUE)
-ENDIF(NOT APPLE)
+SET (MCFX_USES_FFT TRUE)  # FFT on non-Apple via chowdsp_fft; vDSP on Apple
 
 
 IF(${NUM_CHANNELS} LESS 10)

@@ -87,15 +87,16 @@ LowhighpassAudioProcessor::LowhighpassAudioProcessor() :
 
 #else
 
-    fft_c_ = reinterpret_cast<fftwf_complex*>( aligned_malloc( (FFT_LENGTH/2+1)*sizeof(fftwf_complex), 16 ) );
-
-    FloatVectorOperations::clear(&fft_c_[0][0], 2*(FFT_LENGTH/2+1));
-
-    fftwf_plan_r2c_ = nullptr;
-
-    fftwf_make_planner_thread_safe(); // make plan creation threadsafe - new in fftw-3.3.6-pl2
-
-    fftwf_plan_r2c_ = fftwf_plan_dft_r2c_1d (FFT_LENGTH, fft_t_, fft_c_, fftwopt);
+    // chowdsp_fft real transform, ordered output (analyzer runs at GUI rate
+    // so the slight cost of an ordered transform is irrelevant).
+    fft_setup_ = chowdsp::fft::fft_new_setup(FFT_LENGTH,
+                                             chowdsp::fft::FFT_REAL,
+                                             true);
+    fft_freq_ = reinterpret_cast<float*>( aligned_malloc(
+                    FFT_LENGTH * sizeof(float), 32 ) );
+    fft_work_ = reinterpret_cast<float*>( aligned_malloc(
+                    FFT_LENGTH * sizeof(float), 32 ) );
+    FloatVectorOperations::clear(fft_freq_, FFT_LENGTH);
 #endif
 
     _w = reinterpret_cast<float*>( aligned_malloc( FFT_LENGTH*sizeof(float), 16 ) );
@@ -135,10 +136,13 @@ LowhighpassAudioProcessor::~LowhighpassAudioProcessor()
     aligned_free(fft_im_);
 
 #else
-    if (fftwf_plan_r2c_)
-        fftwf_destroy_plan(fftwf_plan_r2c_);
-
-    aligned_free(fft_c_);
+    if (fft_setup_)
+    {
+        chowdsp::fft::fft_destroy_setup(fft_setup_);
+        fft_setup_ = nullptr;
+    }
+    aligned_free(fft_freq_);
+    aligned_free(fft_work_);
 #endif
 
     aligned_free(fft_t_);
@@ -824,11 +828,23 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
                 for (int i = 0; i < specLen; i++)
                     _tmp_mag[i] = sqrtf(fft_re_[i]*fft_re_[i] + fft_im_[i]*fft_im_[i]);
 #else
-                if (fftwf_plan_r2c_)
-                    fftwf_execute_dft_r2c(fftwf_plan_r2c_, fft_t_, fft_c_);
+                // chowdsp_fft ordered REAL output layout (size N):
+                //   fft_freq_[0]      = DC.real        (DC.imag = 0)
+                //   fft_freq_[1]      = Nyquist.real   (Nyquist.imag = 0)
+                //   fft_freq_[2*k]    = bin_k.real     (k = 1 .. N/2-1)
+                //   fft_freq_[2*k+1]  = bin_k.imag
+                chowdsp::fft::fft_transform(fft_setup_, fft_t_, fft_freq_,
+                                            fft_work_,
+                                            chowdsp::fft::FFT_FORWARD);
 
-                for (int i = 0; i < specLen; i++)
-                    _tmp_mag[i] = sqrtf(fft_c_[i][0]*fft_c_[i][0] + fft_c_[i][1]*fft_c_[i][1]);
+                _tmp_mag[0]                = fabsf(fft_freq_[0]);                // DC
+                _tmp_mag[FFT_LENGTH / 2]   = fabsf(fft_freq_[1]);                // Nyquist
+                for (int i = 1; i < FFT_LENGTH / 2; i++)
+                {
+                    const float re = fft_freq_[2 * i];
+                    const float im = fft_freq_[2 * i + 1];
+                    _tmp_mag[i] = sqrtf(re * re + im * im);
+                }
 #endif
             };
 

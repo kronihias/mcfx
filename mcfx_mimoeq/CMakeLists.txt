@@ -19,9 +19,7 @@ endif()
 
 SET(MC_PLUGIN_CODE "Emc0")
 
-IF(NOT APPLE)
-    SET(WITH_FFTW3 TRUE)
-ENDIF()
+SET(MCFX_USES_FFT TRUE)  # FFT on non-Apple via chowdsp_fft; vDSP on Apple
 
 # Pass EqCore + MtxConv + shared PresetManager to both variants via the
 # MCFX_EXTRA_* hooks. PresetManager is shared with mcfx_graph.
@@ -38,10 +36,8 @@ foreach(tgt IN LISTS MCFX_TARGETS)
     if(APPLE)
         target_link_libraries(${tgt} PRIVATE "-framework Accelerate")
     endif()
-    if(WITH_FFTW3)
-        target_link_libraries(${tgt} PRIVATE
-            ${FFTW3F_LIBRARY}
-            ${FFTW3F_THREADS_LIBRARY})
+    if(MCFX_USES_FFT AND NOT APPLE)
+        target_link_libraries(${tgt} PRIVATE chowdsp_fft)
     endif()
 endforeach()
 

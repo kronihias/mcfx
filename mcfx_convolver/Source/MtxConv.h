@@ -28,8 +28,7 @@
 
     #define SPLIT_COMPLEX 1
 #else
-    #include <fftw3.h>
-    const int fftwopt = FFTW_MEASURE; // FFTW_ESTIMATE || FFTW_MEASURE
+    #include <chowdsp_fft.h>
 
     #define SPLIT_COMPLEX 0
 #endif
@@ -91,7 +90,7 @@ private:
     float               **a_re_; // N/2+1
     float               **a_im_; // N/2+1
 #else
-    fftwf_complex       **a_c_; // N+1 -> interleaved complex data
+    float               **a_c_; // 2N floats — chowdsp_fft unordered packed frequency-domain data
 #endif
 
 };
@@ -120,7 +119,7 @@ private:
     float               **b_re_; // N/2+1
     float               **b_im_; // N/2+1
 #else
-    fftwf_complex       **b_c_; // N+1 -> interleaved complex data
+    float               **b_c_; // 2N floats — chowdsp_fft unordered packed frequency-domain data
 #endif
 
 };
@@ -153,7 +152,7 @@ private:
     float               **c_re_; // N/2+1
     float               **c_im_; // N/2+1
 #else
-    fftwf_complex       **c_c_; // N+1 -> interleaved complex data
+    float               **c_c_; // 2N floats — chowdsp_fft unordered packed frequency-domain data
 #endif
 };
 
@@ -262,10 +261,8 @@ private:
     float               *fft_im_;            // N+1
     int                 vdsp_log2_;      // vDSP needs the exponent of two
 #else
-    fftwf_plan          fftwf_plan_r2c_;     // FFTWF forward plan
-    fftwf_plan          fftwf_plan_c2r_;     // FFTWF inverse plan
-    float               *fftwf_t_data_;      // FFTWF buffer for time domain signal (2*N)
-    fftwf_complex       *fft_c_;             // FFTWF buffer for complex signal (N+1)
+    void                *fft_setup_;         // chowdsp_fft setup (REAL, size 2*partitionsize_)
+    float               *fft_work_;          // 2*N work buffer for the unordered transforms
 #endif
 
     OwnedArray<InNode> innodes_;            // holds input nodes

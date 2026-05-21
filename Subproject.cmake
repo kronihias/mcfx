@@ -117,10 +117,8 @@ if(MCFX_BUILD_VST2_PER_CHANNEL AND MCFX_FORMATS_VST2)
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags)
 
-    if(WITH_FFTW3)
-        target_link_libraries(${_vst2_target} PRIVATE
-            ${FFTW3F_LIBRARY}
-            ${FFTW3F_THREADS_LIBRARY})
+    if(MCFX_USES_FFT AND NOT APPLE)
+        target_link_libraries(${_vst2_target} PRIVATE chowdsp_fft)
     endif()
 
     list(APPEND MCFX_TARGETS ${_vst2_target})
@@ -178,10 +176,8 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
         juce::juce_recommended_config_flags
         juce::juce_recommended_lto_flags)
 
-    if(WITH_FFTW3)
-        target_link_libraries(${_mc_target} PRIVATE
-            ${FFTW3F_LIBRARY}
-            ${FFTW3F_THREADS_LIBRARY})
+    if(MCFX_USES_FFT AND NOT APPLE)
+        target_link_libraries(${_mc_target} PRIVATE chowdsp_fft)
     endif()
 
     list(APPEND MCFX_TARGETS ${_mc_target})

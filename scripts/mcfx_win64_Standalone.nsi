@@ -42,7 +42,4 @@ Section
     SetOutPath "$INSTDIR"
     File "..\build\standalone\*.exe"
     ${DisableX64FSRedirection}
-
-    SetOutPath "$SYSDIR"
-    File "..\win-libs\x64\libfftw3f-3.dll"
 SectionEnd

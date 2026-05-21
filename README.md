@@ -163,27 +163,12 @@ sudo apt install libasound2-dev libjack-jackd2-dev \
     libfreetype-dev libfontconfig1-dev \
     libx11-dev libxcomposite-dev libxcursor-dev libxext-dev libxinerama-dev libxrandr-dev libxrender-dev \
     libwebkit2gtk-4.1-dev \
-    libglu1-mesa-dev mesa-common-dev \
-    libfftw3-dev
+    libglu1-mesa-dev mesa-common-dev
 ```
 
-> On older Ubuntu/Debian where `libwebkit2gtk-4.1-dev` is not available, substitute `libwebkit2gtk-4.0-dev` — JUCE 8 loads whichever is present at runtime. Likewise, fall back to `libfreetype6-dev` if `libfreetype-dev` is unavailable. If you intend to enable `WITH_ZITA_CONVOLVER` (off by default), also install `libzita-convolver-dev`.
+> On older Ubuntu/Debian where `libwebkit2gtk-4.1-dev` is not available, substitute `libwebkit2gtk-4.0-dev` — JUCE 8 loads whichever is present at runtime. Likewise, fall back to `libfreetype6-dev` if `libfreetype-dev` is unavailable. If you intend to enable `WITH_ZITA_CONVOLVER` (off by default), also install `libzita-convolver-dev` and `libfftw3-dev` (zita brings its own FFTW dependency).
 
-**Windows x64** — FFTW3 is fetched and built by **vcpkg** (declared in [`vcpkg.json`](vcpkg.json) with SSE2/AVX/AVX2/threads features, statically linked). Bootstrap vcpkg once:
-
-```
-git clone https://github.com/microsoft/vcpkg "%USERPROFILE%\vcpkg"
-"%USERPROFILE%\vcpkg\bootstrap-vcpkg.bat"
-setx VCPKG_ROOT "%USERPROFILE%\vcpkg"
-```
-
-Then point CMake at the toolchain when configuring:
-
-```
-cmake -B build -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static-md ...
-```
-
-`tests/run_tests.py` does this automatically when `VCPKG_ROOT` (or GH Actions' `VCPKG_INSTALLATION_ROOT`) is set; otherwise it falls back to the pre-built DLL under `win-libs/` (legacy path, requires shipping the FFTW DLL alongside the plug-in).
+**Windows x64** — no extra setup. The FFT used by `mcfx_convolver`, `mcfx_filter`, and `mcfx_mimoeq` comes from the in-tree [chowdsp_fft](https://github.com/Chowdhury-DSP/chowdsp_fft) submodule (a fork of pffft, BSD-style licence) — statically linked, with runtime AVX/SSE dispatch. macOS uses Apple Accelerate (vDSP) instead, same as before.
 
 Clone the repository including submodules:
 
@@ -243,15 +228,6 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 | `WITH_ZITA_CONVOLVER` | Use zita-convolver for better Linux performance (Linux only) | `OFF` |
 
 > Note: VST3 is the recommended format for new projects but currently defaults to OFF — pass `-DBUILD_VST3=ON` when configuring.
-
-**FFTW paths** (set manually if not found automatically):
-
-- **`FFTW3F_LIBRARY`** — path to the FFTW3F library file (note the trailing **f**):
-  - Linux: `/usr/lib/x86_64-linux-gnu/libfftw3f-3.so`
-  - Windows/MSVC: `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.lib`
-  - Windows/MinGW: `C:/Program Files/fftw-3.3.6-pl2-dll64/libfftw3f-3.dll`
-- **`FFTW3_INCLUDE_DIR`** — path to the FFTW3 include directory, e.g. `/usr/include`
-- **`FFTW3F_THREADS_LIBRARY`** *(Linux only)* — e.g. `/usr/lib/x86_64-linux-gnu/libfftw3f_threads.so`
 
 ---
 
