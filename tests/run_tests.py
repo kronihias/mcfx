@@ -55,12 +55,28 @@ def cmake_configure() -> None:
     ]
 
     if IS_WINDOWS:
-        # FFTW3 ships in-tree under win-libs/ for mcfx_convolver. Mirrors
-        # scripts/build_all_win64.bat.
-        args += [
-            f"-DFFTW3_INCLUDE_DIR={WIN_LIBS.as_posix()}/",
-            f"-DFFTW3F_LIBRARY={WIN_LIBS.as_posix()}/x64/libfftw3f-3.lib",
-        ]
+        # Prefer vcpkg when available — manifest-mode installs the deps listed
+        # in vcpkg.json (FFTW3 with SSE2/AVX/AVX2/threads, statically linked).
+        # GitHub Actions Windows runners expose VCPKG_INSTALLATION_ROOT; local
+        # dev boxes set VCPKG_ROOT after bootstrapping vcpkg.
+        # Fallback: the pre-built FFTW3 DLL under win-libs/ — kept for users
+        # who can't run vcpkg.
+        vcpkg_root = os.environ.get("VCPKG_ROOT") or os.environ.get("VCPKG_INSTALLATION_ROOT")
+        if vcpkg_root and (Path(vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+            # Use the in-tree overlay triplet so vcpkg only builds the Release
+            # variant of FFTW3 (we don't link a debug fftw3f.lib). Halves the
+            # first-time vcpkg build cost.
+            overlay = (REPO_ROOT / "vcpkg-triplets").as_posix()
+            args += [
+                f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_root}/scripts/buildsystems/vcpkg.cmake",
+                f"-DVCPKG_OVERLAY_TRIPLETS={overlay}",
+                "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md-release",
+            ]
+        else:
+            args += [
+                f"-DFFTW3_INCLUDE_DIR={WIN_LIBS.as_posix()}/",
+                f"-DFFTW3F_LIBRARY={WIN_LIBS.as_posix()}/x64/libfftw3f-3.lib",
+            ]
 
     # Prefer Ninja on macOS/Linux when available — much faster than make.
     if not IS_WINDOWS and shutil.which("ninja"):
