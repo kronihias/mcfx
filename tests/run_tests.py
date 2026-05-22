@@ -22,6 +22,7 @@ CI uses this exact entrypoint; keep it green on both platforms.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -38,6 +39,34 @@ IS_MACOS   = sys.platform == "darwin"
 def run(cmd: list[str], cwd: Path | None = None) -> None:
     print(f"\n$ {' '.join(str(c) for c in cmd)}", flush=True)
     subprocess.run(cmd, cwd=cwd, check=True)
+
+
+def ensure_vcpkg_baseline(vcpkg_root: Path) -> None:
+    # The preinstalled vcpkg on GH Actions runners often predates the
+    # builtin-baseline pinned in vcpkg.json, and `vcpkg install` then aborts
+    # with "failed to git show versions/baseline.json". Fetch the missing
+    # commit before invoking cmake.
+    manifest = REPO_ROOT / "vcpkg.json"
+    try:
+        baseline = json.loads(manifest.read_text())["builtin-baseline"]
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        return
+    if not (vcpkg_root / ".git").exists():
+        return
+    have = subprocess.run(
+        ["git", "-C", str(vcpkg_root), "cat-file", "-e", f"{baseline}^{{commit}}"],
+        capture_output=True,
+    )
+    if have.returncode == 0:
+        return
+    print(f"\n[vcpkg] baseline {baseline[:12]} missing in {vcpkg_root}, fetching", flush=True)
+    fetch = subprocess.run(
+        ["git", "-C", str(vcpkg_root), "fetch", "--depth", "1", "origin", baseline],
+    )
+    if fetch.returncode != 0:
+        # Fetch-by-sha can be refused (uploadpack.allowReachableSHA1InWant);
+        # fall back to a full fetch from origin.
+        run(["git", "-C", str(vcpkg_root), "fetch", "origin"])
 
 
 def cmake_configure() -> None:
@@ -63,6 +92,7 @@ def cmake_configure() -> None:
         # who can't run vcpkg.
         vcpkg_root = os.environ.get("VCPKG_ROOT") or os.environ.get("VCPKG_INSTALLATION_ROOT")
         if vcpkg_root and (Path(vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+            ensure_vcpkg_baseline(Path(vcpkg_root))
             # Use the in-tree overlay triplet so vcpkg only builds the Release
             # variant of FFTW3 (we don't link a debug fftw3f.lib). Halves the
             # first-time vcpkg build cost.
