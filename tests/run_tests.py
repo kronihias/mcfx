@@ -31,7 +31,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_DIR = REPO_ROOT / "_build"
-WIN_LIBS  = REPO_ROOT / "win-libs"
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS   = sys.platform == "darwin"
 
@@ -69,6 +68,26 @@ def ensure_vcpkg_baseline(vcpkg_root: Path) -> None:
         run(["git", "-C", str(vcpkg_root), "fetch", "origin"])
 
 
+def ensure_vcpkg_root() -> Path:
+    # Resolve a usable vcpkg checkout. Honors VCPKG_ROOT, then GH-Actions'
+    # VCPKG_INSTALLATION_ROOT; otherwise clones + bootstraps into
+    # ~/vcpkg. FFTW3 (manifest-declared in vcpkg.json) is required on
+    # Windows since the prebuilt fallback under win-libs/ was removed.
+    for env_var in ("VCPKG_ROOT", "VCPKG_INSTALLATION_ROOT"):
+        v = os.environ.get(env_var)
+        if v and (Path(v) / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+            return Path(v)
+
+    home_vcpkg = Path.home() / "vcpkg"
+    if not (home_vcpkg / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
+        print(f"\n[vcpkg] bootstrapping into {home_vcpkg}", flush=True)
+        if not home_vcpkg.exists():
+            run(["git", "clone", "https://github.com/microsoft/vcpkg", str(home_vcpkg)])
+        bootstrap = home_vcpkg / ("bootstrap-vcpkg.bat" if IS_WINDOWS else "bootstrap-vcpkg.sh")
+        run([str(bootstrap), "-disableMetrics"])
+    return home_vcpkg
+
+
 def cmake_configure() -> None:
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -84,29 +103,21 @@ def cmake_configure() -> None:
     ]
 
     if IS_WINDOWS:
-        # Prefer vcpkg when available — manifest-mode installs the deps listed
-        # in vcpkg.json (FFTW3 with SSE2/AVX/AVX2/threads, statically linked).
-        # GitHub Actions Windows runners expose VCPKG_INSTALLATION_ROOT; local
-        # dev boxes set VCPKG_ROOT after bootstrapping vcpkg.
-        # Fallback: the pre-built FFTW3 DLL under win-libs/ — kept for users
-        # who can't run vcpkg.
-        vcpkg_root = os.environ.get("VCPKG_ROOT") or os.environ.get("VCPKG_INSTALLATION_ROOT")
-        if vcpkg_root and (Path(vcpkg_root) / "scripts" / "buildsystems" / "vcpkg.cmake").is_file():
-            ensure_vcpkg_baseline(Path(vcpkg_root))
-            # Use the in-tree overlay triplet so vcpkg only builds the Release
-            # variant of FFTW3 (we don't link a debug fftw3f.lib). Halves the
-            # first-time vcpkg build cost.
-            overlay = (REPO_ROOT / "vcpkg-triplets").as_posix()
-            args += [
-                f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_root}/scripts/buildsystems/vcpkg.cmake",
-                f"-DVCPKG_OVERLAY_TRIPLETS={overlay}",
-                "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md-release",
-            ]
-        else:
-            args += [
-                f"-DFFTW3_INCLUDE_DIR={WIN_LIBS.as_posix()}/",
-                f"-DFFTW3F_LIBRARY={WIN_LIBS.as_posix()}/x64/libfftw3f-3.lib",
-            ]
+        # FFTW3 comes from vcpkg manifest mode (see vcpkg.json — static lib
+        # with SSE2/AVX/AVX2/threads). GH Actions runners expose
+        # VCPKG_INSTALLATION_ROOT; local dev boxes set VCPKG_ROOT; otherwise
+        # we bootstrap into ~/vcpkg.
+        vcpkg_root = ensure_vcpkg_root()
+        ensure_vcpkg_baseline(vcpkg_root)
+        # In-tree overlay triplet so vcpkg only builds the Release variant of
+        # FFTW3 (we don't link a debug fftw3f.lib). Halves the first-time
+        # vcpkg build cost.
+        overlay = (REPO_ROOT / "vcpkg-triplets").as_posix()
+        args += [
+            f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_root.as_posix()}/scripts/buildsystems/vcpkg.cmake",
+            f"-DVCPKG_OVERLAY_TRIPLETS={overlay}",
+            "-DVCPKG_TARGET_TRIPLET=x64-windows-static-md-release",
+        ]
 
     # Prefer Ninja on macOS/Linux when available — much faster than make.
     if not IS_WINDOWS and shutil.which("ninja"):
@@ -139,21 +150,6 @@ def cmake_build() -> None:
     args = ["cmake", "--build", str(BUILD_DIR), "--config", "Release",
             "--parallel", "--target", *BUILD_TARGETS]
     run(args)
-
-    if IS_WINDOWS:
-        # On Windows the FFTW3 DLL has to sit alongside any binary that links
-        # against it — Windows resolves imports from the loaded module's
-        # directory, not the lib search path. mcfx_convolver, mcfx_filter, and
-        # mcfx_mimoeq all use the FFTW-backed MtxConv engine.
-        dll = WIN_LIBS / "x64" / "libfftw3f-3.dll"
-        if dll.is_file():
-            fftw_plugins = ["mcfx_convolver", "mcfx_filter", "mcfx_mimoeq"]
-            dsts = [BUILD_DIR / "testhost"]
-            dsts += [BUILD_DIR / "vst3" / f"{p}.vst3" / "Contents" / "x86_64-win"
-                     for p in fftw_plugins]
-            for dst in dsts:
-                if dst.is_dir():
-                    shutil.copy2(dll, dst)
 
 
 def pip_install() -> None:
