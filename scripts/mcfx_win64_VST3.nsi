@@ -41,8 +41,4 @@ Page instfiles
 Section
     SetOutPath "$INSTDIR"
     File /r "..\build\vst3\*.vst3"
-    ${DisableX64FSRedirection}
-
-    SetOutPath "$SYSDIR"
-    File "..\win-libs\x64\libfftw3f-3.dll"
 SectionEnd

@@ -169,7 +169,9 @@ sudo apt install libasound2-dev libjack-jackd2-dev \
 
 > On older Ubuntu/Debian where `libwebkit2gtk-4.1-dev` is not available, substitute `libwebkit2gtk-4.0-dev` — JUCE 8 loads whichever is present at runtime. Likewise, fall back to `libfreetype6-dev` if `libfreetype-dev` is unavailable. If you intend to enable `WITH_ZITA_CONVOLVER` (off by default), also install `libzita-convolver-dev`.
 
-**Windows x64** — FFTW3 is fetched and built by **vcpkg** (declared in [`vcpkg.json`](vcpkg.json) with SSE2/AVX/AVX2/threads features, statically linked). Bootstrap vcpkg once:
+**Windows x64** — FFTW3 is fetched and built by **vcpkg** (declared in [`vcpkg.json`](vcpkg.json) with SSE2/AVX/AVX2/threads features, statically linked into each plug-in — no DLL to ship). Both `scripts/build_all_win64.bat` and `tests/run_tests.py` auto-bootstrap vcpkg into `%USERPROFILE%\vcpkg` if neither `VCPKG_ROOT` nor (GH Actions') `VCPKG_INSTALLATION_ROOT` is set, so no manual setup is required.
+
+To bootstrap vcpkg manually (e.g. to share one checkout across projects):
 
 ```
 git clone https://github.com/microsoft/vcpkg "%USERPROFILE%\vcpkg"
@@ -177,13 +179,14 @@ git clone https://github.com/microsoft/vcpkg "%USERPROFILE%\vcpkg"
 setx VCPKG_ROOT "%USERPROFILE%\vcpkg"
 ```
 
-Then point CMake at the toolchain when configuring:
+If you invoke CMake directly, point it at the toolchain and overlay triplet:
 
 ```
-cmake -B build -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows-static-md ...
+cmake -B build ^
+    -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
+    -DVCPKG_OVERLAY_TRIPLETS=vcpkg-triplets ^
+    -DVCPKG_TARGET_TRIPLET=x64-windows-static-md-release ...
 ```
-
-`tests/run_tests.py` does this automatically when `VCPKG_ROOT` (or GH Actions' `VCPKG_INSTALLATION_ROOT`) is set; otherwise it falls back to the pre-built DLL under `win-libs/` (legacy path, requires shipping the FFTW DLL alongside the plug-in).
 
 Clone the repository including submodules:
 
