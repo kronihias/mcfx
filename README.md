@@ -260,6 +260,12 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 ## Changelog
 
+### 0.8.5 (2026-05-24)
+
+- testsuite for Mac, Win, Linux
+- Win: statically link to custom built fftw via vcpkg
+- `mcfx_send`/`mcfx_receiver` network discovery improvements
+
 ### 0.8.4 (2026-05-17)
 
 - `mcfx_mimoeq`: add advanced iir filters, add linearphase fir designer, add phase display
