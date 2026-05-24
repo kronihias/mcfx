@@ -245,8 +245,6 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 | `VST2SDKPATH` | Path to the VST2 SDK | `~/SDKs/vstsdk2.4` |
 | `WITH_ZITA_CONVOLVER` | Use zita-convolver for better Linux performance (Linux only) | `OFF` |
 
-> Note: VST3 is the recommended format for new projects but currently defaults to OFF — pass `-DBUILD_VST3=ON` when configuring.
-
 **FFTW paths** (set manually if not found automatically):
 
 - **`FFTW3F_LIBRARY`** — path to the FFTW3F library file (note the trailing **f**):
@@ -265,6 +263,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 - testsuite for Mac, Win, Linux
 - Win: statically link to custom built fftw via vcpkg
 - `mcfx_send`/`mcfx_receiver` network discovery improvements
+- update to JUCE 8.0.13
 
 ### 0.8.4 (2026-05-17)
 
