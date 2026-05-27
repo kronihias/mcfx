@@ -257,6 +257,9 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### 0.8.6 (2026-05-27)
+
+- `mcfx_anything`, `mcfx_graph`: plug-in scan UI fixes/improvements, avoid skipping some plugins on Mac
 
 ### 0.8.5 (2026-05-24)
 
@@ -306,6 +309,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 - VST3 plug-ins now automatically adjust to the track's channel count — one binary per plug-in, up to 64 channels (AU and VST2 support up to 128); VST3 is recommended going forward
 - update to JUCE 8
 
+### 0.8.6 ()
 ### 0.6.4 (2024-03-20)
 
 `mcfx_convolver`: add master gain parameter and rotary control, mechanism to save channel count in WAV IR files, fix debug window. Add build and installer creation scripts.
