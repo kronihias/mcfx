@@ -59,10 +59,36 @@ codesign_bundles() {
     $NO_SIGN && return 0
     local dir="$1"
     local ext="$2"
+    local entitlements="$ROOT/scripts/scanner.entitlements"
+
     find "$dir" -type d -name "*.$ext" -print0 2>/dev/null | while IFS= read -r -d '' bundle; do
-        codesign -s "$CODESIGN_APP" \
-                 --deep --strict --force --verbose --timestamp --options=runtime \
-                 "$bundle"
+        # Sign any embedded *_plugin_scanner helper first, with the
+        # library-validation-disable entitlement so it can dlopen 3rd-party
+        # VST3/AU/VST2 plugins for scanning. Must happen before signing the
+        # outer bundle so the bundle seal hashes the final helper signature.
+        while IFS= read -r -d '' helper; do
+            codesign -s "$CODESIGN_APP" \
+                     --force --timestamp --options=runtime \
+                     --entitlements "$entitlements" \
+                     "$helper"
+        done < <(find "$bundle/Contents/Helpers" -type f -name "*_plugin_scanner" -print0 2>/dev/null)
+
+        # Outer bundle: for .app (Standalone) the main exe loads 3rd-party
+        # plugins in-process and needs the same entitlement. For .vst3 /
+        # .component / .vst the DAW is the loader, so its entitlements apply
+        # and the bundle stays without one. --deep is intentionally omitted —
+        # the helper above is already signed and would otherwise be re-signed
+        # without entitlements.
+        if [ "$ext" = "app" ]; then
+            codesign -s "$CODESIGN_APP" \
+                     --force --strict --verbose --timestamp --options=runtime \
+                     --entitlements "$entitlements" \
+                     "$bundle"
+        else
+            codesign -s "$CODESIGN_APP" \
+                     --force --strict --verbose --timestamp --options=runtime \
+                     "$bundle"
+        fi
     done
 }
 
