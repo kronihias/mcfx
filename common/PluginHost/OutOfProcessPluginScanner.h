@@ -234,16 +234,13 @@ public:
 
                 if (ok && ! results.isEmpty())
                 {
-                    int newFound = 0;
+                    found.fetch_add (results.size());
 
                     juce::MessageManager::callAsync ([this, results = std::move (results)]() mutable
                     {
                         for (auto* desc : results)
                             knownPlugins_.addType (*desc);
                     });
-
-                    newFound = results.size();
-                    found.fetch_add (newFound);
                 }
 
                 int c = completed.fetch_add (1) + 1;

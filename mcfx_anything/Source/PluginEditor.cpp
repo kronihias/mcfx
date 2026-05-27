@@ -491,6 +491,21 @@ public:
                                                               deadMansPedalFile, nullptr, true);
         addAndMakeVisible (*pluginList_);
 
+        // Wrap JUCE's "Options..." menu so we can append a "Clear blacklist"
+        // entry — KnownPluginList::clear() doesn't touch the blacklist, and
+        // JUCE's stock menu offers no way to clear it.
+        pluginList_->getOptionsButton().onClick = [this]
+        {
+            auto menu = pluginList_->createOptionsMenu();
+            menu.addSeparator();
+            menu.addItem ("Clear blacklist", [this]
+            {
+                knownPlugins_.clearBlacklistedFiles();
+            });
+            menu.showMenuAsync (PopupMenu::Options()
+                                    .withTargetComponent (pluginList_->getOptionsButton()));
+        };
+
         scanButton_.setButtonText ("Scan All (Parallel)");
         scanButton_.setEnabled (scannerExe_.existsAsFile());
         scanButton_.setTooltip (scannerExe_.existsAsFile()
@@ -550,18 +565,31 @@ private:
         scanner_ = std::make_unique<ParallelPluginScanner> (
             formatManager_, knownPlugins_, scannerExe_);
 
-        scanner_->setProgressCallback ([this] (float progress, String name, int found)
-        {
-            // Already on message thread (callAsync in ParallelPluginScanner)
-            progress_ = progress;
-            statusLabel_.setText (name + " (" + String (found) + " found)", dontSendNotification);
-            progressBar_.setVisible (true);
-            statusLabel_.setVisible (true);
-            resized();
+        const int gen = ++scanGeneration_;
+        scanner_->setProgressCallback (
+            [safeThis = SafePointer<PluginSettingsPanel> (this), gen]
+            (float progress, String name, int found)
+            {
+                // ParallelPluginScanner queues progress reports via callAsync,
+                // so a few stale ones can fire after the panel was destroyed
+                // (host closed the GUI mid-scan) or after we cancelled. The
+                // SafePointer guards against use-after-free; the generation
+                // counter guards against overwriting "Scan cancelled" / a
+                // newly-started scan's UI with a stale report.
+                auto* self = safeThis.getComponent();
+                if (self == nullptr) return;
+                if (self->scanGeneration_.load() != gen) return;
 
-            if (progress >= 1.0f)
-                onScanFinished();
-        });
+                self->progress_ = progress;
+                self->statusLabel_.setText (name + " (" + String (found) + " found)",
+                                            dontSendNotification);
+                self->progressBar_.setVisible (true);
+                self->statusLabel_.setVisible (true);
+                self->resized();
+
+                if (progress >= 1.0f)
+                    self->onScanFinished();
+            });
 
         scanButton_.setEnabled (false);
         cancelButton_.setVisible (true);
@@ -577,6 +605,10 @@ private:
 
     void cancelScan()
     {
+        // Bump first so queued progress callbacks become no-ops before they
+        // get a chance to overwrite the UI on the message thread.
+        ++scanGeneration_;
+
         if (scanner_ != nullptr)
         {
             scanner_->signalThreadShouldExit();
@@ -585,6 +617,7 @@ private:
         }
 
         onScanFinished();
+        statusLabel_.setText ("Scan cancelled", dontSendNotification);
     }
 
     void onScanFinished()
@@ -626,6 +659,10 @@ private:
     double progress_ = 0.0;
 
     std::unique_ptr<ParallelPluginScanner> scanner_;
+
+    // Bumped on every scan start / cancel so callAsync-queued progress
+    // callbacks captured with an older generation silently drop.
+    std::atomic<int> scanGeneration_ { 0 };
 };
 
 void Mcfx_anythingAudioProcessorEditor::showSettings()
