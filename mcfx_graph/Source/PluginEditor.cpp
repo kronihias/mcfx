@@ -139,7 +139,7 @@ Mcfx_graphAudioProcessorEditor::Mcfx_graphAudioProcessorEditor (Mcfx_graphAudioP
 
     // Tooltips on every toolbar button so a hover explains what they do.
     presetsButton_   .setTooltip ("Save / load named graph presets (stored under the user's app-data folder), or import / export a JSON file anywhere on disk.");
-    scanButton_      .setTooltip ("Scan the system for VST3 / VST / AU plug-ins and rebuild the picker list.");
+    scanButton_      .setTooltip ("Scan the system for VST3 / VST / AU plug-ins, or clear the blacklist of plug-ins that previously failed to scan. Click during a running scan to cancel it.");
     undoButton_      .setTooltip ("Undo the last graph change (Cmd+Z).");
     redoButton_      .setTooltip ("Redo (Cmd+Shift+Z).");
     zoomOutButton_   .setTooltip ("Zoom out the canvas. Cmd+scroll on the canvas zooms around the cursor.");
@@ -662,12 +662,48 @@ void Mcfx_graphAudioProcessorEditor::confirmDeletePreset (const juce::File& file
 void Mcfx_graphAudioProcessorEditor::onScanClicked()
 {
     auto& mgr = processor_.getPluginList();
-    if (mgr.isScanning())
+    const bool scanning = mgr.isScanning();
+
+    juce::PopupMenu menu;
+
+    if (scanning)
     {
-        mgr.cancelRescan();
-        statusLabel_.setText ("Scan cancelled", juce::dontSendNotification);
-        return;
+        menu.addItem ("Cancel scan", [this]
+        {
+            processor_.getPluginList().cancelRescan();
+            statusLabel_.setText ("Scan cancelled", juce::dontSendNotification);
+        });
     }
+    else
+    {
+        menu.addItem ("Scan plug-ins", [this] { startPluginScan(); });
+    }
+
+    menu.addSeparator();
+    menu.addItem (juce::PopupMenu::Item ("Clear list")
+                      .setEnabled (! scanning)
+                      .setAction ([this]
+                      {
+                          processor_.getPluginList().getKnownPluginList().clear();
+                          statusLabel_.setText ("Plug-in list cleared", juce::dontSendNotification);
+                      }));
+    menu.addItem (juce::PopupMenu::Item ("Clear blacklist")
+                      .setEnabled (! scanning)
+                      .setAction ([this]
+                      {
+                          processor_.getPluginList().getKnownPluginList().clearBlacklistedFiles();
+                          statusLabel_.setText ("Blacklist cleared", juce::dontSendNotification);
+                      }));
+
+    menu.showMenuAsync (juce::PopupMenu::Options()
+                            .withTargetComponent (&scanButton_));
+}
+
+void Mcfx_graphAudioProcessorEditor::startPluginScan()
+{
+    auto& mgr = processor_.getPluginList();
+    if (mgr.isScanning())
+        return;
 
     juce::Component::SafePointer<juce::Label> label (&statusLabel_);
     mgr.startRescan ([label] (float progress, juce::String name, int found)
@@ -676,7 +712,7 @@ void Mcfx_graphAudioProcessorEditor::onScanClicked()
         {
             const int pct = juce::roundToInt (progress * 100.0f);
             l->setText (juce::String (pct) + "%  " + name + "  ("
-                            + juce::String (found) + " plugins)",
+                            + juce::String (found) + " plugins found)",
                         juce::dontSendNotification);
         }
     });

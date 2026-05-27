@@ -68,17 +68,29 @@ void PluginListManager::startRescan (std::function<void (float, juce::String, in
         return;
     }
 
+    const int gen = ++scanGeneration_;
+
     scanner_ = std::make_unique<ParallelPluginScanner> (formatManager_,
                                                         knownPluginList_,
                                                         scannerExe_);
     if (progressCb)
-        scanner_->setProgressCallback (std::move (progressCb));
+        scanner_->setProgressCallback (
+            [this, gen, cb = std::move (progressCb)]
+            (float p, juce::String n, int f)
+            {
+                if (scanGeneration_.load() == gen)
+                    cb (p, n, f);
+            });
 
     scanner_->startThread();
 }
 
 void PluginListManager::cancelRescan()
 {
+    // Bump first so already-queued progress callbacks (carrying the old
+    // generation) become no-ops by the time they fire on the message thread.
+    ++scanGeneration_;
+
     if (scanner_ != nullptr)
     {
         scanner_->signalThreadShouldExit();

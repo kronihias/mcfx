@@ -38,6 +38,7 @@ private:
 
     void onPresetsClicked();
     void onScanClicked();
+    void startPluginScan();
     void onUndoClicked();
     void onRedoClicked();
     void onHelpClicked();

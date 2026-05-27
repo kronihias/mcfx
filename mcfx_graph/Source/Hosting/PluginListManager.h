@@ -14,6 +14,7 @@
 #include <JuceHeader.h>
 #include "PluginHost/OutOfProcessPluginScanner.h"
 #include "PluginHost/findScannerExecutable.h"
+#include <atomic>
 #include <memory>
 
 class PluginListManager : private juce::ChangeListener
@@ -43,4 +44,9 @@ private:
     juce::KnownPluginList          knownPluginList_;
     juce::File                     scannerExe_;
     std::unique_ptr<ParallelPluginScanner> scanner_;
+
+    // Bumped on every start/cancel so late progress callbacks queued via
+    // callAsync — which capture the callback by value at fire time — can
+    // notice they belong to a stale scan and silently drop.
+    std::atomic<int> scanGeneration_ { 0 };
 };
