@@ -33,9 +33,18 @@ INCLUDE(${SRC_DIR}/Subproject.cmake)
 #------------------------------------------------------------------------------
 # Out-of-process plugin scanner executable
 #------------------------------------------------------------------------------
+# Hardened runtime + library-validation-disable entitlement: required so the
+# scanner can dlopen 3rd-party VST3/AU/VST2 plugins signed by other Team IDs.
+# (Without these, dyld rejects every non-Apple, non-W52ZCCWU2C plugin with
+# "mapping process and mapped file (non-platform) have different Team IDs".)
+# HARDENED_RUNTIME_OPTIONS only feeds Xcode attributes; the actual codesign
+# step in scripts/build_osx.sh consumes scripts/scanner.entitlements.
 juce_add_gui_app(mcfx_plugin_scanner
-    PRODUCT_NAME  mcfx_plugin_scanner
-    VERSION       ${VERSION})
+    PRODUCT_NAME              mcfx_plugin_scanner
+    VERSION                   ${VERSION}
+    HARDENED_RUNTIME_ENABLED  TRUE
+    HARDENED_RUNTIME_OPTIONS  "com.apple.security.cs.disable-library-validation"
+                              "com.apple.security.cs.allow-unsigned-executable-memory")
 
 juce_generate_juce_header(mcfx_plugin_scanner)
 

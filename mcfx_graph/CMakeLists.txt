@@ -37,9 +37,14 @@ INCLUDE(${SRC_DIR}/Subproject.cmake)
 # sources, mirroring mcfx_anything). The exe name is unique per plugin so each
 # bundle embeds its own copy without overwriting siblings.
 #------------------------------------------------------------------------------
+# See mcfx_anything/CMakeLists.txt for why HARDENED_RUNTIME_OPTIONS is set
+# here — same library-validation issue applies to this scanner exe.
 juce_add_gui_app(mcfx_graph_plugin_scanner
-    PRODUCT_NAME  mcfx_graph_plugin_scanner
-    VERSION       ${VERSION})
+    PRODUCT_NAME              mcfx_graph_plugin_scanner
+    VERSION                   ${VERSION}
+    HARDENED_RUNTIME_ENABLED  TRUE
+    HARDENED_RUNTIME_OPTIONS  "com.apple.security.cs.disable-library-validation"
+                              "com.apple.security.cs.allow-unsigned-executable-memory")
 
 juce_generate_juce_header(mcfx_graph_plugin_scanner)
 
