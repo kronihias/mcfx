@@ -169,33 +169,63 @@ void GraphController::removeNode (const juce::Uuid& uuid)
 
     if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (gn->uuid);
 
-    graph_->removeNode (gn->nodeId);
+    // The canvas rebuild that destroys this node's NodeComponent is deferred
+    // (see GraphEditorComponent::hookTopologyListener), but a NodeComponent
+    // holds a GraphNode& and paints node_.processor->getName(). Freeing the
+    // GraphNode (OwnedArray) and the AudioProcessor (graph_->removeNode) right
+    // now would leave the still-displayed component dangling — any repaint
+    // before the deferred rebuild would dereference freed memory. So keep both
+    // alive: the removed graph Node::Ptr owns the processor, and we detach the
+    // GraphNode without deleting it, then release both in a callAsync queued
+    // AFTER the rebuild (callAsync is FIFO), once the component is gone.
+    auto removedNode = graph_->removeNode (gn->nodeId);
     nodeIdToNode_.erase (gn->nodeId.uid);
     uuidToNode_.erase (it);
 
+    GraphNode* detachedMeta = nullptr;
     for (int i = 0; i < userNodes_.size(); ++i)
     {
         if (userNodes_.getUnchecked (i) == gn)
         {
-            userNodes_.remove (i);
+            detachedMeta = userNodes_.removeAndReturn (i); // release ownership, no delete
             break;
         }
     }
 
-    notifyTopologyChanged();
+    notifyTopologyChanged();   // queues the deferred canvas rebuild
+
+    // The captured Node::Ptr copy is released when this lambda is destroyed
+    // (after it runs), freeing the processor then.
+    juce::MessageManager::callAsync ([detachedMeta, removedNode] { delete detachedMeta; });
 }
 
 void GraphController::clearAllUserNodes()
 {
+    // Same lifetime concern as removeNode(): NodeComponents reference these
+    // GraphNodes (and their processors) and are only destroyed by the deferred
+    // canvas rebuild. Keep both alive until after that rebuild runs.
+    std::vector<juce::AudioProcessorGraph::Node::Ptr> removedNodes;
     for (auto* gn : userNodes_)
     {
         if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (gn->uuid);
-        graph_->removeNode (gn->nodeId);
+        removedNodes.push_back (graph_->removeNode (gn->nodeId));
         nodeIdToNode_.erase (gn->nodeId.uid);
         uuidToNode_.erase (gn->uuid.toString());
     }
-    userNodes_.clear();
-    notifyTopologyChanged();
+
+    // Detach the GraphNodes without deleting them (releases OwnedArray ownership).
+    std::vector<GraphNode*> detached;
+    while (userNodes_.size() > 0)
+        detached.push_back (userNodes_.removeAndReturn (userNodes_.size() - 1));
+
+    notifyTopologyChanged();   // queues the deferred canvas rebuild
+
+    juce::MessageManager::callAsync (
+        [detached, removedNodes]
+        {
+            for (auto* gn : detached)
+                delete gn;
+        });
 }
 
 bool GraphController::replaceNodeProcessor (const juce::Uuid& uuid,
