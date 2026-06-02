@@ -49,6 +49,14 @@ void GraphEditorComponent::hookTopologyListener()
             {
                 p->processor_.commitHistorySnapshot();
                 p->rebuildAll();
+
+                // A topology change may have removed the selected node. Re-emit
+                // the (re-resolved) selection so observers like the properties
+                // panel drop any cached pointer to a node that no longer exists
+                // — getSelectedNode() resolves through the controller and safely
+                // yields nullptr for a removed node.
+                if (p->selectionListener_)
+                    p->selectionListener_ (p->getSelectedNodeUuid());
             }
         });
     });

@@ -540,8 +540,15 @@ void NodeComponent::showContextMenu()
     m.addItem ("Delete node", ! isTerminal, false,
                [this]
                {
-                   editor_.getController().removeNode (node_.uuid);
-                   editor_.rebuildAll();
+                   // Clear selection first so the properties panel drops its
+                   // pointer to this node before removeNode frees it. Do NOT
+                   // call rebuildAll() synchronously here: removeNode schedules
+                   // the canvas rebuild asynchronously, and rebuilding now would
+                   // destroy this NodeComponent (and the `this` its lambda is
+                   // still running on) mid-callback.
+                   const auto uuid = node_.uuid;
+                   editor_.clearSelection();
+                   editor_.getController().removeNode (uuid);
                });
 
     m.addItem ("Open plugin editor", node_.kind == NodeKind::Plugin
