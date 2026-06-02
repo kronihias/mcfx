@@ -760,10 +760,12 @@ namespace
             info_.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.8f));
             addAndMakeVisible (info_);
 
-            const bool canOpen = (node_.processor != nullptr && node_.processor->hasEditor());
-            if (canOpen)
+            // Any plug-in node can open an editor: its own GUI if it has one,
+            // otherwise a generic parameter editor (see openEditor()).
+            if (node_.processor != nullptr)
             {
-                openEditor_.setButtonText ("Open plugin editor");
+                openEditor_.setButtonText (node_.processor->hasEditor() ? "Open plugin editor"
+                                                                        : "Open generic editor");
                 openEditor_.onClick = [this] { openEditor(); };
                 addAndMakeVisible (openEditor_);
             }
@@ -956,9 +958,15 @@ namespace
         void openEditor()
         {
             auto* p = node_.processor;
-            if (p == nullptr || ! p->hasEditor()) return;
-            auto* ed = p->createEditorAndMakeActive();
-            if (ed == nullptr) return;
+            if (p == nullptr) return;
+
+            // Prefer the plug-in's own GUI; fall back to a generic editor built
+            // from its parameters when it has none (e.g. LADSPA, or LV2/VST3
+            // without an embeddable UI for this platform).
+            juce::AudioProcessorEditor* ed = p->hasEditor() ? p->createEditorAndMakeActive() : nullptr;
+            const bool isGeneric = (ed == nullptr);
+            if (isGeneric)
+                ed = new juce::GenericAudioProcessorEditor (*p);
 
             const auto title = node_.displayName.isNotEmpty() ? node_.displayName : p->getName();
             auto* dw = new TrackedPluginWindow (outerProc_, node_.uuid,
@@ -966,7 +974,7 @@ namespace
                                                  juce::DocumentWindow::closeButton, true);
             dw->setUsingNativeTitleBar (true);
             dw->setContentOwned (ed, true);
-            dw->setResizable (false, false);
+            dw->setResizable (isGeneric, false);
             dw->setAlwaysOnTop (true);
             dw->centreWithSize (ed->getWidth(), ed->getHeight());
             dw->setVisible (true);

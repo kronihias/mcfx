@@ -347,10 +347,16 @@ namespace
 void NodeComponent::openPluginEditor()
 {
     auto* p = node_.processor;
-    if (p == nullptr || ! p->hasEditor()) return;
+    if (p == nullptr) return;
 
-    auto* ed = p->createEditorAndMakeActive();
-    if (ed == nullptr) return;
+    // Prefer the plug-in's own GUI; fall back to a generic editor built from its
+    // parameters when it has none (e.g. LADSPA, or LV2/VST3 without an
+    // embeddable UI for this platform). The generic editor is internally
+    // scrollable and resizable, so its window is made resizable too.
+    juce::AudioProcessorEditor* ed = p->hasEditor() ? p->createEditorAndMakeActive() : nullptr;
+    const bool isGeneric = (ed == nullptr);
+    if (isGeneric)
+        ed = new juce::GenericAudioProcessorEditor (*p);
 
     const auto title = node_.displayName.isNotEmpty() ? node_.displayName : p->getName();
 
@@ -359,7 +365,7 @@ void NodeComponent::openPluginEditor()
                                          juce::DocumentWindow::closeButton, true);
     dw->setUsingNativeTitleBar (true);
     dw->setContentOwned (ed, true);
-    dw->setResizable (false, false);
+    dw->setResizable (isGeneric, false);
     // Always-on-top so the plugin GUI doesn't get covered by the DAW window
     // or the mcfx_graph editor that owns the host context. Without this,
     // some hosts (Reaper) keep the plugin GUI behind the FX chain window.
@@ -539,8 +545,7 @@ void NodeComponent::showContextMenu()
                });
 
     m.addItem ("Open plugin editor", node_.kind == NodeKind::Plugin
-                                     && node_.processor != nullptr
-                                     && node_.processor->hasEditor(),
+                                     && node_.processor != nullptr,
                false,
                [this] { openPluginEditor(); });
 
