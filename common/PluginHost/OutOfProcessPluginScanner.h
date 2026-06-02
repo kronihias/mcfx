@@ -150,12 +150,14 @@ public:
     ParallelPluginScanner (juce::AudioPluginFormatManager& formatManager,
                            juce::KnownPluginList& knownPlugins,
                            const juce::File& scannerExe,
+                           juce::PropertiesFile* properties = nullptr,
                            int maxConcurrent = 0,
                            int timeoutPerPluginMs = 30000)
         : Thread ("ParallelPluginScanner"),
           formatManager_ (formatManager),
           knownPlugins_ (knownPlugins),
           scannerExe_ (scannerExe),
+          properties_ (properties),
           maxConcurrent_ (maxConcurrent > 0 ? maxConcurrent
                               : juce::jlimit (2, 8, (int) std::thread::hardware_concurrency())),
           timeoutMs_ (timeoutPerPluginMs)
@@ -182,7 +184,14 @@ public:
 
         for (auto* format : formatManager_.getFormats())
         {
-            auto paths = format->getDefaultLocationsToSearch();
+            // Honor user-customized search folders when a PropertiesFile is
+            // supplied; getLastSearchPath falls back to the format's default
+            // locations when the user hasn't overridden them. The key scheme
+            // ("lastPluginScanPath_<FormatName>") matches PluginListComponent,
+            // so its built-in "change folders" dialog and this scanner agree.
+            auto paths = (properties_ != nullptr)
+                             ? juce::PluginListComponent::getLastSearchPath (*properties_, *format)
+                             : format->getDefaultLocationsToSearch();
             auto files = format->searchPathsForPlugins (paths, true, false);
 
             for (auto& file : files)
@@ -285,6 +294,7 @@ private:
     juce::AudioPluginFormatManager& formatManager_;
     juce::KnownPluginList& knownPlugins_;
     juce::File scannerExe_;
+    juce::PropertiesFile* properties_;
     int maxConcurrent_;
     int timeoutMs_;
 

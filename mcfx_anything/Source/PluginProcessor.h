@@ -181,6 +181,12 @@ public:
     void loadPluginListFromCache();
     static File getPluginListCacheFile();
 
+    // Persistent UI/scan settings (e.g. user-customized plugin search folders).
+    // Shared by PluginListComponent and the parallel scanner so both agree on
+    // which folders to scan. May be null if the settings file can't be created.
+    static File getPluginSettingsFile();
+    PropertiesFile* getPluginSettings() { return _pluginSettings.get(); }
+
     // Out-of-process scanner executable
     File getScannerExecutable() const { return _scannerExe; }
     static File findScannerExecutable();
@@ -203,6 +209,7 @@ private:
     AudioPluginFormatManager _formatManager;
     KnownPluginList _knownPluginList;
     File _scannerExe;
+    std::unique_ptr<PropertiesFile> _pluginSettings;
 
     // Listener to auto-save plugin list when it changes (after scan)
     class PluginListChangeListener : public ChangeListener

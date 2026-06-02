@@ -5,6 +5,15 @@ PluginListManager::PluginListManager()
 {
     addDefaultFormatsToManager (formatManager_);
 
+    {
+        auto settingsFile = getSettingsFile();
+        settingsFile.getParentDirectory().createDirectory();
+
+        juce::PropertiesFile::Options options;
+        options.commonToAllUsers = false;
+        settings_ = std::make_unique<juce::PropertiesFile> (settingsFile, options);
+    }
+
     loadCache();
 
     scannerExe_ = findScannerExecutable ("mcfx_graph_plugin_scanner");
@@ -26,6 +35,13 @@ juce::File PluginListManager::getCacheFile()
     return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                .getChildFile ("mcfx_graph")
                .getChildFile ("pluginList.xml");
+}
+
+juce::File PluginListManager::getSettingsFile()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+               .getChildFile ("mcfx_graph")
+               .getChildFile ("pluginSettings.settings");
 }
 
 void PluginListManager::loadCache()
@@ -72,7 +88,8 @@ void PluginListManager::startRescan (std::function<void (float, juce::String, in
 
     scanner_ = std::make_unique<ParallelPluginScanner> (formatManager_,
                                                         knownPluginList_,
-                                                        scannerExe_);
+                                                        scannerExe_,
+                                                        settings_.get());
     if (progressCb)
         scanner_->setProgressCallback (
             [this, gen, cb = std::move (progressCb)]

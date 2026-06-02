@@ -19,6 +19,7 @@
 
 #include "PluginEditor.h"
 #include "PluginHost/OutOfProcessPluginScanner.h"
+#include "PluginHost/ScanFoldersEditor.h"
 
 #define Q(x) #x
 #define QUOTE(x) Q(x)
@@ -482,13 +483,17 @@ public:
     PluginSettingsPanel (AudioPluginFormatManager& formatManager,
                          KnownPluginList& knownPlugins,
                          const File& deadMansPedalFile,
-                         const File& scannerExe)
+                         const File& scannerExe,
+                         PropertiesFile* properties)
         : formatManager_ (formatManager),
           knownPlugins_ (knownPlugins),
-          scannerExe_ (scannerExe)
+          scannerExe_ (scannerExe),
+          properties_ (properties)
     {
+        // Passing the PropertiesFile lets JUCE's built-in "Options... → Change
+        // scan folders" dialog persist the user's per-format search paths.
         pluginList_ = std::make_unique<PluginListComponent> (formatManager, knownPlugins,
-                                                              deadMansPedalFile, nullptr, true);
+                                                              deadMansPedalFile, properties, true);
         addAndMakeVisible (*pluginList_);
 
         // Wrap JUCE's "Options..." menu so we can append a "Clear blacklist"
@@ -498,6 +503,9 @@ public:
         {
             auto menu = pluginList_->createOptionsMenu();
             menu.addSeparator();
+            menu.addItem (PopupMenu::Item ("Edit scan folders...")
+                              .setEnabled (properties_ != nullptr)
+                              .setAction ([this] { showScanFoldersEditor(); }));
             menu.addItem ("Clear blacklist", [this]
             {
                 knownPlugins_.clearBlacklistedFiles();
@@ -557,13 +565,28 @@ public:
     }
 
 private:
+    void showScanFoldersEditor()
+    {
+        if (properties_ == nullptr)
+            return;
+
+        DialogWindow::LaunchOptions options;
+        options.content.setOwned (new ScanFoldersEditor (formatManager_, *properties_));
+        options.dialogTitle = "mcfx_anything - Plug-in Scan Folders";
+        options.dialogBackgroundColour = Colour (0xff2a2a2a);
+        options.escapeKeyTriggersCloseButton = true;
+        options.useNativeTitleBar = true;
+        options.resizable = true;
+        options.launchAsync();
+    }
+
     void startParallelScan()
     {
         if (scanner_ != nullptr)
             return;
 
         scanner_ = std::make_unique<ParallelPluginScanner> (
-            formatManager_, knownPlugins_, scannerExe_);
+            formatManager_, knownPlugins_, scannerExe_, properties_);
 
         const int gen = ++scanGeneration_;
         scanner_->setProgressCallback (
@@ -650,6 +673,7 @@ private:
     AudioPluginFormatManager& formatManager_;
     KnownPluginList& knownPlugins_;
     File scannerExe_;
+    PropertiesFile* properties_;
 
     std::unique_ptr<PluginListComponent> pluginList_;
     TextButton scanButton_;
@@ -677,7 +701,8 @@ void Mcfx_anythingAudioProcessorEditor::showSettings()
     auto* content = new PluginSettingsPanel (getProcessor()->getFormatManager(),
                                              getProcessor()->getKnownPluginList(),
                                              deadMansPedalFile,
-                                             getProcessor()->getScannerExecutable());
+                                             getProcessor()->getScannerExecutable(),
+                                             getProcessor()->getPluginSettings());
     content->setSize (700, 540);
 
     DialogWindow::LaunchOptions options;
