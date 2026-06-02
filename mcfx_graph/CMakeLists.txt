@@ -24,6 +24,14 @@ IF(BUILD_VST OR MCFX_VST2_SDK_AVAILABLE)
     LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_VST=1)
 ENDIF()
 
+# LV2 hosting is cross-platform (JUCE bundles the host libs). LADSPA hosting is
+# Linux/BSD-only — JUCE_INTERNAL_HAS_LADSPA gates it on platform internally, so
+# defining the flag elsewhere is harmless.
+LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_LV2=1)
+IF(UNIX AND NOT APPLE)
+    LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_LADSPA=1)
+ENDIF()
+
 # Shared preset-folder helper used by both mcfx_graph and mcfx_mimoeq.
 SET(MCFX_EXTRA_SOURCES
     ${SRC_DIR}/common/Presets/PresetManager.cpp
