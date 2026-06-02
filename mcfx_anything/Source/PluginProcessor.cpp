@@ -152,6 +152,16 @@ Mcfx_anythingAudioProcessor::Mcfx_anythingAudioProcessor()
 {
     addDefaultFormatsToManager (_formatManager);
 
+    // Persistent settings (user-customized plugin search folders, etc.)
+    {
+        auto settingsFile = getPluginSettingsFile();
+        settingsFile.getParentDirectory().createDirectory();
+
+        PropertiesFile::Options options;
+        options.commonToAllUsers = false;
+        _pluginSettings = std::make_unique<PropertiesFile> (settingsFile, options);
+    }
+
     // Load cached plugin list from disk so we don't need to rescan
     loadPluginListFromCache();
 
@@ -504,6 +514,13 @@ File Mcfx_anythingAudioProcessor::getPluginListCacheFile()
     return File::getSpecialLocation (File::userApplicationDataDirectory)
                .getChildFile ("mcfx_anything")
                .getChildFile ("pluginList.xml");
+}
+
+File Mcfx_anythingAudioProcessor::getPluginSettingsFile()
+{
+    return File::getSpecialLocation (File::userApplicationDataDirectory)
+               .getChildFile ("mcfx_anything")
+               .getChildFile ("pluginSettings.settings");
 }
 
 void Mcfx_anythingAudioProcessor::savePluginListToCache()

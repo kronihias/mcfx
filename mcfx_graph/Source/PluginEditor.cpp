@@ -1,5 +1,6 @@
 #include "PluginEditor.h"
 #include "Graph/GraphClipboard.h"
+#include "PluginHost/ScanFoldersEditor.h"
 
 namespace
 {
@@ -679,6 +680,10 @@ void Mcfx_graphAudioProcessorEditor::onScanClicked()
         menu.addItem ("Scan plug-ins", [this] { startPluginScan(); });
     }
 
+    menu.addItem (juce::PopupMenu::Item ("Edit scan folders...")
+                      .setEnabled (! scanning && processor_.getPluginList().getSettings() != nullptr)
+                      .setAction ([this] { promptEditScanFolders(); }));
+
     menu.addSeparator();
     menu.addItem (juce::PopupMenu::Item ("Clear list")
                       .setEnabled (! scanning)
@@ -718,6 +723,25 @@ void Mcfx_graphAudioProcessorEditor::startPluginScan()
     });
 
     statusLabel_.setText ("Scanning...", juce::dontSendNotification);
+}
+
+void Mcfx_graphAudioProcessorEditor::promptEditScanFolders()
+{
+    auto* settings = processor_.getPluginList().getSettings();
+    if (settings == nullptr)
+        return;
+
+    auto* content = new ScanFoldersEditor (processor_.getPluginList().getFormatManager(),
+                                           *settings);
+
+    juce::DialogWindow::LaunchOptions options;
+    options.content.setOwned (content);
+    options.dialogTitle = "mcfx_graph - Plug-in Scan Folders";
+    options.dialogBackgroundColour = juce::Colour (0xff2a2a2a);
+    options.escapeKeyTriggersCloseButton = true;
+    options.useNativeTitleBar = true;
+    options.resizable = true;
+    options.launchAsync();
 }
 
 void Mcfx_graphAudioProcessorEditor::onUndoClicked()

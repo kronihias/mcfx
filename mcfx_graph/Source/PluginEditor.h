@@ -39,6 +39,7 @@ private:
     void onPresetsClicked();
     void onScanClicked();
     void startPluginScan();
+    void promptEditScanFolders();
     void onUndoClicked();
     void onRedoClicked();
     void onHelpClicked();
