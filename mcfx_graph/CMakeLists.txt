@@ -32,6 +32,10 @@ IF(UNIX AND NOT APPLE)
     LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_LADSPA=1)
 ENDIF()
 
+# The graph host routes arbitrary in/out, so keep the standalone's input and
+# output channel selectors independent (don't auto-link them).
+LIST(APPEND MCFX_EXTRA_DEFS JSA_STANDALONE_INDEPENDENT_IO=1)
+
 # Shared preset-folder helper used by both mcfx_graph and mcfx_mimoeq.
 SET(MCFX_EXTRA_SOURCES
     ${SRC_DIR}/common/Presets/PresetManager.cpp

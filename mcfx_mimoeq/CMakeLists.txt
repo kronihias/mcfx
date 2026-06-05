@@ -31,6 +31,10 @@ SET(MCFX_EXTRA_SOURCES  ${EQCORE_SOURCE} ${EQCORE_HEADER} ${MTXCONV_SOURCES}
 SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/EqCore ${SRC_DIR}/mcfx_convolver/Source
                         ${SRC_DIR}/common/Presets)
 
+# mimoeq allows independent input/output channel counts, so keep the standalone's
+# input and output channel selectors separate (don't auto-link).
+SET(MCFX_EXTRA_DEFS JSA_STANDALONE_INDEPENDENT_IO=1)
+
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 
 # MtxConv requires platform-specific FFT libraries
@@ -48,3 +52,4 @@ endforeach()
 # clear so other plugins don't inherit
 UNSET(MCFX_EXTRA_SOURCES)
 UNSET(MCFX_EXTRA_INCLUDES)
+UNSET(MCFX_EXTRA_DEFS)
