@@ -55,8 +55,17 @@ else()
 endif()
 
 if(BUILD_STANDALONE)
-    list(APPEND _MCFX_SOURCE ${SRC_DIR}/standalone-filter/Main.cpp)
-    list(APPEND _MCFX_HEADER ${SRC_DIR}/standalone-filter/CustomStandaloneFilterWindow.h)
+    list(APPEND _MCFX_SOURCE ${SRC_DIR}/standalone-filter/StandaloneApp.cpp)
+    list(APPEND _MCFX_HEADER ${SRC_DIR}/standalone-filter/StandaloneFilterWindow.h)
+    list(APPEND _MCFX_HEADER ${SRC_DIR}/standalone-filter/AudioDeviceSelectorComponent.h)
+    # Vendored JACK backend: a standalone translation unit (namespace jsa, built
+    # as its own .cpp so it is not part of the JUCE module unity build). JUCE is
+    # built with JUCE_JACK undefined, so this is the only JACK type. Only compiled
+    # where JACK is enabled (it includes <jack/jack.h>). Shared verbatim with ambix.
+    if(JUCE_JACK)
+        list(APPEND _MCFX_HEADER ${SRC_DIR}/standalone-filter/JackAudioDevice.h)
+        list(APPEND _MCFX_SOURCE ${SRC_DIR}/standalone-filter/JackAudioDevice.cpp)
+    endif()
 endif()
 
 list(SORT _MCFX_SOURCE)
@@ -165,6 +174,7 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
         JUCE_VST3_CAN_REPLACE_VST2=0
         NUM_CHANNELS=${MCFX_MAX_CHANNELS}
         MCFX_MULTICHANNEL_BUILD=1
+        JSA_STANDALONE_MAX_CHANNELS=${MCFX_MAX_CHANNELS}
         ${MCFX_EXTRA_DEFS})
 
     target_include_directories(${_mc_target} PRIVATE ${SRC_DIR}/common ${MCFX_EXTRA_INCLUDES})

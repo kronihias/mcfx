@@ -2,21 +2,22 @@
 
 // #include "MainComponent.h"
 
-#include "CustomStandaloneFilterWindow.h"
+#include "StandaloneFilterWindow.h"
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
 #define VAL(str) #str
 #define TOSTRING(str) VAL(str)
 
-namespace juce
+namespace jsa
 {
+using namespace juce;
 
 //==============================================================================
-class GuiAppApplication  : public juce::JUCEApplication
+class StandaloneFilterApp  : public juce::JUCEApplication
 {
 public:
     //==============================================================================
-    GuiAppApplication()
+    StandaloneFilterApp()
     {
         PluginHostType::jucePlugInClientCurrentWrapperType = AudioProcessor::wrapperType_Standalone;
 
@@ -39,7 +40,7 @@ public:
         appProperties.setStorageParameters (options);
 
         // setup window name
-        pluginWindowName << getApplicationName() << " v" << TOSTRING(VERSION);
+        pluginWindowName << getApplicationName() << " v" << ProjectInfo::versionString;
         #ifdef JUCE_DEBUG
         pluginWindowName << " (DEBUG)";
         #endif
@@ -52,13 +53,13 @@ public:
     const juce::String getApplicationVersion() override    { return ProjectInfo::versionString; }
     bool moreThanOneInstanceAllowed() override             { return true; }
 
-    virtual CustomStandaloneFilterWindow* createWindow()
+    virtual StandaloneFilterWindow* createWindow()
     {
         #ifdef JucePlugin_PreferredChannelConfigurations
         StandalonePluginHolder::PluginInOuts channels[] = { JucePlugin_PreferredChannelConfigurations };
         #endif
 
-        return new CustomStandaloneFilterWindow (pluginWindowName,
+        return new StandaloneFilterWindow (pluginWindowName,
                                             LookAndFeel::getDefaultLookAndFeel().findColour (ResizableWindow::backgroundColourId),
                                             appProperties.getUserSettings(),
                                             false, {}, nullptr
@@ -182,11 +183,11 @@ protected:
     String pluginWindowName;
 
     ApplicationProperties appProperties;
-    std::unique_ptr<CustomStandaloneFilterWindow> mainWindow;
+    std::unique_ptr<StandaloneFilterWindow> mainWindow;
     // std::unique_ptr<MainWindow> mainWindow;
 };
 
-} // namespace juce
+} // namespace jsa
 
 #if JucePlugin_Build_Standalone && JUCE_IOS
 
@@ -217,4 +218,4 @@ Image JUCE_CALLTYPE juce_getIAAHostIcon (int size)
 
 //==============================================================================
 // This macro generates the main() routine that launches the app.
-START_JUCE_APPLICATION (GuiAppApplication)
+START_JUCE_APPLICATION (jsa::StandaloneFilterApp)
