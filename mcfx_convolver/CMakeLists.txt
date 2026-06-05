@@ -15,4 +15,10 @@ endif()
 
 SET(MC_PLUGIN_CODE "Cmc0")
 
+# Convolver has genuinely independent input/output channel counts, so keep the
+# standalone's input and output channel selectors separate (don't auto-link).
+SET(MCFX_EXTRA_DEFS JSA_STANDALONE_INDEPENDENT_IO=1)
+
 INCLUDE(${SRC_DIR}/Subproject.cmake)
+
+UNSET(MCFX_EXTRA_DEFS)
