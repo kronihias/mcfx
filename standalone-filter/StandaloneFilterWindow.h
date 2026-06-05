@@ -9,9 +9,14 @@
 
 #include "JuceHeader.h"
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#include "AudioDeviceSelectorComponent.h"
+#if JSA_VENDORED_JACK
+ #include "JackAudioDevice.h"
+#endif
 
-namespace juce
+namespace jsa
 {
+using namespace juce;
 //==============================================================================
 /**
     A class that can be used to run a simple standalone application containing your filter.
@@ -22,7 +27,7 @@ namespace juce
 
     @tags{Audio}
 */
-class CustomStandaloneFilterWindow    : public DocumentWindow,
+class StandaloneFilterWindow    : public DocumentWindow,
                                         public MenuBarModel,
                                         private Button::Listener
 {
@@ -36,7 +41,7 @@ public:
         store its settings (it can also be null). If takeOwnershipOfSettings is
         true, then the settings object will be owned and deleted by this object.
     */
-    CustomStandaloneFilterWindow (const String& title,
+    StandaloneFilterWindow (const String& title,
                                   Colour backgroundColour,
                                   PropertySet* settingsToUse,
                                   bool takeOwnershipOfSettings,
@@ -51,9 +56,7 @@ public:
                                 ) : DocumentWindow (title,
                                                     backgroundColour,
                                                     DocumentWindow::minimiseButton | DocumentWindow::closeButton),
-                                    optionsButton ("Options"),
-                                    
-                                    titleBarModelChange (false)
+                                    optionsButton ("Options")
     {
        #if JUCE_IOS || JUCE_ANDROID
         setTitleBarHeight (0);
@@ -74,30 +77,44 @@ public:
                                                         preferredDefaultDeviceName, preferredSetupOptions,
                                                         constrainToConfiguration, autoOpenMidiDevices));
 
-       #if MCFX_MULTICHANNEL_BUILD
+       #if JSA_VENDORED_JACK
+        // JUCE is built without its own JACK backend; register the vendored one.
+        // The holder's ctor has already created the built-in device types (e.g.
+        // ALSA), so this appends JACK to the list. Prefer JACK as the active type
+        // on a fresh install BEFORE the reopen below, so the reopen actually
+        // opens a JACK device (a saved setup is honoured by the reopen instead).
+        registerVendoredJackDeviceType();
+        preferJackBackendIfFreshInstall();
+       #endif
+
+       #ifdef JSA_STANDALONE_MAX_CHANNELS
         // JUCE's StandalonePluginHolder initialises the AudioDeviceManager
         // with the processor's default bus layout channel count. In the MC
         // build that default is stereo (required for VST3 compliance), so
         // the standalone only opens 2-in/2-out. Re-open the device with
-        // NUM_CHANNELS (== MCFX_MAX_CHANNELS == 128) channels so the user
+        // JSA_STANDALONE_MAX_CHANNELS (== JSA_STANDALONE_MAX_CHANNELS == 128) channels so the user
         // can actually select multichannel devices like BlackHole 16ch.
         reopenDeviceManagerForMaxChannels();
        #endif
-        
-        /*modified code*/
+
+        // Start unmuted so live input always passes through; muting is an opt-in
+        // toggle in the Audio Settings dialog (works on every backend, including
+        // JACK, as a quick mute while re-patching).
+        pluginHolder->getMuteInputValue().setValue (false);
+
+        // Always use the native OS title bar so the window gets full desktop
+        // integration (snapping, the system min/max/close buttons, the window
+        // menu, HiDPI, and the macOS system menu bar). The app menu is shown
+        // as an in-window menu bar on Linux/Windows (setMenuBar) and in the
+        // system menu bar on macOS (setMacMainMenu); the redundant top-right
+        // Options button is therefore hidden.
+        setUsingNativeTitleBar (true);
+        optionsButton.setVisible (false);
+
         if (auto* props = pluginHolder->settings.get())
         {
-            const int   x = props->getIntValue ("windowX", -100);
-            const int   y = props->getIntValue ("windowY", -100);
-            const bool  native = props->getBoolValue("nativeTitleBar", true);
-
-            setUsingNativeTitleBar (native);
-
-            if (!native)
-            {
-                setDropShadowEnabled (false);
-                optionsButton.setVisible(!native);
-            }
+            const int x = props->getIntValue ("windowX", -100);
+            const int y = props->getIntValue ("windowY", -100);
 
             if (x != -100 && y != -100)
                 setBoundsConstrained ({ x, y, getWidth(), getHeight() });
@@ -106,7 +123,6 @@ public:
         }
         else
         {
-            setUsingNativeTitleBar (true);
             centreWithSize (getWidth(), getHeight());
         }
         #if JUCE_MAC
@@ -127,17 +143,13 @@ public:
     }
 
 
-    ~CustomStandaloneFilterWindow() override
+    ~StandaloneFilterWindow() override
     {
        #if (! JUCE_IOS) && (! JUCE_ANDROID)
         if (auto* props = pluginHolder->settings.get())
         {
             props->setValue ("windowX", getX());
             props->setValue ("windowY", getY());
-
-            //added lines
-             if (!titleBarModelChange)
-                props->setValue("nativeTitleBar", isUsingNativeTitleBar());
         }
        #endif
 
@@ -187,11 +199,8 @@ public:
         else if (topLevelMenuIndex == 2)
         {
             menu.addItem (6, TRANS("Audio Settings..."));
-            menu.addSeparator();
-            if (isUsingNativeTitleBar())
-                menu.addItem (7, TRANS("Use JUCE Titlebar"));
-            else
-                menu.addItem (7, TRANS("Use Native Titlebar"));
+            // The mute-input toggle lives in the Audio Settings dialog (it works
+            // for every backend, including JACK, as a quick mute while re-patching).
         }
         return menu;
     }
@@ -210,15 +219,6 @@ public:
             closeButtonPressed();
         else if (menuItemID == 6)
             showAudioSettingsDialogMC();
-        else if (menuItemID == 7)
-        {
-            if (auto* props = pluginHolder->settings.get())
-            {
-                titleBarModelChange = true;
-                props->setValue("nativeTitleBar", !isUsingNativeTitleBar());
-                AlertWindow::showMessageBoxAsync(AlertWindow::InfoIcon, "Need restart", "You need to restart this plugin to apply the changes", TRANS("Ok"), this);
-            }
-        }
         else if (menuItemID >= 11)
           getAudioProcessor()->setCurrentProgram(menuItemID-11);
     }
@@ -264,7 +264,7 @@ public:
         }
     }
 
-    static void menuCallback (int result, CustomStandaloneFilterWindow* button)
+    static void menuCallback (int result, StandaloneFilterWindow* button)
     {
         if (button != nullptr && result != 0)
             button->handleMenuResult (result);
@@ -282,14 +282,57 @@ public:
 
     virtual StandalonePluginHolder* getPluginHolder()    { return pluginHolder.get(); }
 
+   #if JSA_VENDORED_JACK
     //==============================================================================
-    /** Re-initialises the AudioDeviceManager with NUM_CHANNELS inputs/outputs
+    /** Registers mcfx's vendored JACK backend on the holder's AudioDeviceManager.
+        JUCE is compiled without JUCE_JACK, so it never creates its own JACK type;
+        the built-in types (ALSA on Linux) were already created when the holder
+        constructed and initialised the device manager, so addAudioDeviceType()
+        simply appends JACK. Done before any re-initialise so a saved JACK setup
+        restores correctly. Preferring JACK as the default backend (for a fresh
+        install) is handled separately, after the device manager is fully set up. */
+    void registerVendoredJackDeviceType()
+    {
+        if (pluginHolder == nullptr)
+            return;
+
+        auto* jackType = createJackAudioDeviceType();
+
+        // Scan now so the device manager immediately sees JACK's available ports.
+        // addAudioDeviceType() does not mark the type list as needing a rescan, so
+        // the device manager's next initialise() would call getDeviceNames() on an
+        // unscanned JACK type, conclude it has no devices, and fall back to ALSA.
+        jackType->scanForDevices();
+
+        pluginHolder->deviceManager.addAudioDeviceType (
+            std::unique_ptr<AudioIODeviceType> (jackType));
+    }
+
+    /** On a fresh install (no saved audio setup) make JACK the active backend,
+        since these are multichannel JACK tools. Called after reopen/init so the
+        choice is not reset; an existing saved choice is left untouched. */
+    void preferJackBackendIfFreshInstall()
+    {
+        if (pluginHolder == nullptr)
+            return;
+
+        bool hasSavedSetup = false;
+        if (auto* props = pluginHolder->settings.get())
+            hasSavedSetup = props->getXmlValue ("audioSetup") != nullptr;
+
+        if (! hasSavedSetup)
+            pluginHolder->deviceManager.setCurrentAudioDeviceType ("JACK", true);
+    }
+   #endif
+
+    //==============================================================================
+    /** Re-initialises the AudioDeviceManager with JSA_STANDALONE_MAX_CHANNELS inputs/outputs
         so the user can pick multichannel devices in the Audio Settings dialog.
         JUCE's StandalonePluginHolder only opens as many channels as the
         processor's default bus layout advertises (2 in the MC build). */
     void reopenDeviceManagerForMaxChannels()
     {
-       #if MCFX_MULTICHANNEL_BUILD
+       #ifdef JSA_STANDALONE_MAX_CHANNELS
         if (pluginHolder == nullptr)
             return;
 
@@ -299,7 +342,7 @@ public:
         if (auto* props = pluginHolder->settings.get())
             savedState = props->getXmlValue ("audioSetup");
 
-        const int maxCh = (int) NUM_CHANNELS;  // == MCFX_MAX_CHANNELS
+        const int maxCh = (int) JSA_STANDALONE_MAX_CHANNELS;  // == JSA_STANDALONE_MAX_CHANNELS
 
         // Initialise the device manager with the full max channel count.
         // Actual channel count opened on the device is still negotiated from
@@ -314,22 +357,58 @@ public:
     }
 
     /** Shows the Audio/MIDI settings dialog. In the MC build this uses an
-        AudioDeviceSelectorComponent configured with max = NUM_CHANNELS so
+        AudioDeviceSelectorComponent configured with max = JSA_STANDALONE_MAX_CHANNELS so
         every channel of a multichannel device can be enabled. In the
         per-channel VST2 build this simply forwards to JUCE's default. */
     void showAudioSettingsDialogMC()
     {
-       #if MCFX_MULTICHANNEL_BUILD
-        const int maxCh = (int) NUM_CHANNELS;
+       #ifdef JSA_STANDALONE_MAX_CHANNELS
+        const int maxCh = (int) JSA_STANDALONE_MAX_CHANNELS;
 
-        auto* selector = new AudioDeviceSelectorComponent (pluginHolder->deviceManager,
+        // For a bus whose AudioChannelSet is ambisonic, only offer valid
+        // ambisonic channel counts (1, 4, 9, 16, ...). Channel-based plug-ins
+        // (mcfx, or e.g. a discrete source/loudspeaker bus) keep the full range.
+        auto busIsAmbisonic = [this] (bool isInput) -> bool
+        {
+            if (auto* p = getAudioProcessor())
+                if (auto* bus = p->getBus (isInput, 0))
+                    return bus->getDefaultLayout().getAmbisonicOrder() >= 0;
+            return false;
+        };
+
+        // Link the input and output channel-count selectors into a single
+        // "Channels" control when the plug-in's input and output buses are
+        // identical (same AudioChannelSet) - which covers most symmetric
+        // ambisonic / channel processors. Plug-ins that genuinely want
+        // independent in/out counts but happen to share a default layout can
+        // force them apart by defining JSA_STANDALONE_INDEPENDENT_IO.
+        bool linkIO = false;
+        if (auto* p = getAudioProcessor())
+            if (auto* inBus = p->getBus (true, 0))
+                if (auto* outBus = p->getBus (false, 0))
+                    linkIO = (inBus->getDefaultLayout() == outBus->getDefaultLayout());
+       #ifdef JSA_STANDALONE_INDEPENDENT_IO
+        linkIO = false;
+       #endif
+
+        // jsa::AudioDeviceSelectorComponent is a vendored copy of JUCE's
+        // AudioDeviceSelectorComponent that replaces the per-channel (stereo-pair)
+        // on/off list with a plain input/output channel-count selector, which is
+        // what multichannel plug-ins actually want. The stereo-pairs argument
+        // is therefore irrelevant here.
+        auto* selector = new jsa::AudioDeviceSelectorComponent (pluginHolder->deviceManager,
                                                            0, maxCh,   // min/max inputs
                                                            0, maxCh,   // min/max outputs
                                                            true,       // show MIDI inputs
                                                            getAudioProcessor() != nullptr
                                                                && getAudioProcessor()->producesMidi(),
-                                                           true,       // show channels as stereo pairs = true
-                                                           false);     // hide advanced options
+                                                           false,      // show channels as stereo pairs (unused)
+                                                           false,      // hide advanced options
+                                                           busIsAmbisonic (true),    // restrict input counts to ambisonic
+                                                           busIsAmbisonic (false),   // restrict output counts to ambisonic
+                                                           linkIO,                   // single combined channel selector
+                                                           true,                     // show "Mute audio input" toggle (all backends)
+                                                           pluginHolder->getMuteInputValue());
         selector->setSize (500, 650);
 
         DialogWindow::LaunchOptions o;
@@ -371,7 +450,7 @@ private:
                                   private ComponentListener
     {
     public:
-        MainContentComponent (CustomStandaloneFilterWindow& filterWindow)
+        MainContentComponent (StandaloneFilterWindow& filterWindow)
             : owner (filterWindow), notification (this),
               editor (owner.getAudioProcessor()->hasEditor() ? owner.getAudioProcessor()->createEditorIfNeeded()
                                                              : new GenericAudioProcessorEditor (*owner.getAudioProcessor()))
@@ -388,11 +467,12 @@ private:
 
             addChildComponent (notification);
 
-            if (owner.pluginHolder->getProcessorHasPotentialFeedbackLoop())
-            {
-                inputMutedValue.addListener (this);
-                shouldShowNotification = inputMutedValue.getValue();
-            }
+            // The JACK backend never auto-connects ports, so there is no feedback
+            // loop to guard against: input is force-unmuted in the window ctor and
+            // we never wire up / show the "Audio input is muted to avoid feedback
+            // loop" notification.
+            ignoreUnused (inputMutedValue);
+            shouldShowNotification = false;
 
             inputMutedChanged (shouldShowNotification);
         }
@@ -517,7 +597,7 @@ private:
         }
 
         //==============================================================================
-        CustomStandaloneFilterWindow& owner;
+        StandaloneFilterWindow& owner;
         NotificationArea notification;
         std::unique_ptr<AudioProcessorEditor> editor;
         bool shouldShowNotification = false;
@@ -527,12 +607,10 @@ private:
 
     //==============================================================================
     TextButton optionsButton;
-    bool titleBarModelChange;
 
-
-    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (CustomStandaloneFilterWindow)
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (StandaloneFilterWindow)
 };
 
-} // namespace juce
+} // namespace jsa
 
 #endif // JUCE_STANDALONE_FILTER_WINDOW_H_INCLUDED

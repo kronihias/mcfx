@@ -148,7 +148,12 @@ if (BUILD_STANDALONE)
     ENDIF(JUCE_ASIO)
 
     IF (JUCE_JACK)
-        ADD_DEFINITIONS(-DJUCE_JACK=1)
+        # NOTE: we deliberately do NOT define JUCE_JACK for the JUCE modules, so
+        # JUCE does not compile its own JACK backend. Instead we ship the shared
+        # vendored host (standalone-filter/JackAudioDevice.cpp) and register it
+        # at runtime. JSA_VENDORED_JACK gates that registration code. (The same
+        # standalone-filter/ sources are shared verbatim with the ambix repo.)
+        ADD_DEFINITIONS(-DJSA_VENDORED_JACK=1)
     ENDIF (JUCE_JACK)
 
     IF (JUCE_ALSA)
@@ -299,9 +304,11 @@ function(apply_juce_patch patch_file)
 endfunction()
 
 IF (JUCE_JACK)
+    # The JACK backend is vendored (standalone-filter/McfxJackAudio.cpp) rather
+    # than patched into JUCE: JUCE is built with JUCE_JACK undefined so it skips its
+    # own JACK type, and we register our copy at runtime. We still need the JACK
+    # headers at compile time; libjack itself is dlopen'd at runtime, so no link.
     find_package(Jack REQUIRED)
-    apply_juce_patch(
-        "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_JackAudio.cpp.patch")
 ENDIF (JUCE_JACK)
 
 # Always apply: relax the JUCE 8 VST3 host's strict bus-arrangement roundtrip
