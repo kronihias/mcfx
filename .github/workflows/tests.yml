@@ -110,3 +110,20 @@ jobs:
         # touch the display server even for "headless" use, so give them a
         # virtual one rather than chasing per-plugin skips.
         run: ${{ runner.os == 'Linux' && 'xvfb-run -a python tests/run_tests.py' || 'python tests/run_tests.py' }}
+
+      # The Linux/JACK standalone uses the vendored host in standalone-filter/.
+      # run_tests.py configures with BUILD_STANDALONE off, so compile a couple of
+      # standalone targets here as a smoke test of the JACK path. Compile only
+      # (no JACK server or display needed); libjack-jackd2-dev is installed above.
+      # gain_delay exercises the linked channel selector, convolver the
+      # independent in/out opt-out.
+      - name: Build JACK standalone (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          # --target only builds the Standalone (not VST3); VST3 stays ON to match
+          # the known-good universal/MC build configuration.
+          cmake -S . -B _build_standalone -G Ninja \
+            -DBUILD_VST3=ON -DBUILD_VST=OFF \
+            -DBUILD_STANDALONE=ON -DBUILD_TESTHOST=OFF -DBUILD_NET_TESTS=OFF
+          cmake --build _build_standalone --parallel \
+            --target mcfx_gain_delay_Standalone mcfx_convolver_Standalone
