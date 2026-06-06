@@ -595,7 +595,8 @@ namespace
                            bool linked,
                            juce::String headline,
                            std::function<void (int newIn, int newOut)> onApply)
-            : linked_ (linked), onApply_ (std::move (onApply))
+            : linked_ (linked), allowedIn_ (allowedIn), allowedOut_ (allowedOut),
+              onApply_ (std::move (onApply))
         {
             title_.setText (headline, juce::dontSendNotification);
             title_.setFont (juce::Font (juce::FontOptions (14.0f, juce::Font::bold)));
@@ -610,13 +611,18 @@ namespace
             outLabel_.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.85f));
 
             populateCombo (inCombo_,  allowedIn,  currentIn);
+            inCombo_.setEditableText (true);   // allow typing a channel count directly
             inCombo_.onChange = [this]
             {
-                if (linked_) outCombo_.setSelectedId (inCombo_.getSelectedId(), juce::dontSendNotification);
+                // Only mirror real list selections; a typed value (id 0) is
+                // resolved on Apply, where it's snapped to an allowed count.
+                if (linked_ && inCombo_.getSelectedId() > 0)
+                    outCombo_.setSelectedId (inCombo_.getSelectedId(), juce::dontSendNotification);
             };
             addAndMakeVisible (inCombo_);
 
             populateCombo (outCombo_, allowedOut, currentOut);
+            outCombo_.setEditableText (true);
 
             // In linked mode we keep the outputs row hidden — there's nothing
             // independent to set for Plugin / Gain / MutePhase / Delay nodes.
@@ -629,8 +635,8 @@ namespace
             applyButton_.setButtonText ("Apply");
             applyButton_.onClick = [this]
             {
-                const int n  = inCombo_.getSelectedId() - 1;
-                const int m  = linked_ ? n : (outCombo_.getSelectedId() - 1);
+                const int n  = resolveCount (inCombo_,  allowedIn_);
+                const int m  = linked_ ? n : resolveCount (outCombo_, allowedOut_);
                 if (n > 0 && m > 0)
                 {
                     auto cb = onApply_;
@@ -696,7 +702,37 @@ namespace
             cb.setSelectedId (current + 1, juce::dontSendNotification);
         }
 
+        /** Pick the allowed value closest to a typed count. As `allowed` is
+            sorted ascending, the nearest entry also clamps out-of-range input
+            to the min/max, and snaps to a supported size for plugin nodes
+            whose allowed list is non-contiguous. */
+        static int snapToAllowed (int typed, const std::vector<int>& allowed)
+        {
+            if (allowed.empty()) return typed;
+            auto dist = [typed] (int v) { return v > typed ? v - typed : typed - v; };
+            int best = allowed.front();
+            for (int v : allowed)
+                if (dist (v) < dist (best))
+                    best = v;
+            return best;
+        }
+
+        /** Read a channel count from an (editable) combo. A real list pick has
+            id > 0; a typed value reports id 0, so we snap its text to an
+            allowed count and reflect that back in the box. */
+        static int resolveCount (juce::ComboBox& cb, const std::vector<int>& allowed)
+        {
+            const int id = cb.getSelectedId();
+            if (id > 0)
+                return id - 1;
+
+            const int snapped = snapToAllowed (cb.getText().trim().getIntValue(), allowed);
+            cb.setSelectedId (snapped + 1, juce::dontSendNotification);
+            return snapped;
+        }
+
         bool linked_;
+        std::vector<int> allowedIn_, allowedOut_;
         std::function<void (int, int)> onApply_;
 
         juce::Label      title_;
