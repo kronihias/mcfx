@@ -398,6 +398,27 @@ public:
         }
        #endif
 
+       #ifdef JSA_STANDALONE_SYMMETRIC_IO
+        // Input-driven tool (e.g. mcfx_send): only the input count matters, but
+        // JUCE's host only grows the processor's input bus when the device opens
+        // symmetrically (findMostSuitableLayout has no input-only fallback), and
+        // the processor requires in == out. Mirror the input port count onto the
+        // output so the device opens N-in/N-out — the processor then negotiates
+        // N/N and every input channel reaches it. The output ports are unused.
+        {
+            auto setup = pluginHolder->deviceManager.getAudioDeviceSetup();
+            setup.outputChannels           = setup.inputChannels;
+            setup.useDefaultOutputChannels = setup.useDefaultInputChannels;
+            // Ensure the output side is actually opened: a saved sender setup
+            // tends to leave the output device empty (the sender never wires its
+            // outputs). The JACK backend never auto-connects, so naming the same
+            // device is harmless — it just registers the unused output ports.
+            if (setup.outputDeviceName.isEmpty())
+                setup.outputDeviceName = setup.inputDeviceName;
+            pluginHolder->deviceManager.setAudioDeviceSetup (setup, true);
+        }
+       #endif
+
         pluginHolder->startPlaying();
        #endif
     }
