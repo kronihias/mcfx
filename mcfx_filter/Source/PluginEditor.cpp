@@ -311,6 +311,7 @@ LowhighpassAudioProcessorEditor::LowhighpassAudioProcessorEditor (LowhighpassAud
     for (int i = 1; i <= NUM_CHANNELS; i++)
         box_analyzer_ch.addItem(String(i), i + 1);
     box_analyzer_ch.setSelectedId(ownerFilter->_analyzerChannel + 1, dontSendNotification);
+    box_analyzer_ch.setEditableText(true);   // allow typing a channel number directly
     box_analyzer_ch.addListener(this);
     box_analyzer_ch.setTooltip("analyzer channel");
 
@@ -712,7 +713,20 @@ void LowhighpassAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHas
     if (comboBoxThatHasChanged == &box_analyzer_ch)
     {
         // id 1 = "all" (channel 0), id 2 = channel 1, etc.
-        getProcessor()->setAnalyzerChannel(box_analyzer_ch.getSelectedId() - 1);
+        int id = box_analyzer_ch.getSelectedId();
+
+        if (id == 0)
+        {
+            // Editable box: the user typed a custom value. Accept "all" or a
+            // channel number, clamp it to a valid channel, and snap the box
+            // back to the matching item.
+            const String txt = box_analyzer_ch.getText().trim();
+            id = txt.equalsIgnoreCase("all") ? 1
+                                             : jlimit(1, NUM_CHANNELS + 1, txt.getIntValue() + 1);
+            box_analyzer_ch.setSelectedId(id, dontSendNotification);
+        }
+
+        getProcessor()->setAnalyzerChannel(id - 1);
     }
 }
 
