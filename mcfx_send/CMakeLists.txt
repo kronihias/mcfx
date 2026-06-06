@@ -24,12 +24,14 @@ SET(MCFX_EXTRA_SOURCES  ${_MCFX_NET_SOURCES} ${_MCFX_NET_HEADERS}
                         ${_MCFX_RESAMPLER_DIR}/resampler.h)
 SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/net ${_MCFX_RESAMPLER_DIR})
 
-# Sender is JACK-input-only: audio comes in from JACK and goes out over the
-# network, so its JACK output is unused (output device left empty -> 0 output
-# ports). Keep the standalone's input/output channel selectors independent so
-# the input channel-count selector (the count that actually matters here) is
-# shown on its own instead of being hidden behind the linked output selector.
-SET(MCFX_EXTRA_DEFS JSA_STANDALONE_INDEPENDENT_IO=1)
+# Sender captures from JACK and ships it over the network; only the input
+# channel count matters. But JUCE's standalone host only grows the processor's
+# input bus when the audio device opens symmetrically (it has no input-only
+# fallback — see findMostSuitableLayout), and the multichannel processor
+# requires in == out anyway. So open the device with matching in/out counts
+# (JSA_STANDALONE_SYMMETRIC_IO mirrors the input port count onto the output)
+# and use the linked "Channels" selector. The output ports exist but are unused.
+SET(MCFX_EXTRA_DEFS JSA_STANDALONE_SYMMETRIC_IO=1)
 
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 
