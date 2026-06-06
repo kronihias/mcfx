@@ -118,10 +118,24 @@ McfxSendAudioProcessorEditor::McfxSendAudioProcessorEditor (McfxSendAudioProcess
     addAndMakeVisible (chansLabel);
     addAndMakeVisible (chansCombo);
     chansCombo.setTooltip ("Cap the number of channels actually sent on the wire. "
-                            "'All bus channels' sends whatever the bus exposes.");
+                            "'All' sends whatever the bus exposes.");
+    chansCombo.setEditableText (true);   // allow typing a channel count directly
     rebuildChansCombo (processor.getMainBusNumInputChannels());
     chansCombo.onChange = [this]() {
-        const int id = chansCombo.getSelectedId();
+        int id = chansCombo.getSelectedId();
+        if (id == 0)
+        {
+            // Editable box: the user typed a custom value. Accept "All" or a
+            // channel count, clamp it to the bus width, and snap the box back
+            // to the matching item.
+            const juce::String txt = chansCombo.getText().trim();
+            const int maxN  = juce::jmax (0, chansCombo.getNumItems() - 1);
+            const int typed = txt.getIntValue();
+            id = (maxN >= 1 && typed >= 1 && ! txt.startsWithIgnoreCase ("all"))
+                     ? juce::jmin (typed, maxN) + 1
+                     : 1;   // "All"
+            chansCombo.setSelectedId (id, juce::dontSendNotification);
+        }
         processor.setSendChannels (id <= 1 ? 0 : (id - 1));
     };
 
@@ -273,7 +287,7 @@ void McfxSendAudioProcessorEditor::rebuildChansCombo (int busWidth)
     const int existingCap = juce::jlimit (0, 64, processor.getSendChannels());
 
     chansCombo.clear (juce::dontSendNotification);
-    chansCombo.addItem ("All bus channels", 1);
+    chansCombo.addItem ("All", 1);
     const int maxN = juce::jlimit (0, 64, busWidth);
     for (int n = 1; n <= maxN; ++n)
         chansCombo.addItem (juce::String (n), n + 1);
