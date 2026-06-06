@@ -257,6 +257,17 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### 0.8.7 (2026-06-06)
+
+**Main focus: improved Linux support.**
+
+- Linux: native JACK standalone applications for all plug-ins — no longer requires a patched JUCE
+- Linux: standalone Audio/MIDI settings can select multichannel devices and per-plug-in input/output channel counts
+- `mcfx_anything`/`mcfx_graph`: LV2 and LADSPA plug-in hosting on Linux, user-editable plug-in scan folders, Linux VST3 scanner-helper packaging fix
+- `mcfx_send`/`mcfx_receive`: JACK standalone channel fixes — `mcfx_send` captures all selected input channels, `mcfx_receive` exposes outputs only
+- `mcfx_graph`: fix use-after-free when deleting a node, generic GUI fallback for plug-ins without an editor
+- channel selectors accept typed values: `mcfx_send` channels-to-send, `mcfx_filter`/`mcfx_mimoeq` analyzer channel; `mcfx_convolver`/`mcfx_mimoeq` standalone links input/output channel count
+
 ### 0.8.6 (2026-05-27)
 
 - `mcfx_anything`, `mcfx_graph`: plug-in scan UI fixes/improvements, avoid skipping some plugins on Mac
@@ -309,7 +320,6 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 - VST3 plug-ins now automatically adjust to the track's channel count — one binary per plug-in, up to 64 channels (AU and VST2 support up to 128); VST3 is recommended going forward
 - update to JUCE 8
 
-### 0.8.6 ()
 ### 0.6.4 (2024-03-20)
 
 `mcfx_convolver`: add master gain parameter and rotary control, mechanism to save channel count in WAV IR files, fix debug window. Add build and installer creation scripts.
