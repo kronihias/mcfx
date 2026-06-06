@@ -152,6 +152,24 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                 VERBATIM)
         endif()
     endif()
+    if(TARGET ${tgt}_LV2)
+        # LV2 bundle is a flat <name>.lv2/ folder containing the shared library
+        # plus its .ttl manifests. findScannerExecutable() looks for the scanner
+        # alongside the loaded binary, so drop it next to the .so. Copy into both
+        # the artefact bundle and the JUCE_LV2_COPY_DIR copy (mirrors the VST3
+        # handling above so it survives whichever post-build order JUCE picks).
+        add_dependencies(${tgt}_LV2 mcfx_plugin_scanner)
+        add_custom_command(TARGET ${tgt}_LV2 POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:mcfx_plugin_scanner>"
+                "$<TARGET_FILE_DIR:${tgt}_LV2>/"
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                "${BIN_DIR}/lv2/${tgt}.lv2"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "$<TARGET_FILE:mcfx_plugin_scanner>"
+                "${BIN_DIR}/lv2/${tgt}.lv2/"
+            VERBATIM)
+    endif()
 endforeach()
 
 UNSET(MCFX_EXTRA_DEFS)

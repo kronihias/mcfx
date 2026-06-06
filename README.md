@@ -225,6 +225,9 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
     |--------|-------|---------|-------|
     | VST2 | `/Library/Audio/Plug-Ins/VST` | `C:\Program Files\Common Files\VST2` | `~/.vst/` or `/usr/local/lib/lxvst` |
     | VST3 | `/Library/Audio/Plug-Ins/VST3` | `C:\Program Files\Common Files\VST3` | `/usr/lib/vst3/` |
+    | LV2 | `~/Library/Audio/Plug-Ins/LV2` | `%APPDATA%\LV2` | `~/.lv2/` or `/usr/lib/lv2/` |
+
+    Each LV2 plug-in is a self-contained `<name>.lv2/` folder (the shared library plus its `.ttl` manifests) — copy the whole folder. On Linux, LV2 is the most portable native format and works in Ardour, Reaper, Carla, Qtractor, and other hosts.
 
 ---
 
@@ -232,15 +235,15 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `NUM_CHANNELS` | Channel count for the per-channel VST2 build | `36` |
+| `NUM_CHANNELS` | Channel count for the per-channel VST2/LV2 build | `36` |
 | `MCFX_MAX_CHANNELS` | Max channel count for the single-binary multichannel VST3/AU/Standalone build | `128` |
 | `MAX_DELAYTIME_S` | Maximum delay time for `mcfx_delay` (seconds) | `0.5` |
 | `BUILD_VST` | Build VST2 plugins (requires `VST2SDKPATH`) | **`ON`** |
 | `BUILD_VST3` | Build VST3 plugins | `OFF` |
 | `BUILD_AU` | Build AU plugins (macOS only) | `OFF` |
 | `BUILD_STANDALONE` | Build standalone applications | `OFF` |
-| `BUILD_LV2` | Build LV2 plugins | `OFF` |
-| `MCFX_BUILD_VST2_PER_CHANNEL` | Build per-channel VST2 variants (legacy) | `ON` |
+| `BUILD_LV2` | Build LV2 plugins (per-channel, like VST2 — needs `MCFX_BUILD_VST2_PER_CHANNEL=ON`) | `OFF` |
+| `MCFX_BUILD_VST2_PER_CHANNEL` | Build per-channel VST2/LV2 variants (legacy) | `ON` |
 | `MCFX_BUILD_MC` | Build single multichannel VST3/AU/Standalone | `ON` |
 | `VST2SDKPATH` | Path to the VST2 SDK | `~/SDKs/vstsdk2.4` |
 | `WITH_ZITA_CONVOLVER` | Use zita-convolver for better Linux performance (Linux only) | `OFF` |
@@ -257,6 +260,12 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### 0.8.8 (2026-06-06)
+
+- LV2: build all plug-ins as LV2 (`BUILD_LV2=ON`), verified on Linux
+- `mcfx_anything`/`mcfx_graph`: embed the out-of-process plug-in scanner in the LV2 bundle so plug-in hosting works when built as LV2 (previously only VST3/AU/Standalone bundles got the scanner)
+- docs: document LV2 install paths and that the LV2 build is per-channel (rides on `MCFX_BUILD_VST2_PER_CHANNEL`)
+
 ### 0.8.7 (2026-06-06)
 
 **Main focus: improved Linux support.**
