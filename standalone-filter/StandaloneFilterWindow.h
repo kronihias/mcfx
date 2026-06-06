@@ -335,7 +335,10 @@ public:
     // JSA_STANDALONE_MAX_OUTPUT_CHANNELS / JSA_STANDALONE_FIXED_OUTPUT defines.
     static int standaloneInChannels()
     {
-       #ifdef JSA_STANDALONE_MAX_CHANNELS
+       #if defined (JSA_STANDALONE_NO_INPUT)
+        // Output-only tool (e.g. mcfx_receive): expose no input ports at all.
+        return 0;
+       #elif defined (JSA_STANDALONE_MAX_CHANNELS)
         return (int) JSA_STANDALONE_MAX_CHANNELS;
        #else
         return 0;
@@ -381,6 +384,19 @@ public:
                                                 standaloneOutChannels(),
                                                 savedState.get(),
                                                 true);        // selectDefaultDeviceOnFailure
+
+       #ifdef JSA_STANDALONE_NO_INPUT
+        // A restored setup (or the device default) may still request input
+        // ports; force inputs off so the JACK client registers output ports
+        // only — initialise()'s numInputChannels is just a fallback that a
+        // saved input-channel mask would otherwise override.
+        {
+            auto setup = pluginHolder->deviceManager.getAudioDeviceSetup();
+            setup.inputChannels.clear();
+            setup.useDefaultInputChannels = false;
+            pluginHolder->deviceManager.setAudioDeviceSetup (setup, true);
+        }
+       #endif
 
         pluginHolder->startPlaying();
        #endif

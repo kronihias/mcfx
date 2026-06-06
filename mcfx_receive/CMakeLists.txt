@@ -21,7 +21,15 @@ SET(MCFX_EXTRA_SOURCES  ${_MCFX_NET_SOURCES} ${_MCFX_NET_HEADERS}
                         ${_MCFX_RESAMPLER_DIR}/resampler.h)
 SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/net ${_MCFX_RESAMPLER_DIR})
 
+# Receiver is JACK-output-only: audio comes in over the network and goes out to
+# JACK, so its JACK input is unused. Tell the standalone host to expose output
+# ports only (no input ports, no input channel selector). Standalone-only; the
+# VST/VST3/AU plug-in keeps its symmetric in/out bus for DAW compatibility.
+SET(MCFX_EXTRA_DEFS JSA_STANDALONE_NO_INPUT=1)
+
 INCLUDE(${SRC_DIR}/Subproject.cmake)
+
+UNSET(MCFX_EXTRA_DEFS)
 
 foreach(_tgt IN LISTS MCFX_TARGETS)
     target_link_libraries(${_tgt} PRIVATE juce::juce_cryptography)
