@@ -1268,6 +1268,7 @@ public:
         for (int ch = 1; ch <= numCh; ++ch)
             cbChannel_.addItem(String(ch), ch + 1);
         cbChannel_.setSelectedId(proc->editorAnalyzerChannel + 1, dontSendNotification);
+        cbChannel_.setEditableText(true);   // allow typing a channel number directly
         cbChannel_.addListener(this);
 
         // In MIMO mode, channels are locked to the selected path
@@ -1324,7 +1325,21 @@ public:
 private:
     void comboBoxChanged(ComboBox*) override
     {
-        int ch = cbChannel_.getSelectedId() - 1; // 0 = all, 1..N = channel
+        int id = cbChannel_.getSelectedId();
+
+        if (id == 0)
+        {
+            // Editable box: the user typed a custom value. Accept "all" or a
+            // channel number, clamp it to a valid channel, and snap the box
+            // back to the matching item.
+            const int numCh = jmax(1, proc_->getNumChannels_());
+            const String txt = cbChannel_.getText().trim();
+            id = txt.equalsIgnoreCase("all") ? 1
+                                             : jlimit(1, numCh + 1, txt.getIntValue() + 1);
+            cbChannel_.setSelectedId(id, dontSendNotification);
+        }
+
+        int ch = id - 1; // 0 = all, 1..N = channel
         proc_->getInputAnalyzer().setAnalyzerChannel(ch);
         proc_->getOutputAnalyzer().setAnalyzerChannel(ch);
         proc_->editorAnalyzerChannel = ch;
