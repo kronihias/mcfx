@@ -34,6 +34,112 @@ IF(UNIX AND NOT APPLE AND NOT ANDROID)
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
 ################################################
+# patch JUCE
+#
+# Patches must be applied before ADD_SUBDIRECTORY(JUCE): configuring JUCE
+# compiles juceaide (which pulls in juce_graphics and other modules), so any
+# patch that affects module sources has to be in place by then.
+
+# Locate GNU patch. On Windows it ships with Git for Windows under usr/bin but
+# isn't on PowerShell's PATH by default, so probe the usual install locations.
+find_program(PATCH_EXECUTABLE
+    NAMES patch
+    HINTS
+        "$ENV{ProgramFiles}/Git/usr/bin"
+        "$ENV{ProgramFiles\(x86\)}/Git/usr/bin"
+        "$ENV{LOCALAPPDATA}/Programs/Git/usr/bin"
+    DOC "GNU patch executable used to apply JUCE patches")
+
+if (NOT PATCH_EXECUTABLE)
+    message(FATAL_ERROR
+        "Could not find the `patch` executable, needed to apply the JUCE patches "
+        "in JUCE_patches/. On Windows, install Git for Windows (which ships "
+        "patch.exe in <install>/usr/bin) or add patch.exe to PATH.")
+endif()
+
+# Apply a patch idempotently: dry-run first so an already-applied patch on a
+# re-configure is reported as a no-op instead of a hard failure. Applies with
+# -p1 rooted at the JUCE submodule so a single patch can touch multiple files.
+function(apply_juce_patch patch_file)
+    set(juce_root "${CMAKE_CURRENT_SOURCE_DIR}/JUCE")
+    execute_process(
+        COMMAND "${PATCH_EXECUTABLE}" --binary --forward --dry-run --silent
+                -p1 -d "${juce_root}" -i "${patch_file}"
+        RESULT_VARIABLE dry_result
+        OUTPUT_VARIABLE dry_output
+        ERROR_VARIABLE  dry_error)
+
+    if (dry_result EQUAL 0)
+        execute_process(
+            COMMAND "${PATCH_EXECUTABLE}" --binary --forward
+                    -p1 -d "${juce_root}" -i "${patch_file}"
+            RESULT_VARIABLE apply_result
+            OUTPUT_VARIABLE apply_output
+            ERROR_VARIABLE  apply_error)
+        if (NOT apply_result EQUAL 0)
+            message(FATAL_ERROR
+                "Failed to apply ${patch_file}:\n${apply_output}\n${apply_error}")
+        endif()
+        message(STATUS "Applied patch: ${patch_file}")
+    else()
+        # GNU patch reports the "no-op" condition with several different
+        # phrasings depending on version: "already applied", "previously
+        # applied", "Reversed (or previously applied)". Detect any.
+        set(combined "${dry_output}${dry_error}")
+        string(FIND "${combined}" "already applied"   already_idx)
+        string(FIND "${combined}" "previously applied" previously_idx)
+        string(FIND "${combined}" "Reversed"          reversed_idx)
+        string(FIND "${combined}" "reversed"          reversed_lc_idx)
+        if (already_idx GREATER -1
+            OR previously_idx GREATER -1
+            OR reversed_idx GREATER -1
+            OR reversed_lc_idx GREATER -1)
+            message(STATUS "Patch already applied: ${patch_file}")
+        else()
+            message(FATAL_ERROR
+                "Patch ${patch_file} cannot be applied under ${juce_root}:\n"
+                "${dry_output}\n${dry_error}")
+        endif()
+    endif()
+endfunction()
+
+# Always apply: relax the JUCE 8 VST3 host's strict bus-arrangement roundtrip
+# check so plugins that rewrite their layout internally (mcfx-style multichannel
+# plug-ins) can be resized via setBusesLayout. See the patch's comment for
+# detail.
+apply_juce_patch(
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3PluginFormatImpl.h.patch")
+
+# Always apply: extend getVst3SpeakerArrangement to synthesise an arrangement
+# for AudioChannelSet::discreteChannels(N) at any N. Without this the JUCE
+# VST3 host wrapper rejects setBusesLayout for arbitrary N (only canonical
+# and ambisonic layouts go through), which manifested as the channel-count
+# popup in mcfx_graph offering only 1..9 + N^2 values for mcfx VST3 plug-ins.
+apply_juce_patch(
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3Common.h.patch")
+
+# Implement IPAddress::getInterfaceBroadcastAddress on Windows (upstream JUCE
+# leaves it as a TODO that returns 0.0.0.0) and add an explicit loopback
+# broadcast in NetworkServiceDiscovery::Advertiser. Without this, Windows peers
+# never appear on remote machines and same-host listeners miss advertisements
+# (mcfx_send ↔ mcfx_receive discovery).
+apply_juce_patch(
+    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_network_discovery.patch")
+
+# GCC 9 compatibility (e.g. Ubuntu 20.04): two source-level fixes for JUCE 8.
+#  1. juce_graphics_Harfbuzz.cpp fakes __has_builtin(x)=1 on GCC < 10, which
+#     makes libstdc++ 9's <utility> take a Clang-only builtin path. Include
+#     <utility> before the fake.
+#  2. A C-style cast in a braced initializer inside a constexpr template in
+#     juce_Midi_linux.cpp ICEs GCC 9; use static_cast instead.
+# Both changes are semantically neutral, but only apply them where they are
+# needed so other configurations keep a pristine JUCE tree.
+IF (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 10)
+    apply_juce_patch(
+        "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_gcc9_compat.patch")
+ENDIF ()
+
+################################################
 # add JUCE
 
 ADD_SUBDIRECTORY ( JUCE )
@@ -240,69 +346,6 @@ IF(UNIX AND NOT APPLE AND NOT ANDROID)
 	find_package(FFTW3 MODULE COMPONENTS single threads)
 ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
-# Locate GNU patch. On Windows it ships with Git for Windows under usr/bin but
-# isn't on PowerShell's PATH by default, so probe the usual install locations.
-find_program(PATCH_EXECUTABLE
-    NAMES patch
-    HINTS
-        "$ENV{ProgramFiles}/Git/usr/bin"
-        "$ENV{ProgramFiles\(x86\)}/Git/usr/bin"
-        "$ENV{LOCALAPPDATA}/Programs/Git/usr/bin"
-    DOC "GNU patch executable used to apply JUCE patches")
-
-if (NOT PATCH_EXECUTABLE)
-    message(FATAL_ERROR
-        "Could not find the `patch` executable, needed to apply the JUCE patches "
-        "in JUCE_patches/. On Windows, install Git for Windows (which ships "
-        "patch.exe in <install>/usr/bin) or add patch.exe to PATH.")
-endif()
-
-# Apply a patch idempotently: dry-run first so an already-applied patch on a
-# re-configure is reported as a no-op instead of a hard failure. Applies with
-# -p1 rooted at the JUCE submodule so a single patch can touch multiple files.
-function(apply_juce_patch patch_file)
-    set(juce_root "${CMAKE_CURRENT_SOURCE_DIR}/JUCE")
-    execute_process(
-        COMMAND "${PATCH_EXECUTABLE}" --binary --forward --dry-run --silent
-                -p1 -d "${juce_root}" -i "${patch_file}"
-        RESULT_VARIABLE dry_result
-        OUTPUT_VARIABLE dry_output
-        ERROR_VARIABLE  dry_error)
-
-    if (dry_result EQUAL 0)
-        execute_process(
-            COMMAND "${PATCH_EXECUTABLE}" --binary --forward
-                    -p1 -d "${juce_root}" -i "${patch_file}"
-            RESULT_VARIABLE apply_result
-            OUTPUT_VARIABLE apply_output
-            ERROR_VARIABLE  apply_error)
-        if (NOT apply_result EQUAL 0)
-            message(FATAL_ERROR
-                "Failed to apply ${patch_file}:\n${apply_output}\n${apply_error}")
-        endif()
-        message(STATUS "Applied patch: ${patch_file}")
-    else()
-        # GNU patch reports the "no-op" condition with several different
-        # phrasings depending on version: "already applied", "previously
-        # applied", "Reversed (or previously applied)". Detect any.
-        set(combined "${dry_output}${dry_error}")
-        string(FIND "${combined}" "already applied"   already_idx)
-        string(FIND "${combined}" "previously applied" previously_idx)
-        string(FIND "${combined}" "Reversed"          reversed_idx)
-        string(FIND "${combined}" "reversed"          reversed_lc_idx)
-        if (already_idx GREATER -1
-            OR previously_idx GREATER -1
-            OR reversed_idx GREATER -1
-            OR reversed_lc_idx GREATER -1)
-            message(STATUS "Patch already applied: ${patch_file}")
-        else()
-            message(FATAL_ERROR
-                "Patch ${patch_file} cannot be applied under ${juce_root}:\n"
-                "${dry_output}\n${dry_error}")
-        endif()
-    endif()
-endfunction()
-
 IF (JUCE_JACK)
     # The JACK backend is vendored (standalone-filter/McfxJackAudio.cpp) rather
     # than patched into JUCE: JUCE is built with JUCE_JACK undefined so it skips its
@@ -310,29 +353,6 @@ IF (JUCE_JACK)
     # headers at compile time; libjack itself is dlopen'd at runtime, so no link.
     find_package(Jack REQUIRED)
 ENDIF (JUCE_JACK)
-
-# Always apply: relax the JUCE 8 VST3 host's strict bus-arrangement roundtrip
-# check so plugins that rewrite their layout internally (mcfx-style multichannel
-# plug-ins) can be resized via setBusesLayout. See the patch's comment for
-# detail.
-apply_juce_patch(
-    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3PluginFormatImpl.h.patch")
-
-# Always apply: extend getVst3SpeakerArrangement to synthesise an arrangement
-# for AudioChannelSet::discreteChannels(N) at any N. Without this the JUCE
-# VST3 host wrapper rejects setBusesLayout for arbitrary N (only canonical
-# and ambisonic layouts go through), which manifested as the channel-count
-# popup in mcfx_graph offering only 1..9 + N^2 values for mcfx VST3 plug-ins.
-apply_juce_patch(
-    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_VST3Common.h.patch")
-
-# Implement IPAddress::getInterfaceBroadcastAddress on Windows (upstream JUCE
-# leaves it as a TODO that returns 0.0.0.0) and add an explicit loopback
-# broadcast in NetworkServiceDiscovery::Advertiser. Without this, Windows peers
-# never appear on remote machines and same-host listeners miss advertisements
-# (mcfx_send ↔ mcfx_receive discovery).
-apply_juce_patch(
-    "${CMAKE_CURRENT_SOURCE_DIR}/JUCE_patches/juce_network_discovery.patch")
 
 include_directories(${FFTW3_INCLUDE_DIR} ${JACK_INCLUDE_DIRS})
 
