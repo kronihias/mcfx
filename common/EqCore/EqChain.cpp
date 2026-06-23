@@ -66,10 +66,21 @@ void EqChain::prepare(double sampleRate, int maxBlockSize)
         band->prepare(sampleRate, maxBlockSize);
 }
 
-void EqChain::processBlock(float* data, int numSamples)
+bool EqChain::hasDynamic() const
 {
     for (auto* band : bands_)
-        band->processBlock(data, numSamples);
+        if (band->isDynamicActive())
+            return true;
+    return false;
+}
+
+void EqChain::processBlock(float* data, int numSamples)
+{
+    // Dynamic bands self-detect on their local input (and apply their own lookahead
+    // delay); linked bands consume an externally-supplied offset. Neither needs a
+    // chain-input snapshot — the 3-arg form routes dynamic bands to applyDynamicIIR.
+    for (auto* band : bands_)
+        band->processBlock(data, numSamples, nullptr);
 }
 
 void EqChain::reset()
@@ -93,6 +104,22 @@ int EqChain::getConvolverLatency() const
     int total = 0;
     for (auto* band : bands_)
         total += band->getConvolverLatency();
+    return total;
+}
+
+int EqChain::getChainLatencySamples(double sampleRate) const
+{
+    int total = 0;
+    for (auto* band : bands_)
+        total += band->getConvolverLatency() + band->getLookaheadSamples(sampleRate);
+    return total;
+}
+
+int EqChain::getAccumLatencyBeforeBand(int idx, double sampleRate) const
+{
+    int total = 0;
+    for (int i = 0; i < idx && i < bands_.size(); ++i)
+        total += bands_[i]->getConvolverLatency() + bands_[i]->getLookaheadSamples(sampleRate);
     return total;
 }
 

@@ -431,9 +431,21 @@ public:
     void setListener(Listener* l) { listener_ = l; }
     void updateFromBand();
 
+    /** Tell the editor whether the current band lives on the diagonal chain.
+        Linked detection only applies to diagonal bands, so the Link control is
+        disabled for MIMO path bands. */
+    void setDynamicDiagonalContext(bool isDiagonal);
+
+    /** Total height the laid-out controls need. The component self-sizes its
+        height in resized(); place it inside a Viewport so the dynamic section can
+        overflow and scroll. */
+    int getContentHeight() const { return contentHeight_; }
+
     void paint(Graphics& g) override;
     void resized() override;
     void sliderValueChanged(Slider* s) override;
+    void sliderDragStarted(Slider* s) override;
+    void sliderDragEnded(Slider* s) override;
     void comboBoxChanged(ComboBox* cb) override;
     void buttonClicked(Button* b) override;
     void labelTextChanged(Label* l) override;
@@ -491,6 +503,24 @@ private:
 
     ToggleButton btnEnable_ { "Enable" };
 
+    // --- Dynamic EQ controls (peak / shelf only) ---
+    Label        lblDynHeader_   { {}, "Dynamics" };
+    ToggleButton btnDynActive_   { "Dynamic mode" };
+    ToggleButton btnDynAuto_     { "Auto" };
+    ToggleButton btnDynLink_     { "Link" };
+    Label  lblDynThreshold_ { {}, "Thr:" };
+    Slider sldDynThreshold_;
+    Label  lblDynRange_     { {}, "Range:" };
+    Slider sldDynRange_;
+    Label  lblDynAttack_    { {}, "Attack:" };
+    Slider sldDynAttack_;
+    Label  lblDynRelease_   { {}, "Release:" };
+    Slider sldDynRelease_;
+    Label  lblDynLookahead_ { {}, "Lookahead:" };
+    Slider sldDynLookahead_;
+    bool   dynIsDiagonal_   = true;   // false on MIMO path bands → Link disabled
+    bool   dynLookaheadDragging_ = false; // coalesce the structural rebuild to drag-end
+
     // Biquad coefficient editors
     Label lblBiquad_  { {}, "Coefficients:" };
     Label lblB0_      { {}, "b0:" };
@@ -524,6 +554,7 @@ private:
     int pendingAudioChannels_ = 0;
 
     bool updating_ = false; // prevent feedback loops
+    int  contentHeight_ = 200; // total laid-out height (self-sized in resized())
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqBandEditor)
 };

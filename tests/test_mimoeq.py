@@ -1152,3 +1152,175 @@ def test_symmetric_fir_group_delay_matches_centre_tap():
         np.testing.assert_allclose(ir[peak_idx], h[(N - 1) // 2], atol=5e-3,
             err_msg=f"Symmetric FIR N={N}: peak amplitude {ir[peak_idx]:.4f} "
                     f"vs centre-tap {h[(N-1)//2]:.4f}")
+
+
+# ===========================================================================
+# Tier-2 — Dynamic EQ (FabFilter-style per-band dynamics)
+# ===========================================================================
+#
+# A dynamic peak/shelf band moves its gain by an offset derived from a level
+# detector on the band's frequency region. These tests drive the testhost with
+# JSON dynamic configs and measure the steady-state gain at the band centre.
+
+def _dyn_peak_config(threshold_db, range_db, *, f=1000.0, q=2.0, gain_db=0.0,
+                     linked=True, attack_ms=5.0, release_ms=50.0, auto=False):
+    return {
+        "sample_rate": SR,
+        "sos": [{"diagonal": True, "parameters": {
+            "type": "peak", "f_Hz": f, "Q": q, "gain_db": gain_db,
+            "dynamic": {
+                "active": True, "threshold_db": threshold_db, "range_db": range_db,
+                "attack_ms": attack_ms, "release_ms": release_ms,
+                "auto": auto, "linked": linked,
+            },
+        }}],
+    }
+
+
+def _tone(amp, n, f=1000.0):
+    t = np.arange(n) / SR
+    return (amp * np.sin(2.0 * np.pi * f * t)).astype(np.float32)
+
+
+def _steady_gain_db(in_sig, out_sig):
+    """Steady-state output/input gain (dB) over the settled middle region."""
+    seg = slice(int(SR * 0.6), int(SR * 0.95))
+    in_rms = np.sqrt(np.mean(in_sig[seg] ** 2))
+    out_rms = np.sqrt(np.mean(out_sig[seg] ** 2))
+    return 20.0 * np.log10(max(out_rms, 1e-12) / max(in_rms, 1e-12))
+
+
+def test_dynamic_engages_full_range():
+    """Loud in-band tone well above threshold → gain saturates at the range."""
+    n = int(SR * 1.0)
+    tone = _tone(0.5, n)
+    audio = np.stack([tone, tone])
+    out = run_mimoeq_json(_dyn_peak_config(threshold_db=-60.0, range_db=-12.0), audio)
+    g = _steady_gain_db(tone, out[0])
+    assert abs(g - (-12.0)) < 1.5, f"Dynamic full-range: expected ~-12 dB, got {g:.2f}"
+
+
+def test_dynamic_below_threshold_is_static():
+    """Level below threshold → no engagement → 0 dB peak passes through."""
+    n = int(SR * 1.0)
+    tone = _tone(0.1, n)
+    audio = np.stack([tone, tone])
+    out = run_mimoeq_json(_dyn_peak_config(threshold_db=0.0, range_db=-12.0), audio)
+    g = _steady_gain_db(tone, out[0])
+    assert abs(g) < 1.0, f"Dynamic below threshold: expected ~0 dB, got {g:.2f}"
+
+
+def test_dynamic_zero_range_matches_static():
+    """range_db=0 can never produce an offset → identical to a static +6 dB peak."""
+    f, q, db = 1000.0, 1.5, 6.0
+    config = _dyn_peak_config(threshold_db=-80.0, range_db=0.0, f=f, q=q, gain_db=db)
+    audio = np.zeros((2, BLOCK), dtype=np.float32)
+    audio[:, 0] = 1.0
+    out = run_mimoeq_json(config, audio)
+
+    sos = make_peak_sos(f, q, db_to_linear(db), SR)
+    ref_ir = apply_sos(sos, audio[0])
+    np.testing.assert_allclose(
+        freq_response_db(out[0]), freq_response_db(ref_ir), atol=0.7,
+        err_msg="Dynamic zero-range band should match the static peak response")
+
+
+def test_dynamic_linked_applies_same_gain():
+    """Linked: a loud channel drives the shared detector, so a quiet channel in
+    the same band is attenuated by the same amount (imaging preserved)."""
+    n = int(SR * 1.0)
+    loud = _tone(0.5, n)
+    quiet = _tone(0.02, n)
+    audio = np.stack([loud, quiet])
+    out = run_mimoeq_json(
+        _dyn_peak_config(threshold_db=-30.0, range_db=-12.0, linked=True), audio)
+    g_loud  = _steady_gain_db(loud,  out[0])
+    g_quiet = _steady_gain_db(quiet, out[1])
+    assert g_loud  < -8.0, f"Linked: loud channel should engage (got {g_loud:.2f} dB)"
+    assert g_quiet < -8.0, f"Linked: quiet channel should follow loud (got {g_quiet:.2f} dB)"
+
+
+def test_dynamic_independent_per_channel():
+    """Independent: each channel reacts to its own level — the quiet channel
+    stays below threshold and passes through while the loud one is attenuated."""
+    n = int(SR * 1.0)
+    loud = _tone(0.5, n)
+    quiet = _tone(0.02, n)
+    audio = np.stack([loud, quiet])
+    out = run_mimoeq_json(
+        _dyn_peak_config(threshold_db=-30.0, range_db=-12.0, linked=False), audio)
+    g_loud  = _steady_gain_db(loud,  out[0])
+    g_quiet = _steady_gain_db(quiet, out[1])
+    assert g_loud  < -8.0, f"Independent: loud channel should engage (got {g_loud:.2f} dB)"
+    assert g_quiet > -2.0, f"Independent: quiet channel should pass through (got {g_quiet:.2f} dB)"
+
+
+def test_dynamic_lookahead_ducks_onset():
+    """With lookahead, the detector sees the transient early, so the gain is already
+    engaged at the tone onset; without it, the gain only starts ramping at onset.
+    (testhost strips the reported latency, so both outputs are input-aligned.)"""
+    def run(lookahead_ms):
+        n = int(SR * 0.5)
+        S = int(SR * 0.25)            # tone onset
+        t = np.arange(n) / SR
+        tone = (0.5 * np.sin(2 * np.pi * 1000.0 * t)).astype(np.float32)
+        tone[:S] = 0.0                # silence before the onset
+        cfg = {
+            "sample_rate": SR,
+            "sos": [{"diagonal": True, "parameters": {
+                "type": "peak", "f_Hz": 1000.0, "Q": 0.707, "gain_db": 0.0,
+                "dynamic": {"active": True, "threshold_db": -40.0, "range_db": -18.0,
+                            "attack_ms": 1.0, "release_ms": 100.0,
+                            "lookahead_ms": lookahead_ms}}}],
+        }
+        out = run_mimoeq_json(cfg, np.stack([tone, tone]))
+        w = slice(S, S + int(SR * 0.002))   # first 2 ms after onset
+        return float(np.sqrt(np.mean(out[0][w] ** 2)))
+
+    amp_none = run(0.0)
+    amp_look = run(5.0)
+    assert amp_look < amp_none * 0.6, \
+        f"lookahead should duck the onset: with={amp_look:.4f} without={amp_none:.4f}"
+
+
+def test_dynamic_lookahead_cross_path_alignment():
+    """Lookahead adds latency; the plugin compensates so all outputs stay aligned.
+    A processed (diagonal) channel and a passthrough channel must keep an impulse at
+    the same sample index after the host strips the reported latency."""
+    config = {
+        "sample_rate": SR,
+        "diag_channels": [1],   # ch1 diagonal (lookahead), ch2 passthrough
+        "sos": [{"diagonal": True, "parameters": {
+            "type": "peak", "f_Hz": 1000.0, "Q": 0.707, "gain_db": 0.0,
+            "dynamic": {"active": True, "threshold_db": -24.0, "range_db": -6.0,
+                        "attack_ms": 5.0, "release_ms": 100.0, "lookahead_ms": 5.0}}}],
+    }
+    n = 2048
+    S = 200
+    audio = np.zeros((2, n), dtype=np.float32)
+    audio[0, S] = 1.0
+    audio[1, S] = 1.0
+    out = run_mimoeq_json(config, audio)
+    p0 = int(np.argmax(np.abs(out[0])))
+    p1 = int(np.argmax(np.abs(out[1])))
+    assert abs(p0 - p1) <= 2, f"channels misaligned: ch1 peak {p0}, ch2 peak {p1}"
+    assert abs(p1 - S) <= 2, f"passthrough not at input position: {p1} vs {S}"
+
+
+def test_dynamic_lowshelf_detects_below_corner():
+    """A dynamic Low Shelf uses a low-pass detector, so energy well below the
+    corner engages it (a band-pass detector at the corner would largely miss it)."""
+    f = 250.0
+    config = {
+        "sample_rate": SR,
+        "sos": [{"diagonal": True, "parameters": {
+            "type": "low_shelf", "f_Hz": f, "Q": 0.707, "gain_db": 0.0,
+            "dynamic": {"active": True, "threshold_db": -60.0, "range_db": -12.0,
+                        "attack_ms": 5.0, "release_ms": 50.0, "linked": True}}}],
+    }
+    n = int(SR * 1.0)
+    tone = _tone(0.5, n, f=60.0)   # well below the 250 Hz corner
+    audio = np.stack([tone, tone])
+    out = run_mimoeq_json(config, audio)
+    g = _steady_gain_db(tone, out[0])
+    assert g < -8.0, f"Low-shelf dynamic should duck sub-corner energy, got {g:.2f} dB"

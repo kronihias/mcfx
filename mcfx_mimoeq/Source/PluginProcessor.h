@@ -23,13 +23,36 @@
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
 #include "EqChain.h"
+#include "DynamicDetector.h"
 #include "SpectrumAnalyzer.h"
 #include <map>
+#include <array>
 #include <atomic>
 #include <set>
 
 // A path key is (input_channel, output_channel)
 using PathKey = std::pair<int, int>;
+
+/** Simple integer delay line for latency compensation (one mono signal). */
+struct CompDelay
+{
+    std::vector<float> buf;
+    int pos = 0;
+    void prepare(int n) { buf.assign((size_t) jmax(0, n), 0.f); pos = 0; }
+    int  length() const { return (int) buf.size(); }
+    void processBlock(float* data, int numSamples)
+    {
+        int sz = (int) buf.size();
+        if (sz == 0) return;
+        for (int i = 0; i < numSamples; ++i)
+        {
+            float in = data[i];
+            data[i] = buf[(size_t) pos];   // sz-sample-old value
+            buf[(size_t) pos] = in;
+            pos = (pos + 1) % sz;
+        }
+    }
+};
 
 /** Holds the complete processing state used exclusively by the audio thread.
     Built on the GUI thread and published lock-free via atomic pointer swap. */
@@ -39,6 +62,12 @@ struct ProcessingState
     std::set<int> diagChannelMask;                     // empty = all; 1-based channel set
     std::map<PathKey, EqChain*> pathChains;            // raw ptrs into ownedPathChains
     OwnedArray<EqChain> ownedPathChains;               // owns the path chain objects
+    OwnedArray<DynamicDetector> diagLinkedDyn;        // shared detectors for linked diagonal bands
+
+    // --- Latency compensation (lookahead + FIR) ---
+    int globalLatency = 0;                             // G = reported plugin latency
+    std::vector<CompDelay> outComp;                    // per output channel: align to G
+    std::map<PathKey, CompDelay> pathComp;            // per path: align contributions before summing
 };
 
 class Mcfx_mimoeqAudioProcessor : public AudioProcessor,
@@ -87,6 +116,16 @@ public:
     // --- VST3 Parameter Automation (diagonal chain) ---
     AudioProcessorValueTreeState apvts;
     static constexpr int kMaxAutomatedBands = 24;
+
+    /** Live dynamic gain offset (dB) for diagonal band `band`, for GUI metering.
+        Written lock-free by the audio thread (from audio-thread-owned processing
+        copies only), read by the GUI. Returns 0 when out of range / not dynamic. */
+    float getDiagDynMeter(int band) const
+    {
+        return (band >= 0 && band < kMaxAutomatedBands)
+                   ? diagDynMeter_[(size_t)band].load(std::memory_order_relaxed)
+                   : 0.f;
+    }
     /** Push current diagonal chain parameter values to APVTS (call after any model change). */
     void syncModelToAPVTS();
 
@@ -187,6 +226,11 @@ private:
 
     std::atomic<bool> needsParamSync_ { false };
     void doParamSyncIfNeeded();
+
+    int lastReportedLatency_ = -1;   // gate setLatencySamples() to actual changes
+
+    // Live dynamic-offset meters for the diagonal chain (audio→GUI, lock-free).
+    std::array<std::atomic<float>, kMaxAutomatedBands> diagDynMeter_ {};
 
     // Click-free undo/redo helpers
     bool canSyncRestore(const String& targetState) const;

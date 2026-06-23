@@ -44,8 +44,19 @@ public:
         Preserves filter state for click-free parameter updates. */
     void syncParametersFrom(const EqChain& source);
 
+    /** True if any band currently has dynamic processing active. */
+    bool hasDynamic() const;
+
     /** Total convolver latency across all bands (serial processing = latencies add). */
     int getConvolverLatency() const;
+
+    /** Total chain latency in samples: convolver (FIR) + dynamic lookahead, summed
+        over all bands (serial). Used for cross-path latency compensation. */
+    int getChainLatencySamples(double sampleRate) const;
+
+    /** Accumulated latency (convolver + lookahead) of the bands BEFORE index `idx`.
+        Used to align a linked detector's offset with the band's local signal. */
+    int getAccumLatencyBeforeBand(int idx, double sampleRate) const;
 
     // Frequency response — combined response of all enabled bands
     std::complex<float> getFrequencyResponse(double freqHz) const;

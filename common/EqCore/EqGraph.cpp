@@ -41,7 +41,7 @@ Colour EqGraph::getBandColour(int bandIndex)
 EqGraph::EqGraph()
 {
     setWantsKeyboardFocus(true);
-    startTimer(100);
+    startTimer(kRefreshIdleMs);
 }
 
 EqGraph::~EqGraph()
@@ -257,6 +257,18 @@ void EqGraph::drawBandHandles(Graphics& g)
 
             Colour bandCol = getBandColour(i);
 
+            // Dynamic EQ: faint bracket from the static gain to the range limit.
+            bool dynActive = (type == EqBandType::IIR) && band->supportsDynamic()
+                          && band->isDynamicActive();
+            if (dynActive)
+            {
+                float yStatic = (float)dbtoypos(band->getGainDB());
+                float yRange  = (float)dbtoypos(band->getGainDB() + band->getDynRangeDB());
+                g.setColour(bandCol.withAlpha(enabled ? 0.4f : 0.2f));
+                g.drawLine(handleX, yStatic, handleX, yRange, 1.5f);
+                g.drawLine(handleX - 4.f, yRange, handleX + 4.f, yRange, 1.5f);
+            }
+
             if (!enabled)
             {
                 // Disabled band: dimmed outline only, no fill
@@ -282,6 +294,17 @@ void EqGraph::drawBandHandles(Graphics& g)
                 g.drawText(String(i + 1), (int)(handleX - radius), (int)(handleY - radius),
                            (int)(radius * 2), (int)(radius * 2), Justification::centred, false);
             }
+
+            // Dynamic EQ: live "current gain" dot at static gain + current offset.
+            if (dynActive && liveDynOffsetProvider_)
+            {
+                float yLive = (float)dbtoypos(band->getGainDB() + liveDynOffsetProvider_(i));
+                float r = 3.5f;
+                g.setColour(bandCol.brighter(0.3f));
+                g.fillEllipse(handleX - r, yLive - r, r * 2.f, r * 2.f);
+                g.setColour(Colours::white.withAlpha(0.85f));
+                g.drawEllipse(handleX - r, yLive - r, r * 2.f, r * 2.f, 1.f);
+            }
         }
     }
 }
@@ -305,57 +328,61 @@ void EqGraph::calcPaths()
         bandFills_[b].clear();
     }
 
-    // First x position
-    int startX = (int)xmargin_;
-    float startHz = xpostohz(startX);
-
-    // Combined response start
-    auto resp = chain_->getFrequencyResponse(startHz);
-    float mag = std::abs(resp);
-    float db = (mag > 0.f) ? 20.f * log10f(mag) : mindb_;
-    pathMag_.startNewSubPath((float)startX, (float)dbtoypos(db));
-
-    // Per-band starts (compute for all bands, including disabled)
+    // Live dynamic gain offset (dB) per band — drives the curve so the displayed
+    // response moves with the dynamic action. 0 for non-dynamic bands.
+    std::vector<float> dynOffset((size_t)jmax(0, numBands), 0.f);
     for (int b = 0; b < numBands; ++b)
     {
         auto* band = chain_->getBand(b);
-        if (band == nullptr)
-            continue;
-
-        auto bandResp = band->getFrequencyResponse(startHz, true);
-        float bandMag = std::abs(bandResp);
-        float bandDb = (bandMag > 0.f) ? 20.f * log10f(bandMag) : 0.f;
-        float y = (float)dbtoypos(bandDb);
-        bandPaths_[b].startNewSubPath((float)startX, y);
-        bandFills_[b].startNewSubPath((float)startX, zeroY);
-        bandFills_[b].lineTo((float)startX, y);
+        if (band != nullptr && liveDynOffsetProvider_ != nullptr
+            && band->supportsDynamic() && band->isDynamicActive())
+            dynOffset[(size_t)b] = liveDynOffsetProvider_(b);
     }
 
-    // Iterate across pixels
-    for (int xPos = startX + 1; xPos < width; ++xPos)
+    int startX = (int)xmargin_;
+    bool first = true;
+
+    // Iterate across pixels, accumulating the combined response from the per-band
+    // (dynamic-aware) responses so both curves track the live gain.
+    for (int xPos = startX; xPos < width; ++xPos)
     {
         float hz = xpostohz(xPos);
 
-        // Combined
-        resp = chain_->getFrequencyResponse(hz);
-        mag = std::abs(resp);
-        db = (mag > 0.f) ? 20.f * log10f(mag) : mindb_;
-        pathMag_.lineTo((float)xPos, (float)dbtoypos(db));
-
-        // Per-band (always compute, even disabled)
+        std::complex<float> combined(1.f, 0.f);
         for (int b = 0; b < numBands; ++b)
         {
             auto* band = chain_->getBand(b);
             if (band == nullptr)
                 continue;
 
-            auto bandResp = band->getFrequencyResponse(hz, true);
+            auto bandResp = band->getFrequencyResponse(hz, true, dynOffset[(size_t)b]);
             float bandMag = std::abs(bandResp);
             float bandDb = (bandMag > 0.f) ? 20.f * log10f(bandMag) : 0.f;
             float y = (float)dbtoypos(bandDb);
-            bandPaths_[b].lineTo((float)xPos, y);
-            bandFills_[b].lineTo((float)xPos, y);
+
+            if (first)
+            {
+                bandPaths_[b].startNewSubPath((float)xPos, y);
+                bandFills_[b].startNewSubPath((float)xPos, zeroY);
+                bandFills_[b].lineTo((float)xPos, y);
+            }
+            else
+            {
+                bandPaths_[b].lineTo((float)xPos, y);
+                bandFills_[b].lineTo((float)xPos, y);
+            }
+
+            if (band->isEnabled())
+                combined *= bandResp;
         }
+
+        float cmag = std::abs(combined);
+        float cdb = (cmag > 0.f) ? 20.f * log10f(cmag) : mindb_;
+        float cy = (float)dbtoypos(cdb);
+        if (first) pathMag_.startNewSubPath((float)xPos, cy);
+        else       pathMag_.lineTo((float)xPos, cy);
+
+        first = false;
     }
 
     // Close fills back to zero line
@@ -472,6 +499,24 @@ void EqGraph::resized()
 
 void EqGraph::timerCallback()
 {
+    // Refresh fast only while something is actually animating — the spectrum
+    // analyzer or a live dynamic band. Otherwise idle slowly to save CPU; GUI
+    // edits and mouse moves repaint the graph directly, so interactivity is
+    // unaffected by the idle rate.
+    bool live = analyzerOn_;
+    if (! live && chain_ != nullptr)
+    {
+        for (int b = 0; b < chain_->getNumBands(); ++b)
+        {
+            auto* band = chain_->getBand(b);
+            if (band != nullptr && band->isDynamicActive()) { live = true; break; }
+        }
+    }
+
+    const int desired = live ? kRefreshFastMs : kRefreshIdleMs;
+    if (getTimerInterval() != desired)
+        startTimer(desired);
+
     repaint();
 }
 

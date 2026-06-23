@@ -124,6 +124,7 @@ private:
     EqGraph graph_;
     EqPhaseGraph phaseGraph_;
     EqBandEditor bandEditor_;
+    Viewport bandEditorViewport_;   // scrolls bandEditor_ when controls overflow
     EqTabBar tabs_;
 
     ToggleButton btnAnalyzer_ { "Analyzer" };

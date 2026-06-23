@@ -121,11 +121,17 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     addAndMakeVisible(graph_);
     graph_.setListener(this);
     graph_.setAnalyzers(&processor->getInputAnalyzer(), &processor->getOutputAnalyzer());
+    graph_.setLiveDynOffsetProvider([this](int band) -> float {
+        // Live dynamic metering is published for the diagonal chain only.
+        return diagonalMode_ ? getProcessor()->getDiagDynMeter(band) : 0.f;
+    });
     graph_.setTooltip("Drag handles to adjust frequency/gain. Mouse wheel to adjust Q.\nDouble-click to add a band. Double-click a handle to toggle enable. Press E to toggle enable.\nDrop a .json file to load configuration.");
 
     addChildComponent(phaseGraph_);   // hidden by default; updatePhaseGraphVisibility() flips it on
 
-    addAndMakeVisible(bandEditor_);
+    addAndMakeVisible(bandEditorViewport_);
+    bandEditorViewport_.setViewedComponent(&bandEditor_, false);
+    bandEditorViewport_.setScrollBarsShown(true, false);
     bandEditor_.setListener(this);
 
     addAndMakeVisible(tabs_);
@@ -338,9 +344,12 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     // Status bar at bottom
     statusBar_.setBounds(0, h - statusH, w, statusH);
 
-    // Band editor — fixed height
+    // Band editor — fixed viewport height; the band editor self-sizes its content
+    // height and scrolls inside the viewport when it overflows (e.g. dynamics on).
     int editorY = tabY + tabBarH;
-    bandEditor_.setBounds(4, editorY, w - 8, editorH);
+    bandEditorViewport_.setBounds(4, editorY, w - 8, editorH);
+    int innerW = jmax(50, (w - 8) - bandEditorViewport_.getScrollBarThickness());
+    bandEditor_.setSize(innerW, jmax(editorH, bandEditor_.getContentHeight()));
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::updatePathSelector()
@@ -467,6 +476,7 @@ void Mcfx_mimoeqAudioProcessorEditor::selectBand(int index)
     if (chain != nullptr && index >= 0 && index < chain->getNumBands())
     {
         selectedBand_ = index;
+        bandEditor_.setDynamicDiagonalContext(diagonalMode_);
         bandEditor_.setBand(chain->getBand(index), index);
         bandEditor_.setVisible(true);
         graph_.setSelectedBand(index);

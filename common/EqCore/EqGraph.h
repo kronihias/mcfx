@@ -51,6 +51,10 @@ public:
     void setListener(Listener* l) { listener_ = l; }
     void setSelectedBand(int idx) { selectedBand_ = idx; repaint(); }
 
+    /** Provide live dynamic gain offsets (dB) per band index for metering. Returns
+        0 (or leave unset) when the band has no dynamic action to display. */
+    void setLiveDynOffsetProvider(std::function<float(int)> fn) { liveDynOffsetProvider_ = std::move(fn); }
+
     /** Set spectrum analyzers to overlay on the graph. Pass nullptr to disable. */
     void setAnalyzers(SpectrumAnalyzer* input, SpectrumAnalyzer* output)
     {
@@ -91,6 +95,7 @@ private:
 
     EqChain* chain_ = nullptr;
     Listener* listener_ = nullptr;
+    std::function<float(int)> liveDynOffsetProvider_;
     int selectedBand_ = -1;
     int dragBand_ = -1;
     bool draggingYAxis_ = false;     // true when dragging the Y-axis (pan)
@@ -100,6 +105,12 @@ private:
 
     // Hover-cursor freq/mag readout in the bottom-right corner
     int hoverX_ = -1;
+
+    // Graph refresh: fast while animating (analyzer / live dynamic band), slow when
+    // idle. ~30 fps reads as smooth for a meter; idle ~10 fps is just a safety tick
+    // (edits/mouse repaint directly). Bump kRefreshFastMs to 16 for 60 fps if wanted.
+    static constexpr int kRefreshFastMs = 33;   // ~30 fps
+    static constexpr int kRefreshIdleMs = 100;  // ~10 fps
 
     float minf_ = 20.f;
     float maxf_ = 20000.f;

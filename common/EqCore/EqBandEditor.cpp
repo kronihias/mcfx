@@ -114,7 +114,8 @@ EqBandEditor::EqBandEditor()
     sldQ_.setNumDecimalPlacesToDisplay(3);
     sldQ_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
     sldQ_.setSliderStyle(Slider::LinearHorizontal);
-    sldQ_.setTooltip("Filter Q (bandwidth). Use mouse wheel on graph handles to adjust");
+    sldQ_.setDoubleClickReturnValue(true, 0.707);
+    sldQ_.setTooltip("Filter Q (bandwidth). Double-click to reset to 0.707. Use mouse wheel on graph handles to adjust");
     sldQ_.addListener(this);
 
     // Gain slider
@@ -169,6 +170,89 @@ EqBandEditor::EqBandEditor()
     addAndMakeVisible(btnEnable_);
     btnEnable_.setTooltip("Enable/disable this band (shortcut: E in graph)");
     btnEnable_.addListener(this);
+
+    // --- Dynamic EQ controls (peak / shelf bands) ---
+    addAndMakeVisible(lblDynHeader_);
+    lblDynHeader_.setFont(Font(FontOptions(13.f, Font::bold)));
+    lblDynHeader_.setColour(Label::textColourId, Colours::white);
+
+    addAndMakeVisible(btnDynActive_);
+    btnDynActive_.setTooltip("Make this band dynamic: its gain reacts to the level in its frequency region");
+    btnDynActive_.addListener(this);
+
+    addAndMakeVisible(btnDynAuto_);
+    btnDynAuto_.setTooltip("Auto threshold: track the program level instead of a fixed threshold");
+    btnDynAuto_.addListener(this);
+
+    addAndMakeVisible(btnDynLink_);
+    btnDynLink_.setTooltip("Link detection across all channels (one shared gain change — preserves imaging). "
+                           "Off = each channel reacts independently.");
+    btnDynLink_.addListener(this);
+
+    addAndMakeVisible(lblDynThreshold_);
+    addAndMakeVisible(sldDynThreshold_);
+    sldDynThreshold_.setRange(-80.0, 0.0, 0.1);
+    sldDynThreshold_.setNumDecimalPlacesToDisplay(1);
+    sldDynThreshold_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldDynThreshold_.setSliderStyle(Slider::LinearHorizontal);
+    sldDynThreshold_.setDoubleClickReturnValue(true, -24.0);
+    sldDynThreshold_.setTextValueSuffix(" dB");
+    sldDynThreshold_.setTooltip("Detection threshold. Dynamic action engages above this level.");
+    sldDynThreshold_.addListener(this);
+
+    addAndMakeVisible(lblDynRange_);
+    addAndMakeVisible(sldDynRange_);
+    sldDynRange_.setRange(-30.0, 30.0, 0.1);
+    sldDynRange_.setNumDecimalPlacesToDisplay(1);
+    sldDynRange_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldDynRange_.setSliderStyle(Slider::LinearHorizontal);
+    sldDynRange_.setDoubleClickReturnValue(true, -6.0);
+    sldDynRange_.setTextValueSuffix(" dB");
+    sldDynRange_.setTooltip("Maximum dynamic gain change. Negative = cut louder material (compress), "
+                            "positive = boost (expand).");
+    sldDynRange_.addListener(this);
+
+    addAndMakeVisible(lblDynAttack_);
+    addAndMakeVisible(sldDynAttack_);
+    sldDynAttack_.setRange(0.1, 200.0, 0.1);
+    sldDynAttack_.setSkewFactorFromMidPoint(15.0);
+    sldDynAttack_.setNumDecimalPlacesToDisplay(1);
+    sldDynAttack_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldDynAttack_.setSliderStyle(Slider::LinearHorizontal);
+    sldDynAttack_.setDoubleClickReturnValue(true, 10.0);
+    sldDynAttack_.setTextValueSuffix(" ms");
+    sldDynAttack_.setTooltip("Attack time (how fast the dynamic gain reacts to rising level)");
+    sldDynAttack_.addListener(this);
+
+    addAndMakeVisible(lblDynRelease_);
+    addAndMakeVisible(sldDynRelease_);
+    sldDynRelease_.setRange(5.0, 2000.0, 1.0);
+    sldDynRelease_.setSkewFactorFromMidPoint(150.0);
+    sldDynRelease_.setNumDecimalPlacesToDisplay(0);
+    sldDynRelease_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldDynRelease_.setSliderStyle(Slider::LinearHorizontal);
+    sldDynRelease_.setDoubleClickReturnValue(true, 120.0);
+    sldDynRelease_.setTextValueSuffix(" ms");
+    sldDynRelease_.setTooltip("Release time (how fast the dynamic gain recovers)");
+    sldDynRelease_.addListener(this);
+
+    addAndMakeVisible(lblDynLookahead_);
+    addAndMakeVisible(sldDynLookahead_);
+    sldDynLookahead_.setRange(0.0, 20.0, 0.1);
+    sldDynLookahead_.setNumDecimalPlacesToDisplay(1);
+    sldDynLookahead_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldDynLookahead_.setSliderStyle(Slider::LinearHorizontal);
+    sldDynLookahead_.setDoubleClickReturnValue(true, 0.0);
+    sldDynLookahead_.setTextValueSuffix(" ms");
+    sldDynLookahead_.setTooltip("Lookahead: detect ahead of the audio so the gain is in place before "
+                                "a transient. Adds latency (reported to the host).");
+    sldDynLookahead_.addListener(this);
+
+    for (auto* lbl : { &lblDynThreshold_, &lblDynRange_, &lblDynAttack_, &lblDynRelease_, &lblDynLookahead_ })
+    {
+        lbl->setFont(Font(FontOptions(13.f, Font::plain)));
+        lbl->setColour(Label::textColourId, Colours::white);
+    }
 
     // Raw biquad coefficient editors
     addAndMakeVisible(lblBiquad_);
@@ -239,6 +323,13 @@ void EqBandEditor::setBand(EqBand* band, int bandIndex)
     bandIndex_ = bandIndex;
     updateFromBand();
     repaint(); // redraw band color indicator
+}
+
+void EqBandEditor::setDynamicDiagonalContext(bool isDiagonal)
+{
+    dynIsDiagonal_ = isDiagonal;
+    if (band_ != nullptr)
+        showControlsForType(band_->getType());
 }
 
 void EqBandEditor::updateFromBand()
@@ -373,6 +464,16 @@ void EqBandEditor::updateFromBand()
 
     btnEnable_.setToggleState(band_->isEnabled(), dontSendNotification);
 
+    // Dynamic EQ controls
+    btnDynActive_.setToggleState(band_->isDynamicActive(), dontSendNotification);
+    btnDynAuto_.setToggleState(band_->getDynAuto(), dontSendNotification);
+    btnDynLink_.setToggleState(band_->getDynLinked(), dontSendNotification);
+    sldDynThreshold_.setValue(band_->getDynThresholdDB(), dontSendNotification);
+    sldDynRange_.setValue(band_->getDynRangeDB(), dontSendNotification);
+    sldDynAttack_.setValue(band_->getDynAttackMs(), dontSendNotification);
+    sldDynRelease_.setValue(band_->getDynReleaseMs(), dontSendNotification);
+    sldDynLookahead_.setValue(band_->getDynLookaheadMs(), dontSendNotification);
+
     showControlsForType(type);
 
     updating_ = false;
@@ -506,6 +607,27 @@ void EqBandEditor::showControlsForType(EqBandType type)
     btnCopyCoeffs_.setVisible(isBiquad);
     btnPasteCoeffs_.setVisible(isBiquad);
 
+    // Dynamic EQ controls — only for gain-bearing peak/shelf bands.
+    bool isDynCapable = band_ != nullptr && band_->supportsDynamic();
+    bool dynOn = isDynCapable && band_->isDynamicActive();
+    lblDynHeader_.setVisible(dynOn);   // header sits above the dynamic params
+    btnDynActive_.setVisible(isDynCapable);
+    btnDynAuto_.setVisible(dynOn);
+    btnDynLink_.setVisible(dynOn);
+    lblDynThreshold_.setVisible(dynOn);
+    sldDynThreshold_.setVisible(dynOn);
+    lblDynRange_.setVisible(dynOn);
+    sldDynRange_.setVisible(dynOn);
+    lblDynAttack_.setVisible(dynOn);
+    sldDynAttack_.setVisible(dynOn);
+    lblDynRelease_.setVisible(dynOn);
+    sldDynRelease_.setVisible(dynOn);
+    lblDynLookahead_.setVisible(dynOn);
+    sldDynLookahead_.setVisible(dynOn);
+    // Link only applies to diagonal bands; threshold disabled while auto is on.
+    btnDynLink_.setEnabled(dynIsDiagonal_);
+    sldDynThreshold_.setEnabled(dynOn && band_ != nullptr && !band_->getDynAuto());
+
     resized(); // re-layout based on new visibility
 }
 
@@ -513,10 +635,9 @@ void EqBandEditor::paint(Graphics& g)
 {
     if (bandIndex_ >= 0)
     {
-        // Draw band color indicator on the right side
+        // Band colour indicator at the very left; Enable/Type/Filter sit to its right.
         float indicatorSize = 40.f;
-        float margin = 10.f;
-        float cx = getWidth() - margin - indicatorSize / 2.f;
+        float cx = 4.f + indicatorSize / 2.f;
         float cy = 4.f + indicatorSize / 2.f; // aligned with first row
 
         Colour bandCol = EqGraph::getBandColour(bandIndex_);
@@ -543,16 +664,24 @@ void EqBandEditor::resized()
     int x = 4;
     int w = getWidth() - 8;
 
-    // Enable + Type on first row
-    btnEnable_.setBounds(x, y, 70, rowH);
-    lblType_.setBounds(x + 75, y, lblW, rowH);
-    cbBandType_.setBounds(x + 120, y, 90, rowH);
+    // Band-ID badge occupies the top-left corner; the first two rows
+    // (Enable/Type, Filter) are inset to its right.
+    const int badgeSize = 40;
+    const int topX = x + badgeSize + 8;
+
+    // Enable + Type on first row (right of the badge)
+    btnEnable_.setBounds(topX, y, 70, rowH);
+    lblType_.setBounds(topX + 75, y, lblW, rowH);
+    cbBandType_.setBounds(topX + 120, y, 90, rowH);
     y += rowH + gap;
 
-    // IIR subtype (only advances y if visible)
-    lblSubType_.setBounds(x, y, lblW, rowH);
-    cbIIRSubType_.setBounds(x + lblW + 4, y, 130, rowH);
+    // IIR subtype (only advances y if visible) — right of the badge
+    lblSubType_.setBounds(topX, y, lblW, rowH);
+    cbIIRSubType_.setBounds(topX + lblW + 4, y, 130, rowH);
     if (cbIIRSubType_.isVisible()) y += rowH + gap;
+
+    // Keep the remaining (full-width) controls below the badge.
+    y = jmax(y, 4 + badgeSize + gap);
 
     // Butterworth order
     lblOrder_.setBounds(x, y, lblW, rowH);
@@ -573,41 +702,91 @@ void EqBandEditor::resized()
         y += rowH + gap;
     }
 
-    // Frequency
-    lblFreq_.setBounds(x, y, lblW, rowH);
-    sldFreq_.setBounds(x + lblW + 4, y, w - lblW - 40, rowH);
-    lblHz_.setBounds(getWidth() - 35, y, 30, rowH);
-    if (sldFreq_.isVisible()) y += rowH + gap;
+    // When the dynamics sliders are shown, lay the EQ params (Freq/Q/Gain) in a
+    // narrower left column and the dynamics params in a right column (which starts
+    // at the top, using the space freed by moving the badge to the left).
+    bool twoCol = sldDynThreshold_.isVisible();
+    const int colGap = 18;
+    int leftW  = twoCol ? jmax(180, (w - colGap) / 2) : w;
+    int rightX = x + leftW + colGap;
+    int rightW = w - leftW - colGap;
 
-    // Q
-    lblQ_.setBounds(x, y, lblW, rowH);
-    sldQ_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
-    if (sldQ_.isVisible()) y += rowH + gap;
+    int yCols = y;          // both columns start here
+    int yLeft = yCols;
 
-    // Gain row: dB slider or linear slider (mutually exclusive)
-    if (sldGain_.isVisible() || sldLinearGain_.isVisible())
-        y += 14; // extra spacing to clear band ID indicator
+    // ----- Left column: Frequency / Q / Gain -----
+    lblFreq_.setBounds(x, yLeft, lblW, rowH);
+    sldFreq_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 40, rowH);
+    lblHz_.setBounds(x + leftW - 32, yLeft, 30, rowH);
+    if (sldFreq_.isVisible()) yLeft += rowH + gap;
+
+    lblQ_.setBounds(x, yLeft, lblW, rowH);
+    sldQ_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 10, rowH);
+    if (sldQ_.isVisible()) yLeft += rowH + gap;
+
+    // Gain row: dB slider or linear slider (mutually exclusive).
     if (sldGain_.isVisible())
     {
-        lblGain_.setBounds(x, y, lblW, rowH);
-        sldGain_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
-        y += rowH + gap;
+        lblGain_.setBounds(x, yLeft, lblW, rowH);
+        sldGain_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 10, rowH);
+        yLeft += rowH + gap;
     }
     else if (sldLinearGain_.isVisible())
     {
-        lblGain_.setBounds(x, y, lblW, rowH);
-        sldLinearGain_.setBounds(x + lblW + 4, y, w - lblW - 10, rowH);
-        y += rowH + gap;
+        lblGain_.setBounds(x, yLeft, lblW, rowH);
+        sldLinearGain_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 10, rowH);
+        yLeft += rowH + gap;
     }
 
     // Gain band: mode toggle (Linear) + invert toggle
     if (btnGainLinear_.isVisible())
     {
-        btnGainLinear_.setBounds(x, y, 70, rowH);
+        btnGainLinear_.setBounds(x, yLeft, 70, rowH);
         if (btnInvertGain_.isVisible())
-            btnInvertGain_.setBounds(x + 75, y, 70, rowH);
-        y += rowH + gap;
+            btnInvertGain_.setBounds(x + 75, yLeft, 70, rowH);
+        yLeft += rowH + gap;
     }
+
+    // ----- Dynamics -----
+    // The "Dynamic mode" toggle stays in the left column (same spot whether on or
+    // off). When on, the "Dynamics" header + Auto/Link toggles sit above the
+    // threshold/range/attack/release sliders in the right column.
+    int yRight = yLeft;
+    if (btnDynActive_.isVisible())
+    {
+        btnDynActive_.setBounds(x, yLeft, 130, rowH);
+        yLeft += rowH + gap;
+
+        if (twoCol)
+        {
+            int yd = 4;   // right column starts at the top (badge is now on the left)
+            lblDynHeader_.setBounds(rightX, yd, 100, rowH);
+            int togRight = rightX + rightW;
+            if (btnDynLink_.isVisible())
+                btnDynLink_.setBounds(togRight - 58, yd, 58, rowH);
+            if (btnDynAuto_.isVisible())
+                btnDynAuto_.setBounds(togRight - 58 - 62, yd, 58, rowH);
+            yd += rowH + gap;
+
+            struct { Label* lbl; Slider* sld; } dynRows[] = {
+                { &lblDynThreshold_, &sldDynThreshold_ },
+                { &lblDynRange_,     &sldDynRange_     },
+                { &lblDynAttack_,    &sldDynAttack_    },
+                { &lblDynRelease_,   &sldDynRelease_   },
+                { &lblDynLookahead_, &sldDynLookahead_ },
+            };
+            const int dynLblW = 62;   // wider column so "Attack:"/"Release:" fit
+            for (auto& r : dynRows)
+            {
+                r.lbl->setBounds(rightX, yd, dynLblW, rowH);
+                r.sld->setBounds(rightX + dynLblW + 4, yd, rightW - dynLblW - 10, rowH);
+                yd += rowH + gap;
+            }
+            yRight = yd;
+        }
+    }
+
+    y = jmax(yLeft, yRight);
 
     // Delay — extra spacing to clear band ID indicator
     if (lblDelay_.isVisible())
@@ -637,11 +816,12 @@ void EqBandEditor::resized()
         if (btnLoadFIR_.isVisible()) y += rowH + gap;
     }
 
-    // FIR impulse response plot — fills remaining space
+    // FIR impulse response plot — fixed height (component self-sizes / scrolls)
     if (firPlot_.isVisible())
     {
-        int plotH = jmax(60, getHeight() - y - 4);
+        int plotH = 170;
         firPlot_.setBounds(x, y, w, plotH);
+        y += plotH + gap;
     }
 
     // Sample rate selector for raw biquad (before biquad coefficients)
@@ -692,7 +872,15 @@ void EqBandEditor::resized()
         cx += coeffRowW;
         lblA2_.setBounds(cx, y, coeffLblW, rowH);
         edA2_.setBounds(cx + coeffLblW + 2, y, coeffEdW, rowH);
+        y += rowH + gap;
     }
+
+    // Self-size height so the owning Viewport can scroll when the controls (e.g.
+    // the dynamics section) overflow the visible area. setSize() re-enters resized()
+    // once; the second pass is a no-op since the height then matches.
+    contentHeight_ = y + 4;
+    if (getHeight() != contentHeight_)
+        setSize(getWidth(), contentHeight_);
 }
 
 void EqBandEditor::sliderValueChanged(Slider* s)
@@ -725,9 +913,47 @@ void EqBandEditor::sliderValueChanged(Slider* s)
             band_->setDelaySamples((int)sldDelay_.getValue());
         }
     }
+    else if (s == &sldDynThreshold_)
+        band_->setDynThresholdDB((float)sldDynThreshold_.getValue());
+    else if (s == &sldDynRange_)
+        band_->setDynRangeDB((float)sldDynRange_.getValue());
+    else if (s == &sldDynAttack_)
+        band_->setDynAttackMs((float)sldDynAttack_.getValue());
+    else if (s == &sldDynRelease_)
+        band_->setDynReleaseMs((float)sldDynRelease_.getValue());
+    else if (s == &sldDynLookahead_)
+    {
+        // Lookahead is structural (changes latency/PDC). Update the model now, but
+        // defer the rebuild to drag-end (sliderDragEnded) to avoid PDC thrash; a
+        // non-drag change (text entry) rebuilds immediately.
+        band_->setDynLookaheadMs((float)sldDynLookahead_.getValue());
+        if (! dynLookaheadDragging_ && listener_ != nullptr)
+            listener_->bandStructureChanged(bandIndex_);
+        return;
+    }
 
     if (listener_ != nullptr)
         listener_->bandParameterChanged(bandIndex_);
+}
+
+void EqBandEditor::sliderDragStarted(Slider* s)
+{
+    if (s == &sldDynLookahead_)
+        dynLookaheadDragging_ = true;
+}
+
+void EqBandEditor::sliderDragEnded(Slider* s)
+{
+    if (s == &sldDynLookahead_)
+    {
+        dynLookaheadDragging_ = false;
+        if (band_ != nullptr && ! updating_)
+        {
+            band_->setDynLookaheadMs((float)sldDynLookahead_.getValue());
+            if (listener_ != nullptr)
+                listener_->bandStructureChanged(bandIndex_);
+        }
+    }
 }
 
 void EqBandEditor::comboBoxChanged(ComboBox* cb)
@@ -903,6 +1129,28 @@ void EqBandEditor::buttonClicked(Button* b)
     {
         delayInMs_ = btnDelayMs_.getToggleState();
         updateDelayDisplay();
+    }
+    else if (b == &btnDynActive_)
+    {
+        // Toggling dynamic changes the processing topology (detectors) → rebuild.
+        band_->setDynamicActive(btnDynActive_.getToggleState());
+        updateFromBand();   // reveal / hide the dynamic sub-controls
+        if (listener_ != nullptr)
+            listener_->bandStructureChanged(bandIndex_);
+    }
+    else if (b == &btnDynLink_)
+    {
+        // Link mode changes the detector set (shared vs per-channel) → rebuild.
+        band_->setDynLinked(btnDynLink_.getToggleState());
+        if (listener_ != nullptr)
+            listener_->bandStructureChanged(bandIndex_);
+    }
+    else if (b == &btnDynAuto_)
+    {
+        band_->setDynAuto(btnDynAuto_.getToggleState());
+        sldDynThreshold_.setEnabled(!band_->getDynAuto());
+        if (listener_ != nullptr)
+            listener_->bandParameterChanged(bandIndex_);
     }
     else if (b == &btnCopyCoeffs_)
     {
@@ -1251,15 +1499,15 @@ void EqBandEditor::IIRSubTypeCombo::showPopup()
         menu.addItem (id, text, true, sel == id);
     };
 
-    // Standard biquads — order 1/2, used most often
-    add (1, "Low Pass");
+    // Standard biquads — most-used first (Peak, then shelves, then HP/LP).
+    add (8, "Peak");
+    add (6, "Low Shelf");
+    add (7, "High Shelf");
     add (2, "High Pass");
+    add (1, "Low Pass");
     add (3, "Band Pass");
     add (4, "Notch");
     add (5, "All Pass");
-    add (6, "Low Shelf");
-    add (7, "High Shelf");
-    add (8, "Peak");
     menu.addSeparator();
 
     // Higher-order Butterworth + Linkwitz-Riley crossover

@@ -69,3 +69,36 @@ def norm_to_gain(n: float) -> float:
 def db_to_linear(db: float) -> float:
     """dB → linear amplitude (for IIR coefficient construction via EqBand.setGainDB)."""
     return float(10.0 ** (db / 20.0))
+
+
+# ---------------------------------------------------------------------------
+# Dynamic EQ (FabFilter-style per-band dynamics)
+# ---------------------------------------------------------------------------
+#
+# EqBand::applyDynamicIIR (and DynamicDetector for linked bands) modulate the
+# band gain by an offset O(dB) derived from a level detector:
+#
+#   detector = sidechain_filter(chain_input, f, Q)  # band's frequency region
+#       Peak       -> band-pass(f, Q)
+#       Low Shelf  -> low-pass(f, Q)   (energy below the corner)
+#       High Shelf -> high-pass(f, Q)  (energy above the corner)
+#   env      = one-pole(detector^2, attack/release) # smoothed power
+#   levelDB  = 10*log10(env)
+#   thr      = threshold_db  (or a slow average of levelDB when auto)
+#   over     = levelDB - thr
+#   O_dB     = clip(over, 0, |range_db|) * sign(range_db)
+#   effective_gain_dB = static_gain_dB + O_dB
+#
+# Linked bands use one shared detector across channels with reduction =
+# max(power over active channels); independent bands detect per channel.
+#
+# Lookahead (per band): the band's audio is delayed by lookahead_ms while the
+# detector reads the undelayed local signal, so the gain anticipates the audio.
+# This adds latency; the processor delays/compensates every path and reports the
+# total to the host (the testhost strips it, so de-latencied output is aligned).
+
+def dyn_offset_db(level_db: float, threshold_db: float, range_db: float) -> float:
+    """Steady-state dynamic gain offset (dB) for a detected level."""
+    over = level_db - threshold_db
+    mag = min(max(over, 0.0), abs(range_db))
+    return mag * (-1.0 if range_db < 0.0 else 1.0)

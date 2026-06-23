@@ -191,6 +191,51 @@ public:
     bool isEnabled() const { return enabled_; }
     void setEnabled(bool e) { enabled_ = e; }
 
+    // --- Dynamic EQ (FabFilter-style per-band dynamics) ---
+    // Only meaningful for gain-bearing single-biquad IIR types (Peak / Low/High shelf).
+    bool supportsDynamic() const;
+
+    /** Sidechain/detector filter for a dynamic band — chosen to match the region
+        the filter actually affects: band-pass for Peak, low-pass for Low Shelf,
+        high-pass for High Shelf. Tracks the band's frequency and Q. */
+    static IIRCoefficients makeDetectorCoeffs(IIRSubType subType, double sampleRate,
+                                              float freq, float q);
+
+    bool  isDynamicActive() const { return dynActive_; }
+    void  setDynamicActive(bool b);
+
+    float getDynThresholdDB() const { return dynThresholdDB_; }
+    void  setDynThresholdDB(float db) { dynThresholdDB_ = db; }
+
+    float getDynRangeDB() const { return dynRangeDB_; }       // signed: <0 = compress, >0 = expand/boost
+    void  setDynRangeDB(float db) { dynRangeDB_ = db; }
+
+    float getDynAttackMs() const { return dynAttackMs_; }
+    void  setDynAttackMs(float ms) { dynAttackMs_ = jmax(0.1f, ms); updateDynEnvCoeffs(); }
+
+    float getDynReleaseMs() const { return dynReleaseMs_; }
+    void  setDynReleaseMs(float ms) { dynReleaseMs_ = jmax(1.0f, ms); updateDynEnvCoeffs(); }
+
+    bool  getDynAuto() const { return dynAuto_; }
+    void  setDynAuto(bool b) { dynAuto_ = b; }
+
+    bool  getDynLinked() const { return dynLinked_; }
+    void  setDynLinked(bool b) { dynLinked_ = b; }
+
+    float getDynLookaheadMs() const { return dynLookaheadMs_; }
+    void  setDynLookaheadMs(float ms) { dynLookaheadMs_ = jlimit(0.f, 50.f, ms); }
+    /** Lookahead in samples (0 unless this is an active dynamic band). Used by the
+        chain/processor for latency accounting and to size the main delay. */
+    int   getLookaheadSamples(double sampleRate) const;
+
+    /** Linked mode: the processor supplies a per-sample dB-offset buffer for this block
+        (computed once across all linked channels). Pass nullptr to self-detect. */
+    void  setExternalDynOffset(const float* buf) { externalDynOffset_ = buf; }
+
+    /** This (processing-copy) band's last computed dynamic offset in dB. Read on the
+        audio thread by the processor to publish GUI metering (no cross-thread access). */
+    float getLastDynOffsetDB() const { return lastDynOffsetDB_; }
+
     // --- Channel routing (for mimo_eq) ---
     int getInputChannel() const { return inputChannel_; }
     void setInputChannel(int ch) { inputChannel_ = ch; }
@@ -202,6 +247,11 @@ public:
     // --- Processing ---
     void prepare(double sampleRate, int maxBlockSize);
     void processBlock(float* data, int numSamples);
+    /** Dynamic-aware processing. chainInput points to the unprocessed chain-input
+        signal used for self-detection (independent mode); ignored when an external
+        offset has been set (linked mode). For non-dynamic bands this is equivalent
+        to processBlock(data, numSamples). */
+    void processBlock(float* data, int numSamples, const float* chainInput);
     void reset();
 
     /** Copy parameters from source without resetting filter state.
@@ -210,8 +260,11 @@ public:
 
     // --- Frequency response ---
     // Returns complex response at frequency f (Hz) for magnitude+phase
-    // If alwaysCompute is true, returns the response even when disabled
-    std::complex<float> getFrequencyResponse(double freqHz, bool alwaysCompute = false) const;
+    // If alwaysCompute is true, returns the response even when disabled.
+    // extraGainDB adds a live gain offset (peak/shelf only) so the displayed
+    // curve can reflect the current dynamic gain.
+    std::complex<float> getFrequencyResponse(double freqHz, bool alwaysCompute = false,
+                                             float extraGainDB = 0.f) const;
 
     /** Rebuild the cached FIR frequency response via FFT.
         Called automatically when FIR coefficients change. */
@@ -226,6 +279,8 @@ public:
 private:
     void updateIIRCoefficients();
     void applyIIR(float* data, int numSamples);
+    void applyDynamicIIR(float* data, int numSamples, const float* chainInput);
+    void updateDynEnvCoeffs();   // recompute attack/release one-pole coeffs from ms + SR
     void applyCascadeIIR(float* data, int numSamples);
     void applyFIR(float* data, int numSamples);
     void resampleFIRCoefficients();
@@ -299,6 +354,34 @@ private:
     int inputChannel_ = -1;  // -1 = not set (diagonal)
     int outputChannel_ = -1;
     bool diagonal_ = true;
+
+    // --- Dynamic EQ ---
+    // Model parameters (default inert):
+    bool  dynActive_      = false;
+    float dynThresholdDB_ = -24.f;
+    float dynRangeDB_     = -6.f;    // signed
+    float dynAttackMs_    = 10.f;
+    float dynReleaseMs_   = 120.f;
+    bool  dynAuto_        = false;
+    bool  dynLinked_      = true;
+    float dynLookaheadMs_ = 0.f;
+
+    // Processing state (per processing copy):
+    BiquadSection dynDetector_;          // bandpass at freq/Q used for level detection
+    int   dynLookaheadSamples_ = 0;      // main-delay length (lookahead); 0 = none
+    std::vector<float> dynMainDelayBuffer_; // ring buffer for the lookahead main delay
+    int   dynMainDelayPos_ = 0;
+    float dynEnv_       = 0.f;           // smoothed detection power
+    float dynAtkCoeff_  = 0.f;           // one-pole attack coeff
+    float dynRelCoeff_  = 0.f;           // one-pole release coeff
+    float dynThreshEnv_ = -60.f;         // slow level average for auto-threshold (dB)
+    BiquadSection dynTarget_;            // target working coeffs at control rate
+    int   dynCtrlCounter_ = 0;           // samples until next control-rate recompute
+    int   dynRampLeft_    = 0;           // samples left in coeff interpolation
+    bool  dynNeedsSnap_   = true;        // snap (don't ramp) coeffs on first/after activation
+    float lastDynOffsetDB_ = 0.f;        // last computed offset (audio thread, for processor)
+    const float* externalDynOffset_ = nullptr;   // linked: per-sample dB offsets (set per block)
+    static constexpr int kDynCtrlSamples = 32;   // control-rate period for coeff recompute
 
     // Cached FIR frequency response (computed via FFT for fast display)
     std::vector<std::complex<float>> firFFT_;  // half-spectrum (N/2+1 bins)

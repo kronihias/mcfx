@@ -164,6 +164,24 @@ void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
         }
     }
 
+    // Build shared detectors for linked dynamic diagonal bands. Each drives the
+    // matching band index of every (in-mask) channel copy with one offset.
+    for (int b = 0; b < diagonalChain_.getNumBands(); ++b)
+    {
+        auto* band = diagonalChain_.getBand(b);
+        if (band != nullptr && band->isDynamicActive() && band->getDynLinked()
+            && band->supportsDynamic())
+        {
+            auto* det = new DynamicDetector();
+            det->setBandIndex(b);
+            det->prepare(currentSampleRate_, numCh, currentBlockSize_);
+            det->setParams(band->getIIRSubType(), band->getFrequency(), band->getQ(),
+                           band->getDynThresholdDB(), band->getDynRangeDB(),
+                           band->getDynAttackMs(), band->getDynReleaseMs(), band->getDynAuto());
+            newState->diagLinkedDyn.add(det);
+        }
+    }
+
     // Build per-path chain processing copies (including empty paths for passthrough)
     for (auto& kv : pathChains_)
     {
@@ -179,13 +197,74 @@ void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
         newState->pathChains[kv.first] = copy;
     }
 
-    // Compute and report maximum convolver latency across all chains
-    int maxLatency = 0;
-    for (auto* ch : newState->diagChannelChains)
-        maxLatency = jmax(maxLatency, ch->getConvolverLatency());
-    for (auto* ch : newState->ownedPathChains)
-        maxLatency = jmax(maxLatency, ch->getConvolverLatency());
-    setLatencySamples(maxLatency);
+    // --- Latency accounting + cross-path compensation ---
+    // Each chain's latency = convolver (FIR) + dynamic lookahead, summed serially.
+    // Diagonal output is delayed by D_diag; a MIMO path contributes
+    // (sourceLatency + pathLatency); each output channel is the max of its
+    // contributions; the plugin aligns every output to G = the global max.
+    const double sr = currentSampleRate_;
+    auto inMask = [&](int ch1based)
+    {
+        return newState->diagChannelMask.empty()
+            || newState->diagChannelMask.count(ch1based) > 0;
+    };
+
+    int D_diag = newState->diagChannelChains.isEmpty()
+        ? 0 : newState->diagChannelChains[0]->getChainLatencySamples(sr);
+
+    std::vector<int> channelLat((size_t) jmax(0, numCh), 0);
+    std::vector<bool> isTarget((size_t) jmax(0, numCh), false);
+
+    // MIMO-target channels: latency = max contribution; mark them.
+    for (auto& kv : newState->pathChains)
+    {
+        int inCh1 = kv.first.first;
+        int outCh = kv.first.second - 1;
+        if (outCh < 0 || outCh >= numCh) continue;
+        isTarget[(size_t) outCh] = true;
+        int srcLat = inMask(inCh1) ? D_diag : 0;
+        int pathTotal = srcLat + kv.second->getChainLatencySamples(sr);
+        channelLat[(size_t) outCh] = jmax(channelLat[(size_t) outCh], pathTotal);
+    }
+    // Non-target channels: diagonal (if in mask) or passthrough.
+    for (int ch = 0; ch < numCh; ++ch)
+        if (! isTarget[(size_t) ch])
+            channelLat[(size_t) ch] = inMask(ch + 1) ? D_diag : 0;
+
+    int G = 0;
+    for (int ch = 0; ch < numCh; ++ch)
+        G = jmax(G, channelLat[(size_t) ch]);
+
+    // Per-path compensation: align each contribution to its output channel's latency.
+    for (auto& kv : newState->pathChains)
+    {
+        int inCh1 = kv.first.first;
+        int outCh = kv.first.second - 1;
+        if (outCh < 0 || outCh >= numCh) continue;
+        int srcLat = inMask(inCh1) ? D_diag : 0;
+        int pathTotal = srcLat + kv.second->getChainLatencySamples(sr);
+        newState->pathComp[kv.first].prepare(jmax(0, channelLat[(size_t) outCh] - pathTotal));
+    }
+    // Per-output compensation: align every channel to G.
+    newState->outComp.resize((size_t) jmax(0, numCh));
+    for (int ch = 0; ch < numCh; ++ch)
+        newState->outComp[(size_t) ch].prepare(jmax(0, G - channelLat[(size_t) ch]));
+
+    // Linked detectors: delay detection by the upstream accumulated latency so the
+    // shared offset aligns with each linked band's local signal (net lookahead = L_b).
+    for (auto* det : newState->diagLinkedDyn)
+    {
+        int dBefore = newState->diagChannelChains.isEmpty()
+            ? 0 : newState->diagChannelChains[0]->getAccumLatencyBeforeBand(det->getBandIndex(), sr);
+        det->setDetectionDelaySamples(dBefore);
+    }
+
+    newState->globalLatency = G;
+    if (G != lastReportedLatency_)
+    {
+        setLatencySamples(G);
+        lastReportedLatency_ = G;
+    }
 
     // Publish lock-free — audio thread will pick up on next buffer
     auto* oldPending = pendingState_.exchange(newState, std::memory_order_release);
@@ -251,6 +330,18 @@ void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
                 if (modelChain != nullptr)
                     kv.second->syncParametersFrom(*modelChain);
             }
+
+            // Refresh linked dynamic detector params from the model (threshold/range/
+            // attack/release/auto/freq/Q can all change via the lightweight sync path).
+            for (auto* det : activeState_->diagLinkedDyn)
+            {
+                auto* band = diagonalChain_.getBand(det->getBandIndex());
+                if (band != nullptr)
+                    det->setParams(band->getIIRSubType(), band->getFrequency(), band->getQ(),
+                                   band->getDynThresholdDB(), band->getDynRangeDB(),
+                                   band->getDynAttackMs(), band->getDynReleaseMs(),
+                                   band->getDynAuto());
+            }
         }
     }
 }
@@ -295,6 +386,26 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
             inputSnapshot_.copyFrom(ch, 0, buffer.getReadPointer(ch), numSamples);
     }
 
+    // Linked dynamic pre-pass: compute shared per-sample gain offsets from the raw
+    // input across in-mask channels, then point each in-mask channel copy's matching
+    // band at the shared offset buffer. Must run before Step 1 (buffer still raw).
+    if (!activeState_->diagLinkedDyn.isEmpty())
+    {
+        for (auto* det : activeState_->diagLinkedDyn)
+        {
+            det->computeOffsets(buffer, diagMask, numSamples);
+            const int b = det->getBandIndex();
+            const float* off = det->offsets();
+            for (int ch = 0; ch < numChannels && ch < (int)diagChains.size(); ++ch)
+            {
+                bool diagActive = diagMask.empty() || diagMask.count(ch + 1) > 0;
+                if (!diagActive) continue;
+                if (auto* band = diagChains[ch]->getBand(b))
+                    band->setExternalDynOffset(off);
+            }
+        }
+    }
+
     // Step 1: Apply diagonal chain to channels in mask.
     // Channels not in the mask are left untouched (not muted) — MIMO
     // paths may still route them.
@@ -336,6 +447,12 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
             tempBuffer_.copyFrom(0, 0, source, numSamples);
             if (chain->getNumBands() > 0)
                 chain->processBlock(tempBuffer_.getWritePointer(0), numSamples);
+
+            // Align this path's contribution to its output channel's latency.
+            auto pcIt = activeState_->pathComp.find(kv.first);
+            if (pcIt != activeState_->pathComp.end())
+                pcIt->second.processBlock(tempBuffer_.getWritePointer(0), numSamples);
+
             workBuffer_.addFrom(outCh, 0, tempBuffer_.getReadPointer(0), numSamples);
         }
 
@@ -345,9 +462,34 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
                 buffer.copyFrom(ch, 0, workBuffer_.getReadPointer(ch), numSamples);
     }
 
+    // Per-output latency compensation: delay each channel so all outputs (diagonal,
+    // MIMO targets, passthrough) land at the single reported plugin latency G.
+    if (activeState_->globalLatency > 0)
+        for (int ch = 0; ch < numChannels && ch < (int)activeState_->outComp.size(); ++ch)
+            activeState_->outComp[(size_t)ch].processBlock(buffer.getWritePointer(ch), numSamples);
+
     // Capture post-processing spectrum
     if (analyzerOn)
         outputAnalyzer_.pushBuffer(buffer, numSamples);
+
+    // ---- Publish diagonal dynamic offsets for GUI metering (lock-free) ----
+    // Reads only audio-thread-owned processing copies (never the GUI-mutable model),
+    // writing into the diagDynMeter_ atomics that the GUI polls. A representative
+    // (first in-mask) channel copy carries the offset for both linked and
+    // independent bands.
+    int repCh = -1;
+    for (int ch = 0; ch < numChannels && ch < (int)diagChains.size(); ++ch)
+        if (diagMask.empty() || diagMask.count(ch + 1) > 0) { repCh = ch; break; }
+
+    for (int b = 0; b < kMaxAutomatedBands; ++b)
+    {
+        float off = 0.f;
+        if (repCh >= 0)
+            if (auto* cb = diagChains[repCh]->getBand(b))
+                if (cb->isDynamicActive())
+                    off = cb->getLastDynOffsetDB();
+        diagDynMeter_[(size_t)b].store(off, std::memory_order_relaxed);
+    }
 }
 
 AudioProcessorEditor* Mcfx_mimoeqAudioProcessor::createEditor()
@@ -508,6 +650,21 @@ static bool bandStructureMatchesJson(const EqBand* band, const var& json)
     var params = json["parameters"];
     if (!params.isObject())
         return false;
+
+    // Dynamic on/off and link mode are structural (they change the detector set /
+    // the linked-detector list), so a difference there forces a full rebuild.
+    {
+        var dyn = params["dynamic"];
+        bool targetActive = dyn.isObject() && (bool)dyn.getProperty("active", true);
+        bool targetLinked = dyn.isObject() ? (bool)dyn.getProperty("linked", true) : true;
+        float targetLA = dyn.isObject() ? (float)dyn.getProperty("lookahead_ms", 0.0) : 0.f;
+        if (targetActive != band->isDynamicActive())
+            return false;
+        if (targetActive && targetLinked != band->getDynLinked())
+            return false;
+        if (targetActive && targetLA != band->getDynLookaheadMs())
+            return false;
+    }
 
     String typeStr = params.getProperty("type", "").toString();
 
@@ -676,6 +833,18 @@ void Mcfx_mimoeqAudioProcessor::syncRestoreState(const String& targetState)
                     band->setInvertGain((bool)params["invert"]);
                 else if (band->getType() == EqBandType::Gain)
                     band->setInvertGain(false);
+            }
+
+            // Dynamic continuous params (active/linked are structural — handled by
+            // the rebuild path, so they never reach here).
+            var dyn = params["dynamic"];
+            if (dyn.isObject())
+            {
+                if (dyn.hasProperty("threshold_db")) band->setDynThresholdDB((float)dyn["threshold_db"]);
+                if (dyn.hasProperty("range_db"))     band->setDynRangeDB((float)dyn["range_db"]);
+                if (dyn.hasProperty("attack_ms"))    band->setDynAttackMs((float)dyn["attack_ms"]);
+                if (dyn.hasProperty("release_ms"))   band->setDynReleaseMs((float)dyn["release_ms"]);
+                band->setDynAuto((bool)dyn.getProperty("auto", false));
             }
         }
 

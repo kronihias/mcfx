@@ -107,6 +107,59 @@ void EqBand::setInvertGain(bool inv)
     }
 }
 
+// --- Dynamic EQ ---
+
+bool EqBand::supportsDynamic() const
+{
+    if (type_ != EqBandType::IIR || hasRawCoeffs_)
+        return false;
+    return iirSubType_ == IIRSubType::Peak
+        || iirSubType_ == IIRSubType::LowShelf
+        || iirSubType_ == IIRSubType::HighShelf;
+}
+
+IIRCoefficients EqBand::makeDetectorCoeffs(IIRSubType subType, double sampleRate,
+                                           float freq, float q)
+{
+    float f = jlimit(20.f, (float)(sampleRate * 0.499), freq);
+    switch (subType)
+    {
+        case IIRSubType::LowShelf:  return IIRCoefficients::makeLowPass (sampleRate, f, q);
+        case IIRSubType::HighShelf: return IIRCoefficients::makeHighPass(sampleRate, f, q);
+        default:                    return IIRCoefficients::makeBandPass(sampleRate, f, q);
+    }
+}
+
+int EqBand::getLookaheadSamples(double sampleRate) const
+{
+    if (! dynActive_ || ! supportsDynamic() || dynLookaheadMs_ <= 0.f)
+        return 0;
+    return juce::roundToInt((double) dynLookaheadMs_ * 0.001 * sampleRate);
+}
+
+void EqBand::setDynamicActive(bool b)
+{
+    if (b == dynActive_)
+        return;
+    dynActive_ = b;
+    // Start clean so the offset ramps in from 0 dB (no pop on toggle).
+    dynEnv_ = 0.f;
+    dynThreshEnv_ = dynThresholdDB_;
+    dynCtrlCounter_ = 0;
+    dynRampLeft_ = 0;
+    dynNeedsSnap_ = true;
+    dynDetector_.resetState();
+}
+
+void EqBand::updateDynEnvCoeffs()
+{
+    double sr = sampleRate_ > 0.0 ? sampleRate_ : 48000.0;
+    double atkSamples = jmax(1.0, (double)dynAttackMs_  * 0.001 * sr);
+    double relSamples = jmax(1.0, (double)dynReleaseMs_ * 0.001 * sr);
+    dynAtkCoeff_ = (float)std::exp(-1.0 / atkSamples);
+    dynRelCoeff_ = (float)std::exp(-1.0 / relSamples);
+}
+
 bool EqBand::usesCascade() const
 {
     return iirSubType_ == IIRSubType::ButterworthLP
@@ -477,6 +530,22 @@ void EqBand::prepare(double sampleRate, int maxBlockSize)
         delayWritePos_ = 0;
     }
 
+    // Dynamic EQ state
+    updateDynEnvCoeffs();
+    dynThreshEnv_ = dynThresholdDB_;
+    externalDynOffset_ = nullptr;
+    lastDynOffsetDB_ = 0.f;
+    if (supportsDynamic())
+    {
+        auto dc = makeDetectorCoeffs(iirSubType_, sampleRate_, frequency_, q_);
+        dynDetector_.setFromStandard(dc.coefficients[0], dc.coefficients[1], dc.coefficients[2],
+                                      dc.coefficients[3], dc.coefficients[4]);
+    }
+    // Size the lookahead main-delay ring from the current lookahead time.
+    dynLookaheadSamples_ = getLookaheadSamples(sampleRate_);
+    dynMainDelayBuffer_.assign((size_t) jmax(0, dynLookaheadSamples_), 0.f);
+    dynMainDelayPos_ = 0;
+
     reset();
     prepared_ = true;
 }
@@ -496,6 +565,33 @@ void EqBand::syncParametersFrom(const EqBand& source)
     }
 
     enabled_ = source.enabled_;
+
+    // Dynamic EQ parameters — copy without disturbing detector/envelope state so
+    // continuous changes (threshold/range/attack/release/auto) stay click-free.
+    // (dynActive / dynLinked changes are routed through a full rebuild, not sync.)
+    {
+        bool wasActive = dynActive_;
+        dynActive_      = source.dynActive_;
+        dynThresholdDB_ = source.dynThresholdDB_;
+        dynRangeDB_     = source.dynRangeDB_;
+        dynAuto_        = source.dynAuto_;
+        dynLinked_      = source.dynLinked_;
+        dynLookaheadMs_ = source.dynLookaheadMs_;  // realized via rebuild (structural)
+        if (dynAttackMs_ != source.dynAttackMs_ || dynReleaseMs_ != source.dynReleaseMs_)
+        {
+            dynAttackMs_  = source.dynAttackMs_;
+            dynReleaseMs_ = source.dynReleaseMs_;
+            updateDynEnvCoeffs();
+        }
+        if (dynActive_ && !wasActive)
+        {
+            dynEnv_ = 0.f;
+            dynThreshEnv_ = dynThresholdDB_;
+            dynCtrlCounter_ = 0;
+            dynNeedsSnap_ = true;
+            dynDetector_.resetState();
+        }
+    }
 
     if (type_ == EqBandType::IIR)
     {
@@ -582,6 +678,21 @@ void EqBand::processBlock(float* data, int numSamples)
     }
 }
 
+void EqBand::processBlock(float* data, int numSamples, const float* chainInput)
+{
+    if (!enabled_)
+        return;
+
+    if (type_ == EqBandType::IIR && dynActive_ && supportsDynamic())
+    {
+        applyDynamicIIR(data, numSamples, chainInput);
+        return;
+    }
+
+    // Non-dynamic band (or unsupported type): static processing.
+    processBlock(data, numSamples);
+}
+
 void EqBand::reset()
 {
     iirWork_.resetState();
@@ -591,6 +702,15 @@ void EqBand::reset()
     std::fill(firState_.begin(), firState_.end(), 0.f);
     std::fill(delayBuffer_.begin(), delayBuffer_.end(), 0.f);
     delayWritePos_ = 0;
+
+    // Dynamic EQ runtime state
+    dynDetector_.resetState();
+    dynEnv_ = 0.f;
+    dynCtrlCounter_ = 0;
+    dynRampLeft_ = 0;
+    dynNeedsSnap_ = true;
+    std::fill(dynMainDelayBuffer_.begin(), dynMainDelayBuffer_.end(), 0.f);
+    dynMainDelayPos_ = 0;
 }
 
 void EqBand::updateIIRCoefficients()
@@ -879,6 +999,144 @@ void EqBand::applyIIR(float* data, int numSamples)
     }
 }
 
+void EqBand::applyDynamicIIR(float* data, int numSamples, const float* chainInput)
+{
+    // Dynamic peak/shelf: a level detector (band-pass/LP/HP at the band's freq/Q)
+    // modulates the band gain by an offset O(dB) bounded by Range. The envelope
+    // follower runs per-sample; the (transcendental) coefficient recompute runs at
+    // control rate and is interpolated per sample (zipper-free, bounded CPU).
+    //
+    // Lookahead: the detector reads the signal arriving at this band (its local
+    // input, undelayed) while the audio is processed through a main delay of
+    // dynLookaheadSamples_, so the gain anticipates the audio by that many samples.
+    // Linked bands consume externalDynOffset_ (computed upstream, already aligned).
+    ignoreUnused(chainInput);   // independent bands self-detect on the local signal
+    const bool linked = (externalDynOffset_ != nullptr);
+    const bool hasLA  = dynLookaheadSamples_ > 0 && ! dynMainDelayBuffer_.empty();
+
+    const float rngAbs  = std::abs(dynRangeDB_);
+    const float rngSign = (dynRangeDB_ < 0.f) ? -1.f : 1.f;
+
+    // Auto-threshold tracking: one-pole over the detection level, ~1.5 s, stepped
+    // once per control block.
+    const float autoCoeff = (float)std::exp(-(double)kDynCtrlSamples
+                                            / (1.5 * jmax(1.0, sampleRate_)));
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        // Advance parameter smoothing so freq/Q/static-gain edits still ramp.
+        float f    = smoothFreq_.getNextValue();
+        float q    = smoothQ_.getNextValue();
+        float gLin = smoothGainLin_.getNextValue();
+
+        float localIn = data[i];   // signal arriving at this band (detection + lookahead source)
+
+        // --- Per-sample detection (independent mode self-detects on local signal) ---
+        if (!linked)
+        {
+            float bp = dynDetector_.process(localIn);
+            float p  = bp * bp;
+            float c  = (p > dynEnv_) ? dynAtkCoeff_ : dynRelCoeff_;
+            dynEnv_  = c * dynEnv_ + (1.f - c) * p;
+        }
+
+        // --- Control-rate coefficient recompute ---
+        if (dynCtrlCounter_ <= 0)
+        {
+            dynCtrlCounter_ = kDynCtrlSamples;
+
+            float O;
+            if (linked)
+            {
+                O = externalDynOffset_[i];
+            }
+            else
+            {
+                float lvlDB = 10.f * std::log10(dynEnv_ + 1e-12f);
+                float thr;
+                if (dynAuto_)
+                {
+                    dynThreshEnv_ = autoCoeff * dynThreshEnv_ + (1.f - autoCoeff) * lvlDB;
+                    thr = dynThreshEnv_;
+                }
+                else
+                {
+                    thr = dynThresholdDB_;
+                }
+                float over = lvlDB - thr;
+                O = jlimit(0.f, rngAbs, over) * rngSign;
+            }
+            lastDynOffsetDB_ = O;
+
+            // Effective gain (linear) = static gain * 10^(O/20).
+            float effLin = gLin * std::pow(10.f, O * 0.05f);
+            float ff = jlimit(20.f, (float)(sampleRate_ * 0.499), f);
+
+            IIRCoefficients c;
+            switch (iirSubType_)
+            {
+                case IIRSubType::LowShelf:  c = IIRCoefficients::makeLowShelf  (sampleRate_, ff, q, effLin); break;
+                case IIRSubType::HighShelf: c = IIRCoefficients::makeHighShelf (sampleRate_, ff, q, effLin); break;
+                default:                    c = IIRCoefficients::makePeakFilter(sampleRate_, ff, q, effLin); break;
+            }
+            dynTarget_.setFromStandard(c.coefficients[0], c.coefficients[1], c.coefficients[2],
+                                        c.coefficients[3], c.coefficients[4]);
+
+            // Track the detector filter to the (possibly dragged) freq/Q. The
+            // filter shape follows the band type (band-pass / low-pass / high-pass).
+            if (!linked)
+            {
+                auto dc = makeDetectorCoeffs(iirSubType_, sampleRate_, ff, q);
+                dynDetector_.setFromStandard(dc.coefficients[0], dc.coefficients[1], dc.coefficients[2],
+                                              dc.coefficients[3], dc.coefficients[4]);
+            }
+
+            if (dynNeedsSnap_)
+            {
+                // Snap working coeffs to target (preserve filter state) — avoids
+                // ramping from stale coefficients on the first block / after toggle.
+                float v1 = iirWork_.v1, v2 = iirWork_.v2;
+                iirWork_ = dynTarget_;
+                iirWork_.v1 = v1;
+                iirWork_.v2 = v2;
+                dynRampLeft_ = 0;
+                dynNeedsSnap_ = false;
+            }
+            else
+            {
+                dynRampLeft_ = kDynCtrlSamples;
+            }
+        }
+        --dynCtrlCounter_;
+
+        // --- Per-sample coefficient interpolation toward target ---
+        if (dynRampLeft_ > 0)
+        {
+            float t = 1.f / (float)dynRampLeft_;
+            iirWork_.b0 += (dynTarget_.b0 - iirWork_.b0) * t;
+            iirWork_.a1 += (dynTarget_.a1 - iirWork_.a1) * t;
+            iirWork_.a2 += (dynTarget_.a2 - iirWork_.a2) * t;
+            iirWork_.c1 += (dynTarget_.c1 - iirWork_.c1) * t;
+            iirWork_.c2 += (dynTarget_.c2 - iirWork_.c2) * t;
+            --dynRampLeft_;
+        }
+
+        // --- Lookahead: process the main signal delayed by dynLookaheadSamples_,
+        //     so the gain (from the undelayed localIn) anticipates it. ---
+        float x = localIn;
+        if (hasLA)
+        {
+            int rp = dynMainDelayPos_ - dynLookaheadSamples_;
+            if (rp < 0) rp += dynLookaheadSamples_;
+            x = dynMainDelayBuffer_[(size_t) rp];
+            dynMainDelayBuffer_[(size_t) dynMainDelayPos_] = localIn;
+            dynMainDelayPos_ = (dynMainDelayPos_ + 1) % dynLookaheadSamples_;
+        }
+
+        data[i] = iirWork_.process(x);
+    }
+}
+
 void EqBand::applyCascadeIIR(float* data, int numSamples)
 {
     int nSections = (int)cascadeWork_.size();
@@ -1039,7 +1297,7 @@ void EqBand::applyDelay(float* data, int numSamples)
     }
 }
 
-std::complex<float> EqBand::getFrequencyResponse(double freqHz, bool alwaysCompute) const
+std::complex<float> EqBand::getFrequencyResponse(double freqHz, bool alwaysCompute, float extraGainDB) const
 {
     if (!enabled_ && !alwaysCompute)
         return std::complex<float>(1.f, 0.f);
@@ -1066,7 +1324,25 @@ std::complex<float> EqBand::getFrequencyResponse(double freqHz, bool alwaysCompu
             }
 
             // Single biquad: H(z) = (b0 + b1*z^-1 + b2*z^-2) / (1 + a1*z^-1 + a2*z^-2)
-            auto* c = iirCoeffs_.coefficients;
+            // For dynamic peak/shelf bands, recompute coefficients at the live
+            // effective gain so the displayed curve tracks the dynamic action.
+            IIRCoefficients dynC;
+            const float* c = iirCoeffs_.coefficients;
+            if (extraGainDB != 0.f && !hasRawCoeffs_
+                && (iirSubType_ == IIRSubType::Peak
+                    || iirSubType_ == IIRSubType::LowShelf
+                    || iirSubType_ == IIRSubType::HighShelf))
+            {
+                float effLin = Decibels::decibelsToGain(gainDB_ + extraGainDB);
+                float f = jlimit(20.f, (float)(sampleRate_ * 0.499), frequency_);
+                switch (iirSubType_)
+                {
+                    case IIRSubType::LowShelf:  dynC = IIRCoefficients::makeLowShelf  (sampleRate_, f, q_, effLin); break;
+                    case IIRSubType::HighShelf: dynC = IIRCoefficients::makeHighShelf (sampleRate_, f, q_, effLin); break;
+                    default:                    dynC = IIRCoefficients::makePeakFilter(sampleRate_, f, q_, effLin); break;
+                }
+                c = dynC.coefficients;
+            }
             float b0 = c[0], b1 = c[1], b2 = c[2], a1 = c[3], a2 = c[4];
 
             std::complex<double> num = (double)b0 + (double)b1 * z_inv + (double)b2 * z_inv2;
@@ -1276,6 +1552,24 @@ var EqBand::toJson() const
                 params->setProperty("delay_samples", delaySamples_);
                 break;
         }
+
+        // Dynamic EQ — only emitted when active, so existing presets are unchanged.
+        if (dynActive_ && supportsDynamic())
+        {
+            auto* dyn = new DynamicObject();
+            dyn->setProperty("active", true);
+            dyn->setProperty("threshold_db", dynThresholdDB_);
+            dyn->setProperty("range_db", dynRangeDB_);
+            dyn->setProperty("attack_ms", dynAttackMs_);
+            dyn->setProperty("release_ms", dynReleaseMs_);
+            if (dynAuto_)
+                dyn->setProperty("auto", true);
+            dyn->setProperty("linked", dynLinked_);
+            if (dynLookaheadMs_ > 0.f)
+                dyn->setProperty("lookahead_ms", dynLookaheadMs_);
+            params->setProperty("dynamic", var(dyn));
+        }
+
         obj->setProperty("parameters", var(params));
     }
 
@@ -1430,6 +1724,20 @@ EqBand* EqBand::fromJson(const var& json)
                     band->setQ((float)params.getProperty("Q", 0.707));
                     band->setGainDB((float)params.getProperty("gain_db", 0.0));
                 }
+            }
+
+            // Dynamic EQ parameters (peak/shelf only; ignored on other IIR types).
+            var dyn = params["dynamic"];
+            if (dyn.isObject())
+            {
+                band->setDynThresholdDB((float)dyn.getProperty("threshold_db", -24.0));
+                band->setDynRangeDB((float)dyn.getProperty("range_db", -6.0));
+                band->setDynAttackMs((float)dyn.getProperty("attack_ms", 10.0));
+                band->setDynReleaseMs((float)dyn.getProperty("release_ms", 120.0));
+                band->setDynAuto((bool)dyn.getProperty("auto", false));
+                band->setDynLinked((bool)dyn.getProperty("linked", true));
+                band->setDynLookaheadMs((float)dyn.getProperty("lookahead_ms", 0.0));
+                band->setDynamicActive((bool)dyn.getProperty("active", true));
             }
         }
     }
