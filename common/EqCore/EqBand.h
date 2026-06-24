@@ -191,7 +191,7 @@ public:
     bool isEnabled() const { return enabled_; }
     void setEnabled(bool e) { enabled_ = e; }
 
-    // --- Dynamic EQ (FabFilter-style per-band dynamics) ---
+    // --- Dynamic EQ (per-band dynamics) ---
     // Only meaningful for gain-bearing single-biquad IIR types (Peak / Low/High shelf).
     bool supportsDynamic() const;
 

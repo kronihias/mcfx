@@ -94,7 +94,7 @@ Multichannel MIMO (Multiple Input Multiple Output) parametric equalizer.
 
 - Applies per-channel EQ on the diagonal (optionally restricted to a subset of channels) and per input-to-output path EQ chains for cross-channel processing
 - Diagonal chain supports up to 24 automated IIR bands (HP, low shelf, peak, high shelf, LP) with host automation via VST3 parameters
-- Dynamic EQ (FabFilter-style) on peak/shelf bands: per-band threshold, range (cut or boost), attack, release, auto-threshold and **lookahead**. The detector tracks the band type (band-pass for peak, low/high-pass for shelves). A live gain dot, moving response curve and range bracket show the action on the graph. Detection is per-band link-selectable — *linked* drives one shared gain change across all channels (preserves Ambisonic/stereo imaging), *independent* lets each channel react on its own
+- Dynamic EQ on peak/shelf bands: per-band threshold, range (cut or boost), attack, release, auto-threshold and **lookahead**. The detector tracks the band type (band-pass for peak, low/high-pass for shelves). A live gain dot, moving response curve and range bracket show the action on the graph. Detection is per-band link-selectable — *linked* drives one shared gain change across all channels (preserves Ambisonic/stereo imaging), *independent* lets each channel react on its own
 - Lookahead is per band; the plugin latency-compensates all paths (diagonal + MIMO, including FIR latency) and reports the total to the host
 - Individual input-to-output path chains for routing-aware corrections (e.g. speaker crosstalk compensation), supporting IIR, FIR (partitioned convolution), delay, and gain nodes
 - Routing can be visualized as a matrix or wires view
@@ -264,7 +264,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
-- `mcfx_mimoeq`: dynamic EQ (FabFilter-style) on peak/shelf bands — per-band threshold, range (cut/boost), attack, release, auto-threshold, and a per-band detection link (linked = one shared gain change across channels, independent = per-channel). Type-aware detector (band-pass for peak, low/high-pass for shelves). Live gain dot, moving response curve and range bracket on the graph. Available on diagonal and MIMO path bands.
+- `mcfx_mimoeq`: dynamic EQ on peak/shelf bands — per-band threshold, range (cut/boost), attack, release, auto-threshold, and a per-band detection link (linked = one shared gain change across channels, independent = per-channel). Type-aware detector (band-pass for peak, low/high-pass for shelves). Live gain dot, moving response curve and range bracket on the graph. Available on diagonal and MIMO path bands.
 - `mcfx_mimoeq`: per-band **lookahead** for the dynamic EQ — the detector reads ahead of the audio so the gain is in place before a transient. All paths (diagonal + MIMO, including FIR latency) are latency-compensated and the total is reported to the host.
 
 ### 0.8.8 (2026-06-06)

@@ -72,7 +72,7 @@ def db_to_linear(db: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Dynamic EQ (FabFilter-style per-band dynamics)
+# Dynamic EQ (per-band dynamics)
 # ---------------------------------------------------------------------------
 #
 # EqBand::applyDynamicIIR (and DynamicDetector for linked bands) modulate the

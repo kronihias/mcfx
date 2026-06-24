@@ -1155,7 +1155,7 @@ def test_symmetric_fir_group_delay_matches_centre_tap():
 
 
 # ===========================================================================
-# Tier-2 — Dynamic EQ (FabFilter-style per-band dynamics)
+# Tier-2 — Dynamic EQ (per-band dynamics)
 # ===========================================================================
 #
 # A dynamic peak/shelf band moves its gain by an offset derived from a level
