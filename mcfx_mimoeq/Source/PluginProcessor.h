@@ -161,6 +161,8 @@ public:
     int editorAnalyzerChannel = 0;       // 0 = sum, 1..N = specific channel
     bool analyzerAutoNormalize = true;    // normalize to 0dB peak
     float analyzerOffset = 0.f;          // dB offset (when auto-normalize is off)
+    bool editorSpectrogramOn = false;     // persisted: spectrogram vs spectrum view
+    bool editorSpectroPost = false;       // persisted: false = pre-EQ, true = post-EQ source
     bool editorPhaseOn = false;          // persisted phase-graph toggle state
 
     double getSampleRate_() const { return currentSampleRate_; }

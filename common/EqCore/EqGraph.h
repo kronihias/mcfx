@@ -65,6 +65,14 @@ public:
     void setAnalyzerAutoNormalize(bool on) { analyzerAutoNormalize_ = on; }
     void setAnalyzerOffset(float dbOffset) { analyzerOffset_ = dbOffset; }
 
+    /** Rolling spectrogram view (X = frequency, Y = time, colour = level) drawn
+        behind the EQ curve, instead of the spectrum overlay. Off by default. */
+    void setSpectrogramMode(bool on);
+    bool getSpectrogramMode() const { return spectrogramMode_; }
+    /** Which signal the spectrogram shows: false = pre-EQ (input), true = post-EQ. */
+    void setSpectrogramSource(bool post) { spectroPost_ = post; }
+    bool getSpectrogramSource() const { return spectroPost_; }
+
     static Colour getBandColour(int bandIndex);
 
     void paint(Graphics& g) override;
@@ -88,6 +96,9 @@ private:
 
     void calcPaths();
     void calcAnalyzerPaths();
+    void writeSpectroRow();
+    void drawSpectrogram(Graphics& g, Rectangle<int> plot);
+    Colour spectroColour(float v01) const;
     void rebuildGridPaths();
     void drawGrid(Graphics& g);
     void drawBandHandles(Graphics& g);
@@ -135,6 +146,16 @@ private:
     float analyzerOffset_ = 0.f;
     Path pathAnalyzerIn_;
     Path pathAnalyzerOut_;
+
+    // Rolling spectrogram (fixed-resolution ring-buffer image, scaled to the plot
+    // so it survives resizes). Default off; populated on the refresh timer.
+    bool spectrogramMode_ = false;
+    bool spectroPost_ = false;                 // false = input (pre), true = output (post)
+    static constexpr int kSpecW = 1024;        // log-frequency columns
+    static constexpr int kSpecH = 512;         // history rows
+    Image spectro_;
+    int specWrite_ = 0;
+    std::vector<float> specSmoothDb_;          // per-column temporal smoothing
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqGraph)
 };

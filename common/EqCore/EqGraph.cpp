@@ -87,23 +87,33 @@ void EqGraph::paint(Graphics& g)
 
     drawGrid(g);
 
-    // Draw spectrum analyzer behind EQ curves
+    // Draw spectrum analyzer (or rolling spectrogram) behind the EQ curves
     if (analyzerOn_ && (inputAnalyzer_ != nullptr || outputAnalyzer_ != nullptr))
     {
-        calcAnalyzerPaths();
-
-        // Input spectrum: semi-transparent white, thin
-        if (inputAnalyzer_ != nullptr)
+        if (spectrogramMode_)
         {
-            g.setColour(Colour(0x44ffffff));
-            g.strokePath(pathAnalyzerIn_, PathStrokeType(0.75f));
+            Rectangle<int> plot((int)xmargin_, (int)(ymargin_ / 2.f),
+                                 width - (int)xmargin_,
+                                 getHeight() - 12 - (int)(ymargin_ / 2.f));
+            drawSpectrogram(g, plot);
         }
-
-        // Output spectrum: yellow, slightly thicker
-        if (outputAnalyzer_ != nullptr)
+        else
         {
-            g.setColour(Colour(0x99ffdd00));
-            g.strokePath(pathAnalyzerOut_, PathStrokeType(1.0f));
+            calcAnalyzerPaths();
+
+            // Input spectrum: semi-transparent white, thin
+            if (inputAnalyzer_ != nullptr)
+            {
+                g.setColour(Colour(0x44ffffff));
+                g.strokePath(pathAnalyzerIn_, PathStrokeType(0.75f));
+            }
+
+            // Output spectrum: yellow, slightly thicker
+            if (outputAnalyzer_ != nullptr)
+            {
+                g.setColour(Colour(0x99ffdd00));
+                g.strokePath(pathAnalyzerOut_, PathStrokeType(1.0f));
+            }
         }
     }
 
@@ -449,6 +459,78 @@ void EqGraph::calcAnalyzerPaths()
     buildPath(outputAnalyzer_, pathAnalyzerOut_);
 }
 
+//==============================================================================
+// Spectrogram (rolling waterfall)
+//==============================================================================
+void EqGraph::setSpectrogramMode(bool on)
+{
+    if (on == spectrogramMode_)
+        return;
+    spectrogramMode_ = on;
+    if (on && ! spectro_.isValid())
+    {
+        spectro_ = Image(Image::RGB, kSpecW, kSpecH, true);
+        spectro_.clear(spectro_.getBounds(), Colour(0xff0a0c10));
+        specSmoothDb_.assign(kSpecW, -300.f);
+        specWrite_ = 0;
+    }
+    repaint();
+}
+
+Colour EqGraph::spectroColour(float v01) const
+{
+    const float v   = jlimit(0.f, 1.f, v01);
+    const float hue = 0.66f * (1.f - v);            // blue (low) -> red (high)
+    const float bri = std::pow(v, 0.55f);
+    return Colour::fromHSV(hue, 0.82f, bri, 1.f);
+}
+
+void EqGraph::writeSpectroRow()
+{
+    SpectrumAnalyzer* an = spectroPost_ ? outputAnalyzer_ : inputAnalyzer_;
+    if (an == nullptr || ! spectro_.isValid())
+        return;
+
+    const double ratio = (double)maxf_ / (double)minf_;
+    float col[kSpecW];
+    float peak = -250.f;
+    for (int i = 0; i < kSpecW; ++i)
+    {
+        const double hz = (double)minf_ * std::pow(ratio, (double)i / kSpecW);
+        const float  db = 20.f * std::log10(an->getMagnitude(hz) + 1e-12f);
+        // light per-column smoothing (fast attack / slow release) for a soft look
+        float& s = specSmoothDb_[(size_t)i];
+        if (s < -250.f) s = db;
+        else            s += (db - s) * (db > s ? 0.5f : 0.25f);
+        col[i] = s;
+        peak = jmax(peak, s);
+    }
+
+    const float floorDb = peak - 72.f;              // 72 dB visible range, per-row peak
+    Image::BitmapData bd(spectro_, Image::BitmapData::writeOnly);
+    for (int i = 0; i < kSpecW; ++i)
+        bd.setPixelColour(i, specWrite_, spectroColour((col[i] - floorDb) / 72.f));
+
+    specWrite_ = (specWrite_ + 1) % kSpecH;         // newest scrolls in at the bottom
+}
+
+void EqGraph::drawSpectrogram(Graphics& g, Rectangle<int> plot)
+{
+    if (! spectro_.isValid())
+        return;
+    Graphics::ScopedSaveState save(g);
+    g.reduceClipRegion(plot);
+    // chronological order is rows [specWrite_..end) then [0..specWrite_); draw
+    // oldest at the top, newest at the bottom, scaling to the plot height.
+    const int older = kSpecH - specWrite_;          // rows from specWrite_ to end
+    const int hTop  = roundToInt(plot.getHeight() * (float)older / kSpecH);
+    g.drawImage(spectro_, plot.getX(), plot.getY(), plot.getWidth(), hTop,
+                0, specWrite_, kSpecW, older);
+    if (specWrite_ > 0)
+        g.drawImage(spectro_, plot.getX(), plot.getY() + hTop, plot.getWidth(),
+                    plot.getHeight() - hTop, 0, 0, kSpecW, specWrite_);
+}
+
 void EqGraph::rebuildGridPaths()
 {
     int width = getWidth();
@@ -516,6 +598,9 @@ void EqGraph::timerCallback()
     const int desired = live ? kRefreshFastMs : kRefreshIdleMs;
     if (getTimerInterval() != desired)
         startTimer(desired);
+
+    if (spectrogramMode_ && analyzerOn_)
+        writeSpectroRow();
 
     repaint();
 }

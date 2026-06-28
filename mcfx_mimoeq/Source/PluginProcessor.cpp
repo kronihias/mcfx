@@ -536,6 +536,10 @@ void Mcfx_mimoeqAudioProcessor::getStateInformation(MemoryBlock& destData)
     // Editor view state — only the bits worth round-tripping with the host.
     if (editorPhaseOn)
         root->setProperty("editor_phase_on", true);
+    if (editorSpectrogramOn)
+        root->setProperty("editor_spectrogram_on", true);
+    if (editorSpectroPost)
+        root->setProperty("editor_spectro_post", true);
 
     String jsonStr = JSON::toString(var(root));
     destData.append(jsonStr.toRawUTF8(), jsonStr.getNumBytesAsUTF8());
@@ -564,6 +568,8 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
 
     // Editor view state
     editorPhaseOn = (bool) parsed.getProperty("editor_phase_on", false);
+    editorSpectrogramOn = (bool) parsed.getProperty("editor_spectrogram_on", false);
+    editorSpectroPost = (bool) parsed.getProperty("editor_spectro_post", false);
 
     // Clear model
     diagonalChain_.fromJson(var(Array<var>()), sr);

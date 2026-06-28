@@ -1224,6 +1224,8 @@ void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
     graph_.setAnalyzerEnabled(on);
     graph_.setAnalyzerAutoNormalize(getProcessor()->analyzerAutoNormalize);
     graph_.setAnalyzerOffset(getProcessor()->analyzerOffset);
+    graph_.setSpectrogramMode(getProcessor()->editorSpectrogramOn);
+    graph_.setSpectrogramSource(getProcessor()->editorSpectroPost);
 
     // In MIMO mode, lock analyzers to the selected path's channels
     if (!diagonalMode_)
@@ -1312,7 +1314,29 @@ public:
         sldOffset_.setEnabled(!proc->analyzerAutoNormalize);
         sldOffset_.setTooltip("dB offset for analyzer display");
 
-        setSize(220, 90);
+        // Spectrogram (rolling waterfall) toggle
+        addAndMakeVisible(btnSpectro_);
+        btnSpectro_.setButtonText("spectrogram");
+        btnSpectro_.setToggleState(proc->editorSpectrogramOn, dontSendNotification);
+        btnSpectro_.addListener(this);
+        btnSpectro_.setColour(ToggleButton::textColourId, Colours::white);
+        btnSpectro_.setColour(ToggleButton::tickColourId, Colours::orange);
+        btnSpectro_.setTooltip("Rolling spectrogram (time vs frequency) instead of the spectrum curve");
+        graph_->setSpectrogramMode(proc->editorSpectrogramOn);
+
+        // Spectrogram source: pre- or post-EQ
+        addAndMakeVisible(lblSource_);
+        lblSource_.setText("Source:", dontSendNotification);
+        lblSource_.setColour(Label::textColourId, Colours::white);
+        addAndMakeVisible(cbSource_);
+        cbSource_.addItem("pre-EQ", 1);
+        cbSource_.addItem("post-EQ", 2);
+        cbSource_.setSelectedId(proc->editorSpectroPost ? 2 : 1, dontSendNotification);
+        cbSource_.addListener(this);
+        cbSource_.setTooltip("Which signal the spectrogram displays");
+        graph_->setSpectrogramSource(proc->editorSpectroPost);
+
+        setSize(220, 142);
     }
 
     void resized() override
@@ -1325,6 +1349,11 @@ public:
         y += 26;
         lblOffset_.setBounds(4, y, 50, 22);
         sldOffset_.setBounds(54, y, 162, 22);
+        y += 26;
+        btnSpectro_.setBounds(4, y, 150, 22);
+        y += 26;
+        lblSource_.setBounds(4, y, 56, 22);
+        cbSource_.setBounds(64, y, 90, 22);
     }
 
     void paint(Graphics& g) override
@@ -1333,8 +1362,16 @@ public:
     }
 
 private:
-    void comboBoxChanged(ComboBox*) override
+    void comboBoxChanged(ComboBox* cb) override
     {
+        if (cb == &cbSource_)
+        {
+            bool post = cbSource_.getSelectedId() == 2;
+            proc_->editorSpectroPost = post;
+            graph_->setSpectrogramSource(post);
+            return;
+        }
+
         int id = cbChannel_.getSelectedId();
 
         if (id == 0)
@@ -1355,8 +1392,16 @@ private:
         proc_->editorAnalyzerChannel = ch;
     }
 
-    void buttonClicked(Button*) override
+    void buttonClicked(Button* b) override
     {
+        if (b == &btnSpectro_)
+        {
+            bool on = btnSpectro_.getToggleState();
+            proc_->editorSpectrogramOn = on;
+            graph_->setSpectrogramMode(on);
+            return;
+        }
+
         bool autoOn = btnAutoNorm_.getToggleState();
         proc_->analyzerAutoNormalize = autoOn;
         graph_->setAnalyzerAutoNormalize(autoOn);
@@ -1377,6 +1422,9 @@ private:
     ToggleButton btnAutoNorm_;
     Label lblOffset_;
     Slider sldOffset_;
+    ToggleButton btnSpectro_;
+    Label lblSource_;
+    ComboBox cbSource_;
 };
 
 void Mcfx_mimoeqAudioProcessorEditor::showAnalyzerSettingsPopup()
