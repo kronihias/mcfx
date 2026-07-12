@@ -111,11 +111,20 @@ void EqBand::setInvertGain(bool inv)
 
 bool EqBand::supportsDynamic() const
 {
-    if (type_ != EqBandType::IIR || hasRawCoeffs_)
+    if (hasRawCoeffs_)
+        return false;
+    if (type_ == EqBandType::Gain)          // broadband compressor (full-band detector)
+        return true;
+    if (type_ != EqBandType::IIR)
         return false;
     return iirSubType_ == IIRSubType::Peak
         || iirSubType_ == IIRSubType::LowShelf
         || iirSubType_ == IIRSubType::HighShelf;
+}
+
+bool EqBand::isDynamicBroadband() const
+{
+    return type_ == EqBandType::Gain;       // Gain bands detect on the full-band level
 }
 
 IIRCoefficients EqBand::makeDetectorCoeffs(IIRSubType subType, double sampleRate,
@@ -683,9 +692,12 @@ void EqBand::processBlock(float* data, int numSamples, const float* chainInput)
     if (!enabled_)
         return;
 
-    if (type_ == EqBandType::IIR && dynActive_ && supportsDynamic())
+    if (dynActive_ && supportsDynamic())
     {
-        applyDynamicIIR(data, numSamples, chainInput);
+        if (type_ == EqBandType::Gain)
+            applyDynamicGain(data, numSamples, chainInput);   // broadband compressor
+        else
+            applyDynamicIIR(data, numSamples, chainInput);
         return;
     }
 
@@ -1137,6 +1149,89 @@ void EqBand::applyDynamicIIR(float* data, int numSamples, const float* chainInpu
     }
 }
 
+void EqBand::applyDynamicGain(float* data, int numSamples, const float* chainInput)
+{
+    // Broadband compressor: the detector measures the full-band level (no
+    // sidechain filter) and modulates the band's flat gain by the same offset
+    // O(dB) mapping (threshold / ratio / knee / range) used by the dynamic EQ.
+    // Linked bands consume externalDynOffset_ (one shared gain change on every
+    // channel — an imaging-safe multichannel compressor).
+    ignoreUnused(chainInput);
+    const bool linked = (externalDynOffset_ != nullptr);
+    const bool hasLA  = dynLookaheadSamples_ > 0 && ! dynMainDelayBuffer_.empty();
+
+    const float rngAbs  = std::abs(dynRangeDB_);
+    const float rngSign = (dynRangeDB_ < 0.f) ? -1.f : 1.f;
+    const float autoCoeff = (float)std::exp(-(double)kDynCtrlSamples
+                                            / (1.5 * jmax(1.0, sampleRate_)));
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        float gLin    = smoothGainLin_.getNextValue();
+        float localIn = data[i];
+
+        // --- Broadband self-detection (independent mode) ---
+        if (!linked)
+        {
+            float p = localIn * localIn;                       // no sidechain filter
+            float c = (p > dynEnv_) ? dynAtkCoeff_ : dynRelCoeff_;
+            dynEnv_ = c * dynEnv_ + (1.f - c) * p;
+        }
+
+        // --- Control-rate offset + target gain ---
+        if (dynCtrlCounter_ <= 0)
+        {
+            dynCtrlCounter_ = kDynCtrlSamples;
+
+            float O;
+            if (linked)
+                O = externalDynOffset_[i];
+            else
+            {
+                float lvlDB = 10.f * std::log10(dynEnv_ + 1e-12f);
+                float thr;
+                if (dynAuto_)
+                {
+                    dynThreshEnv_ = autoCoeff * dynThreshEnv_ + (1.f - autoCoeff) * lvlDB;
+                    thr = dynThreshEnv_;
+                }
+                else
+                {
+                    thr = dynThresholdDB_;
+                }
+                float over = lvlDB - thr;
+                O = dynamicGainOffsetDB(over, dynRatio_, dynKneeDB_, rngAbs, rngSign);
+            }
+            lastDynOffsetDB_ = O;
+
+            dynGainTarget_ = gLin * std::pow(10.f, O * 0.05f);
+            if (dynNeedsSnap_) { dynGainWork_ = dynGainTarget_; dynGainRampLeft_ = 0; dynNeedsSnap_ = false; }
+            else                 dynGainRampLeft_ = kDynCtrlSamples;
+        }
+        --dynCtrlCounter_;
+
+        // --- Per-sample gain ramp toward target (zipper-free) ---
+        if (dynGainRampLeft_ > 0)
+        {
+            dynGainWork_ += (dynGainTarget_ - dynGainWork_) / (float)dynGainRampLeft_;
+            --dynGainRampLeft_;
+        }
+
+        // --- Lookahead: gain (from undelayed localIn) applied to delayed audio ---
+        float x = localIn;
+        if (hasLA)
+        {
+            int rp = dynMainDelayPos_ - dynLookaheadSamples_;
+            if (rp < 0) rp += dynLookaheadSamples_;
+            x = dynMainDelayBuffer_[(size_t) rp];
+            dynMainDelayBuffer_[(size_t) dynMainDelayPos_] = localIn;
+            dynMainDelayPos_ = (dynMainDelayPos_ + 1) % dynLookaheadSamples_;
+        }
+
+        data[i] = x * dynGainWork_;
+    }
+}
+
 void EqBand::applyCascadeIIR(float* data, int numSamples)
 {
     int nSections = (int)cascadeWork_.size();
@@ -1383,7 +1478,14 @@ std::complex<float> EqBand::getFrequencyResponse(double freqHz, bool alwaysCompu
         }
 
         case EqBandType::Gain:
-            return std::complex<float>(linearGain_, 0.f);
+        {
+            // Broadband gain — flat across frequency. The live dynamic offset
+            // (extraGainDB) shifts the whole line so the graph tracks compression.
+            float g = linearGain_;
+            if (extraGainDB != 0.f)
+                g *= Decibels::decibelsToGain(extraGainDB);
+            return std::complex<float>(g, 0.f);
+        }
 
         case EqBandType::Delay:
         {
@@ -1727,22 +1829,25 @@ EqBand* EqBand::fromJson(const var& json)
                     band->setGainDB((float)params.getProperty("gain_db", 0.0));
                 }
             }
+        }
 
-            // Dynamic EQ parameters (peak/shelf only; ignored on other IIR types).
-            var dyn = params["dynamic"];
-            if (dyn.isObject())
-            {
-                band->setDynThresholdDB((float)dyn.getProperty("threshold_db", -24.0));
-                band->setDynRangeDB((float)dyn.getProperty("range_db", -6.0));
-                band->setDynRatio((float)dyn.getProperty("ratio", 4.0));
-                band->setDynKneeDB((float)dyn.getProperty("knee_db", 6.0));
-                band->setDynAttackMs((float)dyn.getProperty("attack_ms", 10.0));
-                band->setDynReleaseMs((float)dyn.getProperty("release_ms", 120.0));
-                band->setDynAuto((bool)dyn.getProperty("auto", false));
-                band->setDynLinked((bool)dyn.getProperty("linked", true));
-                band->setDynLookaheadMs((float)dyn.getProperty("lookahead_ms", 0.0));
-                band->setDynamicActive((bool)dyn.getProperty("active", true));
-            }
+        // Dynamic parameters — applies to any band that supportsDynamic():
+        // peak/shelf IIR, or a broadband Gain band (multichannel compressor).
+        // Parsed at the shared parameters scope so the Gain branch above also
+        // picks it up; supportsDynamic() gates whether it does anything.
+        var dyn = params["dynamic"];
+        if (dyn.isObject())
+        {
+            band->setDynThresholdDB((float)dyn.getProperty("threshold_db", -24.0));
+            band->setDynRangeDB((float)dyn.getProperty("range_db", -6.0));
+            band->setDynRatio((float)dyn.getProperty("ratio", 4.0));
+            band->setDynKneeDB((float)dyn.getProperty("knee_db", 6.0));
+            band->setDynAttackMs((float)dyn.getProperty("attack_ms", 10.0));
+            band->setDynReleaseMs((float)dyn.getProperty("release_ms", 120.0));
+            band->setDynAuto((bool)dyn.getProperty("auto", false));
+            band->setDynLinked((bool)dyn.getProperty("linked", true));
+            band->setDynLookaheadMs((float)dyn.getProperty("lookahead_ms", 0.0));
+            band->setDynamicActive((bool)dyn.getProperty("active", true));
         }
     }
 

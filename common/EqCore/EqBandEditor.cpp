@@ -634,7 +634,8 @@ void EqBandEditor::showControlsForType(EqBandType type)
     btnCopyCoeffs_.setVisible(isBiquad);
     btnPasteCoeffs_.setVisible(isBiquad);
 
-    // Dynamic EQ controls — only for gain-bearing peak/shelf bands.
+    // Dynamic controls — gain-bearing peak/shelf bands, or a broadband Gain
+    // compressor (supportsDynamic() covers both).
     bool isDynCapable = band_ != nullptr && band_->supportsDynamic();
     bool dynOn = isDynCapable && band_->isDynamicActive();
     lblDynHeader_.setVisible(dynOn);   // header sits above the dynamic params

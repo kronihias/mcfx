@@ -225,6 +225,9 @@ public:
     // --- Dynamic EQ (per-band dynamics) ---
     // Only meaningful for gain-bearing single-biquad IIR types (Peak / Low/High shelf).
     bool supportsDynamic() const;
+    /** True for band types whose dynamic detector is broadband (full-band level)
+        rather than a frequency-selective sidechain — i.e. the Gain compressor. */
+    bool isDynamicBroadband() const;
 
     /** Sidechain/detector filter for a dynamic band — chosen to match the region
         the filter actually affects: band-pass for Peak, low-pass for Low Shelf,
@@ -317,6 +320,7 @@ private:
     void updateIIRCoefficients();
     void applyIIR(float* data, int numSamples);
     void applyDynamicIIR(float* data, int numSamples, const float* chainInput);
+    void applyDynamicGain(float* data, int numSamples, const float* chainInput);
     void updateDynEnvCoeffs();   // recompute attack/release one-pole coeffs from ms + SR
     void applyCascadeIIR(float* data, int numSamples);
     void applyFIR(float* data, int numSamples);
@@ -408,6 +412,9 @@ private:
     // Processing state (per processing copy):
     BiquadSection dynDetector_;          // bandpass at freq/Q used for level detection
     int   dynLookaheadSamples_ = 0;      // main-delay length (lookahead); 0 = none
+    float dynGainTarget_ = 1.f;          // Gain-band compressor: target linear gain
+    float dynGainWork_   = 1.f;          // ...current ramped linear gain
+    int   dynGainRampLeft_ = 0;          // ...samples left in the control-rate ramp
     std::vector<float> dynMainDelayBuffer_; // ring buffer for the lookahead main delay
     int   dynMainDelayPos_ = 0;
     float dynEnv_       = 0.f;           // smoothed detection power

@@ -70,7 +70,7 @@ public:
 
     void setParams(IIRSubType subType, float freq, float Q, float thresholdDB, float rangeDB,
                    float attackMs, float releaseMs, bool autoThresh,
-                   float ratio, float kneeDB)
+                   float ratio, float kneeDB, bool broadband = false)
     {
         subType_ = subType;
         freq_ = freq; q_ = Q;
@@ -78,6 +78,7 @@ public:
         ratio_ = jmax(1.0f, ratio); kneeDB_ = jmax(0.0f, kneeDB);
         attackMs_ = jmax(0.1f, attackMs); releaseMs_ = jmax(1.0f, releaseMs);
         auto_ = autoThresh;
+        broadband_ = broadband;             // Gain compressor: detect on full-band level
         updateEnvCoeffs();
         updateDetectorCoeffs();
     }
@@ -133,7 +134,7 @@ public:
                     detDelayPos_[(size_t) ch] = (detDelayPos_[(size_t) ch] + 1) % detDelaySamples_;
                     x = d;
                 }
-                float bp = bandpasses_[(size_t) ch].process(x);
+                float bp = broadband_ ? x : bandpasses_[(size_t) ch].process(x);
                 float pc = bp * bp;
                 if (pc > p) p = pc;
             }
@@ -203,6 +204,7 @@ private:
     float ratio_ = 4.f, kneeDB_ = 6.f;
     float attackMs_ = 10.f, releaseMs_ = 120.f;
     bool  auto_ = false;
+    bool  broadband_ = false;    // true = full-band detection (Gain compressor)
 
     std::vector<BiquadSection> bandpasses_;   // one per channel
     std::vector<int>           activeIdx_;     // scratch: participating channel indices

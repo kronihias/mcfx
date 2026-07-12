@@ -268,8 +268,8 @@ void EqGraph::drawBandHandles(Graphics& g)
             Colour bandCol = getBandColour(i);
 
             // Dynamic EQ: faint bracket from the static gain to the range limit.
-            bool dynActive = (type == EqBandType::IIR) && band->supportsDynamic()
-                          && band->isDynamicActive();
+            // Applies to peak/shelf IIR bands and to a broadband Gain compressor.
+            bool dynActive = band->supportsDynamic() && band->isDynamicActive();
             if (dynActive)
             {
                 float yStatic = (float)dbtoypos(band->getGainDB());

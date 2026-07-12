@@ -1369,3 +1369,52 @@ def test_dynamic_knee_softens_onset():
     assert c_hard < 0.4, f"hard knee below threshold should not engage (got {c_hard:.2f} dB)"
     assert c_soft > c_hard + 0.4, \
         f"soft knee should engage below threshold (hard={c_hard:.2f}, soft={c_soft:.2f} dB)"
+
+
+def _dyn_gain_config(threshold_db, range_db, *, gain_db=0.0, linked=True,
+                     attack_ms=5.0, release_ms=50.0, ratio=4.0, knee_db=6.0):
+    """A broadband Gain band with dynamics active = a compressor."""
+    return {
+        "sample_rate": SR,
+        "sos": [{"diagonal": True, "parameters": {
+            "type": "gain", "gain_db": gain_db,
+            "dynamic": {
+                "active": True, "threshold_db": threshold_db, "range_db": range_db,
+                "ratio": ratio, "knee_db": knee_db,
+                "attack_ms": attack_ms, "release_ms": release_ms, "linked": linked,
+            },
+        }}],
+    }
+
+
+def test_dynamic_gain_compresses_broadband():
+    """A dynamic Gain band is a broadband compressor: material above threshold is
+    attenuated (up to the Range); quiet material below threshold passes through.
+    The detector is full-band (no sidechain filter)."""
+    n = int(SR * 1.0)
+
+    def g(amp, thr):
+        sig = _tone(amp, n)
+        cfg = _dyn_gain_config(threshold_db=thr, range_db=-12.0)
+        return _steady_gain_db(sig, run_mimoeq_json(cfg, np.stack([sig, sig]))[0])
+
+    g_loud  = g(0.5,  -20.0)   # ~ -9 dB level, well above threshold → compress
+    g_quiet = g(0.03, -20.0)   # ~ -33 dB level, below threshold → pass
+    assert g_loud < -3.0, f"loud material should be compressed (got {g_loud:.2f} dB)"
+    assert g_quiet > -1.0, f"quiet material below threshold should pass (got {g_quiet:.2f} dB)"
+
+
+def test_dynamic_gain_linked_multichannel():
+    """Linked: a loud channel drives the shared broadband gain, so a quiet channel
+    is attenuated by the SAME amount — an imaging-safe multichannel compressor."""
+    n = int(SR * 1.0)
+    loud = _tone(0.5, n)
+    quiet = _tone(0.03, n)
+    cfg = _dyn_gain_config(threshold_db=-20.0, range_db=-12.0, linked=True)
+    out = run_mimoeq_json(cfg, np.stack([loud, quiet]))
+    g_loud  = _steady_gain_db(loud,  out[0])
+    g_quiet = _steady_gain_db(quiet, out[1])
+    assert g_loud < -3.0, f"loud channel should compress (got {g_loud:.2f} dB)"
+    assert g_quiet < -3.0, f"linked: quiet channel should follow the shared gain (got {g_quiet:.2f} dB)"
+    assert abs(g_loud - g_quiet) < 1.5, \
+        f"linked channels should get the same gain ({g_loud:.2f} vs {g_quiet:.2f} dB)"
