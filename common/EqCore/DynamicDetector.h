@@ -69,11 +69,13 @@ public:
     }
 
     void setParams(IIRSubType subType, float freq, float Q, float thresholdDB, float rangeDB,
-                   float attackMs, float releaseMs, bool autoThresh)
+                   float attackMs, float releaseMs, bool autoThresh,
+                   float ratio, float kneeDB)
     {
         subType_ = subType;
         freq_ = freq; q_ = Q;
         thresholdDB_ = thresholdDB; rangeDB_ = rangeDB;
+        ratio_ = jmax(1.0f, ratio); kneeDB_ = jmax(0.0f, kneeDB);
         attackMs_ = jmax(0.1f, attackMs); releaseMs_ = jmax(1.0f, releaseMs);
         auto_ = autoThresh;
         updateEnvCoeffs();
@@ -154,7 +156,7 @@ public:
                     thr = thresholdDB_;
                 }
                 float over = lvlDB - thr;
-                lastO = jlimit(0.f, rngAbs, over) * rngSign;
+                lastO = dynamicGainOffsetDB(over, ratio_, kneeDB_, rngAbs, rngSign);
             }
             --ctrlCounter_;
             offsetDB_[(size_t) i] = lastO;
@@ -198,6 +200,7 @@ private:
     IIRSubType subType_ = IIRSubType::Peak;
     float freq_ = 1000.f, q_ = 0.707f;
     float thresholdDB_ = -24.f, rangeDB_ = -6.f;
+    float ratio_ = 4.f, kneeDB_ = 6.f;
     float attackMs_ = 10.f, releaseMs_ = 120.f;
     bool  auto_ = false;
 

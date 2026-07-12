@@ -28,6 +28,37 @@
 #include <vector>
 
 //==============================================================================
+/** Dynamic-EQ gain mapping (shared by EqBand::applyDynamicIIR and the linked
+    DynamicDetector so both behave identically).
+
+    Given `over` = detector level minus threshold (dB), returns the signed gain
+    offset (dB) whose magnitude is capped at `rngAbs` and whose sign is `rngSign`
+    (< 0 compress, > 0 boost):
+
+      slope  = 1 - 1/ratio        (ratio >= 1; 1 = no action, large = hard/limit)
+      knee   = soft-knee width dB (0 = hard corner at threshold)
+      g      = 0                       for over <= -knee/2
+               slope * over            for over >=  knee/2
+               slope * (over+knee/2)^2 / (2*knee)   in the knee
+      offset = clamp(g, 0, rngAbs) * rngSign
+*/
+inline float dynamicGainOffsetDB(float over, float ratio, float kneeDB,
+                                 float rngAbs, float rngSign) noexcept
+{
+    const float slope = 1.0f - 1.0f / juce::jmax(1.0f, ratio);
+    const float hk = 0.5f * kneeDB;
+    float g;
+    if (over <= -hk)          g = 0.0f;
+    else if (over >= hk)      g = slope * over;
+    else                                              // quadratic soft knee
+    {
+        const float t = over + hk;
+        g = slope * (t * t) / (2.0f * kneeDB);
+    }
+    return juce::jlimit(0.0f, rngAbs, g) * rngSign;
+}
+
+//==============================================================================
 /** Modified Transposed Direct-Form II biquad section.
     Pre-computes c1 = b1 - a1*b0, c2 = b2 - a2*b0 to reduce operations
     in the state update (same form as SmoothIIRFilter). */
@@ -210,6 +241,12 @@ public:
     float getDynRangeDB() const { return dynRangeDB_; }       // signed: <0 = compress, >0 = expand/boost
     void  setDynRangeDB(float db) { dynRangeDB_ = db; }
 
+    float getDynRatio() const { return dynRatio_; }           // N:1 (slope = 1 - 1/ratio)
+    void  setDynRatio(float r) { dynRatio_ = jmax(1.0f, r); }
+
+    float getDynKneeDB() const { return dynKneeDB_; }         // soft-knee width (dB); 0 = hard
+    void  setDynKneeDB(float db) { dynKneeDB_ = jmax(0.0f, db); }
+
     float getDynAttackMs() const { return dynAttackMs_; }
     void  setDynAttackMs(float ms) { dynAttackMs_ = jmax(0.1f, ms); updateDynEnvCoeffs(); }
 
@@ -360,6 +397,8 @@ private:
     bool  dynActive_      = false;
     float dynThresholdDB_ = -24.f;
     float dynRangeDB_     = -6.f;    // signed
+    float dynRatio_       = 4.f;     // N:1
+    float dynKneeDB_      = 6.f;     // soft-knee width (dB)
     float dynAttackMs_    = 10.f;
     float dynReleaseMs_   = 120.f;
     bool  dynAuto_        = false;

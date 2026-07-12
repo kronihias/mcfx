@@ -86,7 +86,11 @@ def db_to_linear(db: float) -> float:
 #   levelDB  = 10*log10(env)
 #   thr      = threshold_db  (or a slow average of levelDB when auto)
 #   over     = levelDB - thr
-#   O_dB     = clip(over, 0, |range_db|) * sign(range_db)
+#   slope    = 1 - 1/ratio                            # ratio N:1 (1 = off, big = hard)
+#   g        = 0                       if over <= -knee/2
+#              slope * over            if over >=  knee/2
+#              slope*(over+knee/2)^2/(2*knee)  in the knee (soft corner)
+#   O_dB     = clip(g, 0, |range_db|) * sign(range_db)
 #   effective_gain_dB = static_gain_dB + O_dB
 #
 # Linked bands use one shared detector across channels with reduction =
@@ -97,8 +101,18 @@ def db_to_linear(db: float) -> float:
 # This adds latency; the processor delays/compensates every path and reports the
 # total to the host (the testhost strips it, so de-latencied output is aligned).
 
-def dyn_offset_db(level_db: float, threshold_db: float, range_db: float) -> float:
-    """Steady-state dynamic gain offset (dB) for a detected level."""
+def dyn_offset_db(level_db: float, threshold_db: float, range_db: float,
+                  ratio: float = 4.0, knee_db: float = 6.0) -> float:
+    """Steady-state dynamic gain offset (dB): soft-knee + ratio, capped at |range|."""
     over = level_db - threshold_db
-    mag = min(max(over, 0.0), abs(range_db))
+    slope = 1.0 - 1.0 / max(1.0, ratio)
+    hk = 0.5 * knee_db
+    if over <= -hk:
+        g = 0.0
+    elif over >= hk:
+        g = slope * over
+    else:
+        t = over + hk
+        g = slope * t * t / (2.0 * knee_db)
+    mag = min(max(g, 0.0), abs(range_db))
     return mag * (-1.0 if range_db < 0.0 else 1.0)

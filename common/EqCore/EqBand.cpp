@@ -1064,7 +1064,7 @@ void EqBand::applyDynamicIIR(float* data, int numSamples, const float* chainInpu
                     thr = dynThresholdDB_;
                 }
                 float over = lvlDB - thr;
-                O = jlimit(0.f, rngAbs, over) * rngSign;
+                O = dynamicGainOffsetDB(over, dynRatio_, dynKneeDB_, rngAbs, rngSign);
             }
             lastDynOffsetDB_ = O;
 
@@ -1560,6 +1560,8 @@ var EqBand::toJson() const
             dyn->setProperty("active", true);
             dyn->setProperty("threshold_db", dynThresholdDB_);
             dyn->setProperty("range_db", dynRangeDB_);
+            dyn->setProperty("ratio", dynRatio_);
+            dyn->setProperty("knee_db", dynKneeDB_);
             dyn->setProperty("attack_ms", dynAttackMs_);
             dyn->setProperty("release_ms", dynReleaseMs_);
             if (dynAuto_)
@@ -1732,6 +1734,8 @@ EqBand* EqBand::fromJson(const var& json)
             {
                 band->setDynThresholdDB((float)dyn.getProperty("threshold_db", -24.0));
                 band->setDynRangeDB((float)dyn.getProperty("range_db", -6.0));
+                band->setDynRatio((float)dyn.getProperty("ratio", 4.0));
+                band->setDynKneeDB((float)dyn.getProperty("knee_db", 6.0));
                 band->setDynAttackMs((float)dyn.getProperty("attack_ms", 10.0));
                 band->setDynReleaseMs((float)dyn.getProperty("release_ms", 120.0));
                 band->setDynAuto((bool)dyn.getProperty("auto", false));

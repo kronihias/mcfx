@@ -212,6 +212,30 @@ EqBandEditor::EqBandEditor()
                             "positive = boost (expand).");
     sldDynRange_.addListener(this);
 
+    addAndMakeVisible(lblDynRatio_);
+    addAndMakeVisible(sldDynRatio_);
+    sldDynRatio_.setRange(1.0, 20.0, 0.1);
+    sldDynRatio_.setSkewFactorFromMidPoint(4.0);
+    sldDynRatio_.setNumDecimalPlacesToDisplay(1);
+    sldDynRatio_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldDynRatio_.setSliderStyle(Slider::LinearHorizontal);
+    sldDynRatio_.setDoubleClickReturnValue(true, 4.0);
+    sldDynRatio_.setTextValueSuffix(":1");
+    sldDynRatio_.setTooltip("Ratio: how much of the level-over-threshold becomes gain change "
+                            "(1:1 = none, higher = more aggressive up to the Range limit).");
+    sldDynRatio_.addListener(this);
+
+    addAndMakeVisible(lblDynKnee_);
+    addAndMakeVisible(sldDynKnee_);
+    sldDynKnee_.setRange(0.0, 24.0, 0.1);
+    sldDynKnee_.setNumDecimalPlacesToDisplay(1);
+    sldDynKnee_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldDynKnee_.setSliderStyle(Slider::LinearHorizontal);
+    sldDynKnee_.setDoubleClickReturnValue(true, 6.0);
+    sldDynKnee_.setTextValueSuffix(" dB");
+    sldDynKnee_.setTooltip("Knee: width of the soft transition around the threshold (0 = hard corner).");
+    sldDynKnee_.addListener(this);
+
     addAndMakeVisible(lblDynAttack_);
     addAndMakeVisible(sldDynAttack_);
     sldDynAttack_.setRange(0.1, 200.0, 0.1);
@@ -248,7 +272,8 @@ EqBandEditor::EqBandEditor()
                                 "a transient. Adds latency (reported to the host).");
     sldDynLookahead_.addListener(this);
 
-    for (auto* lbl : { &lblDynThreshold_, &lblDynRange_, &lblDynAttack_, &lblDynRelease_, &lblDynLookahead_ })
+    for (auto* lbl : { &lblDynThreshold_, &lblDynRange_, &lblDynRatio_, &lblDynKnee_,
+                       &lblDynAttack_, &lblDynRelease_, &lblDynLookahead_ })
     {
         lbl->setFont(Font(FontOptions(13.f, Font::plain)));
         lbl->setColour(Label::textColourId, Colours::white);
@@ -470,6 +495,8 @@ void EqBandEditor::updateFromBand()
     btnDynLink_.setToggleState(band_->getDynLinked(), dontSendNotification);
     sldDynThreshold_.setValue(band_->getDynThresholdDB(), dontSendNotification);
     sldDynRange_.setValue(band_->getDynRangeDB(), dontSendNotification);
+    sldDynRatio_.setValue(band_->getDynRatio(), dontSendNotification);
+    sldDynKnee_.setValue(band_->getDynKneeDB(), dontSendNotification);
     sldDynAttack_.setValue(band_->getDynAttackMs(), dontSendNotification);
     sldDynRelease_.setValue(band_->getDynReleaseMs(), dontSendNotification);
     sldDynLookahead_.setValue(band_->getDynLookaheadMs(), dontSendNotification);
@@ -618,6 +645,10 @@ void EqBandEditor::showControlsForType(EqBandType type)
     sldDynThreshold_.setVisible(dynOn);
     lblDynRange_.setVisible(dynOn);
     sldDynRange_.setVisible(dynOn);
+    lblDynRatio_.setVisible(dynOn);
+    sldDynRatio_.setVisible(dynOn);
+    lblDynKnee_.setVisible(dynOn);
+    sldDynKnee_.setVisible(dynOn);
     lblDynAttack_.setVisible(dynOn);
     sldDynAttack_.setVisible(dynOn);
     lblDynRelease_.setVisible(dynOn);
@@ -771,6 +802,8 @@ void EqBandEditor::resized()
             struct { Label* lbl; Slider* sld; } dynRows[] = {
                 { &lblDynThreshold_, &sldDynThreshold_ },
                 { &lblDynRange_,     &sldDynRange_     },
+                { &lblDynRatio_,     &sldDynRatio_     },
+                { &lblDynKnee_,      &sldDynKnee_      },
                 { &lblDynAttack_,    &sldDynAttack_    },
                 { &lblDynRelease_,   &sldDynRelease_   },
                 { &lblDynLookahead_, &sldDynLookahead_ },
@@ -917,6 +950,10 @@ void EqBandEditor::sliderValueChanged(Slider* s)
         band_->setDynThresholdDB((float)sldDynThreshold_.getValue());
     else if (s == &sldDynRange_)
         band_->setDynRangeDB((float)sldDynRange_.getValue());
+    else if (s == &sldDynRatio_)
+        band_->setDynRatio((float)sldDynRatio_.getValue());
+    else if (s == &sldDynKnee_)
+        band_->setDynKneeDB((float)sldDynKnee_.getValue());
     else if (s == &sldDynAttack_)
         band_->setDynAttackMs((float)sldDynAttack_.getValue());
     else if (s == &sldDynRelease_)

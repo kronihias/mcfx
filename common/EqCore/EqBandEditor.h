@@ -512,6 +512,10 @@ private:
     Slider sldDynThreshold_;
     Label  lblDynRange_     { {}, "Range:" };
     Slider sldDynRange_;
+    Label  lblDynRatio_     { {}, "Ratio:" };
+    Slider sldDynRatio_;
+    Label  lblDynKnee_      { {}, "Knee:" };
+    Slider sldDynKnee_;
     Label  lblDynAttack_    { {}, "Attack:" };
     Slider sldDynAttack_;
     Label  lblDynRelease_   { {}, "Release:" };

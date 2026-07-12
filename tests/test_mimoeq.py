@@ -1163,16 +1163,21 @@ def test_symmetric_fir_group_delay_matches_centre_tap():
 # JSON dynamic configs and measure the steady-state gain at the band centre.
 
 def _dyn_peak_config(threshold_db, range_db, *, f=1000.0, q=2.0, gain_db=0.0,
-                     linked=True, attack_ms=5.0, release_ms=50.0, auto=False):
+                     linked=True, attack_ms=5.0, release_ms=50.0, auto=False,
+                     ratio=None, knee_db=None):
+    dyn = {
+        "active": True, "threshold_db": threshold_db, "range_db": range_db,
+        "attack_ms": attack_ms, "release_ms": release_ms,
+        "auto": auto, "linked": linked,
+    }
+    if ratio is not None:
+        dyn["ratio"] = ratio
+    if knee_db is not None:
+        dyn["knee_db"] = knee_db
     return {
         "sample_rate": SR,
         "sos": [{"diagonal": True, "parameters": {
-            "type": "peak", "f_Hz": f, "Q": q, "gain_db": gain_db,
-            "dynamic": {
-                "active": True, "threshold_db": threshold_db, "range_db": range_db,
-                "attack_ms": attack_ms, "release_ms": release_ms,
-                "auto": auto, "linked": linked,
-            },
+            "type": "peak", "f_Hz": f, "Q": q, "gain_db": gain_db, "dynamic": dyn,
         }}],
     }
 
@@ -1324,3 +1329,43 @@ def test_dynamic_lowshelf_detects_below_corner():
     out = run_mimoeq_json(config, audio)
     g = _steady_gain_db(tone, out[0])
     assert g < -8.0, f"Low-shelf dynamic should duck sub-corner energy, got {g:.2f} dB"
+
+
+def test_dynamic_ratio_scales_gain_change():
+    """In the linear region (above the knee, below the Range cap) the gain change
+    scales with the ratio slope (1 - 1/ratio). The exact detector level cancels
+    when we compare two ratios, so the test is robust to the sidechain gain."""
+    n = int(SR * 1.0)
+    tone = _tone(0.5, n)
+    audio = np.stack([tone, tone])
+
+    def cut(ratio):
+        cfg = _dyn_peak_config(threshold_db=-25.0, range_db=-40.0,   # large range → uncapped
+                               ratio=ratio, knee_db=6.0)
+        return -_steady_gain_db(tone, run_mimoeq_json(cfg, audio)[0])   # dB of cut (positive)
+
+    c2 = cut(2.0)   # slope 0.500
+    c8 = cut(8.0)   # slope 0.875
+    assert c2 > 1.0 and c8 > 1.0, f"both ratios should engage (c2={c2:.2f}, c8={c8:.2f})"
+    # expected ratio of cuts = 0.875 / 0.5 = 1.75
+    assert 1.45 < c8 / c2 < 2.05, \
+        f"ratio should scale the gain change: c2={c2:.2f} c8={c8:.2f} (c8/c2={c8/c2:.2f})"
+
+
+def test_dynamic_knee_softens_onset():
+    """A soft knee engages the dynamic action gradually, starting below the
+    threshold; a hard knee (0) does nothing until the level crosses it."""
+    n = int(SR * 1.0)
+    tone = _tone(0.5, n)          # detector level ~ -9 dB
+    audio = np.stack([tone, tone])
+    thr = -4.0                    # tone sits a few dB BELOW threshold
+
+    def cut(knee):
+        cfg = _dyn_peak_config(threshold_db=thr, range_db=-30.0, ratio=4.0, knee_db=knee)
+        return -_steady_gain_db(tone, run_mimoeq_json(cfg, audio)[0])
+
+    c_hard = cut(0.0)
+    c_soft = cut(24.0)
+    assert c_hard < 0.4, f"hard knee below threshold should not engage (got {c_hard:.2f} dB)"
+    assert c_soft > c_hard + 0.4, \
+        f"soft knee should engage below threshold (hard={c_hard:.2f}, soft={c_soft:.2f} dB)"

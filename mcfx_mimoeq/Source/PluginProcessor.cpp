@@ -177,7 +177,8 @@ void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
             det->prepare(currentSampleRate_, numCh, currentBlockSize_);
             det->setParams(band->getIIRSubType(), band->getFrequency(), band->getQ(),
                            band->getDynThresholdDB(), band->getDynRangeDB(),
-                           band->getDynAttackMs(), band->getDynReleaseMs(), band->getDynAuto());
+                           band->getDynAttackMs(), band->getDynReleaseMs(), band->getDynAuto(),
+                           band->getDynRatio(), band->getDynKneeDB());
             newState->diagLinkedDyn.add(det);
         }
     }
@@ -340,7 +341,8 @@ void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
                     det->setParams(band->getIIRSubType(), band->getFrequency(), band->getQ(),
                                    band->getDynThresholdDB(), band->getDynRangeDB(),
                                    band->getDynAttackMs(), band->getDynReleaseMs(),
-                                   band->getDynAuto());
+                                   band->getDynAuto(),
+                                   band->getDynRatio(), band->getDynKneeDB());
             }
         }
     }
