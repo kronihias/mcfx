@@ -129,15 +129,13 @@ def make_highshelf_sos(f0: float, Q: float, gain_linear: float, fs: float) -> np
     return np.array([[b0/a0, b1/a0, b2/a0, 1.0, a1/a0, a2/a0]])
 
 
-def make_tilt_sos(f0: float, Q: float, gain_linear: float, fs: float) -> np.ndarray:
-    """EqBand::makeTiltCoeffs — tilt / spectral seesaw (gain is LINEAR, not dB).
-
-    A low shelf of g^2 scaled by 1/g: +gain at DC, -gain at Nyquist, unity at f0.
+def tilt_target_db(f, slope_db_oct: float, pivot_hz: float) -> np.ndarray:
+    """Ideal tilt response: a straight line on a dB vs log-f plot, `slope_db_oct`
+    dB per octave, crossing 0 dB at `pivot_hz`. This is the *target* the plugin's
+    cascade approximates — EqBand::designTiltCascade is checked against it directly
+    rather than against a re-implementation of its own design.
     """
-    g = max(1e-6, gain_linear)
-    sos = make_lowshelf_sos(f0, Q, g * g, fs).copy()
-    sos[0, 0:3] /= g          # scale the numerator only
-    return sos
+    return slope_db_oct * np.log2(np.asarray(f, dtype=float) / pivot_hz)
 
 
 # ---------------------------------------------------------------------------

@@ -593,13 +593,40 @@ void EqBandEditor::showControlsForType(EqBandType type)
         && subType != IIRSubType::HighPass
         && !hasOrder;
 
+    // Tilt has no Q, and its "gain" is a slope — re-label and re-range the gain
+    // row so it reads as one (dB per octave, capped where the line would need a
+    // steeper-than-first-order fall).
+    const bool isTilt = isIIR && subType == IIRSubType::Tilt;
+    if (isTilt != tiltGainRowActive_)
+    {
+        tiltGainRowActive_ = isTilt;
+        if (isTilt)
+        {
+            lblGain_.setText("Slope:", dontSendNotification);
+            sldGain_.setRange(-EqBand::kTiltMaxSlope, EqBand::kTiltMaxSlope, 0.05);
+            sldGain_.setTextValueSuffix(" dB/oct");
+            sldGain_.setTooltip("Tilt slope in dB per octave — a straight line on the "
+                                "graph, crossing 0 dB at the band frequency. "
+                                "Double-click to reset to flat.");
+        }
+        else
+        {
+            lblGain_.setText("Gain:", dontSendNotification);
+            sldGain_.setRange(-60.0, 30.0, 0.1);
+            sldGain_.setTextValueSuffix(" dB");
+            sldGain_.setTooltip("Gain in dB. Double-click to reset to 0 dB");
+        }
+        if (band_ != nullptr)
+            sldGain_.setValue(band_->getGainDB(), dontSendNotification);
+    }
+
     lblSubType_.setVisible(isIIR || isBiquad);
     cbIIRSubType_.setVisible(isIIR || isBiquad);
     lblFreq_.setVisible(isIIR && !isBiquad);
     sldFreq_.setVisible(isIIR && !isBiquad);
     lblHz_.setVisible(isIIR && !isBiquad);
-    lblQ_.setVisible(isIIR && !isBiquad && !hasOrder);
-    sldQ_.setVisible(isIIR && !isBiquad && !hasOrder);
+    lblQ_.setVisible(isIIR && !isBiquad && !hasOrder && !isTilt);
+    sldQ_.setVisible(isIIR && !isBiquad && !hasOrder && !isTilt);
 
     lblOrder_.setVisible(hasOrder);
     cbOrder_.setVisible(hasOrder);

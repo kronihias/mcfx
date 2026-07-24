@@ -525,6 +525,7 @@ private:
     Slider sldDynRelease_;
     Label  lblDynLookahead_ { {}, "Lookahead:" };
     Slider sldDynLookahead_;
+    bool   tiltGainRowActive_ = false; // gain row currently re-ranged as a tilt slope
     bool   dynIsDiagonal_   = true;   // false on MIMO path bands → Link disabled
     bool   dynLookaheadDragging_ = false; // coalesce the structural rebuild to drag-end
 

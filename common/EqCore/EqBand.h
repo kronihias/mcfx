@@ -236,14 +236,10 @@ public:
     static IIRCoefficients makeDetectorCoeffs(IIRSubType subType, double sampleRate,
                                               float freq, float q);
 
-    /** Tilt ("spectral seesaw"): lifts one half of the spectrum by +gain and drops
-        the other by -gain, pivoting through 0 dB at `freq`. Built as a low shelf of
-        twice the gain, scaled back by half of it — so a single biquad gives
-        +gain at DC, -gain at Nyquist, and unity at the pivot. Positive gain tilts
-        the balance towards the lows (darker), negative towards the highs
-        (brighter). `gainLinear` is linear, matching the JUCE make*() convention. */
-    static IIRCoefficients makeTiltCoeffs(double sampleRate, float freq, float q,
-                                          float gainLinear);
+    /** Tilt slope in dB per octave — a straight line on a dB vs log-frequency plot.
+        Stored in gainDB_ (the band's existing "amount" parameter) and clamped to
+        +/-kTiltMaxSlope; positive tilts up towards the highs, negative down. */
+    static constexpr float kTiltMaxSlope = 6.0f;
 
     bool  isDynamicActive() const { return dynActive_; }
     void  setDynamicActive(bool b);
@@ -328,6 +324,13 @@ public:
 
 private:
     void updateIIRCoefficients();
+    void designTiltCascade();            // constant-slope line; fills cascadeCoeffs_
+
+    // Tilt design constants (see designTiltCascade for what they buy).
+    static constexpr int    kTiltSections  = 16;    // first-order pole/zero pairs
+    static constexpr int    kTiltFitPasses = 3;     // height re-fit iterations
+    static constexpr double kTiltLowHz     = 4.0;   // lowest grid corner
+    static constexpr double kTiltWarpHi    = 120.0; // top grid corner, warped (past Nyquist)
     void applyIIR(float* data, int numSamples);
     void applyDynamicIIR(float* data, int numSamples, const float* chainInput);
     void applyDynamicGain(float* data, int numSamples, const float* chainInput);

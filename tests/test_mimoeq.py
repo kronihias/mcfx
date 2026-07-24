@@ -44,7 +44,7 @@ from scipy.signal import sosfilt
 
 from reference.filter_ref import (
     make_lowpass_sos, make_highpass_sos,
-    make_peak_sos, make_lowshelf_sos, make_highshelf_sos, make_tilt_sos,
+    make_peak_sos, make_lowshelf_sos, make_highshelf_sos, tilt_target_db,
     apply_sos,
 )
 from reference.mimoeq_ref import (
@@ -722,67 +722,84 @@ def test_json_peak_freq_response():
     )
 
 
-@pytest.mark.parametrize("f, q, db", [
-    (1000.0, 0.707, +6.0),    # tilt towards the lows
-    (700.0,  0.707, -9.0),    # tilt towards the highs
-    (2000.0, 1.2,   +3.0),    # steeper pivot
-    (1000.0, 0.707,  0.0),    # 0 dB → unity
-])
-def test_json_tilt_freq_response(f, q, db):
-    """JSON-loaded tilt band frequency response matches the scipy reference."""
-    config = {
-        "sample_rate": SR,
-        "sos": [
-            {"diagonal": True, "parameters": {
-                "type": "tilt", "f_Hz": f, "Q": q, "gain_db": db
-            }}
-        ]
-    }
+TILT_CFG_F = "f_Hz"
+
+
+# The tilt cascade reaches down to a ~4 Hz corner, so its impulse response has a
+# much longer tail than the shared FFT_N (85 ms) window can hold — measuring it
+# there would report the truncation, not the filter. Use most of the 1 s buffer.
+TILT_FFT_N = 1 << 15   # 32768 samples ≈ 0.68 s, 1.5 Hz resolution
+
+
+def _tilt_spec(slope, pivot, extra=None):
+    """Run a tilt band through the plugin; return (freqs, measured dB) over 20 Hz-20 kHz."""
+    params = {"type": "tilt", TILT_CFG_F: pivot, "slope_db_oct": slope}
+    if extra:
+        params.update(extra)
+    config = {"sample_rate": SR, "sos": [{"diagonal": True, "parameters": params}]}
     audio = np.zeros((2, BLOCK), dtype=np.float32)
     audio[:, 0] = 1.0   # impulse
+    ir = run_mimoeq_json(config, audio)[0]
+    spec = 20.0 * np.log10(np.maximum(np.abs(np.fft.rfft(ir[:TILT_FFT_N])), 1e-9))
+    bins = np.arange(len(spec)) * SR / TILT_FFT_N
+    m = (bins >= 20.0) & (bins <= 20000.0)
+    return bins[m], spec[m]
 
-    plugin_ir = run_mimoeq_json(config, audio)[0]
-    ref_ir = apply_sos(make_tilt_sos(f, q, db_to_linear(db), SR), audio[0])
 
-    np.testing.assert_allclose(
-        freq_response_db(plugin_ir), freq_response_db(ref_ir), atol=0.5,
-        err_msg=f"Tilt @ {f:.0f} Hz, Q={q}, {db:+.1f} dB"
+@pytest.mark.parametrize("slope, pivot", [
+    (-3.0, 1000.0),    # "pink" tilt, darker
+    (+3.0, 1000.0),    # brighter
+    (-6.0, 1000.0),    # steepest supported
+    (+6.0, 1000.0),
+    (-1.5,  200.0),    # low pivot
+    (+2.0, 8000.0),    # high pivot
+])
+def test_json_tilt_is_a_straight_line(slope, pivot):
+    """A tilt band is a straight line on a dB vs log-f plot: constant slope in
+    dB/octave, crossing 0 dB at the pivot. Checked against the ideal line itself
+    (not against a re-implementation of the plugin's own filter design)."""
+    f, got = _tilt_spec(slope, pivot)
+    ideal = tilt_target_db(f, slope, pivot)
+    dev = got - ideal
+    assert np.max(np.abs(dev)) < 0.5, (
+        f"tilt {slope:+.1f} dB/oct @ {pivot:.0f} Hz deviates from a straight line "
+        f"by {np.max(np.abs(dev)):.2f} dB (at {f[np.argmax(np.abs(dev))]:.0f} Hz)"
     )
 
 
-def test_json_tilt_is_a_seesaw():
-    """A tilt band is a spectral seesaw, verified independently of the reference
-    model: +gain well below the pivot, -gain well above it, and unity *at* the
-    pivot — so it rebalances the spectrum without changing the level at f_Hz."""
-    f, db = 1000.0, 6.0
-    config = {
-        "sample_rate": SR,
-        "sos": [
-            {"diagonal": True, "parameters": {
-                "type": "tilt", "f_Hz": f, "Q": 0.707, "gain_db": db
-            }}
-        ]
-    }
-    audio = np.zeros((2, BLOCK), dtype=np.float32)
-    audio[:, 0] = 1.0
+def test_json_tilt_pivot_is_unity():
+    """The 0 dB crossing sits at the band frequency, whatever the slope."""
+    for pivot in (100.0, 1000.0, 6000.0):
+        for slope in (-4.0, +4.0):
+            f, got = _tilt_spec(slope, pivot)
+            at_pivot = np.interp(np.log(pivot), np.log(f), got)
+            assert at_pivot == pytest.approx(0.0, abs=0.3), (
+                f"slope {slope:+.1f} @ {pivot:.0f} Hz: pivot is {at_pivot:+.2f} dB, "
+                "expected unity"
+            )
 
-    spec = freq_response_db(run_mimoeq_json(config, audio)[0])
 
-    def at(hz):
-        return spec[int(round(hz * FFT_N / SR))]
+def test_json_tilt_slope_scales_and_mirrors():
+    """Doubling the slope doubles the tilt; flipping its sign mirrors the line."""
+    f, a = _tilt_spec(-2.0, 1000.0)
+    _, b = _tilt_spec(-4.0, 1000.0)
+    _, c = _tilt_spec(+2.0, 1000.0)
+    lo = f <= 100.0
+    assert np.mean(b[lo]) == pytest.approx(2.0 * np.mean(a[lo]), rel=0.06)
+    assert np.mean(c[lo]) == pytest.approx(-np.mean(a[lo]), abs=0.3)
 
-    assert at(50.0) == pytest.approx(+db, abs=0.6), \
-        f"lows should be lifted by {db:+.1f} dB (got {at(50.0):+.2f})"
-    assert at(16000.0) == pytest.approx(-db, abs=0.6), \
-        f"highs should be dropped by {-db:+.1f} dB (got {at(16000.0):+.2f})"
-    assert at(f) == pytest.approx(0.0, abs=0.25), \
-        f"pivot should stay at unity (got {at(f):+.2f} dB)"
 
-    # Negative gain mirrors it: the seesaw tips the other way.
-    config["sos"][0]["parameters"]["gain_db"] = -db
-    spec_neg = freq_response_db(run_mimoeq_json(config, audio)[0])
-    assert spec_neg[int(round(50.0 * FFT_N / SR))] == pytest.approx(-db, abs=0.6)
-    assert spec_neg[int(round(16000.0 * FFT_N / SR))] == pytest.approx(+db, abs=0.6)
+def test_json_tilt_zero_slope_is_flat():
+    """Zero slope is a flat (transparent) band."""
+    _, got = _tilt_spec(0.0, 1000.0)
+    assert np.max(np.abs(got)) < 0.05, f"expected flat, got {np.max(np.abs(got)):.3f} dB"
+
+
+def test_json_tilt_slope_is_clamped():
+    """Slopes beyond the supported range clamp rather than misbehaving."""
+    f, got = _tilt_spec(20.0, 1000.0)          # way past the +6 dB/oct ceiling
+    ideal = tilt_target_db(f, 6.0, 1000.0)
+    assert np.max(np.abs(got - ideal)) < 0.5, "over-range slope should clamp to +6 dB/oct"
 
 
 def test_json_crossover_lp_freq_response():

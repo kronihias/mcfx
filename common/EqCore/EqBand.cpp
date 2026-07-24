@@ -139,21 +139,87 @@ IIRCoefficients EqBand::makeDetectorCoeffs(IIRSubType subType, double sampleRate
     }
 }
 
-IIRCoefficients EqBand::makeTiltCoeffs(double sampleRate, float freq, float q,
-                                       float gainLinear)
+void EqBand::designTiltCascade()
 {
-    // A low shelf of g^2 runs from g^2 at DC to unity at Nyquist, passing through
-    // g at its corner. Scaling the numerator by 1/g slides that whole curve down
-    // to +g / unity / 1/g — i.e. +gain low, 0 dB at the pivot, -gain high.
-    const float g = jmax(1.0e-6f, gainLinear);
-    auto c = IIRCoefficients::makeLowShelf(sampleRate, freq, q, g * g);
-    const float s = 1.0f / g;
-    return IIRCoefficients(c.coefficients[0] * s,   // b0
-                           c.coefficients[1] * s,   // b1
-                           c.coefficients[2] * s,   // b2
-                           1.0f,                    // a0 (already normalised)
-                           c.coefficients[3],       // a1
-                           c.coefficients[4]);      // a2
+    // Tilt = a straight line on a dB vs log-frequency plot: constant slope in
+    // dB/octave, crossing 0 dB at the band's frequency (the pivot).
+    //
+    // Built from kTiltSections first-order pole/zero pairs on a grid that is
+    // geometric in the bilinear-warped variable W = tan(pi*f/fs) rather than in Hz.
+    // Working in W is what keeps the line straight in the top octaves: the grid can
+    // run past Nyquist (W -> infinity), and each section's height is taken from the
+    // target's own increment across its interval, so the frequency warping is
+    // absorbed instead of steepening the treble.
+    //
+    // A section with pole Wp and zero Wz contributes a shelf of 20*log10(Wp/Wz) dB;
+    // straddling the grid point (Wp,Wz = Wc*10^(+/-h/40)) makes rising and falling
+    // slopes exactly symmetric. Asymptotic heights alone still droop at HF — the
+    // magnitude slope of any real filter has to vanish at Nyquist — so a few
+    // fixed-point passes re-fit the heights against the realised curve, which takes
+    // the worst case from ~1.2 dB down to <0.2 dB over 20 Hz..20 kHz at any rate.
+    const double fs = sampleRate_ > 0.0 ? sampleRate_ : 48000.0;
+    const double slope = jlimit(-(double) kTiltMaxSlope, (double) kTiltMaxSlope,
+                                (double) gainDB_);          // dB per octave
+
+    double W[kTiltSections + 1], fd[kTiltSections + 1], tgt[kTiltSections + 1];
+    double h[kTiltSections];
+
+    const double wLo = std::tan(MathConstants<double>::pi * kTiltLowHz / fs);
+    const double stepRatio = std::pow(kTiltWarpHi / wLo, 1.0 / (double) kTiltSections);
+    for (int k = 0; k <= kTiltSections; ++k)
+    {
+        W[k]  = wLo * std::pow(stepRatio, (double) k);
+        fd[k] = fs / MathConstants<double>::pi * std::atan(W[k]);   // grid edge, in Hz
+    }
+    for (int k = 0; k <= kTiltSections; ++k)
+        tgt[k] = slope * std::log2(fd[k] / fd[0]);
+    for (int k = 0; k < kTiltSections; ++k)
+        h[k] = tgt[k + 1] - tgt[k];
+
+    auto build = [&]
+    {
+        cascadeCoeffs_.resize((size_t) kTiltSections);
+        for (int k = 0; k < kTiltSections; ++k)
+        {
+            const double Wc = std::sqrt(W[k] * W[k + 1]);
+            const double Wp = Wc * std::pow(10.0,  h[k] / 40.0);
+            const double Wz = Wc * std::pow(10.0, -h[k] / 40.0);
+            const double den = 1.0 + 1.0 / Wp;
+            cascadeCoeffs_[(size_t) k] = { (float) ((1.0 + 1.0 / Wz) / den),
+                                           (float) ((1.0 - 1.0 / Wz) / den),
+                                           0.f,
+                                           (float) ((1.0 - 1.0 / Wp) / den),
+                                           0.f };
+        }
+    };
+
+    auto magDB = [&] (double hz)
+    {
+        const double w = 2.0 * MathConstants<double>::pi * hz / fs;
+        const std::complex<double> zi(std::cos(-w), std::sin(-w));
+        std::complex<double> H(1.0, 0.0);
+        for (auto& s : cascadeCoeffs_)
+            H *= ((double) s[0] + (double) s[1] * zi) / (1.0 + (double) s[3] * zi);
+        return 20.0 * std::log10(jmax(1.0e-12, std::abs(H)));
+    };
+
+    for (int pass = 0; pass < kTiltFitPasses; ++pass)
+    {
+        build();
+        const double ref = magDB(fd[0]);
+        double err[kTiltSections + 1];
+        for (int k = 0; k <= kTiltSections; ++k)
+            err[k] = tgt[k] - (magDB(fd[k]) - ref);
+        for (int k = 0; k < kTiltSections; ++k)
+            h[k] = jlimit(-18.0, 18.0, h[k] + (err[k + 1] - err[k]));
+    }
+    build();
+
+    // Slide the whole line so it crosses 0 dB at the pivot.
+    const double pivot = jlimit(20.0, 0.45 * fs, (double) frequency_);
+    const double g = std::pow(10.0, -magDB(pivot) / 20.0);
+    cascadeCoeffs_[0][0] = (float) ((double) cascadeCoeffs_[0][0] * g);
+    cascadeCoeffs_[0][1] = (float) ((double) cascadeCoeffs_[0][1] * g);
 }
 
 int EqBand::getLookaheadSamples(double sampleRate) const
@@ -200,7 +266,8 @@ bool EqBand::usesCascade() const
         || iirSubType_ == IIRSubType::EllipticLP
         || iirSubType_ == IIRSubType::EllipticHP
         || iirSubType_ == IIRSubType::BesselLP
-        || iirSubType_ == IIRSubType::BesselHP;
+        || iirSubType_ == IIRSubType::BesselHP
+        || iirSubType_ == IIRSubType::Tilt;   // constant-slope line (1st-order pairs)
 }
 
 static bool isAnalogPrototypeSubType (IIRSubType st)
@@ -774,7 +841,7 @@ void EqBand::updateIIRCoefficients()
             iirCoeffs_ = IIRCoefficients::makePeakFilter(sampleRate_, f, q_, gain);
             break;
         case IIRSubType::Tilt:
-            iirCoeffs_ = makeTiltCoeffs(sampleRate_, f, q_, gain);
+            designTiltCascade();          // constant-slope line (cascade of 1st-order pairs)
             break;
 
         case IIRSubType::ButterworthLP:
@@ -1002,8 +1069,7 @@ void EqBand::recalcWorkingCoeffs()
         case IIRSubType::LowShelf:  c = IIRCoefficients::makeLowShelf(sampleRate_, f, q, g); break;
         case IIRSubType::HighShelf: c = IIRCoefficients::makeHighShelf(sampleRate_, f, q, g); break;
         case IIRSubType::Peak:      c = IIRCoefficients::makePeakFilter(sampleRate_, f, q, g); break;
-        case IIRSubType::Tilt:      c = makeTiltCoeffs(sampleRate_, f, q, g); break;
-        default: return; // cascade types and raw biquad handled separately
+        default: return; // cascade types (incl. tilt) and raw biquad handled separately
     }
     iirWork_.setFromStandard(c.coefficients[0], c.coefficients[1], c.coefficients[2],
                               c.coefficients[3], c.coefficients[4]);
@@ -1627,6 +1693,11 @@ var EqBand::toJson() const
                         if (isCheby2 || isElliptic)
                             params->setProperty("ripple_stop_db", rippleStopDB_);
                     }
+                    else if (iirSubType_ == IIRSubType::Tilt)
+                    {
+                        // Tilt has no Q; its "gain" is a slope, so name it as one.
+                        params->setProperty("slope_db_oct", gainDB_);
+                    }
                     else
                     {
                         params->setProperty("Q", q_);
@@ -1845,6 +1916,12 @@ EqBand* EqBand::fromJson(const var& json)
                     // setAnalogOrder triggers the coefficient rebuild — call it last so
                     // ripple values are in place when coefficients are computed.
                     band->setAnalogOrder((int)params.getProperty("order", 4));
+                }
+                else if (subType == IIRSubType::Tilt)
+                {
+                    // Slope in dB/octave; "gain_db" accepted as a fallback spelling.
+                    band->setGainDB((float)params.getProperty(
+                        "slope_db_oct", params.getProperty("gain_db", 0.0)));
                 }
                 else
                 {
