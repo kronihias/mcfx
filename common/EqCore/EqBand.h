@@ -118,7 +118,8 @@ enum class IIRSubType
     EllipticLP,
     EllipticHP,
     BesselLP,
-    BesselHP
+    BesselHP,
+    Tilt
 };
 
 class EqBand
@@ -234,6 +235,15 @@ public:
         high-pass for High Shelf. Tracks the band's frequency and Q. */
     static IIRCoefficients makeDetectorCoeffs(IIRSubType subType, double sampleRate,
                                               float freq, float q);
+
+    /** Tilt ("spectral seesaw"): lifts one half of the spectrum by +gain and drops
+        the other by -gain, pivoting through 0 dB at `freq`. Built as a low shelf of
+        twice the gain, scaled back by half of it — so a single biquad gives
+        +gain at DC, -gain at Nyquist, and unity at the pivot. Positive gain tilts
+        the balance towards the lows (darker), negative towards the highs
+        (brighter). `gainLinear` is linear, matching the JUCE make*() convention. */
+    static IIRCoefficients makeTiltCoeffs(double sampleRate, float freq, float q,
+                                          float gainLinear);
 
     bool  isDynamicActive() const { return dynActive_; }
     void  setDynamicActive(bool b);

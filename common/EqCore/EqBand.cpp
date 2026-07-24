@@ -139,6 +139,23 @@ IIRCoefficients EqBand::makeDetectorCoeffs(IIRSubType subType, double sampleRate
     }
 }
 
+IIRCoefficients EqBand::makeTiltCoeffs(double sampleRate, float freq, float q,
+                                       float gainLinear)
+{
+    // A low shelf of g^2 runs from g^2 at DC to unity at Nyquist, passing through
+    // g at its corner. Scaling the numerator by 1/g slides that whole curve down
+    // to +g / unity / 1/g — i.e. +gain low, 0 dB at the pivot, -gain high.
+    const float g = jmax(1.0e-6f, gainLinear);
+    auto c = IIRCoefficients::makeLowShelf(sampleRate, freq, q, g * g);
+    const float s = 1.0f / g;
+    return IIRCoefficients(c.coefficients[0] * s,   // b0
+                           c.coefficients[1] * s,   // b1
+                           c.coefficients[2] * s,   // b2
+                           1.0f,                    // a0 (already normalised)
+                           c.coefficients[3],       // a1
+                           c.coefficients[4]);      // a2
+}
+
 int EqBand::getLookaheadSamples(double sampleRate) const
 {
     if (! dynActive_ || ! supportsDynamic() || dynLookaheadMs_ <= 0.f)
@@ -756,6 +773,9 @@ void EqBand::updateIIRCoefficients()
         case IIRSubType::Peak:
             iirCoeffs_ = IIRCoefficients::makePeakFilter(sampleRate_, f, q_, gain);
             break;
+        case IIRSubType::Tilt:
+            iirCoeffs_ = makeTiltCoeffs(sampleRate_, f, q_, gain);
+            break;
 
         case IIRSubType::ButterworthLP:
         {
@@ -982,6 +1002,7 @@ void EqBand::recalcWorkingCoeffs()
         case IIRSubType::LowShelf:  c = IIRCoefficients::makeLowShelf(sampleRate_, f, q, g); break;
         case IIRSubType::HighShelf: c = IIRCoefficients::makeHighShelf(sampleRate_, f, q, g); break;
         case IIRSubType::Peak:      c = IIRCoefficients::makePeakFilter(sampleRate_, f, q, g); break;
+        case IIRSubType::Tilt:      c = makeTiltCoeffs(sampleRate_, f, q, g); break;
         default: return; // cascade types and raw biquad handled separately
     }
     iirWork_.setFromStandard(c.coefficients[0], c.coefficients[1], c.coefficients[2],
@@ -1526,6 +1547,7 @@ static String iirSubTypeToString(IIRSubType st)
         case IIRSubType::EllipticHP:    return "elliptic_hp";
         case IIRSubType::BesselLP:      return "bessel_lp";
         case IIRSubType::BesselHP:      return "bessel_hp";
+        case IIRSubType::Tilt:          return "tilt";
     }
     return "peak";
 }
@@ -1553,6 +1575,7 @@ static IIRSubType stringToIIRSubType(const String& s)
     if (s == "elliptic_hp")   return IIRSubType::EllipticHP;
     if (s == "bessel_lp")     return IIRSubType::BesselLP;
     if (s == "bessel_hp")     return IIRSubType::BesselHP;
+    if (s == "tilt")          return IIRSubType::Tilt;
     return IIRSubType::Peak;
 }
 

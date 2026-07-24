@@ -129,6 +129,17 @@ def make_highshelf_sos(f0: float, Q: float, gain_linear: float, fs: float) -> np
     return np.array([[b0/a0, b1/a0, b2/a0, 1.0, a1/a0, a2/a0]])
 
 
+def make_tilt_sos(f0: float, Q: float, gain_linear: float, fs: float) -> np.ndarray:
+    """EqBand::makeTiltCoeffs — tilt / spectral seesaw (gain is LINEAR, not dB).
+
+    A low shelf of g^2 scaled by 1/g: +gain at DC, -gain at Nyquist, unity at f0.
+    """
+    g = max(1e-6, gain_linear)
+    sos = make_lowshelf_sos(f0, Q, g * g, fs).copy()
+    sos[0, 0:3] /= g          # scale the numerator only
+    return sos
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

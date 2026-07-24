@@ -44,7 +44,7 @@ from scipy.signal import sosfilt
 
 from reference.filter_ref import (
     make_lowpass_sos, make_highpass_sos,
-    make_peak_sos, make_lowshelf_sos, make_highshelf_sos,
+    make_peak_sos, make_lowshelf_sos, make_highshelf_sos, make_tilt_sos,
     apply_sos,
 )
 from reference.mimoeq_ref import (
@@ -720,6 +720,69 @@ def test_json_peak_freq_response():
         freq_response_db(plugin_ir), freq_response_db(ref_ir), atol=0.5,
         err_msg="JSON peak: frequency response mismatch"
     )
+
+
+@pytest.mark.parametrize("f, q, db", [
+    (1000.0, 0.707, +6.0),    # tilt towards the lows
+    (700.0,  0.707, -9.0),    # tilt towards the highs
+    (2000.0, 1.2,   +3.0),    # steeper pivot
+    (1000.0, 0.707,  0.0),    # 0 dB → unity
+])
+def test_json_tilt_freq_response(f, q, db):
+    """JSON-loaded tilt band frequency response matches the scipy reference."""
+    config = {
+        "sample_rate": SR,
+        "sos": [
+            {"diagonal": True, "parameters": {
+                "type": "tilt", "f_Hz": f, "Q": q, "gain_db": db
+            }}
+        ]
+    }
+    audio = np.zeros((2, BLOCK), dtype=np.float32)
+    audio[:, 0] = 1.0   # impulse
+
+    plugin_ir = run_mimoeq_json(config, audio)[0]
+    ref_ir = apply_sos(make_tilt_sos(f, q, db_to_linear(db), SR), audio[0])
+
+    np.testing.assert_allclose(
+        freq_response_db(plugin_ir), freq_response_db(ref_ir), atol=0.5,
+        err_msg=f"Tilt @ {f:.0f} Hz, Q={q}, {db:+.1f} dB"
+    )
+
+
+def test_json_tilt_is_a_seesaw():
+    """A tilt band is a spectral seesaw, verified independently of the reference
+    model: +gain well below the pivot, -gain well above it, and unity *at* the
+    pivot — so it rebalances the spectrum without changing the level at f_Hz."""
+    f, db = 1000.0, 6.0
+    config = {
+        "sample_rate": SR,
+        "sos": [
+            {"diagonal": True, "parameters": {
+                "type": "tilt", "f_Hz": f, "Q": 0.707, "gain_db": db
+            }}
+        ]
+    }
+    audio = np.zeros((2, BLOCK), dtype=np.float32)
+    audio[:, 0] = 1.0
+
+    spec = freq_response_db(run_mimoeq_json(config, audio)[0])
+
+    def at(hz):
+        return spec[int(round(hz * FFT_N / SR))]
+
+    assert at(50.0) == pytest.approx(+db, abs=0.6), \
+        f"lows should be lifted by {db:+.1f} dB (got {at(50.0):+.2f})"
+    assert at(16000.0) == pytest.approx(-db, abs=0.6), \
+        f"highs should be dropped by {-db:+.1f} dB (got {at(16000.0):+.2f})"
+    assert at(f) == pytest.approx(0.0, abs=0.25), \
+        f"pivot should stay at unity (got {at(f):+.2f} dB)"
+
+    # Negative gain mirrors it: the seesaw tips the other way.
+    config["sos"][0]["parameters"]["gain_db"] = -db
+    spec_neg = freq_response_db(run_mimoeq_json(config, audio)[0])
+    assert spec_neg[int(round(50.0 * FFT_N / SR))] == pytest.approx(-db, abs=0.6)
+    assert spec_neg[int(round(16000.0 * FFT_N / SR))] == pytest.approx(+db, abs=0.6)
 
 
 def test_json_crossover_lp_freq_response():

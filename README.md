@@ -264,6 +264,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
+- `mcfx_mimoeq`: new **tilt** filter type — a spectral seesaw that lifts everything below the pivot frequency by the set gain and drops everything above it by the same amount (negative gain tilts the other way), leaving the level at the pivot unchanged. Q sets how steep the transition is. Useful as a broad, single-knob tonal balance across many channels.
 - `mcfx_mimoeq`: rolling **spectrogram** view in the analyzer — switch the graph between the spectrum curve and a time-vs-frequency waterfall (colour = level) with the EQ response drawn on top; selectable pre-EQ or post-EQ source. Enabled from the analyzer settings popup; the view and source persist with the plugin state.
 - `mcfx_mimoeq`: dynamic EQ on peak/shelf bands — per-band threshold, range (cut/boost), attack, release, auto-threshold, and a per-band detection link (linked = one shared gain change across channels, independent = per-channel). Type-aware detector (band-pass for peak, low/high-pass for shelves). Live gain dot, moving response curve and range bracket on the graph. Available on diagonal and MIMO path bands.
 - `mcfx_mimoeq`: per-band **lookahead** for the dynamic EQ — the detector reads ahead of the audio so the gain is in place before a transient. All paths (diagonal + MIMO, including FIR latency) are latency-compensated and the total is reported to the host.

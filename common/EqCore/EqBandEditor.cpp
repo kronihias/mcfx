@@ -44,6 +44,7 @@ EqBandEditor::EqBandEditor()
     cbIIRSubType_.addItem("Low Shelf", 6);
     cbIIRSubType_.addItem("High Shelf", 7);
     cbIIRSubType_.addItem("Peak", 8);
+    cbIIRSubType_.addItem("Tilt", 23);
     cbIIRSubType_.addItem("Butterworth LP", 9);
     cbIIRSubType_.addItem("Butterworth HP", 10);
     cbIIRSubType_.addItem("Crossover LP", 11);
@@ -421,6 +422,7 @@ void EqBandEditor::updateFromBand()
             case IIRSubType::EllipticHP:    cbIIRSubType_.setSelectedId(20, dontSendNotification); break;
             case IIRSubType::BesselLP:      cbIIRSubType_.setSelectedId(21, dontSendNotification); break;
             case IIRSubType::BesselHP:      cbIIRSubType_.setSelectedId(22, dontSendNotification); break;
+            case IIRSubType::Tilt:          cbIIRSubType_.setSelectedId(23, dontSendNotification); break;
         }
         sldFreq_.setValue(band_->getFrequency(), dontSendNotification);
         sldQ_.setValue(band_->getQ(), dontSendNotification);
@@ -1084,6 +1086,7 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
             case 20: band_->setIIRSubType(IIRSubType::EllipticHP); break;
             case 21: band_->setIIRSubType(IIRSubType::BesselLP); break;
             case 22: band_->setIIRSubType(IIRSubType::BesselHP); break;
+            case 23: band_->setIIRSubType(IIRSubType::Tilt); break;
         }
 
         // Repopulate order combo for the selected family
@@ -1577,6 +1580,7 @@ void EqBandEditor::IIRSubTypeCombo::showPopup()
     add (8, "Peak");
     add (6, "Low Shelf");
     add (7, "High Shelf");
+    add (23, "Tilt");
     add (2, "High Pass");
     add (1, "Low Pass");
     add (3, "Band Pass");
