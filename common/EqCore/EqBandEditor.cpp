@@ -176,6 +176,15 @@ EqBandEditor::EqBandEditor()
     lblDynHeader_.setFont(Font(FontOptions(13.f, Font::bold)));
     lblDynHeader_.setColour(Label::textColourId, Colours::white);
 
+    // Sub-column headings ("Amount" / "Timing") — quiet dividers, not competing
+    // with the "Dynamics" header.
+    for (auto* lbl : { &lblDynAmount_, &lblDynTiming_ })
+    {
+        addAndMakeVisible(lbl);
+        lbl->setFont(Font(FontOptions(11.f, Font::plain)));
+        lbl->setColour(Label::textColourId, Colours::white.withAlpha(0.55f));
+    }
+
     addAndMakeVisible(btnDynActive_);
     btnDynActive_.setTooltip("Make this band dynamic: its gain reacts to the level in its frequency region");
     btnDynActive_.addListener(this);
@@ -639,6 +648,8 @@ void EqBandEditor::showControlsForType(EqBandType type)
     bool isDynCapable = band_ != nullptr && band_->supportsDynamic();
     bool dynOn = isDynCapable && band_->isDynamicActive();
     lblDynHeader_.setVisible(dynOn);   // header sits above the dynamic params
+    lblDynAmount_.setVisible(dynOn);   // sub-column headings
+    lblDynTiming_.setVisible(dynOn);
     btnDynActive_.setVisible(isDynCapable);
     btnDynAuto_.setVisible(dynOn);
     btnDynLink_.setVisible(dynOn);
@@ -739,7 +750,9 @@ void EqBandEditor::resized()
     // at the top, using the space freed by moving the badge to the left).
     bool twoCol = sldDynThreshold_.isVisible();
     const int colGap = 18;
-    int leftW  = twoCol ? jmax(180, (w - colGap) / 2) : w;
+    // Give the dynamics area a bit more than half so its two sub-columns keep a
+    // usable slider length; the EQ params on the left need less width.
+    int leftW  = twoCol ? jmax(200, (w - colGap) * 44 / 100) : w;
     int rightX = x + leftW + colGap;
     int rightW = w - leftW - colGap;
 
@@ -800,23 +813,46 @@ void EqBandEditor::resized()
                 btnDynAuto_.setBounds(togRight - 58 - 62, yd, 58, rowH);
             yd += rowH + gap;
 
-            struct { Label* lbl; Slider* sld; } dynRows[] = {
+            // Two grouped sub-columns so the params don't overflow the viewport:
+            //   Amount (the static level curve): Threshold, Range, Ratio, Knee
+            //   Timing (the envelope):           Attack, Release, Lookahead
+            const int subGap  = 14;
+            const int subW    = (rightW - subGap) / 2;
+            const int colAx   = rightX;
+            const int colBx   = rightX + subW + subGap;
+            const int dynLblW = 58;
+
+            lblDynAmount_.setBounds(colAx, yd, subW, 16);
+            lblDynTiming_.setBounds(colBx, yd, subW, 16);
+            const int rowsY = yd + 16 + 2;
+
+            struct Row { Label* lbl; Slider* sld; };
+            const Row amount[] = {
                 { &lblDynThreshold_, &sldDynThreshold_ },
                 { &lblDynRange_,     &sldDynRange_     },
                 { &lblDynRatio_,     &sldDynRatio_     },
                 { &lblDynKnee_,      &sldDynKnee_      },
+            };
+            const Row timing[] = {
                 { &lblDynAttack_,    &sldDynAttack_    },
                 { &lblDynRelease_,   &sldDynRelease_   },
                 { &lblDynLookahead_, &sldDynLookahead_ },
             };
-            const int dynLblW = 62;   // wider column so "Attack:"/"Release:" fit
-            for (auto& r : dynRows)
+
+            auto layoutCol = [&](const Row* rows, int n, int cx)
             {
-                r.lbl->setBounds(rightX, yd, dynLblW, rowH);
-                r.sld->setBounds(rightX + dynLblW + 4, yd, rightW - dynLblW - 10, rowH);
-                yd += rowH + gap;
-            }
-            yRight = yd;
+                int yy = rowsY;
+                for (int i = 0; i < n; ++i)
+                {
+                    rows[i].lbl->setBounds(cx, yy, dynLblW, rowH);
+                    rows[i].sld->setBounds(cx + dynLblW + 4, yy, subW - dynLblW - 4, rowH);
+                    yy += rowH + gap;
+                }
+                return yy;
+            };
+            int ya = layoutCol(amount, 4, colAx);
+            int yb = layoutCol(timing, 3, colBx);
+            yRight = jmax(ya, yb);
         }
     }
 

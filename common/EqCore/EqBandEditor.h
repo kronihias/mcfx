@@ -503,11 +503,14 @@ private:
 
     ToggleButton btnEnable_ { "Enable" };
 
-    // --- Dynamic EQ controls (peak / shelf only) ---
+    // --- Dynamic EQ controls (peak / shelf, or broadband Gain compressor) ---
     Label        lblDynHeader_   { {}, "Dynamics" };
     ToggleButton btnDynActive_   { "Dynamic mode" };
     ToggleButton btnDynAuto_     { "Auto" };
     ToggleButton btnDynLink_     { "Link" };
+    // Sub-column headings that group the params by role (level curve vs envelope).
+    Label  lblDynAmount_    { {}, "Amount" };
+    Label  lblDynTiming_    { {}, "Timing" };
     Label  lblDynThreshold_ { {}, "Thr:" };
     Slider sldDynThreshold_;
     Label  lblDynRange_     { {}, "Range:" };
