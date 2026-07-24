@@ -110,7 +110,13 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     addAndMakeVisible(btnAnalyzer_);
     btnAnalyzer_.setClickingTogglesState(true);
     btnAnalyzer_.addListener(this);
-    btnAnalyzer_.setTooltip("Toggle spectrum analyzer overlay. Right-click to select channel.");
+    btnAnalyzer_.setTooltip("Toggle spectrum analyzer overlay. Click the gear for settings.");
+
+    // Gear next to Analyzer opens the settings popup (channel, normalize, offset,
+    // spectrogram, pre/post source) — a discoverable alternative to right-clicking.
+    addAndMakeVisible(btnAnalyzerCog_);
+    btnAnalyzerCog_.addListener(this);
+    btnAnalyzerCog_.setTooltip("Analyzer settings: channel, normalize, offset, spectrogram, pre/post source.");
 
     // Phase toggle — shows a separate phase-response graph below the magnitude.
     addAndMakeVisible(btnPhase_);
@@ -304,12 +310,14 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     btnRemovePath_.setBounds(mx, pathY, 85, 22);     mx += 89;
     btnRouting_.setBounds(mx, pathY, 65, 22);        mx += 69;
 
-    // Right-anchored: Analyzer + Phase toggles
+    // Right-anchored: Analyzer gear + Analyzer + Phase toggles
     int rightX = w - 4;
+    int cogW      = 24;
     int analyzerW = 80;
     int phaseW    = 65;
-    btnAnalyzer_.setBounds(rightX - analyzerW,                pathY, analyzerW, 22);
-    btnPhase_   .setBounds(rightX - analyzerW - phaseW - 4,    pathY, phaseW,    22);
+    btnAnalyzerCog_.setBounds(rightX - cogW,                              pathY, cogW,      22);
+    btnAnalyzer_   .setBounds(rightX - cogW - analyzerW,                  pathY, analyzerW, 22);
+    btnPhase_      .setBounds(rightX - cogW - analyzerW - phaseW - 4,     pathY, phaseW,    22);
 
     // Reserve fixed space for the bottom sections so the graph area absorbs
     // any extra height (and shrinks first when the window gets smaller).
@@ -732,6 +740,12 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
     if (b == &btnAnalyzer_)
     {
         updateAnalyzerState();
+        return;
+    }
+
+    if (b == &btnAnalyzerCog_)
+    {
+        showAnalyzerSettingsPopup();
         return;
     }
 
@@ -1432,7 +1446,7 @@ void Mcfx_mimoeqAudioProcessorEditor::showAnalyzerSettingsPopup()
     auto* settings = new AnalyzerSettingsComponent(getProcessor(), &graph_, diagonalMode_);
     auto& box = CallOutBox::launchAsynchronously(
         std::unique_ptr<Component>(settings),
-        btnAnalyzer_.getScreenBounds(),
+        btnAnalyzerCog_.getScreenBounds(),
         nullptr);
     analyzerSettingsCallOut_ = &box;
 }
