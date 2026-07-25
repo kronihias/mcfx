@@ -169,6 +169,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     addAndMakeVisible(graph_);
     graph_.setListener(this);
     graph_.setAnalyzers(&processor->getInputAnalyzer(), &processor->getOutputAnalyzer());
+    graph_.setCQTAnalyzer(&processor->getCQTAnalyzer());
     graph_.setLiveDynOffsetProvider([this](int band) -> float {
         // Live dynamic metering is published for the diagonal chain only.
         return diagonalMode_ ? getProcessor()->getDiagDynMeter(band) : 0.f;

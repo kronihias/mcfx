@@ -373,6 +373,10 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     bool analyzerOn = analyzerEnabled_.load(std::memory_order_relaxed);
     if (analyzerOn)
         inputAnalyzer_.pushBuffer(buffer, numSamples);
+    // The spectrogram reads a constant-Q analysis of whichever side it shows;
+    // feeding it costs a ring copy, and only while it is actually on screen.
+    if (analyzerOn && editorSpectrogramOn && !editorSpectroPost)
+        cqtAnalyzer_.push(buffer, numSamples, inputAnalyzer_.getAnalyzerChannel());
 
     auto& diagChains = activeState_->diagChannelChains;
     auto& diagMask = activeState_->diagChannelMask;
@@ -474,6 +478,8 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     // Capture post-processing spectrum
     if (analyzerOn)
         outputAnalyzer_.pushBuffer(buffer, numSamples);
+    if (analyzerOn && editorSpectrogramOn && editorSpectroPost)
+        cqtAnalyzer_.push(buffer, numSamples, outputAnalyzer_.getAnalyzerChannel());
 
     // ---- Publish diagonal dynamic offsets for GUI metering (lock-free) ----
     // Reads only audio-thread-owned processing copies (never the GUI-mutable model),

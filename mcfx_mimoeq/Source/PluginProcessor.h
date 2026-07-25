@@ -25,6 +25,7 @@
 #include "EqChain.h"
 #include "DynamicDetector.h"
 #include "SpectrumAnalyzer.h"
+#include "CQTAnalyzer.h"
 #include <map>
 #include <array>
 #include <atomic>
@@ -155,6 +156,8 @@ public:
     // --- Spectrum Analyzer ---
     SpectrumAnalyzer& getInputAnalyzer() { return inputAnalyzer_; }
     SpectrumAnalyzer& getOutputAnalyzer() { return outputAnalyzer_; }
+    /** Constant-Q analyzer feeding the spectrogram (log-spaced bins). */
+    CQTAnalyzer& getCQTAnalyzer() { return cqtAnalyzer_; }
     bool isAnalyzerEnabled() const { return analyzerEnabled_.load(std::memory_order_relaxed); }
     void setAnalyzerEnabled(bool on) { analyzerEnabled_.store(on, std::memory_order_relaxed); }
     bool editorAnalyzerOn = false;       // persisted toggle state
@@ -246,6 +249,7 @@ private:
     // Spectrum analyzers
     SpectrumAnalyzer inputAnalyzer_;
     SpectrumAnalyzer outputAnalyzer_;
+    CQTAnalyzer      cqtAnalyzer_;      // spectrogram only; kernels built on first use
     std::atomic<bool> analyzerEnabled_ { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Mcfx_mimoeqAudioProcessor)

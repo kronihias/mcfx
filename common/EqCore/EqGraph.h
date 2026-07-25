@@ -23,6 +23,7 @@
 #include "JuceHeader.h"
 #include "EqChain.h"
 #include "SpectrumAnalyzer.h"
+#include "CQTAnalyzer.h"
 
 class EqGraph : public Component,
                 public SettableTooltipClient,
@@ -69,6 +70,10 @@ public:
         behind the EQ curve, instead of the spectrum overlay. Off by default. */
     void setSpectrogramMode(bool on);
     bool getSpectrogramMode() const { return spectrogramMode_; }
+    /** Constant-Q analyzer used for the spectrogram (log-spaced bins). When set,
+        the waterfall reads it instead of the linear-bin spectrum analyzer. */
+    void setCQTAnalyzer(CQTAnalyzer* c) { cqt_ = c; }
+
     /** Which signal the spectrogram shows: false = pre-EQ (input), true = post-EQ. */
     void setSpectrogramSource(bool post) { spectroPost_ = post; }
     bool getSpectrogramSource() const { return spectroPost_; }
@@ -144,6 +149,7 @@ private:
     bool analyzerOn_ = false;
     bool analyzerAutoNormalize_ = true;
     float analyzerOffset_ = 0.f;
+    CQTAnalyzer* cqt_ = nullptr;   // spectrogram source (log-spaced bins)
     Path pathAnalyzerIn_;
     Path pathAnalyzerOut_;
 

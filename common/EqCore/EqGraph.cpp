@@ -491,13 +491,27 @@ void EqGraph::writeSpectroRow()
     if (an == nullptr || ! spectro_.isValid())
         return;
 
+    // Prefer the constant-Q analyzer: its bins are log-spaced like this display,
+    // so the bass gets the long window it needs while the treble keeps a short
+    // one. A linear-bin FFT can only do one or the other. Kernels are built on
+    // first use here (GUI thread) rather than in prepareToPlay, so a session
+    // that never opens the spectrogram never pays for them.
+    const bool useCQT = (cqt_ != nullptr);
+    if (useCQT)
+    {
+        cqt_->prepare(an->getSampleRate());
+        cqt_->compute();
+    }
+
     const double ratio = (double)maxf_ / (double)minf_;
     float col[kSpecW];
     float peak = -250.f;
     for (int i = 0; i < kSpecW; ++i)
     {
         const double hz = (double)minf_ * std::pow(ratio, (double)i / kSpecW);
-        const float  db = 20.f * std::log10(an->getMagnitude(hz) + 1e-12f);
+        const float  mag = useCQT && cqt_->isReady() ? cqt_->getMagnitude(hz)
+                                                     : an->getMagnitude(hz);
+        const float  db = 20.f * std::log10(mag + 1e-12f);
         // light per-column smoothing (fast attack / slow release) for a soft look
         float& s = specSmoothDb_[(size_t)i];
         if (s < -250.f) s = db;
