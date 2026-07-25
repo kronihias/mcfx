@@ -106,35 +106,59 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     updatePathSelector();
 
-    // Analyzer toggle
-    addAndMakeVisible(btnAnalyzer_);
-    btnAnalyzer_.setClickingTogglesState(true);
-    btnAnalyzer_.addListener(this);
-    btnAnalyzer_.setTooltip("Toggle spectrum analyzer overlay. Click the gear for settings.");
-
-    // Gear next to Analyzer opens the settings popup (channel, normalize, offset,
-    // spectrogram, pre/post source) — a discoverable alternative to right-clicking.
-    addAndMakeVisible(btnAnalyzerCog_);
-    btnAnalyzerCog_.addListener(this);
-
-    // Display row: the analyzer settings worth reaching without opening anything.
+    // Display row — every analyzer setting, no popup.
     addAndMakeVisible(lblDisplay_);
     lblDisplay_.setColour(Label::textColourId, Colours::white.withAlpha(0.55f));
     lblDisplay_.setFont(Font(FontOptions(13.f, Font::plain)));
 
+    // "off" is just the first view, so the analyzer needs no separate toggle.
     addAndMakeVisible(cbAnalyzerView_);
-    cbAnalyzerView_.addItem("spectrum", 1);
-    cbAnalyzerView_.addItem("spectrogram", 2);
+    cbAnalyzerView_.addItem("analyzer off", 1);
+    cbAnalyzerView_.addItem("spectrum",     2);
+    cbAnalyzerView_.addItem("spectrogram",  3);
     cbAnalyzerView_.addListener(this);
-    cbAnalyzerView_.setTooltip("Spectrum curve, or a rolling spectrogram "
-                               "(time vs frequency, colour = level)");
+    cbAnalyzerView_.setTooltip("Analyzer overlay: off, spectrum curve, or a rolling "
+                               "spectrogram (time vs frequency, colour = level)");
 
     addAndMakeVisible(cbAnalyzerSource_);
     cbAnalyzerSource_.addItem("pre-EQ", 1);
     cbAnalyzerSource_.addItem("post-EQ", 2);
     cbAnalyzerSource_.addListener(this);
     cbAnalyzerSource_.setTooltip("Which signal the spectrogram displays");
-    btnAnalyzerCog_.setTooltip("Analyzer settings: channel, normalize, offset, spectrogram, pre/post source.");
+
+    addAndMakeVisible(lblChannel_);
+    lblChannel_.setColour(Label::textColourId, Colours::white.withAlpha(0.55f));
+    lblChannel_.setFont(Font(FontOptions(13.f, Font::plain)));
+    addAndMakeVisible(cbAnalyzerChannel_);
+    {
+        int numCh = jmax(1, processor->getNumChannels_());
+        cbAnalyzerChannel_.addItem("all", 1);
+        for (int ch = 1; ch <= numCh; ++ch)
+            cbAnalyzerChannel_.addItem(String(ch), ch + 1);
+        cbAnalyzerChannel_.setSelectedId(processor->editorAnalyzerChannel + 1,
+                                         dontSendNotification);
+        cbAnalyzerChannel_.setEditableText(true);   // type a channel number directly
+    }
+    cbAnalyzerChannel_.addListener(this);
+    cbAnalyzerChannel_.setTooltip("Which channel the analyzer measures "
+                                  "(set by the selected path in MIMO mode)");
+
+    addAndMakeVisible(btnAutoNorm_);
+    btnAutoNorm_.setToggleState(processor->analyzerAutoNormalize, dontSendNotification);
+    btnAutoNorm_.addListener(this);
+    btnAutoNorm_.setTooltip("Track the program level automatically instead of using a fixed offset");
+
+    addAndMakeVisible(lblOffset_);
+    lblOffset_.setColour(Label::textColourId, Colours::white.withAlpha(0.55f));
+    lblOffset_.setFont(Font(FontOptions(13.f, Font::plain)));
+    addAndMakeVisible(sldOffset_);
+    sldOffset_.setRange(-80.0, 80.0, 0.5);
+    sldOffset_.setValue(processor->analyzerOffset, dontSendNotification);
+    sldOffset_.setSliderStyle(Slider::LinearHorizontal);
+    sldOffset_.setTextBoxStyle(Slider::TextBoxRight, false, 46, 20);
+    sldOffset_.setDoubleClickReturnValue(true, 0.0);
+    sldOffset_.addListener(this);
+    sldOffset_.setTooltip("dB offset for the analyzer display");
 
     // Phase toggle — shows a separate phase-response graph below the magnitude.
     addAndMakeVisible(btnPhase_);
@@ -215,8 +239,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     else if (chain != nullptr && chain->getNumBands() > 0)
         selectBand(0);
 
-    // Restore analyzer state
-    btnAnalyzer_.setToggleState(processor->editorAnalyzerOn, dontSendNotification);
+    // Restore analyzer state (the display row is synced by updateAnalyzerState)
     processor->getInputAnalyzer().setAnalyzerChannel(processor->editorAnalyzerChannel);
     processor->getOutputAnalyzer().setAnalyzerChannel(processor->editorAnalyzerChannel);
     updateAnalyzerState();
@@ -231,7 +254,8 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     setResizable(true, true);
     // A touch taller than before to carry the display row without eating the graph.
-    setResizeLimits(560, 508, 1400, 1200);
+    // The minimum width is what that row needs with a usable offset slider.
+    setResizeLimits(680, 508, 1400, 1200);
     setSize(800, 628);
 }
 
@@ -242,7 +266,6 @@ Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
     proc->editorDiagonalMode = diagonalMode_;
     proc->editorSelectedPath = selectedPath_;
     proc->editorSelectedBand = selectedBand_;
-    proc->editorAnalyzerOn = btnAnalyzer_.getToggleState();
     proc->editorAnalyzerChannel = proc->getInputAnalyzer().getAnalyzerChannel();
     proc->editorPhaseOn = btnPhase_.getToggleState();
 
@@ -264,12 +287,6 @@ Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
         diagChannelCallOut_->setVisible(false);
         diagChannelCallOut_->dismiss();
     }
-    if (analyzerSettingsCallOut_ != nullptr)
-    {
-        analyzerSettingsCallOut_->setVisible(false);
-        analyzerSettingsCallOut_->dismiss();
-    }
-
     proc->removeChangeListener(this);
     tabs_.setLookAndFeel(nullptr);
     setLookAndFeel(nullptr);
@@ -333,15 +350,18 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     // from the row above, which selects what is being edited.
     int dispY = pathY + 26;
     int dx = 4;
-    // Phase first, so Analyzer sits next to the settings that belong to it.
     lblDisplay_.setBounds(dx, dispY, 55, 22);        dx += 57;
-    btnPhase_   .setBounds(dx, dispY, 65, 22);       dx += 69;
-    btnAnalyzer_.setBounds(dx, dispY, 80, 22);       dx += 82;
+    btnPhase_  .setBounds(dx, dispY, 65, 22);        dx += 69;
 
-    dx += 12;   // gap before the analyzer's own display options
-    cbAnalyzerView_  .setBounds(dx, dispY, 110, 22); dx += 114;
-    cbAnalyzerSource_.setBounds(dx, dispY, 90, 22);  dx += 94;
-    btnAnalyzerCog_  .setBounds(dx, dispY, 24, 22);
+    dx += 10;   // gap: everything from here on belongs to the analyzer
+    cbAnalyzerView_  .setBounds(dx, dispY, 118, 22); dx += 122;
+    cbAnalyzerSource_.setBounds(dx, dispY, 88, 22);  dx += 96;
+    lblChannel_      .setBounds(dx, dispY, 24, 22);  dx += 26;
+    cbAnalyzerChannel_.setBounds(dx, dispY, 64, 22); dx += 70;
+    btnAutoNorm_     .setBounds(dx, dispY, 92, 22);  dx += 96;
+    lblOffset_       .setBounds(dx, dispY, 44, 22);  dx += 46;
+    // The offset slider takes whatever is left, so the row fits any window width.
+    sldOffset_       .setBounds(dx, dispY, jmax(60, w - 4 - dx), 22);
 
     // Reserve fixed space for the bottom sections so the graph area absorbs
     // any extra height (and shrinks first when the window gets smaller).
@@ -457,13 +477,14 @@ void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
 
 void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
 {
-    // Display-row combos only change what is drawn — no chain/tab rebuild needed.
+    // Display-row controls only change what is drawn — no chain/tab rebuild needed.
     if (cb == &cbAnalyzerView_)
     {
-        bool spectro = cbAnalyzerView_.getSelectedId() == 2;
-        getProcessor()->editorSpectrogramOn = spectro;
-        graph_.setSpectrogramMode(spectro);
-        cbAnalyzerSource_.setEnabled(spectro);
+        // 1 = off, 2 = spectrum, 3 = spectrogram.
+        const int sel = cbAnalyzerView_.getSelectedId();
+        getProcessor()->editorAnalyzerOn     = (sel != 1);
+        getProcessor()->editorSpectrogramOn  = (sel == 3);
+        updateAnalyzerState();
         return;
     }
     if (cb == &cbAnalyzerSource_)
@@ -471,6 +492,23 @@ void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
         bool post = cbAnalyzerSource_.getSelectedId() == 2;
         getProcessor()->editorSpectroPost = post;
         graph_.setSpectrogramSource(post);
+        return;
+    }
+    if (cb == &cbAnalyzerChannel_)
+    {
+        int id = cbAnalyzerChannel_.getSelectedId();
+        if (id == 0)
+        {
+            // Editable box: the user typed a value. Accept "all" or a channel
+            // number, clamp it, and snap the box back to the matching item.
+            const int numCh = jmax(1, getProcessor()->getNumChannels_());
+            const String txt = cbAnalyzerChannel_.getText().trim();
+            id = txt.equalsIgnoreCase("all") ? 1
+                                             : jlimit(1, numCh + 1, txt.getIntValue() + 1);
+            cbAnalyzerChannel_.setSelectedId(id, dontSendNotification);
+        }
+        getProcessor()->editorAnalyzerChannel = id - 1;   // 0 = all, 1..N = channel
+        updateAnalyzerState();
         return;
     }
 
@@ -778,15 +816,12 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
         return;
     }
 
-    if (b == &btnAnalyzer_)
+    if (b == &btnAutoNorm_)
     {
-        updateAnalyzerState();
-        return;
-    }
-
-    if (b == &btnAnalyzerCog_)
-    {
-        showAnalyzerSettingsPopup();
+        const bool autoOn = btnAutoNorm_.getToggleState();
+        getProcessor()->analyzerAutoNormalize = autoOn;
+        graph_.setAnalyzerAutoNormalize(autoOn);
+        sldOffset_.setEnabled(!autoOn);   // a fixed offset only applies without it
         return;
     }
 
@@ -1261,20 +1296,18 @@ void Mcfx_mimoeqAudioProcessorEditor::mouseExit(const MouseEvent&)
     statusBar_.setText("", dontSendNotification);
 }
 
-void Mcfx_mimoeqAudioProcessorEditor::mouseDown(const MouseEvent& e)
+void Mcfx_mimoeqAudioProcessorEditor::sliderValueChanged(Slider* s)
 {
-    // Right-click on analyzer button shows channel selection menu
-    if (e.mods.isPopupMenu() && e.eventComponent == &btnAnalyzer_)
+    if (s == &sldOffset_)
     {
-        showAnalyzerSettingsPopup();
-        return;
+        getProcessor()->analyzerOffset = (float) sldOffset_.getValue();
+        graph_.setAnalyzerOffset((float) sldOffset_.getValue());
     }
-    AudioProcessorEditor::mouseDown(e);
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
 {
-    bool on = btnAnalyzer_.getToggleState();
+    bool on = getProcessor()->editorAnalyzerOn;
     getProcessor()->setAnalyzerEnabled(on);
     graph_.setAnalyzerEnabled(on);
     graph_.setAnalyzerAutoNormalize(getProcessor()->analyzerAutoNormalize);
@@ -1282,12 +1315,23 @@ void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
     graph_.setSpectrogramMode(getProcessor()->editorSpectrogramOn);
     graph_.setSpectrogramSource(getProcessor()->editorSpectroPost);
 
-    // Keep the display row showing the state it controls.
-    cbAnalyzerView_.setSelectedId(getProcessor()->editorSpectrogramOn ? 2 : 1,
-                                  dontSendNotification);
+    // Keep the display row showing the state it controls, and grey out the parts
+    // that do nothing right now: everything analyzer-related when it is off, the
+    // pre/post source unless the spectrogram is showing, the offset under auto.
+    const bool spectro = getProcessor()->editorSpectrogramOn;
+    cbAnalyzerView_.setSelectedId(!on ? 1 : (spectro ? 3 : 2), dontSendNotification);
     cbAnalyzerSource_.setSelectedId(getProcessor()->editorSpectroPost ? 2 : 1,
                                     dontSendNotification);
-    cbAnalyzerSource_.setEnabled(getProcessor()->editorSpectrogramOn);
+    cbAnalyzerChannel_.setSelectedId(getProcessor()->editorAnalyzerChannel + 1,
+                                     dontSendNotification);
+    btnAutoNorm_.setToggleState(getProcessor()->analyzerAutoNormalize, dontSendNotification);
+    sldOffset_.setValue(getProcessor()->analyzerOffset, dontSendNotification);
+
+    cbAnalyzerSource_.setEnabled(on && spectro);
+    // In MIMO mode the channel follows the selected path, so it is not editable.
+    cbAnalyzerChannel_.setEnabled(on && diagonalMode_);
+    btnAutoNorm_.setEnabled(on);
+    sldOffset_.setEnabled(on && !getProcessor()->analyzerAutoNormalize);
 
     // In MIMO mode, lock analyzers to the selected path's channels
     if (!diagonalMode_)
@@ -1317,142 +1361,6 @@ void Mcfx_mimoeqAudioProcessorEditor::updatePhaseGraphVisibility()
     if (on)
         phaseGraph_.setChain (getActiveChain());
     resized();   // re-layout to allocate / reclaim space below the magnitude graph
-}
-
-//==============================================================================
-// Analyzer settings popup — shown on right-click of the Analyzer toggle
-//==============================================================================
-class AnalyzerSettingsComponent : public Component,
-                                  private ComboBox::Listener,
-                                  private Button::Listener,
-                                  private Slider::Listener
-{
-public:
-    AnalyzerSettingsComponent(Mcfx_mimoeqAudioProcessor* proc, EqGraph* graph, bool diagonalMode)
-        : proc_(proc), graph_(graph)
-    {
-        // Channel selector
-        addAndMakeVisible(lblChannel_);
-        lblChannel_.setText("Channel:", dontSendNotification);
-        lblChannel_.setColour(Label::textColourId, Colours::white);
-
-        addAndMakeVisible(cbChannel_);
-        int numCh = jmax(1, proc->getNumChannels_());
-        cbChannel_.addItem("all", 1);
-        for (int ch = 1; ch <= numCh; ++ch)
-            cbChannel_.addItem(String(ch), ch + 1);
-        cbChannel_.setSelectedId(proc->editorAnalyzerChannel + 1, dontSendNotification);
-        cbChannel_.setEditableText(true);   // allow typing a channel number directly
-        cbChannel_.addListener(this);
-
-        // In MIMO mode, channels are locked to the selected path
-        if (!diagonalMode)
-        {
-            cbChannel_.setEnabled(false);
-            cbChannel_.setTooltip("Channel is set by the selected MIMO path");
-        }
-
-        // Auto-normalize toggle
-        addAndMakeVisible(btnAutoNorm_);
-        btnAutoNorm_.setButtonText("auto-normalize");
-        btnAutoNorm_.setToggleState(proc->analyzerAutoNormalize, dontSendNotification);
-        btnAutoNorm_.addListener(this);
-        btnAutoNorm_.setColour(ToggleButton::textColourId, Colours::white);
-        btnAutoNorm_.setColour(ToggleButton::tickColourId, Colours::orange);
-
-        // Offset slider
-        addAndMakeVisible(lblOffset_);
-        lblOffset_.setText("Offset:", dontSendNotification);
-        lblOffset_.setColour(Label::textColourId, Colours::white);
-
-        addAndMakeVisible(sldOffset_);
-        sldOffset_.setRange(-80.0, 80.0, 0.5);
-        sldOffset_.setValue(proc->analyzerOffset, dontSendNotification);
-        sldOffset_.setSliderStyle(Slider::LinearHorizontal);
-        sldOffset_.setTextBoxStyle(Slider::TextBoxRight, false, 50, 20);
-        sldOffset_.setColour(Slider::textBoxTextColourId, Colours::white);
-        sldOffset_.setDoubleClickReturnValue(true, 0.0);
-        sldOffset_.addListener(this);
-        sldOffset_.setEnabled(!proc->analyzerAutoNormalize);
-        sldOffset_.setTooltip("dB offset for analyzer display");
-
-        // The view mode and pre/post source live on the editor's display row now,
-        // so this popup is just the settings that are set once and left alone.
-        setSize(220, 90);
-    }
-
-    void resized() override
-    {
-        int y = 4;
-        lblChannel_.setBounds(4, y, 60, 22);
-        cbChannel_.setBounds(68, y, 70, 22);
-        y += 26;
-        btnAutoNorm_.setBounds(4, y, 150, 22);
-        y += 26;
-        lblOffset_.setBounds(4, y, 50, 22);
-        sldOffset_.setBounds(54, y, 162, 22);
-    }
-
-    void paint(Graphics& g) override
-    {
-        g.fillAll(Colour(0xff2a2a2a));
-    }
-
-private:
-    void comboBoxChanged(ComboBox* cb) override
-    {
-        int id = cbChannel_.getSelectedId();
-
-        if (id == 0)
-        {
-            // Editable box: the user typed a custom value. Accept "all" or a
-            // channel number, clamp it to a valid channel, and snap the box
-            // back to the matching item.
-            const int numCh = jmax(1, proc_->getNumChannels_());
-            const String txt = cbChannel_.getText().trim();
-            id = txt.equalsIgnoreCase("all") ? 1
-                                             : jlimit(1, numCh + 1, txt.getIntValue() + 1);
-            cbChannel_.setSelectedId(id, dontSendNotification);
-        }
-
-        int ch = id - 1; // 0 = all, 1..N = channel
-        proc_->getInputAnalyzer().setAnalyzerChannel(ch);
-        proc_->getOutputAnalyzer().setAnalyzerChannel(ch);
-        proc_->editorAnalyzerChannel = ch;
-    }
-
-    void buttonClicked(Button* b) override
-    {
-        bool autoOn = btnAutoNorm_.getToggleState();
-        proc_->analyzerAutoNormalize = autoOn;
-        graph_->setAnalyzerAutoNormalize(autoOn);
-        sldOffset_.setEnabled(!autoOn);
-    }
-
-    void sliderValueChanged(Slider*) override
-    {
-        float offset = (float)sldOffset_.getValue();
-        proc_->analyzerOffset = offset;
-        graph_->setAnalyzerOffset(offset);
-    }
-
-    Mcfx_mimoeqAudioProcessor* proc_;
-    EqGraph* graph_;
-    Label lblChannel_;
-    ComboBox cbChannel_;
-    ToggleButton btnAutoNorm_;
-    Label lblOffset_;
-    Slider sldOffset_;
-};
-
-void Mcfx_mimoeqAudioProcessorEditor::showAnalyzerSettingsPopup()
-{
-    auto* settings = new AnalyzerSettingsComponent(getProcessor(), &graph_, diagonalMode_);
-    auto& box = CallOutBox::launchAsynchronously(
-        std::unique_ptr<Component>(settings),
-        btnAnalyzerCog_.getScreenBounds(),
-        nullptr);
-    analyzerSettingsCallOut_ = &box;
 }
 
 //==============================================================================

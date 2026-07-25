@@ -40,40 +40,13 @@ private:
     Mcfx_mimoeqAudioProcessorEditor* owner_;
 };
 
-/** A small vector-drawn gear/cog icon button (no text, transparent background),
-    used to open the analyzer settings popup. Renders crisply at any size on all
-    platforms — unlike a Unicode glyph, which depends on the system font. */
-class GearButton : public Button
-{
-public:
-    GearButton() : Button("gear") {}
-
-    void paintButton(Graphics& g, bool over, bool down) override
-    {
-        auto b = getLocalBounds().toFloat().reduced(3.0f);
-        const float cx = b.getCentreX(), cy = b.getCentreY();
-        const float R  = jmin(b.getWidth(), b.getHeight()) * 0.5f;
-        const float ring     = R * 0.60f;              // gear-body ring centre-line
-        const float toothIn  = R * 0.50f;              // teeth start inside the ring
-        const float toothOut = R * 1.15f;              // ...and stick out past it
-        g.setColour(Colours::white.withAlpha(down ? 1.0f : (over ? 0.9f : 0.72f)));
-        for (int i = 0; i < 8; ++i)                    // eight radial teeth
-        {
-            const float a  = MathConstants<float>::twoPi * (float) i / 8.0f;
-            const float ca = std::cos(a), sa = std::sin(a);
-            g.drawLine(cx + ca * toothIn,  cy + sa * toothIn,
-                       cx + ca * toothOut, cy + sa * toothOut, R * 0.34f);
-        }
-        g.drawEllipse(cx - ring, cy - ring, ring * 2.0f, ring * 2.0f, R * 0.40f);
-    }
-};
-
 class Mcfx_mimoeqAudioProcessorEditor : public AudioProcessorEditor,
                                           public ChangeListener,
                                           public ComboBox::Listener,
                                           public EqGraph::Listener,
                                           public EqBandEditor::Listener,
                                           public Button::Listener,
+                                          public Slider::Listener,
                                           public FileDragAndDropTarget,
                                           public RoutingOverviewComponent::Listener,
                                           public ChannelSelectorComponent::Listener
@@ -106,6 +79,9 @@ public:
 
     // Button::Listener
     void buttonClicked(Button* b) override;
+
+    // Slider::Listener  (the analyzer offset on the display row)
+    void sliderValueChanged(Slider* s) override;
 
     // FileDragAndDropTarget
     bool isInterestedInFileDrag(const StringArray& files) override;
@@ -155,18 +131,20 @@ private:
     Viewport bandEditorViewport_;   // scrolls bandEditor_ when controls overflow
     EqTabBar tabs_;
 
-    ToggleButton btnAnalyzer_ { "Analyzer" };
     ToggleButton btnPhase_    { "Phase" };
-    GearButton   btnAnalyzerCog_;   // gear next to Analyzer → opens the settings popup
-    // The two most-switched analyzer settings sit on the display row itself; the
-    // rest (channel, auto-normalize, offset) stay behind the gear.
-    ComboBox     cbAnalyzerView_;    // spectrum / spectrogram
-    ComboBox     cbAnalyzerSource_;  // pre-EQ / post-EQ
+    // Every analyzer setting lives on the display row — "off" is the first entry of
+    // the view selector, so the analyzer needs no separate toggle and nothing is
+    // hidden behind a popup.
+    ComboBox     cbAnalyzerView_;      // off / spectrum / spectrogram
+    ComboBox     cbAnalyzerSource_;    // pre-EQ / post-EQ (spectrogram only)
+    ComboBox     cbAnalyzerChannel_;   // all / 1..N
+    ToggleButton btnAutoNorm_ { "auto-norm" };
+    Slider       sldOffset_;
     Label        lblDisplay_ { {}, "Display:" };
+    Label        lblChannel_ { {}, "Ch:" };
+    Label        lblOffset_  { {}, "Offset:" };
     void updateAnalyzerState();
-    void showAnalyzerSettingsPopup();
     void updatePhaseGraphVisibility();
-    Component::SafePointer<CallOutBox> analyzerSettingsCallOut_;
 
     TextButton btnAdd_ { "+" };
     TextButton btnRemove_ { "-" };
@@ -248,7 +226,6 @@ private:
 
     void mouseEnter(const MouseEvent& e) override;
     void mouseExit(const MouseEvent& e) override;
-    void mouseDown(const MouseEvent& e) override;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(Mcfx_mimoeqAudioProcessorEditor)
 };
