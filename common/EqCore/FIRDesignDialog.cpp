@@ -226,6 +226,7 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     cbType_.addItem ("Low Shelf",       5);
     cbType_.addItem ("High Shelf",      6);
     cbType_.addItem ("Peak",            7);
+    cbType_.addItem ("Tilt",           12);
     cbType_.addSeparator();
     // Variable-order linear-phase LP/HP. Used as a complementary pair (same
     // freq / order / length / window) the LP and HP sum to flat magnitude.
@@ -470,6 +471,7 @@ void FIRDesignDialog::showHideControls()
     bool isShelfPeak = (type == 5 || type == 6 || type == 7);   // shelves + peak
     bool isCrossover = (type == 10 || type == 11);
     bool isSlopeLPHP = (type == 1 || type == 2);   // plain LP/HP: slope replaces Q
+    bool isTilt      = (type == 12);
     bool needsQ      = (type >= 1 && type <= 7) && ! isSlopeLPHP;
     // (Shelves use Q-like 'shape' parameter; keep visible — JUCE makeLowShelf takes Q.)
 
@@ -477,8 +479,38 @@ void FIRDesignDialog::showHideControls()
     lblGain_.setVisible (isShelfPeak);
     sldQ_.setVisible (needsQ);
     lblQ_.setVisible (needsQ);
-    sldSlope_.setVisible (isSlopeLPHP);
-    lblSlope_.setVisible (isSlopeLPHP);
+    sldSlope_.setVisible (isSlopeLPHP || isTilt);
+    lblSlope_.setVisible (isSlopeLPHP || isTilt);
+
+    // The same Slope row serves both, but they mean different things: a low/high
+    // pass rolls off one-sided (always attenuating, 3..48 dB/oct), while a tilt is
+    // a signed seesaw about the pivot over the whole spectrum.
+    if (isTilt != tiltSlopeRange_)
+    {
+        tiltSlopeRange_ = isTilt;
+        if (isTilt)
+        {
+            sldSlope_.setRange (-EqBand::kTiltMaxSlope, EqBand::kTiltMaxSlope, 0.05);
+            sldSlope_.setDoubleClickReturnValue (true, 0.0);
+            sldSlope_.setValue (0.0, dontSendNotification);
+            sldSlope_.setTooltip ("Tilt slope in dB per octave — a straight line on the "
+                                  "graph, crossing 0 dB at the frequency above. "
+                                  "Negative tilts towards the lows. The line is held flat "
+                                  "below 20 Hz; longer filters resolve the bottom octaves "
+                                  "more accurately. Double-click to reset.");
+            lblFreq_.setText ("Pivot:", dontSendNotification);
+        }
+        else
+        {
+            sldSlope_.setRange (kSlopeMinDbOct, kSlopeMaxDbOct, 0.1);
+            sldSlope_.setDoubleClickReturnValue (true, 12.0);
+            sldSlope_.setValue (12.0, dontSendNotification);
+            sldSlope_.setTooltip ("Roll-off past the corner, in dB per octave. -3 dB at the "
+                                  "corner frequency (Butterworth), continuously adjustable — "
+                                  "12 dB/oct matches a 2nd-order filter. Double-click to reset.");
+            lblFreq_.setText ("Freq:", dontSendNotification);
+        }
+    }
     cbOrder_.setVisible (isCrossover);
     lblOrder_.setVisible (isCrossover);
 
@@ -554,6 +586,24 @@ void FIRDesignDialog::recomputeFIR()
             const double r = lowPass ? (jmax (1.0e-6, f) / fc)
                                      : (fc / jmax (1.0e-6, f));
             return 1.0 / std::sqrt (1.0 + std::pow (r, 2.0 * n));
+        };
+    }
+    else if (type == 12)
+    {
+        // Tilt: a straight line on the dB / log-frequency plot, crossing 0 dB at
+        // the pivot. The IIR band has to approximate this with a cascade of
+        // first-order pairs; designing from a target magnitude, the FIR can just
+        // *be* the line — exactly, and linear phase.
+        //
+        // The line is held flat below kTiltFloorHz: continued to DC it would ask
+        // for unbounded gain at one end, and no FIR of a usable length resolves
+        // anything below the bottom of the audio band anyway.
+        const double fc = jmax (1.0, sldFreq_.getValue());
+        const double s  = jlimit (-(double) EqBand::kTiltMaxSlope,
+                                   (double) EqBand::kTiltMaxSlope, sldSlope_.getValue());
+        magAt = [fc, s] (double f) -> double
+        {
+            return std::pow (10.0, s * std::log2 (jmax (kTiltFloorHz, f) / fc) / 20.0);
         };
     }
     else
@@ -650,6 +700,7 @@ namespace
             case 5:  return "low_shelf";
             case 6:  return "high_shelf";
             case 7:  return "peak";
+            case 12: return "tilt";
             case 10: return "crossover_lp";
             case 11: return "crossover_hp";
         }
@@ -664,6 +715,7 @@ namespace
         if (s == "low_shelf")      return 5;
         if (s == "high_shelf")     return 6;
         if (s == "peak")           return 7;
+        if (s == "tilt")           return 12;
         if (s == "crossover_lp")   return 10;
         if (s == "crossover_hp")   return 11;
         return 7;

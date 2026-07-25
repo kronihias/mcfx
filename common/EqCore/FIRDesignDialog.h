@@ -95,6 +95,9 @@ private:
     // 12 = the usual 2nd-order Butterworth, 48 = steep crossover territory.
     static constexpr double kSlopeMinDbOct = 3.0;
     static constexpr double kSlopeMaxDbOct = 48.0;
+    // Tilt: below this the target line is held flat, so it never asks for
+    // unbounded gain at DC.
+    static constexpr double kTiltFloorHz = 20.0;
 
     void rebuildBandFromUI();
     void recomputeFIR();
@@ -142,6 +145,7 @@ private:
     TextButton btnClose_  { "Close" };
 
     bool updating_ = false;
+    bool tiltSlopeRange_ = false;   // Slope row currently ranged as a tilt (signed)
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (FIRDesignDialog)
 };
