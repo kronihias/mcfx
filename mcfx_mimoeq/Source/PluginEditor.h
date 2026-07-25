@@ -137,6 +137,7 @@ private:
     // hidden behind a popup.
     ComboBox     cbAnalyzerView_;      // off / spectrum / spectrogram
     ComboBox     cbAnalyzerSource_;    // pre-EQ / post-EQ (spectrogram only)
+    ComboBox     cbSpectroSpan_;       // spectrogram scroll speed (spectrogram only)
     ComboBox     cbAnalyzerChannel_;   // all / 1..N
     ToggleButton btnAutoNorm_ { "auto-norm" };
     Slider       sldOffset_;

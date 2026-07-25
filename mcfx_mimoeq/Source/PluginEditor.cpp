@@ -126,6 +126,17 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     cbAnalyzerSource_.addListener(this);
     cbAnalyzerSource_.setTooltip("Which signal the spectrogram displays");
 
+    // Scroll speed, expressed as the time the vertical axis covers.
+    addAndMakeVisible(cbSpectroSpan_);
+    cbSpectroSpan_.addItem("2 s",  1);
+    cbSpectroSpan_.addItem("5 s",  2);
+    cbSpectroSpan_.addItem("10 s", 3);
+    cbSpectroSpan_.addItem("20 s", 4);
+    cbSpectroSpan_.addItem("60 s", 5);
+    cbSpectroSpan_.addListener(this);
+    cbSpectroSpan_.setTooltip("How much time the spectrogram shows top to bottom — "
+                              "shorter scrolls faster");
+
     addAndMakeVisible(lblChannel_);
     lblChannel_.setColour(Label::textColourId, Colours::white.withAlpha(0.55f));
     lblChannel_.setFont(Font(FontOptions(13.f, Font::plain)));
@@ -255,8 +266,9 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     setResizable(true, true);
     // A touch taller than before to carry the display row without eating the graph.
-    // The minimum width is what that row needs with a usable offset slider.
-    setResizeLimits(680, 508, 1400, 1200);
+    // The minimum width is what that row needs with a usable offset slider, in its
+    // widest state (spectrogram, where the source and speed selectors appear).
+    setResizeLimits(730, 508, 1400, 1200);
     setSize(800, 628);
 }
 
@@ -367,7 +379,8 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
         c.setBounds(dx, dispY, cw, 22);
         dx += cw + gap;
     };
-    place(cbAnalyzerSource_,  88, 8);
+    place(cbAnalyzerSource_,  88, 4);
+    place(cbSpectroSpan_,     64, 8);
     place(lblChannel_,        24, 2);
     place(cbAnalyzerChannel_, 64, 6);
     place(btnAutoNorm_,       92, 4);
@@ -505,6 +518,14 @@ void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
         bool post = cbAnalyzerSource_.getSelectedId() == 2;
         getProcessor()->editorSpectroPost = post;
         graph_.setSpectrogramSource(post);
+        return;
+    }
+    if (cb == &cbSpectroSpan_)
+    {
+        static const float spans[] = { 2.f, 5.f, 10.f, 20.f, 60.f };
+        const int sel = jlimit(1, 5, cbSpectroSpan_.getSelectedId());
+        getProcessor()->editorSpectroSpanSec = spans[sel - 1];
+        graph_.setSpectroSpanSeconds(spans[sel - 1]);
         return;
     }
     if (cb == &cbAnalyzerChannel_)
@@ -1342,6 +1363,16 @@ void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
 
     // Hide what does not apply: the whole set while the analyzer is off, and the
     // pre/post source unless there is a spectrogram for it to act on.
+    {
+        static const float spans[] = { 2.f, 5.f, 10.f, 20.f, 60.f };
+        const float want = getProcessor()->editorSpectroSpanSec;
+        int sel = 3;
+        for (int i = 0; i < 5; ++i)
+            if (std::abs(spans[i] - want) < 0.01f) sel = i + 1;
+        cbSpectroSpan_.setSelectedId(sel, dontSendNotification);
+        graph_.setSpectroSpanSeconds(want);
+    }
+    cbSpectroSpan_.setVisible(on && spectro);
     cbAnalyzerSource_.setVisible(on && spectro);
     lblChannel_.setVisible(on);
     cbAnalyzerChannel_.setVisible(on);

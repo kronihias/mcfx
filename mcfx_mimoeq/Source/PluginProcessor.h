@@ -166,6 +166,7 @@ public:
     float analyzerOffset = 0.f;          // dB offset (when auto-normalize is off)
     bool editorSpectrogramOn = false;     // persisted: spectrogram vs spectrum view
     bool editorSpectroPost = false;       // persisted: false = pre-EQ, true = post-EQ source
+    float editorSpectroSpanSec = 10.f;    // persisted: seconds of history the spectrogram shows
     bool editorPhaseOn = false;          // persisted phase-graph toggle state
 
     double getSampleRate_() const { return currentSampleRate_; }

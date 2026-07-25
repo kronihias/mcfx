@@ -537,21 +537,48 @@ void EqGraph::writeSpectroRow()
     specWrite_ = (specWrite_ + 1) % kSpecH;         // newest scrolls in at the bottom
 }
 
+void EqGraph::setSpectroSpanSeconds(float seconds)
+{
+    spectroSpanSec_ = jlimit(kSpanMinSec, kSpanMaxSec, seconds);
+
+    // A row can be written at most once per refresh tick, so that rate sets the
+    // shortest span the stored rows can cover. Below it, keep writing every tick
+    // and simply show fewer of the newest rows; above it, show them all and
+    // write less often.
+    const float tickRate = 1000.f / (float) kRefreshFastMs;      // rows/s at most
+    const float fullSpan = (float) kSpecH / tickRate;            // span if every tick writes
+
+    if (spectroSpanSec_ <= fullSpan)
+    {
+        rowsPerTick_ = 1.f;
+        visibleRows_ = jlimit(1, kSpecH, roundToInt(spectroSpanSec_ * tickRate));
+    }
+    else
+    {
+        rowsPerTick_ = fullSpan / spectroSpanSec_;
+        visibleRows_ = kSpecH;
+    }
+}
+
 void EqGraph::drawSpectrogram(Graphics& g, Rectangle<int> plot)
 {
     if (! spectro_.isValid())
         return;
     Graphics::ScopedSaveState save(g);
     g.reduceClipRegion(plot);
-    // chronological order is rows [specWrite_..end) then [0..specWrite_); draw
-    // oldest at the top, newest at the bottom, scaling to the plot height.
-    const int older = kSpecH - specWrite_;          // rows from specWrite_ to end
-    const int hTop  = roundToInt(plot.getHeight() * (float)older / kSpecH);
+
+    // Draw the newest visibleRows_ rows, oldest at the top. They end at
+    // specWrite_ and may wrap around the start of the ring image.
+    const int rows  = jlimit(1, kSpecH, visibleRows_);
+    const int start = ((specWrite_ - rows) % kSpecH + kSpecH) % kSpecH;
+    const int first = jmin(rows, kSpecH - start);               // before wrapping
+    const int hTop  = roundToInt(plot.getHeight() * (float) first / rows);
+
     g.drawImage(spectro_, plot.getX(), plot.getY(), plot.getWidth(), hTop,
-                0, specWrite_, kSpecW, older);
-    if (specWrite_ > 0)
+                0, start, kSpecW, first);
+    if (first < rows)
         g.drawImage(spectro_, plot.getX(), plot.getY() + hTop, plot.getWidth(),
-                    plot.getHeight() - hTop, 0, 0, kSpecW, specWrite_);
+                    plot.getHeight() - hTop, 0, 0, kSpecW, rows - first);
 }
 
 void EqGraph::rebuildGridPaths()
@@ -623,7 +650,16 @@ void EqGraph::timerCallback()
         startTimer(desired);
 
     if (spectrogramMode_ && analyzerOn_)
-        writeSpectroRow();
+    {
+        // Fractional scheduler: at long spans a row is written only every few
+        // ticks, so the stored rows stretch further back in time.
+        rowAccum_ += rowsPerTick_;
+        if (rowAccum_ >= 1.f)
+        {
+            rowAccum_ -= std::floor(rowAccum_);
+            writeSpectroRow();
+        }
+    }
 
     repaint();
 }

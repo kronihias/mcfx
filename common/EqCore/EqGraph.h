@@ -78,6 +78,14 @@ public:
     void setSpectrogramSource(bool post) { spectroPost_ = post; }
     bool getSpectrogramSource() const { return spectroPost_; }
 
+    /** How much time the spectrogram's vertical axis covers, i.e. how fast it
+        scrolls. Short spans show fewer of the stored rows (the newest ones);
+        long spans write rows less often so the same rows reach further back. */
+    void setSpectroSpanSeconds(float seconds);
+    float getSpectroSpanSeconds() const { return spectroSpanSec_; }
+    static constexpr float kSpanMinSec = 2.f;
+    static constexpr float kSpanMaxSec = 60.f;
+
     static Colour getBandColour(int bandIndex);
 
     void paint(Graphics& g) override;
@@ -162,6 +170,10 @@ private:
     static constexpr float kSpectroRangeDb = 72.f;  // colour scale spans 0 .. -72 dB
     Image spectro_;
     int specWrite_ = 0;
+    float spectroSpanSec_ = 10.f;   // visible history; see setSpectroSpanSeconds
+    float rowAccum_ = 0.f;          // fractional row scheduler for slow scrolling
+    int   visibleRows_ = kSpecH;    // newest rows actually drawn (short spans)
+    float rowsPerTick_ = 1.f;
     std::vector<float> specSmoothDb_;          // per-column temporal smoothing
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqGraph)
