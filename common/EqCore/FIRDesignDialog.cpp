@@ -256,6 +256,25 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     sldQ_.setValue (0.707, dontSendNotification);
     sldQ_.addListener (this);
 
+    // Low/high pass roll-off, set continuously in dB/octave rather than by order.
+    // The FIR is designed straight from a target magnitude, so the slope does not
+    // have to land on a whole filter order — 12 dB/oct is the familiar 2nd-order
+    // Butterworth, and anything in between is just as designable.
+    addAndMakeVisible (lblSlope_);
+    addAndMakeVisible (sldSlope_);
+    sldSlope_.setRange (kSlopeMinDbOct, kSlopeMaxDbOct, 0.1);
+    sldSlope_.setSkewFactorFromMidPoint (12.0);
+    sldSlope_.setNumDecimalPlacesToDisplay (1);
+    sldSlope_.setTextBoxStyle (Slider::TextBoxLeft, false, 70, 20);
+    sldSlope_.setSliderStyle (Slider::LinearHorizontal);
+    sldSlope_.setTextValueSuffix (" dB/oct");
+    sldSlope_.setDoubleClickReturnValue (true, 12.0);
+    sldSlope_.setValue (12.0, dontSendNotification);
+    sldSlope_.setTooltip ("Roll-off past the corner, in dB per octave. -3 dB at the "
+                          "corner frequency (Butterworth), continuously adjustable — "
+                          "12 dB/oct matches a 2nd-order filter. Double-click to reset.");
+    sldSlope_.addListener (this);
+
     addAndMakeVisible (lblGain_);
     addAndMakeVisible (sldGain_);
     sldGain_.setRange (-24.0, 24.0, 0.1);
@@ -375,7 +394,8 @@ void FIRDesignDialog::resized()
 
     row (lblType_,  cbType_,  180);
     row (lblFreq_,  sldFreq_);
-    row (lblQ_,     sldQ_);
+    if (sldQ_.isVisible())     row (lblQ_,     sldQ_);
+    if (sldSlope_.isVisible()) row (lblSlope_, sldSlope_);
     row (lblGain_,  sldGain_);
     if (cbOrder_.isVisible()) row (lblOrder_, cbOrder_, 180);
 
@@ -449,13 +469,16 @@ void FIRDesignDialog::showHideControls()
     auto type = cbType_.getSelectedId();
     bool isShelfPeak = (type == 5 || type == 6 || type == 7);   // shelves + peak
     bool isCrossover = (type == 10 || type == 11);
-    bool needsQ      = (type >= 1 && type <= 7);
+    bool isSlopeLPHP = (type == 1 || type == 2);   // plain LP/HP: slope replaces Q
+    bool needsQ      = (type >= 1 && type <= 7) && ! isSlopeLPHP;
     // (Shelves use Q-like 'shape' parameter; keep visible — JUCE makeLowShelf takes Q.)
 
     sldGain_.setVisible (isShelfPeak);
     lblGain_.setVisible (isShelfPeak);
     sldQ_.setVisible (needsQ);
     lblQ_.setVisible (needsQ);
+    sldSlope_.setVisible (isSlopeLPHP);
+    lblSlope_.setVisible (isSlopeLPHP);
     cbOrder_.setVisible (isCrossover);
     lblOrder_.setVisible (isCrossover);
 
@@ -511,9 +534,34 @@ void FIRDesignDialog::recomputeFIR()
         case 5: win = EqDesign::FIRWindow::Kaiser;          break;
     }
 
-    auto magAt = [this] (double f) -> double {
-        return (double) std::abs (tempBand_.getFrequencyResponse (f, /*alwaysCompute*/ true));
-    };
+    const int type = cbType_.getSelectedId();
+
+    std::function<double (double)> magAt;
+    if (type == 1 || type == 2)
+    {
+        // Low/high pass with a continuously adjustable roll-off. Because the FIR is
+        // designed from a target magnitude rather than from a biquad, the order does
+        // not have to be a whole number: a Butterworth magnitude
+        //     |H| = 1 / sqrt(1 + r^(2n)),   r = f/fc (low pass) or fc/f (high pass)
+        // has an asymptote of exactly 6.0206*n dB/octave, so n = slope/6.0206 gives
+        // the requested slope for any real slope, keeping the -3 dB corner at fc.
+        const double fc = jmax (1.0, sldFreq_.getValue());
+        const double n  = jlimit (kSlopeMinDbOct, kSlopeMaxDbOct, sldSlope_.getValue())
+                              / 6.020599913;
+        const bool lowPass = (type == 1);
+        magAt = [fc, n, lowPass] (double f) -> double
+        {
+            const double r = lowPass ? (jmax (1.0e-6, f) / fc)
+                                     : (fc / jmax (1.0e-6, f));
+            return 1.0 / std::sqrt (1.0 + std::pow (r, 2.0 * n));
+        };
+    }
+    else
+    {
+        magAt = [this] (double f) -> double {
+            return (double) std::abs (tempBand_.getFrequencyResponse (f, /*alwaysCompute*/ true));
+        };
+    }
 
     currentCoeffs_ = EqDesign::designLinearPhaseFIR (magAt, N, sampleRate_,
                                                        win, sldKaiserBeta_.getValue());
@@ -628,6 +676,7 @@ var FIRDesignDialog::captureState() const
     obj->setProperty ("type",         designTypeToString (cbType_.getSelectedId()));
     obj->setProperty ("f_Hz",         sldFreq_.getValue());
     obj->setProperty ("Q",            sldQ_.getValue());
+    obj->setProperty ("slope_db_oct", sldSlope_.getValue());
     obj->setProperty ("gain_db",      sldGain_.getValue());
     obj->setProperty ("order",        cbOrder_.getSelectedId());
     obj->setProperty ("fir_length",   cbLength_.getSelectedId());
@@ -646,6 +695,10 @@ void FIRDesignDialog::applyInitialState (const var& s)
         sldFreq_.setValue ((double) s["f_Hz"], dontSendNotification);
     if (s.hasProperty ("Q"))
         sldQ_.setValue ((double) s["Q"], dontSendNotification);
+    // Designs saved before the slope control existed reopen at 12 dB/oct, which is
+    // the 2nd-order roll-off their Q-based low/high pass had.
+    if (s.hasProperty ("slope_db_oct"))
+        sldSlope_.setValue ((double) s["slope_db_oct"], dontSendNotification);
     if (s.hasProperty ("gain_db"))
         sldGain_.setValue ((double) s["gain_db"], dontSendNotification);
     if (s.hasProperty ("order"))

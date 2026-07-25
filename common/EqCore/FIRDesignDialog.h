@@ -91,6 +91,11 @@ private:
         float  dragStartMaxDb_ = 0.f;
     };
 
+    // Continuous low/high-pass roll-off range (dB per octave). 6 = first-order,
+    // 12 = the usual 2nd-order Butterworth, 48 = steep crossover territory.
+    static constexpr double kSlopeMinDbOct = 3.0;
+    static constexpr double kSlopeMaxDbOct = 48.0;
+
     void rebuildBandFromUI();
     void recomputeFIR();
     void updateLatencyLabel();
@@ -107,11 +112,13 @@ private:
     ComboBox cbType_;
     Slider sldFreq_;
     Slider sldQ_;
+    Slider sldSlope_;                   // low/high pass: continuous roll-off, dB/octave
     Slider sldGain_;
     ComboBox cbOrder_;
     Label lblType_  { {}, "Type:" };
     Label lblFreq_  { {}, "Freq:" };
     Label lblQ_     { {}, "Q:" };
+    Label lblSlope_ { {}, "Slope:" };
     Label lblGain_  { {}, "Gain:" };
     Label lblOrder_ { {}, "Order:" };
 
