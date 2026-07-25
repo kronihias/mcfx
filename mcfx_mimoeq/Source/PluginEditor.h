@@ -158,6 +158,11 @@ private:
     ToggleButton btnAnalyzer_ { "Analyzer" };
     ToggleButton btnPhase_    { "Phase" };
     GearButton   btnAnalyzerCog_;   // gear next to Analyzer → opens the settings popup
+    // The two most-switched analyzer settings sit on the display row itself; the
+    // rest (channel, auto-normalize, offset) stay behind the gear.
+    ComboBox     cbAnalyzerView_;    // spectrum / spectrogram
+    ComboBox     cbAnalyzerSource_;  // pre-EQ / post-EQ
+    Label        lblDisplay_ { {}, "Display:" };
     void updateAnalyzerState();
     void showAnalyzerSettingsPopup();
     void updatePhaseGraphVisibility();

@@ -116,6 +116,24 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     // spectrogram, pre/post source) — a discoverable alternative to right-clicking.
     addAndMakeVisible(btnAnalyzerCog_);
     btnAnalyzerCog_.addListener(this);
+
+    // Display row: the analyzer settings worth reaching without opening anything.
+    addAndMakeVisible(lblDisplay_);
+    lblDisplay_.setColour(Label::textColourId, Colours::white.withAlpha(0.55f));
+    lblDisplay_.setFont(Font(FontOptions(13.f, Font::plain)));
+
+    addAndMakeVisible(cbAnalyzerView_);
+    cbAnalyzerView_.addItem("spectrum", 1);
+    cbAnalyzerView_.addItem("spectrogram", 2);
+    cbAnalyzerView_.addListener(this);
+    cbAnalyzerView_.setTooltip("Spectrum curve, or a rolling spectrogram "
+                               "(time vs frequency, colour = level)");
+
+    addAndMakeVisible(cbAnalyzerSource_);
+    cbAnalyzerSource_.addItem("pre-EQ", 1);
+    cbAnalyzerSource_.addItem("post-EQ", 2);
+    cbAnalyzerSource_.addListener(this);
+    cbAnalyzerSource_.setTooltip("Which signal the spectrogram displays");
     btnAnalyzerCog_.setTooltip("Analyzer settings: channel, normalize, offset, spectrogram, pre/post source.");
 
     // Phase toggle — shows a separate phase-response graph below the magnitude.
@@ -212,8 +230,9 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     addMouseListener(this, true);
 
     setResizable(true, true);
-    setResizeLimits(500, 480, 1400, 1200);
-    setSize(800, 600);
+    // A touch taller than before to carry the display row without eating the graph.
+    setResizeLimits(560, 508, 1400, 1200);
+    setSize(800, 628);
 }
 
 Mcfx_mimoeqAudioProcessorEditor::~Mcfx_mimoeqAudioProcessorEditor()
@@ -310,14 +329,18 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     btnRemovePath_.setBounds(mx, pathY, 85, 22);     mx += 89;
     btnRouting_.setBounds(mx, pathY, 65, 22);        mx += 69;
 
-    // Right-anchored: Analyzer gear + Analyzer + Phase toggles
-    int rightX = w - 4;
-    int cogW      = 24;
-    int analyzerW = 80;
-    int phaseW    = 65;
-    btnAnalyzerCog_.setBounds(rightX - cogW,                              pathY, cogW,      22);
-    btnAnalyzer_   .setBounds(rightX - cogW - analyzerW,                  pathY, analyzerW, 22);
-    btnPhase_      .setBounds(rightX - cogW - analyzerW - phaseW - 4,     pathY, phaseW,    22);
+    // Display row — everything that changes what the graph *shows*, kept separate
+    // from the row above, which selects what is being edited.
+    int dispY = pathY + 26;
+    int dx = 4;
+    lblDisplay_.setBounds(dx, dispY, 55, 22);        dx += 57;
+    btnAnalyzer_.setBounds(dx, dispY, 80, 22);       dx += 82;
+    btnPhase_   .setBounds(dx, dispY, 65, 22);       dx += 69;
+
+    dx += 12;   // gap before the analyzer's own display options
+    cbAnalyzerView_  .setBounds(dx, dispY, 110, 22); dx += 114;
+    cbAnalyzerSource_.setBounds(dx, dispY, 90, 22);  dx += 94;
+    btnAnalyzerCog_  .setBounds(dx, dispY, 24, 22);
 
     // Reserve fixed space for the bottom sections so the graph area absorbs
     // any extra height (and shrinks first when the window gets smaller).
@@ -325,7 +348,7 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     constexpr int tabBarH    = 32;     // 28-tall tab buttons + 4 gap
     constexpr int editorH    = 200;    // fixed band-parameter area
 
-    int graphTop = pathY + 28;
+    int graphTop = dispY + 28;
     int reservedBelow = editorH + tabBarH + statusH;
     int graphHeight = jmax (80, h - graphTop - reservedBelow);
 
@@ -433,6 +456,23 @@ void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
 
 void Mcfx_mimoeqAudioProcessorEditor::comboBoxChanged(ComboBox* cb)
 {
+    // Display-row combos only change what is drawn — no chain/tab rebuild needed.
+    if (cb == &cbAnalyzerView_)
+    {
+        bool spectro = cbAnalyzerView_.getSelectedId() == 2;
+        getProcessor()->editorSpectrogramOn = spectro;
+        graph_.setSpectrogramMode(spectro);
+        cbAnalyzerSource_.setEnabled(spectro);
+        return;
+    }
+    if (cb == &cbAnalyzerSource_)
+    {
+        bool post = cbAnalyzerSource_.getSelectedId() == 2;
+        getProcessor()->editorSpectroPost = post;
+        graph_.setSpectrogramSource(post);
+        return;
+    }
+
     if (cb == &cbPathSelector_)
     {
         int sel = cbPathSelector_.getSelectedId() - 1; // 0-based index
@@ -1241,6 +1281,13 @@ void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
     graph_.setSpectrogramMode(getProcessor()->editorSpectrogramOn);
     graph_.setSpectrogramSource(getProcessor()->editorSpectroPost);
 
+    // Keep the display row showing the state it controls.
+    cbAnalyzerView_.setSelectedId(getProcessor()->editorSpectrogramOn ? 2 : 1,
+                                  dontSendNotification);
+    cbAnalyzerSource_.setSelectedId(getProcessor()->editorSpectroPost ? 2 : 1,
+                                    dontSendNotification);
+    cbAnalyzerSource_.setEnabled(getProcessor()->editorSpectrogramOn);
+
     // In MIMO mode, lock analyzers to the selected path's channels
     if (!diagonalMode_)
     {
@@ -1328,29 +1375,9 @@ public:
         sldOffset_.setEnabled(!proc->analyzerAutoNormalize);
         sldOffset_.setTooltip("dB offset for analyzer display");
 
-        // Spectrogram (rolling waterfall) toggle
-        addAndMakeVisible(btnSpectro_);
-        btnSpectro_.setButtonText("spectrogram");
-        btnSpectro_.setToggleState(proc->editorSpectrogramOn, dontSendNotification);
-        btnSpectro_.addListener(this);
-        btnSpectro_.setColour(ToggleButton::textColourId, Colours::white);
-        btnSpectro_.setColour(ToggleButton::tickColourId, Colours::orange);
-        btnSpectro_.setTooltip("Rolling spectrogram (time vs frequency) instead of the spectrum curve");
-        graph_->setSpectrogramMode(proc->editorSpectrogramOn);
-
-        // Spectrogram source: pre- or post-EQ
-        addAndMakeVisible(lblSource_);
-        lblSource_.setText("Source:", dontSendNotification);
-        lblSource_.setColour(Label::textColourId, Colours::white);
-        addAndMakeVisible(cbSource_);
-        cbSource_.addItem("pre-EQ", 1);
-        cbSource_.addItem("post-EQ", 2);
-        cbSource_.setSelectedId(proc->editorSpectroPost ? 2 : 1, dontSendNotification);
-        cbSource_.addListener(this);
-        cbSource_.setTooltip("Which signal the spectrogram displays");
-        graph_->setSpectrogramSource(proc->editorSpectroPost);
-
-        setSize(220, 142);
+        // The view mode and pre/post source live on the editor's display row now,
+        // so this popup is just the settings that are set once and left alone.
+        setSize(220, 90);
     }
 
     void resized() override
@@ -1363,11 +1390,6 @@ public:
         y += 26;
         lblOffset_.setBounds(4, y, 50, 22);
         sldOffset_.setBounds(54, y, 162, 22);
-        y += 26;
-        btnSpectro_.setBounds(4, y, 150, 22);
-        y += 26;
-        lblSource_.setBounds(4, y, 56, 22);
-        cbSource_.setBounds(64, y, 90, 22);
     }
 
     void paint(Graphics& g) override
@@ -1378,14 +1400,6 @@ public:
 private:
     void comboBoxChanged(ComboBox* cb) override
     {
-        if (cb == &cbSource_)
-        {
-            bool post = cbSource_.getSelectedId() == 2;
-            proc_->editorSpectroPost = post;
-            graph_->setSpectrogramSource(post);
-            return;
-        }
-
         int id = cbChannel_.getSelectedId();
 
         if (id == 0)
@@ -1408,14 +1422,6 @@ private:
 
     void buttonClicked(Button* b) override
     {
-        if (b == &btnSpectro_)
-        {
-            bool on = btnSpectro_.getToggleState();
-            proc_->editorSpectrogramOn = on;
-            graph_->setSpectrogramMode(on);
-            return;
-        }
-
         bool autoOn = btnAutoNorm_.getToggleState();
         proc_->analyzerAutoNormalize = autoOn;
         graph_->setAnalyzerAutoNormalize(autoOn);
@@ -1436,9 +1442,6 @@ private:
     ToggleButton btnAutoNorm_;
     Label lblOffset_;
     Slider sldOffset_;
-    ToggleButton btnSpectro_;
-    Label lblSource_;
-    ComboBox cbSource_;
 };
 
 void Mcfx_mimoeqAudioProcessorEditor::showAnalyzerSettingsPopup()
