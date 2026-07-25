@@ -608,6 +608,12 @@ void EqBandEditor::showControlsForType(EqBandType type)
             sldGain_.setTooltip("Tilt slope in dB per octave — a straight line on the "
                                 "graph, crossing 0 dB at the band frequency. "
                                 "Double-click to reset to flat.");
+            // Double-click returns a tilt to its neutral starting point.
+            sldGain_.setDoubleClickReturnValue(true, 0.0);
+            sldFreq_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultFreqHz);
+            sldFreq_.setTooltip("Pivot: the frequency the tilt crosses 0 dB at. "
+                                "Double-click to reset to "
+                                + String((int) EqBand::kTiltDefaultFreqHz) + " Hz");
         }
         else
         {
@@ -615,6 +621,9 @@ void EqBandEditor::showControlsForType(EqBandType type)
             sldGain_.setRange(-60.0, 30.0, 0.1);
             sldGain_.setTextValueSuffix(" dB");
             sldGain_.setTooltip("Gain in dB. Double-click to reset to 0 dB");
+            sldGain_.setDoubleClickReturnValue(true, 0.0);
+            sldFreq_.setDoubleClickReturnValue(false, 0.0);
+            sldFreq_.setTooltip("Filter cutoff/center frequency");
         }
         if (band_ != nullptr)
             sldGain_.setValue(band_->getGainDB(), dontSendNotification);
@@ -1113,7 +1122,15 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
             case 20: band_->setIIRSubType(IIRSubType::EllipticHP); break;
             case 21: band_->setIIRSubType(IIRSubType::BesselLP); break;
             case 22: band_->setIIRSubType(IIRSubType::BesselHP); break;
-            case 23: band_->setIIRSubType(IIRSubType::Tilt); break;
+            case 23:
+                band_->setIIRSubType(IIRSubType::Tilt);
+                // Pivot and slope don't mean what the previous type's centre and
+                // gain meant, so start a tilt neutral rather than inheriting them.
+                band_->setFrequency(EqBand::kTiltDefaultFreqHz);
+                band_->setGainDB(0.f);
+                sldFreq_.setValue(EqBand::kTiltDefaultFreqHz, dontSendNotification);
+                sldGain_.setValue(0.0, dontSendNotification);
+                break;
         }
 
         // Repopulate order combo for the selected family

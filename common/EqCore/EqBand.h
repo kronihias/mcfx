@@ -240,6 +240,9 @@ public:
         Stored in gainDB_ (the band's existing "amount" parameter) and clamped to
         +/-kTiltMaxSlope; positive tilts up towards the highs, negative down. */
     static constexpr float kTiltMaxSlope = 6.0f;
+    /** Where a tilt starts (and returns to on a double-click): flat, pivoting
+        mid-band. */
+    static constexpr float kTiltDefaultFreqHz = 1000.0f;
 
     bool  isDynamicActive() const { return dynActive_; }
     void  setDynamicActive(bool b);
