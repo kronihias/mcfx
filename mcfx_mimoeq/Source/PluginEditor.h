@@ -141,7 +141,6 @@ private:
     ComboBox     cbAnalyzerChannel_;   // all / 1..N
     ToggleButton btnAutoNorm_ { "auto-norm" };
     Slider       sldOffset_;
-    Label        lblDisplay_ { {}, "Display:" };
     Label        lblChannel_ { {}, "Ch:" };
     Label        lblOffset_  { {}, "Offset:" };
     void updateAnalyzerState();

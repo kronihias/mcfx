@@ -106,11 +106,8 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     updatePathSelector();
 
-    // Display row — every analyzer setting, no popup.
-    addAndMakeVisible(lblDisplay_);
-    lblDisplay_.setColour(Label::textColourId, Colours::white.withAlpha(0.55f));
-    lblDisplay_.setFont(Font(FontOptions(13.f, Font::plain)));
-
+    // Display row — every analyzer setting, no popup. The controls speak for
+    // themselves, so the row carries no heading.
     // "off" is just the first view, so the analyzer needs no separate toggle.
     addAndMakeVisible(cbAnalyzerView_);
     cbAnalyzerView_.addItem("analyzer off", 1);
@@ -268,7 +265,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     // A touch taller than before to carry the display row without eating the graph.
     // The minimum width is what that row needs with a usable offset slider, in its
     // widest state (spectrogram, where the source and speed selectors appear).
-    setResizeLimits(730, 508, 1400, 1200);
+    setResizeLimits(675, 508, 1400, 1200);
     setSize(800, 628);
 }
 
@@ -363,7 +360,6 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     // from the row above, which selects what is being edited.
     int dispY = pathY + 26;
     int dx = 4;
-    lblDisplay_.setBounds(dx, dispY, 55, 22);        dx += 57;
     btnPhase_  .setBounds(dx, dispY, 65, 22);        dx += 69;
 
     dx += 10;   // gap: everything from here on belongs to the analyzer
