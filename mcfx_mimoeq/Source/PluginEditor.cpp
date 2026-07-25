@@ -355,13 +355,25 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
 
     dx += 10;   // gap: everything from here on belongs to the analyzer
     cbAnalyzerView_  .setBounds(dx, dispY, 118, 22); dx += 122;
-    cbAnalyzerSource_.setBounds(dx, dispY, 88, 22);  dx += 96;
-    lblChannel_      .setBounds(dx, dispY, 24, 22);  dx += 26;
-    cbAnalyzerChannel_.setBounds(dx, dispY, 64, 22); dx += 70;
-    btnAutoNorm_     .setBounds(dx, dispY, 92, 22);  dx += 96;
-    lblOffset_       .setBounds(dx, dispY, 44, 22);  dx += 46;
+
+    // The analyzer's settings are hidden, not just greyed, when they don't apply
+    // (analyzer off, or pre/post source with no spectrogram to apply it to), so
+    // the row closes up instead of showing dead controls.
+    auto place = [&] (Component& c, int cw, int gap)
+    {
+        if (! c.isVisible())
+            return;
+        c.setBounds(dx, dispY, cw, 22);
+        dx += cw + gap;
+    };
+    place(cbAnalyzerSource_,  88, 8);
+    place(lblChannel_,        24, 2);
+    place(cbAnalyzerChannel_, 64, 6);
+    place(btnAutoNorm_,       92, 4);
+    place(lblOffset_,         44, 2);
     // The offset slider takes whatever is left, so the row fits any window width.
-    sldOffset_       .setBounds(dx, dispY, jmax(60, w - 4 - dx), 22);
+    if (sldOffset_.isVisible())
+        sldOffset_.setBounds(dx, dispY, jmax(60, w - 4 - dx), 22);
 
     // Reserve fixed space for the bottom sections so the graph area absorbs
     // any extra height (and shrinks first when the window gets smaller).
@@ -1327,11 +1339,20 @@ void Mcfx_mimoeqAudioProcessorEditor::updateAnalyzerState()
     btnAutoNorm_.setToggleState(getProcessor()->analyzerAutoNormalize, dontSendNotification);
     sldOffset_.setValue(getProcessor()->analyzerOffset, dontSendNotification);
 
-    cbAnalyzerSource_.setEnabled(on && spectro);
+    // Hide what does not apply: the whole set while the analyzer is off, and the
+    // pre/post source unless there is a spectrogram for it to act on.
+    cbAnalyzerSource_.setVisible(on && spectro);
+    lblChannel_.setVisible(on);
+    cbAnalyzerChannel_.setVisible(on);
+    btnAutoNorm_.setVisible(on);
+    lblOffset_.setVisible(on);
+    sldOffset_.setVisible(on);
+
     // In MIMO mode the channel follows the selected path, so it is not editable.
-    cbAnalyzerChannel_.setEnabled(on && diagonalMode_);
-    btnAutoNorm_.setEnabled(on);
-    sldOffset_.setEnabled(on && !getProcessor()->analyzerAutoNormalize);
+    cbAnalyzerChannel_.setEnabled(diagonalMode_);
+    sldOffset_.setEnabled(!getProcessor()->analyzerAutoNormalize);
+
+    resized();   // the row closes up around whatever is hidden
 
     // In MIMO mode, lock analyzers to the selected path's channels
     if (!diagonalMode_)
