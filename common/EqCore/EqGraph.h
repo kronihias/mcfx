@@ -153,6 +153,7 @@ private:
     bool spectroPost_ = false;                 // false = input (pre), true = output (post)
     static constexpr int kSpecW = 1024;        // log-frequency columns
     static constexpr int kSpecH = 512;         // history rows
+    static constexpr float kSpectroRangeDb = 72.f;  // colour scale spans 0 .. -72 dB
     Image spectro_;
     int specWrite_ = 0;
     std::vector<float> specSmoothDb_;          // per-column temporal smoothing

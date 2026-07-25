@@ -506,10 +506,19 @@ void EqGraph::writeSpectroRow()
         peak = jmax(peak, s);
     }
 
-    const float floorDb = peak - 72.f;              // 72 dB visible range, per-row peak
+    // Level mapping matches the spectrum curve: auto-normalize pins the current
+    // peak to the top of the scale, otherwise the user's offset shifts an
+    // absolute one. Normalizing per row (the old behaviour) made every row reach
+    // full scale by construction, so a quiet passage looked as hot as a loud one
+    // and the top colour was always present; on an absolute scale the level over
+    // time is what the picture actually shows.
+    const float offset  = analyzerAutoNormalize_ ? -peak : analyzerOffset_;
+    const float floorDb = -kSpectroRangeDb;         // top of the scale is 0 dB
+
     Image::BitmapData bd(spectro_, Image::BitmapData::writeOnly);
     for (int i = 0; i < kSpecW; ++i)
-        bd.setPixelColour(i, specWrite_, spectroColour((col[i] - floorDb) / 72.f));
+        bd.setPixelColour(i, specWrite_,
+                          spectroColour((col[i] + offset - floorDb) / kSpectroRangeDb));
 
     specWrite_ = (specWrite_ + 1) % kSpecH;         // newest scrolls in at the bottom
 }
