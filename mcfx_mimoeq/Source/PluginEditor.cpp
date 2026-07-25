@@ -333,9 +333,10 @@ void Mcfx_mimoeqAudioProcessorEditor::resized()
     // from the row above, which selects what is being edited.
     int dispY = pathY + 26;
     int dx = 4;
+    // Phase first, so Analyzer sits next to the settings that belong to it.
     lblDisplay_.setBounds(dx, dispY, 55, 22);        dx += 57;
-    btnAnalyzer_.setBounds(dx, dispY, 80, 22);       dx += 82;
     btnPhase_   .setBounds(dx, dispY, 65, 22);       dx += 69;
+    btnAnalyzer_.setBounds(dx, dispY, 80, 22);       dx += 82;
 
     dx += 12;   // gap before the analyzer's own display options
     cbAnalyzerView_  .setBounds(dx, dispY, 110, 22); dx += 114;
