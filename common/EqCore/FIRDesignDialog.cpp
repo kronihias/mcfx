@@ -245,6 +245,7 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     sldFreq_.setTextBoxStyle (Slider::TextBoxLeft, false, 80, 20);
     sldFreq_.setSliderStyle (Slider::LinearHorizontal);
     sldFreq_.setTextValueSuffix (" Hz");
+    sldFreq_.setDoubleClickReturnValue (true, 1000.0);
     sldFreq_.setValue (1000.0, dontSendNotification);
     sldFreq_.addListener (this);
 
@@ -255,6 +256,7 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     sldQ_.setNumDecimalPlacesToDisplay (3);
     sldQ_.setTextBoxStyle (Slider::TextBoxLeft, false, 70, 20);
     sldQ_.setSliderStyle (Slider::LinearHorizontal);
+    sldQ_.setDoubleClickReturnValue (true, 0.707);
     sldQ_.setValue (0.707, dontSendNotification);
     sldQ_.addListener (this);
 
