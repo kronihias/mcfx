@@ -877,6 +877,18 @@ void EqBandEditor::resized()
         yLeft += rowH + gap;
     }
 
+    // Tilt band limits — the frequencies where the line levels off, below the
+    // pivot and slope that define it.
+    if (sldTiltLo_.isVisible())
+    {
+        lblTiltLo_.setBounds(x, yLeft, lblW, rowH);
+        sldTiltLo_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 10, rowH);
+        yLeft += rowH + gap;
+        lblTiltHi_.setBounds(x, yLeft, lblW, rowH);
+        sldTiltHi_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 10, rowH);
+        yLeft += rowH + gap;
+    }
+
     // Gain band: mode toggle (Linear) + invert toggle
     if (btnGainLinear_.isVisible())
     {
