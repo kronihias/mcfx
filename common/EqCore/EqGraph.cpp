@@ -419,11 +419,11 @@ void EqGraph::calcAnalyzerPaths()
     {
         for (int xPos = startX; xPos < width; xPos += 2) // sample every 2 pixels for speed
         {
-            float hz = xpostohz(xPos);
+            float hz = xpostohz(xPos), hzNext = xpostohz(xPos + 2);
             if (inputAnalyzer_ != nullptr)
-                peakMag = jmax(peakMag, inputAnalyzer_->getMagnitude(hz));
+                peakMag = jmax(peakMag, inputAnalyzer_->getMaxMagnitude(hz, hzNext));
             if (outputAnalyzer_ != nullptr)
-                peakMag = jmax(peakMag, outputAnalyzer_->getMagnitude(hz));
+                peakMag = jmax(peakMag, outputAnalyzer_->getMaxMagnitude(hz, hzNext));
         }
     }
 
@@ -438,8 +438,10 @@ void EqGraph::calcAnalyzerPaths()
         bool started = false;
         for (int xPos = startX; xPos < width; ++xPos)
         {
-            float hz = xpostohz(xPos);
-            float mag = jmax(magFloor, analyzer->getMagnitude(hz));
+            // Peak over the pixel's own frequency span, not a single sample of it:
+            // high up the log axis one pixel covers many bins.
+            float mag = jmax(magFloor, analyzer->getMaxMagnitude(xpostohz(xPos),
+                                                                 xpostohz(xPos + 1)));
             float db = 20.f * log10f(mag) + offset;
             float y = (float)dbtoypos(db);
 

@@ -154,6 +154,25 @@ void SpectrumAnalyzer::computeFFT()
     }
 }
 
+float SpectrumAnalyzer::getMaxMagnitude(double freqLoHz, double freqHiHz) const
+{
+    const double binScale = (double) kFFTSize / sampleRate_;
+    const double lo = freqLoHz * binScale;
+    const double hi = freqHiHz * binScale;
+
+    // Narrower than a bin (the low end of the plot): interpolate as before, so the
+    // curve stays smooth instead of turning into a staircase.
+    if (! (hi - lo >= 1.0))
+        return getMagnitude(0.5 * (freqLoHz + freqHiHz));
+
+    const int b0 = jlimit(0, kSpecLen - 1, (int) std::floor(lo));
+    const int b1 = jlimit(0, kSpecLen - 1, (int) std::ceil (hi));
+    float m = 0.f;
+    for (int b = b0; b <= b1; ++b)
+        m = jmax(m, magnitude_[(size_t) b]);
+    return m;
+}
+
 float SpectrumAnalyzer::getMagnitude(double freqHz) const
 {
     float bin = (float)(freqHz / sampleRate_ * (double)kFFTSize);

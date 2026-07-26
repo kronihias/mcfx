@@ -38,9 +38,15 @@
 class SpectrumAnalyzer
 {
 public:
-    static constexpr int kFFTOrder = 12;                     // 2^12 = 4096
-    static constexpr int kFFTSize = 1 << kFFTOrder;          // 4096
-    static constexpr int kSpecLen = kFFTSize / 2 + 1;        // 2049
+    // 8192 rather than 4096: on a log-frequency plot the bottom octaves are what
+    // a linear-bin FFT starves, and doubling the length doubles the bins there
+    // (20-40 Hz goes from under two bins to over three). The cost is a 171 ms
+    // window instead of 85 ms, so the curve settles more slowly — acceptable for
+    // a display that is watched for balance, and the spectrogram's constant-Q
+    // analysis covers the fast, fine-grained bass detail.
+    static constexpr int kFFTOrder = 13;                     // 2^13 = 8192
+    static constexpr int kFFTSize = 1 << kFFTOrder;          // 8192
+    static constexpr int kSpecLen = kFFTSize / 2 + 1;        // 4097
 
     SpectrumAnalyzer();
     ~SpectrumAnalyzer() = default;
@@ -55,6 +61,12 @@ public:
     /** Get interpolated smoothed magnitude at a given frequency (Hz).
         Returns linear magnitude (not dB). Thread-safe for GUI reads. */
     float getMagnitude(double freqHz) const;
+
+    /** Largest magnitude in a frequency range. A pixel high up the log axis spans
+        many bins, so sampling one of them lets narrow peaks fall between pixels
+        and flicker in and out; taking the peak over the pixel's own span shows
+        them. Falls back to interpolation where a pixel is narrower than a bin. */
+    float getMaxMagnitude(double freqLoHz, double freqHiHz) const;
 
     /** Set which channel to analyze. 0 = average all, 1..N = single channel. */
     void setAnalyzerChannel(int ch) { analyzerChannel_.store(ch, std::memory_order_relaxed); }
