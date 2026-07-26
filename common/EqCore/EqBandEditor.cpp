@@ -100,9 +100,7 @@ EqBandEditor::EqBandEditor()
     addAndMakeVisible(sldFreq_);
     sldFreq_.setRange(20.0, 20000.0, 0.1);
     sldFreq_.setSkewFactorFromMidPoint(1000.0);
-    sldFreq_.setNumDecimalPlacesToDisplay(1);
     sldFreq_.setTextBoxStyle(Slider::TextBoxLeft, false, 80, 20);
-    sldFreq_.setTextValueSuffix(" Hz");
     sldFreq_.setSliderStyle(Slider::LinearHorizontal);
     sldFreq_.setTooltip("Filter cutoff/center frequency");
     sldFreq_.addListener(this);
@@ -136,9 +134,8 @@ EqBandEditor::EqBandEditor()
     addAndMakeVisible(sldTiltLo_);
     sldTiltLo_.setRange(10.0, 2000.0, 1.0);
     sldTiltLo_.setSkewFactorFromMidPoint(100.0);
-    sldTiltLo_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldTiltLo_.setTextBoxStyle(Slider::TextBoxLeft, false, 78, 20);
     sldTiltLo_.setSliderStyle(Slider::LinearHorizontal);
-    sldTiltLo_.setTextValueSuffix(" Hz");
     sldTiltLo_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultLoHz);
     sldTiltLo_.setTooltip("Below this the tilt levels off instead of continuing to rise or fall");
     sldTiltLo_.addListener(this);
@@ -147,9 +144,8 @@ EqBandEditor::EqBandEditor()
     addAndMakeVisible(sldTiltHi_);
     sldTiltHi_.setRange(1000.0, 24000.0, 1.0);
     sldTiltHi_.setSkewFactorFromMidPoint(6000.0);
-    sldTiltHi_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldTiltHi_.setTextBoxStyle(Slider::TextBoxLeft, false, 78, 20);
     sldTiltHi_.setSliderStyle(Slider::LinearHorizontal);
-    sldTiltHi_.setTextValueSuffix(" Hz");
     sldTiltHi_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultHiHz);
     sldTiltHi_.setTooltip("Above this the tilt levels off instead of continuing to rise or fall");
     sldTiltHi_.addListener(this);

@@ -114,11 +114,11 @@ private:
 
     // Filter parameters
     ComboBox cbType_;
-    Slider sldFreq_;
+    FreqSlider sldFreq_;
     Slider sldQ_;
     Slider sldSlope_;                   // low/high pass: continuous roll-off, dB/octave
-    Slider sldTiltLo_;                  // tilt: line levels off below this
-    Slider sldTiltHi_;                  // ...and above this
+    FreqSlider sldTiltLo_;              // tilt: line levels off below this
+    FreqSlider sldTiltHi_;              // ...and above this
     Slider sldGain_;
     ComboBox cbOrder_;
     Label lblType_  { {}, "Type:" };

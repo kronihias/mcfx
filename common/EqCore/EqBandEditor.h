@@ -24,6 +24,36 @@
 #include "EqBand.h"
 
 //==============================================================================
+/** Slider for a frequency in Hz that reads in kHz once it passes 999, and takes
+    either unit back when typed: "1.3k", "1.3 kHz" and "1300" all mean the same
+    thing. Trailing zeros are trimmed, so 20 kHz shows as "20 kHz" rather than
+    "20.00 kHz". Used for every frequency control in the band editor and the FIR
+    designer, so they all read the same way. */
+class FreqSlider : public Slider
+{
+public:
+    String getTextFromValue(double value) override
+    {
+        if (value >= 1000.0)
+        {
+            String s(value / 1000.0, 2);
+            while (s.endsWithChar('0')) s = s.dropLastCharacters(1);
+            if (s.endsWithChar('.'))    s = s.dropLastCharacters(1);
+            return s + " kHz";
+        }
+        return String(value, value < 100.0 ? 1 : 0) + " Hz";
+    }
+
+    double getValueFromText(const String& text) override
+    {
+        const String t = text.trim().toLowerCase();
+        // "k" anywhere (k, kHz, kilohertz) scales by a thousand; anything else is Hz.
+        const double scale = t.containsChar('k') ? 1000.0 : 1.0;
+        return t.retainCharacters("0123456789.-").getDoubleValue() * scale;
+    }
+};
+
+//==============================================================================
 /** Small component that draws a FIR impulse response (time-domain waveform).
     Supports drag-and-drop of .txt/.csv/.dat/.wav/.aif/.aiff files. */
 class FIRPlot : public Component, public FileDragAndDropTarget
@@ -473,7 +503,7 @@ private:
     IIRSubTypeCombo cbIIRSubType_; // low_pass, high_pass, etc., with submenu for analog prototypes
     ComboBox cbOrder_;          // Butterworth order (1-8)
 
-    Slider sldFreq_;
+    FreqSlider sldFreq_;
     Slider sldQ_;
     Slider sldRipplePass_;     // Chebyshev I passband ripple (dB)
     Slider sldRippleStop_;     // Chebyshev II stopband attenuation (dB)
@@ -497,9 +527,9 @@ private:
     Label lblGain_    { {}, "Gain:" };
     // Tilt only: the band limits where the line levels off.
     Label  lblTiltLo_ { {}, "Min f:" };
-    Slider sldTiltLo_;
+    FreqSlider sldTiltLo_;
     Label  lblTiltHi_ { {}, "Max f:" };
-    Slider sldTiltHi_;
+    FreqSlider sldTiltHi_;
     Label lblDelay_   { {}, "Delay:" };
     Label lblSampleRate_ { {}, "Rate:" };
     Label lblSamples_ { {}, "smpls" };

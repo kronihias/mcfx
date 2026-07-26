@@ -241,10 +241,8 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     addAndMakeVisible (sldFreq_);
     sldFreq_.setRange (20.0, jmin (20000.0, sampleRate_ * 0.49), 0.1);
     sldFreq_.setSkewFactorFromMidPoint (1000.0);
-    sldFreq_.setNumDecimalPlacesToDisplay (1);
     sldFreq_.setTextBoxStyle (Slider::TextBoxLeft, false, 80, 20);
     sldFreq_.setSliderStyle (Slider::LinearHorizontal);
-    sldFreq_.setTextValueSuffix (" Hz");
     sldFreq_.setDoubleClickReturnValue (true, 1000.0);
     sldFreq_.setValue (1000.0, dontSendNotification);
     sldFreq_.addListener (this);
@@ -285,9 +283,8 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     addAndMakeVisible (sldTiltLo_);
     sldTiltLo_.setRange (10.0, 2000.0, 1.0);
     sldTiltLo_.setSkewFactorFromMidPoint (100.0);
-    sldTiltLo_.setTextBoxStyle (Slider::TextBoxLeft, false, 70, 20);
+    sldTiltLo_.setTextBoxStyle (Slider::TextBoxLeft, false, 78, 20);
     sldTiltLo_.setSliderStyle (Slider::LinearHorizontal);
-    sldTiltLo_.setTextValueSuffix (" Hz");
     sldTiltLo_.setDoubleClickReturnValue (true, kTiltDefaultLoHz);
     sldTiltLo_.setValue (kTiltDefaultLoHz, dontSendNotification);
     sldTiltLo_.setTooltip ("Below this the tilt levels off instead of continuing to rise or fall");
@@ -296,9 +293,8 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     addAndMakeVisible (sldTiltHi_);
     sldTiltHi_.setRange (1000.0, 24000.0, 1.0);
     sldTiltHi_.setSkewFactorFromMidPoint (6000.0);
-    sldTiltHi_.setTextBoxStyle (Slider::TextBoxLeft, false, 70, 20);
+    sldTiltHi_.setTextBoxStyle (Slider::TextBoxLeft, false, 78, 20);
     sldTiltHi_.setSliderStyle (Slider::LinearHorizontal);
-    sldTiltHi_.setTextValueSuffix (" Hz");
     sldTiltHi_.setDoubleClickReturnValue (true, kTiltDefaultHiHz);
     sldTiltHi_.setValue (kTiltDefaultHiHz, dontSendNotification);
     sldTiltHi_.setTooltip ("Above this the tilt levels off instead of continuing to rise or fall");
