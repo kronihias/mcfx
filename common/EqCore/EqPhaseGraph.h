@@ -52,7 +52,7 @@ private:
     EqChain* chain_ = nullptr;
 
     float minf_     =  20.f;
-    float maxf_     = 20000.f;
+    float maxf_     = 24000.f;   // must match EqGraph: the two axes are stacked
     float minDeg_   = -180.f;
     float maxDeg_   =  180.f;
     float degStep_  =  90.f;

@@ -137,7 +137,7 @@ private:
     static constexpr int kRefreshIdleMs = 100;  // ~10 fps
 
     float minf_ = 20.f;
-    float maxf_ = 20000.f;
+    float maxf_ = 24000.f;   // past 20k so its label fits inside the plot
     float mindb_ = -24.f;
     float maxdb_ = 24.f;
     float gridDiv_ = 6.f;

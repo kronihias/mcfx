@@ -87,7 +87,7 @@ void EqPhaseGraph::rebuildGrid()
 
     // Frequency grid (every step within each decade)
     auto isMajor = [] (float f) {
-        return f == 50 || f == 100 || f == 500 || f == 1000 || f == 5000 || f == 10000;
+        return isMajorFreqGridline (f);
     };
     for (float f = minf_; f <= maxf_; f += std::pow (10.f, std::floor (std::log10 (f))))
     {
@@ -130,11 +130,11 @@ void EqPhaseGraph::drawGrid (Graphics& g)
     // Frequency labels (only the major ones)
     for (float f = minf_; f <= maxf_; f += std::pow (10.f, std::floor (std::log10 (f))))
     {
-        if (! (f == 50 || f == 100 || f == 500 || f == 1000 || f == 5000 || f == 10000))
+        if (! isMajorFreqGridline (f))
             continue;
         int x = hzToXpos (f);
         g.setFont (Font (FontOptions ("Arial Rounded MT", 12.f, Font::plain)));
-        g.drawText (String ((int) f), x, getHeight() - 12, 45, 12,
+        g.drawText (formatFreqAxisLabel (f), x, getHeight() - 12, 45, 12,
                     Justification::left, false);
     }
 

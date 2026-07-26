@@ -49,7 +49,7 @@ void FIRDesignDialog::MagPreview::paint (Graphics& g)
                                    area.getHeight() - padT - padB);
 
     const double fLo  = 20.0;
-    const double fHi  = jmin (20000.0, sampleRate_ * 0.5);
+    const double fHi  = jmin (24000.0, sampleRate_ * 0.5);
     const double dbMax = (double) dbMax_;
     const double dbMin = (double) dbMin_;
     const float  dbStep = dbStep_;   // grid spacing in dB (adapts on zoom)
@@ -77,9 +77,7 @@ void FIRDesignDialog::MagPreview::paint (Graphics& g)
 
     // Frequency grid: every step within each decade (20, 30, ..., 100, 200, ..., 1000, ...)
     // Major decades and half-decades go on the bright path with labels.
-    auto isMajor = [] (double f) {
-        return f == 50 || f == 100 || f == 500 || f == 1000 || f == 5000 || f == 10000;
-    };
+    auto isMajor = [] (double f) { return isMajorFreqGridline (f); };
     for (double f = fLo; f <= fHi; f += std::pow (10.0, std::floor (std::log10 (f))))
     {
         float x = freqToX (f);
@@ -109,7 +107,7 @@ void FIRDesignDialog::MagPreview::paint (Graphics& g)
     {
         if (! isMajor (f)) continue;
         int x = (int) freqToX (f);
-        g.drawText (String ((int) f), x - 22, (int) area.getBottom() - 12, 45, 12,
+        g.drawText (formatFreqAxisLabel (f), x - 22, (int) area.getBottom() - 12, 45, 12,
                     Justification::centred, false);
     }
 

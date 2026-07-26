@@ -217,9 +217,9 @@ void EqGraph::drawGrid(Graphics& g)
     for (float f = minf_; f <= maxf_; f += powf(10, floorf(log10(f))))
     {
         int xpos = hztoxpos(f);
-        if (f == 50 || f == 100 || f == 500 || f == 1000 || f == 5000 || f == 10000)
+        if (isMajorFreqGridline(f))
         {
-            String axislabel = String((int)f);
+            String axislabel = formatFreqAxisLabel(f);
             g.setFont(Font(FontOptions("Arial Rounded MT", 12.f, Font::plain)));
             g.drawText(axislabel, xpos, getHeight() - 12, 45, 12, Justification::left, false);
         }
@@ -613,7 +613,7 @@ void EqGraph::rebuildGridPaths()
     for (float f = minf_; f <= maxf_; f += powf(10, floorf(log10(f))))
     {
         int xpos = hztoxpos(f);
-        if (f == 50 || f == 100 || f == 500 || f == 1000 || f == 5000 || f == 10000)
+        if (isMajorFreqGridline(f))
         {
             pathGridW_.startNewSubPath((float)xpos, (float)dbtoypos(maxdb_));
             pathGridW_.lineTo((float)xpos, (float)dbtoypos(mindb_));

@@ -59,6 +59,28 @@ inline float dynamicGainOffsetDB(float over, float ratio, float kneeDB,
 }
 
 //==============================================================================
+/** Frequency as an axis label: plain Hz below a kHz, kHz above, trailing zeros
+    trimmed — "50", "500", "1k", "2.5k", "10k". Shared by the EQ graph, the phase
+    graph and the FIR designer's preview so every frequency axis reads alike. */
+inline bool isMajorFreqGridline(double hz)
+{
+    return hz == 50.0 || hz == 100.0 || hz == 500.0
+        || hz == 1000.0 || hz == 5000.0 || hz == 10000.0 || hz == 20000.0;
+}
+
+inline juce::String formatFreqAxisLabel(double hz)
+{
+    if (hz >= 1000.0)
+    {
+        juce::String s(hz / 1000.0, 1);
+        if (s.endsWithChar('0')) s = s.dropLastCharacters(1);
+        if (s.endsWithChar('.')) s = s.dropLastCharacters(1);
+        return s + "k";
+    }
+    return juce::String((int) hz);
+}
+
+//==============================================================================
 /** Modified Transposed Direct-Form II biquad section.
     Pre-computes c1 = b1 - a1*b0, c2 = b2 - a2*b0 to reduce operations
     in the state update (same form as SmoothIIRFilter). */
