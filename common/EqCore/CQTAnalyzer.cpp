@@ -192,18 +192,21 @@ void CQTAnalyzer::compute()
 
     // Copy the ring oldest-to-newest so the frame ends at the write head. The
     // audio thread may advance mid-copy; for a display that is harmless.
+    // The input is real, so it goes in unpacked (not interleaved) — the real-only
+    // transform is ~1.8x cheaper than treating it as complex with a zero imaginary
+    // part, and costs nothing here: every kernel is concentrated around its own
+    // centre frequency, so no kernel index reaches past the Nyquist bin that the
+    // real transform stops at.
     std::fill (frame_.begin(), frame_.end(), 0.f);
     {
         const juce::SpinLock::ScopedLockType sl (ringLock_);
         const int size = (int) ring_.size();
         const int wp = writePos_.load (std::memory_order_acquire);
         for (int i = 0; i < size; ++i)
-            frame_[(size_t) (2 * i)] = ring_[(size_t) ((wp + i) % size)];  // imag stays 0
+            frame_[(size_t) i] = ring_[(size_t) ((wp + i) % size)];
     }
 
-    fft_->perform (reinterpret_cast<const juce::dsp::Complex<float>*> (frame_.data()),
-                   reinterpret_cast<juce::dsp::Complex<float>*> (frame_.data()),
-                   false);
+    fft_->performRealOnlyForwardTransform (frame_.data(), true);
 
     // Kernels carry a unit-sum window, so the dot product comes out scaled by
     // the frame length and by the half-amplitude of a real sine's analytic part.
