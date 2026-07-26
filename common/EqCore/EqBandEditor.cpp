@@ -130,6 +130,30 @@ EqBandEditor::EqBandEditor()
     sldGain_.setDoubleClickReturnValue(true, 0.0);
     sldGain_.setTextValueSuffix(" dB");
     sldGain_.setTooltip("Gain in dB. Double-click to reset to 0 dB");
+
+    // Tilt band limits — outside them the line levels off, so a steep slope
+    // cannot run away into huge boost at the extremes.
+    addAndMakeVisible(lblTiltLo_);
+    addAndMakeVisible(sldTiltLo_);
+    sldTiltLo_.setRange(10.0, 2000.0, 1.0);
+    sldTiltLo_.setSkewFactorFromMidPoint(100.0);
+    sldTiltLo_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldTiltLo_.setSliderStyle(Slider::LinearHorizontal);
+    sldTiltLo_.setTextValueSuffix(" Hz");
+    sldTiltLo_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultLoHz);
+    sldTiltLo_.setTooltip("Below this the tilt levels off instead of continuing to rise or fall");
+    sldTiltLo_.addListener(this);
+
+    addAndMakeVisible(lblTiltHi_);
+    addAndMakeVisible(sldTiltHi_);
+    sldTiltHi_.setRange(1000.0, 24000.0, 1.0);
+    sldTiltHi_.setSkewFactorFromMidPoint(6000.0);
+    sldTiltHi_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldTiltHi_.setSliderStyle(Slider::LinearHorizontal);
+    sldTiltHi_.setTextValueSuffix(" Hz");
+    sldTiltHi_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultHiHz);
+    sldTiltHi_.setTooltip("Above this the tilt levels off instead of continuing to rise or fall");
+    sldTiltHi_.addListener(this);
     sldGain_.addListener(this);
 
     // Linear gain slider (for Gain band in linear mode)
@@ -427,6 +451,8 @@ void EqBandEditor::updateFromBand()
         sldFreq_.setValue(band_->getFrequency(), dontSendNotification);
         sldQ_.setValue(band_->getQ(), dontSendNotification);
         sldGain_.setValue(band_->getGainDB(), dontSendNotification);
+    sldTiltLo_.setValue(band_->getTiltLoHz(), dontSendNotification);
+    sldTiltHi_.setValue(band_->getTiltHiHz(), dontSendNotification);
         sldRipplePass_.setValue(band_->getRipplePassDB(), dontSendNotification);
         sldRippleStop_.setValue(band_->getRippleStopDB(), dontSendNotification);
 
@@ -603,6 +629,7 @@ void EqBandEditor::showControlsForType(EqBandType type)
         if (isTilt)
         {
             lblGain_.setText("Slope:", dontSendNotification);
+            lblFreq_.setText("Pivot:", dontSendNotification);
             sldGain_.setRange(-EqBand::kTiltMaxSlope, EqBand::kTiltMaxSlope, 0.05);
             sldGain_.setTextValueSuffix(" dB/oct");
             sldGain_.setTooltip("Tilt slope in dB per octave — a straight line on the "
@@ -618,9 +645,34 @@ void EqBandEditor::showControlsForType(EqBandType type)
         else
         {
             lblGain_.setText("Gain:", dontSendNotification);
+            lblFreq_.setText("Freq:", dontSendNotification);
             sldGain_.setRange(-60.0, 30.0, 0.1);
             sldGain_.setTextValueSuffix(" dB");
             sldGain_.setTooltip("Gain in dB. Double-click to reset to 0 dB");
+
+    // Tilt band limits — outside them the line levels off, so a steep slope
+    // cannot run away into huge boost at the extremes.
+    addAndMakeVisible(lblTiltLo_);
+    addAndMakeVisible(sldTiltLo_);
+    sldTiltLo_.setRange(10.0, 2000.0, 1.0);
+    sldTiltLo_.setSkewFactorFromMidPoint(100.0);
+    sldTiltLo_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldTiltLo_.setSliderStyle(Slider::LinearHorizontal);
+    sldTiltLo_.setTextValueSuffix(" Hz");
+    sldTiltLo_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultLoHz);
+    sldTiltLo_.setTooltip("Below this the tilt levels off instead of continuing to rise or fall");
+    sldTiltLo_.addListener(this);
+
+    addAndMakeVisible(lblTiltHi_);
+    addAndMakeVisible(sldTiltHi_);
+    sldTiltHi_.setRange(1000.0, 24000.0, 1.0);
+    sldTiltHi_.setSkewFactorFromMidPoint(6000.0);
+    sldTiltHi_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
+    sldTiltHi_.setSliderStyle(Slider::LinearHorizontal);
+    sldTiltHi_.setTextValueSuffix(" Hz");
+    sldTiltHi_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultHiHz);
+    sldTiltHi_.setTooltip("Above this the tilt levels off instead of continuing to rise or fall");
+    sldTiltHi_.addListener(this);
             sldGain_.setDoubleClickReturnValue(true, 0.0);
             sldFreq_.setDoubleClickReturnValue(false, 0.0);
             sldFreq_.setTooltip("Filter cutoff/center frequency");
@@ -636,6 +688,10 @@ void EqBandEditor::showControlsForType(EqBandType type)
     lblHz_.setVisible(isIIR && !isBiquad);
     lblQ_.setVisible(isIIR && !isBiquad && !hasOrder && !isTilt);
     sldQ_.setVisible(isIIR && !isBiquad && !hasOrder && !isTilt);
+    lblTiltLo_.setVisible(isTilt);
+    sldTiltLo_.setVisible(isTilt);
+    lblTiltHi_.setVisible(isTilt);
+    sldTiltHi_.setVisible(isTilt);
 
     lblOrder_.setVisible(hasOrder);
     cbOrder_.setVisible(hasOrder);
@@ -1025,6 +1081,10 @@ void EqBandEditor::sliderValueChanged(Slider* s)
         band_->setDynThresholdDB((float)sldDynThreshold_.getValue());
     else if (s == &sldDynRange_)
         band_->setDynRangeDB((float)sldDynRange_.getValue());
+    else if (s == &sldTiltLo_)
+        band_->setTiltLoHz((float)sldTiltLo_.getValue());
+    else if (s == &sldTiltHi_)
+        band_->setTiltHiHz((float)sldTiltHi_.getValue());
     else if (s == &sldDynRatio_)
         band_->setDynRatio((float)sldDynRatio_.getValue());
     else if (s == &sldDynKnee_)

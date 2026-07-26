@@ -495,6 +495,11 @@ private:
     Label lblRipplePass_ { {}, "Ripple:" };
     Label lblRippleStop_ { {}, "Atten:" };
     Label lblGain_    { {}, "Gain:" };
+    // Tilt only: the band limits where the line levels off.
+    Label  lblTiltLo_ { {}, "Min f:" };
+    Slider sldTiltLo_;
+    Label  lblTiltHi_ { {}, "Max f:" };
+    Slider sldTiltHi_;
     Label lblDelay_   { {}, "Delay:" };
     Label lblSampleRate_ { {}, "Rate:" };
     Label lblHz_      { {}, "Hz" };

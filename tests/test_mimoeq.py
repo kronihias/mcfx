@@ -724,6 +724,10 @@ def test_json_peak_freq_response():
 
 TILT_CFG_F = "f_Hz"
 
+# Open the band limits past the audio range, for tests that want the bare line
+# rather than the levelling-off the defaults (40 Hz / 20 kHz) apply at each end.
+WIDE_TILT_LIMITS = {"tilt_lo_hz": 10.0, "tilt_hi_hz": 24000.0}
+
 
 # The tilt cascade reaches down to a ~4 Hz corner, so its impulse response has a
 # much longer tail than the shared FFT_N (85 ms) window can hold — measuring it
@@ -757,8 +761,11 @@ def _tilt_spec(slope, pivot, extra=None):
 def test_json_tilt_is_a_straight_line(slope, pivot):
     """A tilt band is a straight line on a dB vs log-f plot: constant slope in
     dB/octave, crossing 0 dB at the pivot. Checked against the ideal line itself
-    (not against a re-implementation of the plugin's own filter design)."""
-    f, got = _tilt_spec(slope, pivot)
+    (not against a re-implementation of the plugin's own filter design).
+
+    The band limits are opened past the audio range here so the line runs
+    unbroken; their own effect is covered by the band-limit tests below."""
+    f, got = _tilt_spec(slope, pivot, WIDE_TILT_LIMITS)
     ideal = tilt_target_db(f, slope, pivot)
     dev = got - ideal
     assert np.max(np.abs(dev)) < 0.5, (
@@ -797,9 +804,48 @@ def test_json_tilt_zero_slope_is_flat():
 
 def test_json_tilt_slope_is_clamped():
     """Slopes beyond the supported range clamp rather than misbehaving."""
-    f, got = _tilt_spec(20.0, 1000.0)          # way past the +6 dB/oct ceiling
+    f, got = _tilt_spec(20.0, 1000.0, WIDE_TILT_LIMITS)   # way past the +6 dB/oct ceiling
     ideal = tilt_target_db(f, 6.0, 1000.0)
     assert np.max(np.abs(got - ideal)) < 0.5, "over-range slope should clamp to +6 dB/oct"
+
+
+def test_json_tilt_band_limits_flatten_the_ends():
+    """The tilt line levels off outside [tilt_lo_hz, tilt_hi_hz], so a steep slope
+    cannot run away into huge boost at the extremes. The knee is deliberately
+    smooth, so this checks the slope is largely gone rather than exactly zero."""
+    f, wide = _tilt_spec(-6.0, 1000.0, {"tilt_lo_hz": 10.0, "tilt_hi_hz": 24000.0})
+    _, dflt = _tilt_spec(-6.0, 1000.0)          # defaults: 40 Hz .. 20 kHz
+
+    def at(spec, hz):
+        return float(np.interp(np.log(hz), np.log(f), spec))
+
+    # Unbounded keeps climbing below 40 Hz; bounded gives most of that back.
+    assert at(wide, 20.0) - at(dflt, 20.0) > 4.0, "the low limit should curb the bass boost"
+    # Over the octave below the limit an unbounded -6 dB/oct line rises a full
+    # 6 dB; bounded it should be a fraction of that.
+    assert at(dflt, 20.0) - at(dflt, 40.0) < 2.5, "should be levelling off below the low limit"
+    assert at(wide, 20.0) - at(wide, 40.0) > 5.0, "unbounded should still rise ~6 dB/oct"
+
+
+def test_json_tilt_limits_are_adjustable():
+    """Tighter limits flatten more of the span."""
+    f, dflt = _tilt_spec(-6.0, 1000.0)
+    _, tight = _tilt_spec(-6.0, 1000.0, {"tilt_lo_hz": 100.0, "tilt_hi_hz": 8000.0})
+
+    def at(spec, hz):
+        return float(np.interp(np.log(hz), np.log(f), spec))
+
+    assert at(tight, 20.0) < at(dflt, 20.0) - 4.0, "a higher low limit should curb the bass more"
+    assert at(tight, 20000.0) > at(dflt, 20000.0) + 4.0, "a lower high limit should curb the treble cut"
+    assert at(tight, 1000.0) == pytest.approx(0.0, abs=0.3), "the pivot should stay at unity"
+
+
+def test_json_tilt_limits_default_when_absent():
+    """A tilt band with no limits given uses 40 Hz / 20 kHz."""
+    f, implicit = _tilt_spec(-6.0, 1000.0)
+    _, explicit = _tilt_spec(-6.0, 1000.0, {"tilt_lo_hz": 40.0, "tilt_hi_hz": 20000.0})
+    np.testing.assert_allclose(implicit, explicit, atol=0.05,
+                               err_msg="defaults should match an explicit 40 Hz / 20 kHz")
 
 
 def test_json_crossover_lp_freq_response():

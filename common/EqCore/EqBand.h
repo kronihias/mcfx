@@ -244,6 +244,16 @@ public:
         mid-band. */
     static constexpr float kTiltDefaultFreqHz = 1000.0f;
 
+    /** Band limits of a tilt. Outside them the line levels off, so the slope
+        cannot run away into huge boost at the bottom or the top; the corners
+        round off smoothly rather than breaking sharply. */
+    static constexpr float kTiltDefaultLoHz = 40.0f;
+    static constexpr float kTiltDefaultHiHz = 20000.0f;
+    float getTiltLoHz() const { return tiltLoHz_; }
+    void  setTiltLoHz(float hz);
+    float getTiltHiHz() const { return tiltHiHz_; }
+    void  setTiltHiHz(float hz);
+
     bool  isDynamicActive() const { return dynActive_; }
     void  setDynamicActive(bool b);
 
@@ -417,6 +427,8 @@ private:
     bool  dynActive_      = false;
     float dynThresholdDB_ = -24.f;
     float dynRangeDB_     = -6.f;    // signed
+    float tiltLoHz_       = kTiltDefaultLoHz;   // tilt: line flattens below this
+    float tiltHiHz_       = kTiltDefaultHiHz;   // ...and above this
     float dynRatio_       = 4.f;     // N:1
     float dynKneeDB_      = 6.f;     // soft-knee width (dB)
     float dynAttackMs_    = 10.f;

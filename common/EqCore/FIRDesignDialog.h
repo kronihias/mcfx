@@ -95,9 +95,10 @@ private:
     // 12 = the usual 2nd-order Butterworth, 48 = steep crossover territory.
     static constexpr double kSlopeMinDbOct = 3.0;
     static constexpr double kSlopeMaxDbOct = 48.0;
-    // Tilt: below this the target line is held flat, so it never asks for
-    // unbounded gain at DC.
-    static constexpr double kTiltFloorHz = 20.0;
+    // Tilt band limits: outside them the target line is held flat, so it never
+    // asks for unbounded gain at either end.
+    static constexpr double kTiltDefaultLoHz = 40.0;
+    static constexpr double kTiltDefaultHiHz = 20000.0;
 
     void rebuildBandFromUI();
     void recomputeFIR();
@@ -116,12 +117,16 @@ private:
     Slider sldFreq_;
     Slider sldQ_;
     Slider sldSlope_;                   // low/high pass: continuous roll-off, dB/octave
+    Slider sldTiltLo_;                  // tilt: line levels off below this
+    Slider sldTiltHi_;                  // ...and above this
     Slider sldGain_;
     ComboBox cbOrder_;
     Label lblType_  { {}, "Type:" };
     Label lblFreq_  { {}, "Freq:" };
     Label lblQ_     { {}, "Q:" };
     Label lblSlope_ { {}, "Slope:" };
+    Label lblTiltLo_ { {}, "Min f:" };
+    Label lblTiltHi_ { {}, "Max f:" };
     Label lblGain_  { {}, "Gain:" };
     Label lblOrder_ { {}, "Order:" };
 

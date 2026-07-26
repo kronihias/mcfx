@@ -39,6 +39,20 @@ void EqBand::setType(EqBandType t)
     reset();
 }
 
+void EqBand::setTiltLoHz(float hz)
+{
+    tiltLoHz_ = jlimit(10.f, 2000.f, hz);
+    if (type_ == EqBandType::IIR && iirSubType_ == IIRSubType::Tilt)
+        updateIIRCoefficients();
+}
+
+void EqBand::setTiltHiHz(float hz)
+{
+    tiltHiHz_ = jlimit(1000.f, 24000.f, hz);
+    if (type_ == EqBandType::IIR && iirSubType_ == IIRSubType::Tilt)
+        updateIIRCoefficients();
+}
+
 void EqBand::setIIRSubType(IIRSubType st)
 {
     iirSubType_ = st;
@@ -171,8 +185,15 @@ void EqBand::designTiltCascade()
         W[k]  = wLo * std::pow(stepRatio, (double) k);
         fd[k] = fs / MathConstants<double>::pi * std::atan(W[k]);   // grid edge, in Hz
     }
+    // Bound the line: outside [lo, hi] the target stops changing, which drives the
+    // sections there to unit gain on its own — a section's height is just the
+    // target's increment across its interval, and that is now zero. The corners
+    // come out rounded, since a cascade this smooth cannot follow a kink; that is
+    // the shape a shelf wants anyway.
+    const double lo = jlimit(10.0, 0.4 * fs, (double) tiltLoHz_);
+    const double hi = jmax(lo * 1.05, jlimit(10.0, 0.45 * fs, (double) tiltHiHz_));
     for (int k = 0; k <= kTiltSections; ++k)
-        tgt[k] = slope * std::log2(fd[k] / fd[0]);
+        tgt[k] = slope * std::log2(jlimit(lo, hi, fd[k]) / fd[0]);
     for (int k = 0; k < kTiltSections; ++k)
         h[k] = tgt[k + 1] - tgt[k];
 
@@ -715,6 +736,8 @@ void EqBand::syncParametersFrom(const EqBand& source)
             analogOrder_   = source.analogOrder_;
             ripplePassDB_  = source.ripplePassDB_;
             rippleStopDB_  = source.rippleStopDB_;
+            tiltLoHz_      = source.tiltLoHz_;
+            tiltHiHz_      = source.tiltHiHz_;
 
             if (needsCoeffUpdate || usesCascade())
             {
@@ -1697,6 +1720,8 @@ var EqBand::toJson() const
                     {
                         // Tilt has no Q; its "gain" is a slope, so name it as one.
                         params->setProperty("slope_db_oct", gainDB_);
+                        params->setProperty("tilt_lo_hz", tiltLoHz_);
+                        params->setProperty("tilt_hi_hz", tiltHiHz_);
                     }
                     else
                     {
@@ -1920,6 +1945,10 @@ EqBand* EqBand::fromJson(const var& json)
                 else if (subType == IIRSubType::Tilt)
                 {
                     // Slope in dB/octave; "gain_db" accepted as a fallback spelling.
+                    band->setTiltLoHz((float)params.getProperty("tilt_lo_hz",
+                                                                kTiltDefaultLoHz));
+                    band->setTiltHiHz((float)params.getProperty("tilt_hi_hz",
+                                                                kTiltDefaultHiHz));
                     band->setGainDB((float)params.getProperty(
                         "slope_db_oct", params.getProperty("gain_db", 0.0)));
                 }

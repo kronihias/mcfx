@@ -276,6 +276,31 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
                           "12 dB/oct matches a 2nd-order filter. Double-click to reset.");
     sldSlope_.addListener (this);
 
+    // Tilt band limits — where the line levels off at each end.
+    for (auto* t : { &lblTiltLo_, &lblTiltHi_ })
+        addAndMakeVisible (t);
+    addAndMakeVisible (sldTiltLo_);
+    sldTiltLo_.setRange (10.0, 2000.0, 1.0);
+    sldTiltLo_.setSkewFactorFromMidPoint (100.0);
+    sldTiltLo_.setTextBoxStyle (Slider::TextBoxLeft, false, 70, 20);
+    sldTiltLo_.setSliderStyle (Slider::LinearHorizontal);
+    sldTiltLo_.setTextValueSuffix (" Hz");
+    sldTiltLo_.setDoubleClickReturnValue (true, kTiltDefaultLoHz);
+    sldTiltLo_.setValue (kTiltDefaultLoHz, dontSendNotification);
+    sldTiltLo_.setTooltip ("Below this the tilt levels off instead of continuing to rise or fall");
+    sldTiltLo_.addListener (this);
+
+    addAndMakeVisible (sldTiltHi_);
+    sldTiltHi_.setRange (1000.0, 24000.0, 1.0);
+    sldTiltHi_.setSkewFactorFromMidPoint (6000.0);
+    sldTiltHi_.setTextBoxStyle (Slider::TextBoxLeft, false, 70, 20);
+    sldTiltHi_.setSliderStyle (Slider::LinearHorizontal);
+    sldTiltHi_.setTextValueSuffix (" Hz");
+    sldTiltHi_.setDoubleClickReturnValue (true, kTiltDefaultHiHz);
+    sldTiltHi_.setValue (kTiltDefaultHiHz, dontSendNotification);
+    sldTiltHi_.setTooltip ("Above this the tilt levels off instead of continuing to rise or fall");
+    sldTiltHi_.addListener (this);
+
     addAndMakeVisible (lblGain_);
     addAndMakeVisible (sldGain_);
     sldGain_.setRange (-24.0, 24.0, 0.1);
@@ -396,7 +421,9 @@ void FIRDesignDialog::resized()
     row (lblType_,  cbType_,  180);
     row (lblFreq_,  sldFreq_);
     if (sldQ_.isVisible())     row (lblQ_,     sldQ_);
-    if (sldSlope_.isVisible()) row (lblSlope_, sldSlope_);
+    if (sldSlope_.isVisible())  row (lblSlope_,  sldSlope_);
+    if (sldTiltLo_.isVisible()) row (lblTiltLo_, sldTiltLo_);
+    if (sldTiltHi_.isVisible()) row (lblTiltHi_, sldTiltHi_);
     row (lblGain_,  sldGain_);
     if (cbOrder_.isVisible()) row (lblOrder_, cbOrder_, 180);
 
@@ -481,6 +508,10 @@ void FIRDesignDialog::showHideControls()
     lblQ_.setVisible (needsQ);
     sldSlope_.setVisible (isSlopeLPHP || isTilt);
     lblSlope_.setVisible (isSlopeLPHP || isTilt);
+    sldTiltLo_.setVisible (isTilt);
+    lblTiltLo_.setVisible (isTilt);
+    sldTiltHi_.setVisible (isTilt);
+    lblTiltHi_.setVisible (isTilt);
 
     // The same Slope row serves both, but they mean different things: a low/high
     // pass rolls off one-sided (always attenuating, 3..48 dB/oct), while a tilt is
@@ -595,15 +626,18 @@ void FIRDesignDialog::recomputeFIR()
         // first-order pairs; designing from a target magnitude, the FIR can just
         // *be* the line — exactly, and linear phase.
         //
-        // The line is held flat below kTiltFloorHz: continued to DC it would ask
-        // for unbounded gain at one end, and no FIR of a usable length resolves
-        // anything below the bottom of the audio band anyway.
+        // The line is held flat outside [lo, hi]: continued to either end it
+        // would ask for unbounded gain, and the level-off is what keeps a steep
+        // slope usable. Unlike the IIR band, which has to fit a filter cascade to
+        // this shape and rounds the corners, the FIR target *is* the shape.
         const double fc = jmax (1.0, sldFreq_.getValue());
         const double s  = jlimit (-(double) EqBand::kTiltMaxSlope,
                                    (double) EqBand::kTiltMaxSlope, sldSlope_.getValue());
-        magAt = [fc, s] (double f) -> double
+        const double lo = sldTiltLo_.getValue();
+        const double hi = jmax (lo * 1.05, sldTiltHi_.getValue());
+        magAt = [fc, s, lo, hi] (double f) -> double
         {
-            return std::pow (10.0, s * std::log2 (jmax (kTiltFloorHz, f) / fc) / 20.0);
+            return std::pow (10.0, s * std::log2 (jlimit (lo, hi, jmax (1.0e-6, f)) / fc) / 20.0);
         };
     }
     else
@@ -729,6 +763,8 @@ var FIRDesignDialog::captureState() const
     obj->setProperty ("f_Hz",         sldFreq_.getValue());
     obj->setProperty ("Q",            sldQ_.getValue());
     obj->setProperty ("slope_db_oct", sldSlope_.getValue());
+    obj->setProperty ("tilt_lo_hz",   sldTiltLo_.getValue());
+    obj->setProperty ("tilt_hi_hz",   sldTiltHi_.getValue());
     obj->setProperty ("gain_db",      sldGain_.getValue());
     obj->setProperty ("order",        cbOrder_.getSelectedId());
     obj->setProperty ("fir_length",   cbLength_.getSelectedId());
@@ -751,6 +787,10 @@ void FIRDesignDialog::applyInitialState (const var& s)
     // the 2nd-order roll-off their Q-based low/high pass had.
     if (s.hasProperty ("slope_db_oct"))
         sldSlope_.setValue ((double) s["slope_db_oct"], dontSendNotification);
+    if (s.hasProperty ("tilt_lo_hz"))
+        sldTiltLo_.setValue ((double) s["tilt_lo_hz"], dontSendNotification);
+    if (s.hasProperty ("tilt_hi_hz"))
+        sldTiltHi_.setValue ((double) s["tilt_hi_hz"], dontSendNotification);
     if (s.hasProperty ("gain_db"))
         sldGain_.setValue ((double) s["gain_db"], dontSendNotification);
     if (s.hasProperty ("order"))
