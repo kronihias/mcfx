@@ -64,8 +64,10 @@ inline float dynamicGainOffsetDB(float over, float ratio, float kneeDB,
     graph and the FIR designer's preview so every frequency axis reads alike. */
 inline bool isMajorFreqGridline(double hz)
 {
+    // 20 kHz is deliberately absent: it lands on the right edge of the plot,
+    // where a centred label would be cut in half.
     return hz == 50.0 || hz == 100.0 || hz == 500.0
-        || hz == 1000.0 || hz == 5000.0 || hz == 10000.0 || hz == 20000.0;
+        || hz == 1000.0 || hz == 5000.0 || hz == 10000.0;
 }
 
 inline juce::String formatFreqAxisLabel(double hz)

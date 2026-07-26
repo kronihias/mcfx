@@ -49,7 +49,7 @@ void FIRDesignDialog::MagPreview::paint (Graphics& g)
                                    area.getHeight() - padT - padB);
 
     const double fLo  = 20.0;
-    const double fHi  = jmin (24000.0, sampleRate_ * 0.5);
+    const double fHi  = jmin (20000.0, sampleRate_ * 0.5);
     const double dbMax = (double) dbMax_;
     const double dbMin = (double) dbMin_;
     const float  dbStep = dbStep_;   // grid spacing in dB (adapts on zoom)
