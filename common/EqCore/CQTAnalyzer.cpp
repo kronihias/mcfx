@@ -21,18 +21,22 @@
 
 namespace
 {
-    /** Frame length: at least ~0.7 s of history rounded up to a power of two, so
-        constant-Q still holds well down into the bass, and capped at 65536 to keep
-        the per-frame FFT cheap at high sample rates. At 48 kHz that lands on
-        65536 (1.37 s), holding constant-Q to 25 Hz; at 192 kHz the cap leaves
-        0.34 s and the floor rises to ~100 Hz. */
-    int chooseFFTOrder (double sampleRate)
+    /** Frame length, fixed at 32768. It sets both the cost of a frame and how far
+        down constant-Q holds before the window caps and Q starts to fall — at
+        48 kHz, 0.68 s and a floor of 50 Hz.
+
+        Doubling it would carry constant-Q down to 25 Hz, but at double the cost:
+        the transform grows with the frame and so does the number of kernel
+        coefficients, which together are the whole per-frame budget. 50 Hz is a
+        good trade — below it Q tapers off gradually rather than falling off a
+        cliff, and it is still far finer than the linear-bin analyzer this
+        replaced, which was down to Q of about 1.7 at 20 Hz.
+
+        Held constant across sample rates so the cost is too; the floor rises in
+        proportion (100 Hz at 96 kHz, 200 Hz at 192 kHz). */
+    int chooseFFTOrder (double)
     {
-        const double wanted = 0.7 * sampleRate;
-        int order = 15;                              // 32768
-        while ((1 << order) < wanted && order < 16)
-            ++order;
-        return order;
+        return 15;                                   // 32768
     }
 }
 
