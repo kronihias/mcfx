@@ -365,7 +365,7 @@ EqBandEditor::EqBandEditor()
     cbSampleRate_.addListener(this);
 
     // Set label styles
-    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblOrder_, &lblRipplePass_, &lblRippleStop_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_, &lblSampleRate_ })
+    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblTiltLo_, &lblTiltHi_, &lblOrder_, &lblRipplePass_, &lblRippleStop_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_, &lblSampleRate_ })
     {
         lbl->setFont(Font(FontOptions(13.f, Font::plain)));
         lbl->setColour(Label::textColourId, Colours::white);

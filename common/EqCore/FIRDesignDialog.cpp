@@ -244,6 +244,7 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     sldFreq_.setNumDecimalPlacesToDisplay (1);
     sldFreq_.setTextBoxStyle (Slider::TextBoxLeft, false, 80, 20);
     sldFreq_.setSliderStyle (Slider::LinearHorizontal);
+    sldFreq_.setTextValueSuffix (" Hz");
     sldFreq_.setValue (1000.0, dontSendNotification);
     sldFreq_.addListener (this);
 
@@ -366,7 +367,8 @@ FIRDesignDialog::FIRDesignDialog (double sampleRate,
     addAndMakeVisible (btnClose_);
     btnClose_.addListener (this);
 
-    for (auto* lbl : { &lblType_, &lblFreq_, &lblQ_, &lblGain_, &lblOrder_,
+    for (auto* lbl : { &lblType_, &lblFreq_, &lblQ_, &lblSlope_,
+                        &lblTiltLo_, &lblTiltHi_, &lblGain_, &lblOrder_,
                         &lblLength_, &lblWindow_, &lblKaiserBeta_,
                         &lblMag_, &lblImpulse_ })
     {
