@@ -502,8 +502,6 @@ private:
     Slider sldTiltHi_;
     Label lblDelay_   { {}, "Delay:" };
     Label lblSampleRate_ { {}, "Rate:" };
-    Label lblHz_      { {}, "Hz" };
-    Label lblDb_      { {}, "dB" };
     Label lblSamples_ { {}, "smpls" };
 
     ToggleButton btnEnable_ { "Enable" };

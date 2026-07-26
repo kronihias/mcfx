@@ -98,11 +98,11 @@ EqBandEditor::EqBandEditor()
     // Frequency slider
     addAndMakeVisible(lblFreq_);
     addAndMakeVisible(sldFreq_);
-    addAndMakeVisible(lblHz_);
     sldFreq_.setRange(20.0, 20000.0, 0.1);
     sldFreq_.setSkewFactorFromMidPoint(1000.0);
     sldFreq_.setNumDecimalPlacesToDisplay(1);
     sldFreq_.setTextBoxStyle(Slider::TextBoxLeft, false, 80, 20);
+    sldFreq_.setTextValueSuffix(" Hz");
     sldFreq_.setSliderStyle(Slider::LinearHorizontal);
     sldFreq_.setTooltip("Filter cutoff/center frequency");
     sldFreq_.addListener(this);
@@ -122,7 +122,6 @@ EqBandEditor::EqBandEditor()
     // Gain slider
     addAndMakeVisible(lblGain_);
     addAndMakeVisible(sldGain_);
-    addAndMakeVisible(lblDb_);
     sldGain_.setRange(-60.0, 30.0, 0.1);
     sldGain_.setNumDecimalPlacesToDisplay(1);
     sldGain_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
@@ -365,7 +364,7 @@ EqBandEditor::EqBandEditor()
     cbSampleRate_.addListener(this);
 
     // Set label styles
-    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblTiltLo_, &lblTiltHi_, &lblOrder_, &lblRipplePass_, &lblRippleStop_, &lblGain_, &lblDelay_, &lblHz_, &lblDb_, &lblSamples_, &lblFIRInfo_, &lblBiquad_, &lblSampleRate_ })
+    for (auto* lbl : { &lblType_, &lblSubType_, &lblFreq_, &lblQ_, &lblTiltLo_, &lblTiltHi_, &lblOrder_, &lblRipplePass_, &lblRippleStop_, &lblGain_, &lblDelay_, &lblSamples_, &lblFIRInfo_, &lblBiquad_, &lblSampleRate_ })
     {
         lbl->setFont(Font(FontOptions(13.f, Font::plain)));
         lbl->setColour(Label::textColourId, Colours::white);
@@ -685,7 +684,6 @@ void EqBandEditor::showControlsForType(EqBandType type)
     cbIIRSubType_.setVisible(isIIR || isBiquad);
     lblFreq_.setVisible(isIIR && !isBiquad);
     sldFreq_.setVisible(isIIR && !isBiquad);
-    lblHz_.setVisible(isIIR && !isBiquad);
     lblQ_.setVisible(isIIR && !isBiquad && !hasOrder && !isTilt);
     sldQ_.setVisible(isIIR && !isBiquad && !hasOrder && !isTilt);
     lblTiltLo_.setVisible(isTilt);
@@ -706,7 +704,6 @@ void EqBandEditor::showControlsForType(EqBandType type)
 
     lblGain_.setVisible(iirUsesGain || isGain);
     sldGain_.setVisible(iirUsesGain || gainIsDB);
-    lblDb_.setVisible(false); // suffix is now inside the text box
 
     sldLinearGain_.setVisible(gainIsLinear);
     btnGainLinear_.setVisible(isGain);
@@ -855,8 +852,7 @@ void EqBandEditor::resized()
 
     // ----- Left column: Frequency / Q / Gain -----
     lblFreq_.setBounds(x, yLeft, lblW, rowH);
-    sldFreq_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 40, rowH);
-    lblHz_.setBounds(x + leftW - 32, yLeft, 30, rowH);
+    sldFreq_.setBounds(x + lblW + 4, yLeft, leftW - lblW - 10, rowH);
     if (sldFreq_.isVisible()) yLeft += rowH + gap;
 
     lblQ_.setBounds(x, yLeft, lblW, rowH);
