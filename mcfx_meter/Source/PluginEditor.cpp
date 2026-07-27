@@ -118,6 +118,9 @@ AudioProcessorEditor (ownerFilter)
     ownerFilter->sendChangeMessage(); // get status from dsp
 
     //[Constructor] You can add your own custom stuff here..
+    // Resizable, but the bar view pins min == max in applyModeSizing() so it
+    // behaves exactly as it always has.
+    setResizable (true, true);
     startTimer (40);
     //[/Constructor]
 }
@@ -200,6 +203,21 @@ void Ambix_meterAudioProcessorEditor::resized()
     
 
     //[UserResized] Add your own custom resize handling here..
+    // Remember the size per view. The bar view is pinned min == max so this
+    // just records the size it was given; the resizable views record the user's.
+    Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+    switch (ourProcessor->_view_mode)
+    {
+        case Ambix_meterAudioProcessor::ViewMode::Circle:
+            ourProcessor->_size_circle_w = getWidth();
+            ourProcessor->_size_circle_h = getHeight();
+            break;
+        case Ambix_meterAudioProcessor::ViewMode::Waterfall:
+            ourProcessor->_size_wf_w = getWidth();
+            ourProcessor->_size_wf_h = getHeight();
+            break;
+        default: break;
+    }
     //[/UserResized]
 }
 
@@ -316,13 +334,48 @@ void Ambix_meterAudioProcessorEditor::rebuildChannelStrips()
         addAndMakeVisible (_scales.getUnchecked (i * 2 + 1));
     }
 
-    // make space between each group of eight
-    int gr_of_eight = std::min (64, numCh) / GROUP_CHANNELS;
+    applyModeSizing();
+}
 
-    _width  = 50 + METER_WIDTH * std::min (64, numCh) + 50 + gr_of_eight * METER_GROUP_SPACE;
-    _height = 220 * ((int) floor ((numCh - 1.0) / 64.0) + 1);
+void Ambix_meterAudioProcessorEditor::applyModeSizing()
+{
+    Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+    const int numCh = jmax (1, _cachedNumCh);
 
-    setSize (_width, _height);
+    // The bar view's size is dictated by how many strips it has to show.
+    const int gr_of_eight = std::min (64, numCh) / GROUP_CHANNELS;
+    const int barsW = jmax (kMinEditorWidth,
+                            50 + METER_WIDTH * std::min (64, numCh) + 50
+                              + gr_of_eight * METER_GROUP_SPACE);
+    const int barsH = 220 * ((int) floor ((numCh - 1.0) / 64.0) + 1);
+
+    switch (ourProcessor->_view_mode)
+    {
+        case Ambix_meterAudioProcessor::ViewMode::Bars:
+        default:
+            // Locked: min == max. MeterComponent paints at a hard-coded 8x163
+            // and has an empty resized(), so the bar view must not be stretched.
+            _width  = barsW;
+            _height = barsH;
+            setResizeLimits (barsW, barsH, barsW, barsH);
+            setSize (barsW, barsH);
+            break;
+
+        case Ambix_meterAudioProcessor::ViewMode::Circle:
+            setResizeLimits (kMinEditorWidth, 560, 2000, 2000);
+            _width  = ourProcessor->_size_circle_w;
+            _height = ourProcessor->_size_circle_h;
+            setSize (_width, _height);
+            break;
+
+        case Ambix_meterAudioProcessor::ViewMode::Waterfall:
+            setResizeLimits (700, 480, 2400, 1600);
+            _width  = ourProcessor->_size_wf_w;
+            _height = ourProcessor->_size_wf_h;
+            setSize (_width, _height);
+            break;
+    }
+
     resized();
     repaint();
 }

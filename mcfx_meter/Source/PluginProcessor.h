@@ -90,6 +90,19 @@ public:
 
     OwnedArray<MyMeterDsp> _my_meter_dsp;
 
+    /** Which visualisation the editor shows. Deliberately NOT a plug-in
+        parameter: it is a view setting, so it has no business being automatable,
+        and adding a fifth parameter would change getNumParameters() — which is
+        the bound of the state loop below and of the host's parameter list. */
+    enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2 };
+    ViewMode _view_mode = ViewMode::Bars;
+
+    // Editor size remembered per view, so switching back and forth does not
+    // forget how the user sized each one. Bars derives its size from the
+    // channel count and ignores these.
+    int _size_circle_w = 640, _size_circle_h = 700;
+    int _size_wf_w     = 900, _size_wf_h     = 560;
+
     float _hold; // peak hold time, seconds
     float _fall; // peak fallback rate, dB/s
 

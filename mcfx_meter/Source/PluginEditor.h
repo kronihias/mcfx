@@ -29,7 +29,9 @@
 
 #define METER_WIDTH 16
 #define GROUP_CHANNELS 4
-#define METER_GROUP_SPACE 10;
+// NB: no trailing semicolon — it used to have one, which only survived because
+// both uses happened to be statement-final.
+#define METER_GROUP_SPACE 10
 
 
 //==============================================================================
@@ -84,6 +86,17 @@ private:
     // channel count. Called from the constructor and from
     // changeListenerCallback() when the host re-negotiates the layout.
     void rebuildChannelStrips();
+
+    // Window size and resize limits for the current view. Split out of
+    // rebuildChannelStrips() so a host re-negotiating the channel count cannot
+    // stomp a size the user chose in one of the resizable views.
+    void applyModeSizing();
+
+    // The control strip is laid out at absolute pixel positions ending at x=473,
+    // so a narrow window clips it. The bar view alone is narrower than that
+    // below ~26 channels.
+    static constexpr int kMinEditorWidth = 481;
+
     int _cachedNumCh = 0;
 
     int _width;

@@ -308,6 +308,14 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
         xml.setAttribute (String(i), getParameter(i));
     }
 
+    // Named, not indexed: the loop above owns the numeric keys "0".."N", so a
+    // name cannot collide with them now or when a real parameter is appended.
+    xml.setAttribute ("view_mode", (int) _view_mode);
+    xml.setAttribute ("circle_w", _size_circle_w);
+    xml.setAttribute ("circle_h", _size_circle_h);
+    xml.setAttribute ("wf_w",     _size_wf_w);
+    xml.setAttribute ("wf_h",     _size_wf_h);
+
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
 }
@@ -327,6 +335,14 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
             for (int i=0; i < getNumParameters(); i++) {
                 setParameter(i, xmlState->getDoubleAttribute(String(i)));
             }
+
+            // Absent in sessions saved before these existed, which is exactly
+            // the default: the classic bar view at its usual size.
+            _view_mode = (ViewMode) jlimit (0, 2, xmlState->getIntAttribute ("view_mode", 0));
+            _size_circle_w = xmlState->getIntAttribute ("circle_w", _size_circle_w);
+            _size_circle_h = xmlState->getIntAttribute ("circle_h", _size_circle_h);
+            _size_wf_w     = xmlState->getIntAttribute ("wf_w",     _size_wf_w);
+            _size_wf_h     = xmlState->getIntAttribute ("wf_h",     _size_wf_h);
         }
 
     }
