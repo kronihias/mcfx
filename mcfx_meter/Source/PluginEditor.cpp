@@ -118,6 +118,23 @@ AudioProcessorEditor (ownerFilter)
     ownerFilter->sendChangeMessage(); // get status from dsp
 
     //[Constructor] You can add your own custom stuff here..
+    addAndMakeVisible (cb_view);
+    cb_view.addItem ("bars",   1);
+    cb_view.addItem ("circle", 2);
+    cb_view.addListener (this);
+    cb_view.setTooltip ("How the channels are laid out. The ring keeps a square "
+                        "footprint whatever the channel count, and an odd channel "
+                        "shows up as a break in its symmetry.");
+    cb_view.setSelectedId ((int) getProcessor()->_view_mode + 1, dontSendNotification);
+
+    addChildComponent (_circular);
+    _circular.onChannelReset = [this] (int ch)
+    {
+        Ambix_meterAudioProcessor* p = getProcessor();
+        if (isPositiveAndBelow (ch, p->_my_meter_dsp.size()))
+            p->_my_meter_dsp.getUnchecked (ch)->reset();
+    };
+
     // Resizable, but the bar view pins min == max in applyModeSizing() so it
     // behaves exactly as it always has.
     setResizable (true, true);
@@ -177,6 +194,10 @@ void Ambix_meterAudioProcessorEditor::resized()
     tgl_pkhold.setBounds (382, 0, 91, 24);
 
     sld_offset.setBounds (4, 23, 18, 167);
+    cb_view.setBounds (481, 1, 92, 22);
+
+    // The ring owns everything below the control strip.
+    _circular.setBounds (0, 28, getWidth(), jmax (0, getHeight() - 28));
 
     const int row_y_offset = 215;
 
@@ -267,10 +288,26 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
 
 
-    for (int i=0; i<_meters.size(); i++)
+    // Feed only the view on screen — MeterComponent::setValue repaints
+    // unconditionally, so walking 128 hidden strips every tick is pure waste.
+    const bool bars = ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Bars;
+
+    if (bars)
     {
-        // _meters.getUnchecked(i)->setValue(ourProcessor->_rms.getUnchecked(i), ourProcessor->_peak.getUnchecked(i));
-        _meters.getUnchecked(i)->setValue(ourProcessor->_my_meter_dsp.getUnchecked(i)->getRMS(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeak(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeakHold());
+        for (int i=0; i<_meters.size(); i++)
+        {
+            _meters.getUnchecked(i)->setValue(ourProcessor->_my_meter_dsp.getUnchecked(i)->getRMS(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeak(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeakHold());
+        }
+    }
+    else
+    {
+        const int n = jmin (_cachedNumCh, ourProcessor->_my_meter_dsp.size());
+        for (int i = 0; i < n; ++i)
+        {
+            MyMeterDsp* d = ourProcessor->_my_meter_dsp.getUnchecked (i);
+            _circular.setValue (i, d->getRMS(), d->getPeak(), d->getPeakHold());
+        }
+        _circular.repaint();
     }
 
 }
@@ -337,6 +374,18 @@ void Ambix_meterAudioProcessorEditor::rebuildChannelStrips()
     applyModeSizing();
 }
 
+void Ambix_meterAudioProcessorEditor::applyModeVisibility()
+{
+    const bool bars = getProcessor()->_view_mode == Ambix_meterAudioProcessor::ViewMode::Bars;
+
+    for (auto* m : _meters) m->setVisible (bars);
+    for (auto* l : _labels) l->setVisible (bars);
+    for (auto* s : _scales) s->setVisible (bars);
+
+    _circular.setNumChannels (_cachedNumCh);
+    _circular.setVisible (! bars);
+}
+
 void Ambix_meterAudioProcessorEditor::applyModeSizing()
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
@@ -376,6 +425,7 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
             break;
     }
 
+    applyModeVisibility();
     resized();
     repaint();
 }
@@ -389,6 +439,9 @@ void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster 
     const int hostCh = jlimit (1, NUM_CHANNELS, ourProcessor->getTotalNumInputChannels());
     if (hostCh != _cachedNumCh)
         rebuildChannelStrips();
+
+    _circular.setOffset ((int) ourProcessor->_offset);
+    _circular.setPeakHoldVisible (ourProcessor->_pk_hold);
 
     sld_hold.setValue(ourProcessor->_hold,dontSendNotification);
     sld_fall.setValue(ourProcessor->_fall,dontSendNotification);
@@ -406,6 +459,20 @@ void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster 
         _meters.getUnchecked(i)->_peak_hold = ourProcessor->_pk_hold;
     }
 
+}
+
+void Ambix_meterAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
+{
+    if (comboBoxThatHasChanged != &cb_view)
+        return;
+
+    Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+    const auto mode = (Ambix_meterAudioProcessor::ViewMode) jlimit (0, 2, cb_view.getSelectedId() - 1);
+    if (mode == ourProcessor->_view_mode)
+        return;
+
+    ourProcessor->_view_mode = mode;
+    applyModeSizing();          // applies visibility too
 }
 
 void Ambix_meterAudioProcessorEditor::mouseDown (const MouseEvent& e)

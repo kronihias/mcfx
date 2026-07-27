@@ -25,6 +25,7 @@
 #include "PluginProcessor.h"
 #include "meter.h"
 #include "MeterScale.h"
+#include "CircularMeter.h"
 
 
 #define METER_WIDTH 16
@@ -45,6 +46,7 @@
 class Ambix_meterAudioProcessorEditor  : public AudioProcessorEditor,
                                         public Slider::Listener,
                                         public Button::Listener,
+                                        public ComboBox::Listener,
                                         public Timer,
                                         public ChangeListener
 {
@@ -63,6 +65,8 @@ public:
     void sliderValueChanged (Slider* sliderThatWasMoved);
     void buttonClicked (Button* buttonThatWasClicked);
 
+    void comboBoxChanged (ComboBox* comboBoxThatHasChanged);
+
     void mouseDown (const MouseEvent& e);
 
     void timerCallback();
@@ -80,6 +84,13 @@ private:
     OwnedArray<Label> _labels;
 
     OwnedArray<MeterScaleComponent> _scales;
+
+    // Alternate view: all channels around a ring. Constructed once and shown or
+    // hidden, rather than rebuilt on every mode change.
+    CircularMeter _circular;
+
+    // Show only the components the current view uses.
+    void applyModeVisibility();
 
     // Rebuild / (re)layout the per-channel meter strips, scales and the
     // editor's overall size to match the host's currently-negotiated
@@ -119,6 +130,7 @@ private:
     Label label2;
     Label label3;
     ToggleButton tgl_pkhold;
+    ComboBox cb_view;
     Slider sld_offset;
 
 
