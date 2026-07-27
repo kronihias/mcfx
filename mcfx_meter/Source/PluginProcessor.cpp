@@ -280,6 +280,10 @@ void Ambix_meterAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
         _my_meter_dsp.getUnchecked(channel)->calc(buffer.getReadPointer(channel), NumSamples);
     }
 
+    // Copy only, and only while the waterfall is on screen — the transform runs
+    // on the GUI thread. This is the first audio-thread copying this plug-in has
+    // ever done, so it stays a memcpy behind a gate.
+    _band_analyser.push (buffer, NumSamples);
 }
 
 //==============================================================================

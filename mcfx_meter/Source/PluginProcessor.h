@@ -23,6 +23,7 @@
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
 #include "MyMeterDsp.h"
+#include "MultiBandAnalyser.h"
 
 //==============================================================================
 /**
@@ -102,6 +103,10 @@ public:
     // channel count and ignores these.
     int _size_circle_w = 640, _size_circle_h = 700;
     int _size_wf_w     = 900, _size_wf_h     = 560;
+
+    /** Per-channel band levels for the waterfall view. Idle — and unallocated —
+        until the editor switches that view on. */
+    MultiBandAnalyser _band_analyser;
 
     float _hold; // peak hold time, seconds
     float _fall; // peak fallback rate, dB/s
