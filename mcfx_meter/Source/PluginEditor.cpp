@@ -171,7 +171,11 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
                                        Colours::black,
                                        (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
                                        true));
-    g.fillRect (0, 0, _width, _height);
+    // Fill what the editor actually is, not what it was last sized to. The
+    // resizable views let the user change the window without going through
+    // applyModeSizing(), and filling a stale _width/_height left the gradient
+    // as a visible rectangle over part of the background.
+    g.fillRect (getLocalBounds());
 
     /* Version text */
     g.setColour (Colours::white);
@@ -188,6 +192,11 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
 
 void Ambix_meterAudioProcessorEditor::resized()
 {
+    // Keep these in step with the real size: a user drag in one of the
+    // resizable views does not go through applyModeSizing(), and everything
+    // below that positions against _width would otherwise use a stale value.
+    _width  = getWidth();
+    _height = getHeight();
 
     label.setBounds (0, 0, 104, 16);
     sld_hold.setBounds (166, 0, 70, 24);
