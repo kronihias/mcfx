@@ -78,7 +78,7 @@ void MultiBandAnalyser::prepare (double sampleRate, int numChannels)
 
     magSq_.assign ((size_t) (fftSize_ / 2 + 1), 0.f);
     levels_.assign ((size_t) numChannels_ * kNumBands, 0.f);
-    nextChannel_ = 0;
+    primed_ = false;
 
     {
         const juce::SpinLock::ScopedLockType sl (ringLock_);
@@ -160,18 +160,24 @@ void MultiBandAnalyser::push (const AudioSampleBuffer& buffer, int numSamples)
     writePos_.store ((wp + n) % size, std::memory_order_release);
 }
 
-void MultiBandAnalyser::computeNext (int maxChannels)
+void MultiBandAnalyser::setSmoothing (float alpha)
+{
+    smoothAlpha_ = jlimit (0.f, 0.99f, alpha);
+}
+
+void MultiBandAnalyser::compute()
 {
     if (! ready_ || ! fft_.isReady() || numChannels_ <= 0)
         return;
 
-    const int todo = jlimit (1, numChannels_, maxChannels);
+    // Latched once for the whole pass. Every channel is then read from the same
+    // instant, which is the property the view depends on — and it is free,
+    // because a pass takes under a millisecond while the ring holds 85 ms, so
+    // nothing under this position can be overwritten before the pass ends.
+    const int wp = writePos_.load (std::memory_order_acquire);
 
-    for (int k = 0; k < todo; ++k)
+    for (int ch = 0; ch < numChannels_; ++ch)
     {
-        const int ch = nextChannel_;
-        nextChannel_ = (nextChannel_ + 1) % numChannels_;
-
         // Hold the lock only for the copy — holding it across the transform
         // would make the audio thread's try-lock fail and drop blocks.
         {
@@ -180,7 +186,6 @@ void MultiBandAnalyser::computeNext (int maxChannels)
                 continue;
 
             const int size = ring_.getNumSamples();
-            const int wp = writePos_.load (std::memory_order_acquire);
             const float* src = ring_.getReadPointer (ch);
             const int first = size - wp;
             // Oldest-to-newest, so the frame ends at the write head. Copied
@@ -222,9 +227,19 @@ void MultiBandAnalyser::computeNext (int maxChannels)
             }
 
             // 2x for the negative-frequency half a real transform folds away.
-            out[b] = std::sqrt (2.f * power) * norm;
+            const float mag = std::sqrt (2.f * power) * norm;
+
+            // Averaged in power, not amplitude: it is power that is additive for
+            // uncorrelated content, so this converges on the right level for
+            // noise instead of biasing low.
+            out[b] = (primed_ && smoothAlpha_ > 0.f)
+                         ? std::sqrt (smoothAlpha_ * out[b] * out[b]
+                                      + (1.f - smoothAlpha_) * mag * mag)
+                         : mag;
         }
     }
+
+    primed_ = true;
 }
 
 const float* MultiBandAnalyser::getChannelBands (int channel) const
@@ -242,5 +257,5 @@ void MultiBandAnalyser::reset()
         writePos_.store (0, std::memory_order_relaxed);
     }
     std::fill (levels_.begin(), levels_.end(), 0.f);
-    nextChannel_ = 0;
+    primed_ = false;
 }

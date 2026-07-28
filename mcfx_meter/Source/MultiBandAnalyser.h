@@ -36,13 +36,20 @@
     and the transform runs on the GUI thread. Putting 128 FFTs in processBlock
     is not an option.
 
-    Three things keep the cost down, and all three matter at 128 channels:
+    Every channel is transformed on every call, from a single latched read
+    position, because the view's whole purpose is comparing channels against
+    each other and that only means anything if they describe the same instant.
+    An earlier version cycled through a slice of the channels per call to bound
+    the cost; identical audio on 64 channels then read 3.4 dB apart across a
+    level change, because the slices were transformed up to 160 ms apart.
+
+    Cost is kept down by the two things that do not compromise that:
       - it does nothing at all unless setActive(true) — the waterfall being on
         screen is the only reason to pay for this;
-      - computeNext() transforms a bounded number of channels per call and
-        cycles, so a tick costs the same whether there are 8 channels or 128;
       - buffers are allocated on first activation, so a session that never opens
         the waterfall never pays the memory either.
+    A full 128-channel pass costs well under a millisecond now that the
+    transform goes straight to the platform's vector library.
 
     Band levels are linear magnitudes calibrated so a full-scale sine reads 1.0
     in the band containing it. */
@@ -70,9 +77,20 @@ public:
     /** Audio thread: append a block. Copy only — no transform here. */
     void push (const AudioSampleBuffer& buffer, int numSamples);
 
-    /** GUI thread: transform up to maxChannels channels, resuming where the
-        last call left off. */
-    void computeNext (int maxChannels);
+    /** GUI thread: transform every channel from one latched read position.
+
+        The window is 85 ms and always ends at "now", so successive calls
+        overlap rather than tile: a late call means more overlap, never a gap.
+        Only an interval longer than the window itself could miss audio, which
+        is why this is safe to drive from a GUI timer at 40 ms — there is better
+        than 2:1 headroom — even though the timer's spacing is not exact. */
+    void compute();
+
+    /** Per-call pole for the exponential average of each band, 0 = no
+        smoothing. One 85 ms frame of anything noise-like is a chi-squared
+        estimate with several dB of spread, so without this the display shimmers
+        even on a steady signal. */
+    void setSmoothing (float alpha);
 
     /** Linear band magnitudes for a channel — kNumBands entries, or nullptr. */
     const float* getChannelBands (int channel) const;
@@ -122,8 +140,9 @@ private:
     juce::SpinLock    ringLock_;
 
     std::vector<float> magSq_;        // fftSize_/2 + 1 bin powers
-    std::vector<float> levels_;       // numChannels_ * kNumBands
-    int nextChannel_ = 0;             // round-robin cursor
+    std::vector<float> levels_;       // numChannels_ * kNumBands — smoothed
+    float smoothAlpha_ = 0.f;
+    bool  primed_ = false;            // first pass loads rather than averages
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultiBandAnalyser)
 };

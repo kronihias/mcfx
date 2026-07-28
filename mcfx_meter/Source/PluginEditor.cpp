@@ -342,18 +342,18 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
         // Bounded work per tick: a fixed slice of channels is transformed and
         // the cursor carries on next time, so the cost is the same at 8
         // channels as at 128.
-        const int slice = jmin (jmax (1, _cachedNumCh), kWaterfallChannelsPerTick);
-        ourProcessor->_band_analyser.computeNext (slice);
+        // Every channel, every tick, from one latched read position — the
+        // channels have to describe the same instant to be comparable.
+        ourProcessor->_band_analyser.compute();
         _waterfall.setOffset ((int) ourProcessor->_offset);
 
-        // Redraw once per completed sweep rather than every tick. Above 32
-        // channels a tick only refreshes part of the data, so drawing at the
-        // full timer rate would re-rasterise ~130 filled paths to show mostly
-        // the same picture — and the drawing, not the transforms, is what this
-        // view costs. Measured at 128 channels: 20 ms a paint against 0.34 ms
-        // for the transforms.
-        const int ticksPerSweep = jmax (1, (jmax (1, _cachedNumCh) + slice - 1) / slice);
-        if (++_wf_tick >= ticksPerSweep)
+        // The analysis is cheap; the drawing is not. Measured at 128 channels:
+        // 20 ms a paint against well under 1 ms for every transform. So the data
+        // refreshes at the full timer rate and only the repaint is thinned,
+        // which the temporal smoothing above makes look continuous anyway.
+        const int n = jmax (1, _cachedNumCh);
+        const int ticksPerPaint = n <= 32 ? 1 : (n <= 64 ? 2 : 4);
+        if (++_wf_tick >= ticksPerPaint)
         {
             _wf_tick = 0;
             _waterfall.repaint();
@@ -448,8 +448,12 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
     // view is actually on screen. prepare() allocates, hence the GUI thread.
     Ambix_meterAudioProcessor* p = getProcessor();
     if (wf)
+    {
         p->_band_analyser.prepare (p->getSampleRate() > 0.0 ? p->getSampleRate() : 48000.0,
                                    jmax (1, _cachedNumCh));
+        // ~200 ms to settle, from the 40 ms timer.
+        p->_band_analyser.setSmoothing (std::exp (-0.040f / 0.20f));
+    }
     p->_band_analyser.setActive (wf);
 }
 
