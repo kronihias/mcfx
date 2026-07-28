@@ -113,6 +113,15 @@ void CircularMeter::resized()
     buildGradient();
 }
 
+bool CircularMeter::isScaleTickRow (Colour c)
+{
+    // The gradient image has the bar's scale marks painted into it as rows of
+    // pure white. In a bar they read as thin lines; interpolated between
+    // gradient stops they smear into wide white bands instead. The ring draws
+    // its own reference circles, so these rows are skipped entirely.
+    return c.getRed() == 255 && c.getGreen() == 255 && c.getBlue() == 255;
+}
+
 void CircularMeter::buildGradient()
 {
     // Sample the bar view's vertical gradient into a radial one, so a wedge is
@@ -121,17 +130,36 @@ void CircularMeter::buildGradient()
                             centre_ + Point<float> (outerR_, 0.f), true);
     fill_.clearColours();
 
+    if (! gradientImage_.isValid())
+    {
+        fill_.addColour (0.0, Colours::green);
+        fill_.addColour (1.0, Colours::green);
+        return;
+    }
+
     const int h = jmax (1, gradientImage_.getHeight());
-    const int steps = 12;
+    const float hubProp = innerR_ / jmax (1.f, outerR_);
+    const int steps = 24;
+
     for (int i = 0; i <= steps; ++i)
     {
         const float t = (float) i / (float) steps;                 // 0 = hub, 1 = rim
-        const float prop = innerR_ / jmax (1.f, outerR_) + t * (1.f - innerR_ / jmax (1.f, outerR_));
+        const float prop = hubProp + t * (1.f - hubProp);
         // The image runs top = full scale, bottom = silence, so invert.
-        const int y = jlimit (0, h - 1, (int) ((1.f - t) * (float) (h - 1)));
-        fill_.addColour (jlimit (0.0, 1.0, (double) prop),
-                         gradientImage_.isValid() ? gradientImage_.getPixelAt (0, y)
-                                                  : Colours::green);
+        const int y0 = jlimit (0, h - 1, (int) ((1.f - t) * (float) (h - 1)));
+
+        // Walk off a scale-mark row to the nearest real ramp colour.
+        Colour c = gradientImage_.getPixelAt (0, y0);
+        for (int d = 1; d < h && isScaleTickRow (c); ++d)
+        {
+            const int up = y0 - d, dn = y0 + d;
+            if (up >= 0 && ! isScaleTickRow (gradientImage_.getPixelAt (0, up)))
+                c = gradientImage_.getPixelAt (0, up);
+            else if (dn < h && ! isScaleTickRow (gradientImage_.getPixelAt (0, dn)))
+                c = gradientImage_.getPixelAt (0, dn);
+        }
+
+        fill_.addColour (jlimit (0.0, 1.0, (double) prop), c.withAlpha (1.f));
     }
 }
 
@@ -185,16 +213,15 @@ void CircularMeter::paint (Graphics& g)
                                           outerR_ * 2.f, outerR_ * 2.f);
 
     // --- reference rings, at the same dB values the bar scale labels ---
-    g.setFont (Font (FontOptions (10.f, Font::plain)));
+    //     Labels are deliberately not drawn here: the wedges paint over this,
+    //     and outside the rim they collide with the channel numbers. They go on
+    //     top at the end instead.
     for (float db : kRingDb)
     {
         const float r = radiusForDb (db);
         const bool zero = std::abs (db) < 0.01f;
         g.setColour (Colours::white.withAlpha (zero ? 0.40f : 0.13f));
         g.drawEllipse (centre_.x - r, centre_.y - r, r * 2.f, r * 2.f, zero ? 1.2f : 0.6f);
-        g.setColour (Colours::white.withAlpha (0.35f));
-        g.drawText (String ((int) db), (int) (centre_.x + 3.f), (int) (centre_.y - r - 6.f),
-                    30, 12, Justification::centredLeft, false);
     }
 
     // --- per-channel wedges ---
@@ -276,6 +303,23 @@ void CircularMeter::paint (Graphics& g)
             g.drawText (String (ch + 1), (int) lp.x - 14, (int) lp.y - 7, 28, 14,
                         Justification::centred, false);
         }
+    }
+
+    // --- dB scale, on top of the wedges so it stays readable whatever the
+    //     levels are doing. Each label sits just inside its own ring, on the
+    //     vertical, over a dark plate. ---
+    g.setFont (Font (FontOptions (10.f, Font::plain)));
+    for (float db : kRingDb)
+    {
+        const float r = radiusForDb (db);
+        if (r < innerR_ + 7.f)              // too close to the hub to place
+            continue;
+
+        const auto plate = Rectangle<float> (centre_.x - 13.f, centre_.y - r + 1.f, 26.f, 12.f);
+        g.setColour (Colours::black.withAlpha (0.62f));
+        g.fillRoundedRectangle (plate, 2.f);
+        g.setColour (Colours::white.withAlpha (std::abs (db) < 0.01f ? 0.85f : 0.6f));
+        g.drawText (String ((int) db), plate, Justification::centred, false);
     }
 
     // --- hub readout: at high counts this answers "which wedge is that?"

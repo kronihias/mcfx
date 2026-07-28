@@ -103,10 +103,13 @@ private:
     // stomp a size the user chose in one of the resizable views.
     void applyModeSizing();
 
-    // The control strip is laid out at absolute pixel positions ending at x=473,
-    // so a narrow window clips it. The bar view alone is narrower than that
-    // below ~26 channels.
-    static constexpr int kMinEditorWidth = 481;
+    // The control strip is laid out at absolute pixel positions: the peak-hold
+    // toggle ends at x=473 and the view selector runs 481..573, so anything
+    // narrower than this hides the selector entirely — with no other way to get
+    // back to the bar view. The bar view alone is narrower than this below ~32
+    // channels, which is why the strip already clipped before the selector
+    // existed.
+    static constexpr int kMinEditorWidth = 581;
 
     int _cachedNumCh = 0;
 

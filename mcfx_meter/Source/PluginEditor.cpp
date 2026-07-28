@@ -410,19 +410,32 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
             setSize (barsW, barsH);
             break;
 
+        // NB both resizable cases read the remembered size *before* touching the
+        // limits. setResizeLimits() constrains the current bounds, which fires
+        // resized(), which records getWidth()/getHeight() back into these very
+        // members — so reading them afterwards yields the minimum size, not the
+        // user's. That silently reset the window on every editor open.
         case Ambix_meterAudioProcessor::ViewMode::Circle:
+        {
+            const int w = ourProcessor->_size_circle_w;
+            const int h = ourProcessor->_size_circle_h;
             setResizeLimits (kMinEditorWidth, 560, 2000, 2000);
-            _width  = ourProcessor->_size_circle_w;
-            _height = ourProcessor->_size_circle_h;
-            setSize (_width, _height);
+            _width  = w;
+            _height = h;
+            setSize (w, h);
             break;
+        }
 
         case Ambix_meterAudioProcessor::ViewMode::Waterfall:
-            setResizeLimits (700, 480, 2400, 1600);
-            _width  = ourProcessor->_size_wf_w;
-            _height = ourProcessor->_size_wf_h;
-            setSize (_width, _height);
+        {
+            const int w = ourProcessor->_size_wf_w;
+            const int h = ourProcessor->_size_wf_h;
+            setResizeLimits (jmax (kMinEditorWidth, 700), 480, 2400, 1600);
+            _width  = w;
+            _height = h;
+            setSize (w, h);
             break;
+        }
     }
 
     applyModeVisibility();

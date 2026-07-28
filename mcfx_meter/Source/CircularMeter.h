@@ -84,6 +84,10 @@ public:
 private:
     struct ChannelLevel { float rmsDb = -200.f, peakDb = -200.f, holdDb = -200.f; };
 
+    /** True for the rows of pure white the bar's scale marks occupy in the
+        gradient image — they must not become radial gradient stops. */
+    static bool isScaleTickRow (Colour c);
+
     void buildGradient();
 
     std::vector<ChannelLevel> levels_;
