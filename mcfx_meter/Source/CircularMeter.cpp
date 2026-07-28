@@ -104,6 +104,15 @@ float CircularMeter::radiusForDb (float db) const
     return innerR_ + s * (outerR_ - innerR_);
 }
 
+float CircularMeter::radiusForScaleDb (float scaleDb) const
+{
+    // No offset here: see the header. The two agree by construction — a signal
+    // sitting at `offset` dBFS reaches iec_scale(0), which is the gradation
+    // labelled 0 + offset.
+    const float s = jlimit (0.f, 1.f, iec_scale (scaleDb));
+    return innerR_ + s * (outerR_ - innerR_);
+}
+
 void CircularMeter::resized()
 {
     auto b = getLocalBounds().toFloat();
@@ -226,7 +235,7 @@ void CircularMeter::paint (Graphics& g)
     //     top at the end instead.
     for (float db : kRingDb)
     {
-        const float r = radiusForDb (db);
+        const float r = radiusForScaleDb (db);
         const bool zero = std::abs (db) < 0.01f;
         g.setColour (Colours::white.withAlpha (zero ? 0.40f : 0.13f));
         g.drawEllipse (centre_.x - r, centre_.y - r, r * 2.f, r * 2.f, zero ? 1.2f : 0.6f);
@@ -326,7 +335,7 @@ void CircularMeter::paint (Graphics& g)
 
     for (float db : kRingDb)
     {
-        const float r = radiusForDb (db);
+        const float r = radiusForScaleDb (db);
         if (r < innerR_ + 7.f)              // too close to the hub to place
             continue;
         if (std::abs (db) > 0.01f && lastLabelR - r < 13.f)
@@ -337,7 +346,7 @@ void CircularMeter::paint (Graphics& g)
         g.setColour (Colours::black.withAlpha (0.62f));
         g.fillRoundedRectangle (plate, 2.f);
         g.setColour (Colours::white.withAlpha (std::abs (db) < 0.01f ? 0.85f : 0.6f));
-        g.drawText (String ((int) db), plate, Justification::centred, false);
+        g.drawText (String ((int) db + offset_), plate, Justification::centred, false);
     }
 
     // --- hub readout: at high counts this answers "which wedge is that?"

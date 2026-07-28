@@ -78,6 +78,15 @@ public:
         Clamped to the outer radius: iec_scale keeps climbing above 0 dB (1.15 at
         +6 dB), which would otherwise draw outside the ring. */
     float radiusForDb (float db) const;
+
+    /** Radius of a *scale* gradation, which is a position on the ring rather
+        than a signal level: it ignores the offset, exactly as the bar view's
+        scale does. The offset moves what the gradations are called, not where
+        they sit — MeterScaleComponent places its labels at a fixed
+        iec_scale(-10*i) and rewrites their text as -10*i + offset. Doing it the
+        other way round, which the ring used to, drags the rings past each other
+        as the offset changes and leaves an unreadable scale. */
+    float radiusForScaleDb (float scaleDb) const;
     float getOuterRadius() const { return outerR_; }
     float getInnerRadius() const { return innerR_; }
 
