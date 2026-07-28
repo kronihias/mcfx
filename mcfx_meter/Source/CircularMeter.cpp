@@ -201,7 +201,26 @@ void CircularMeter::mouseExit (const MouseEvent&)
     if (hovered_ != -1) { hovered_ = -1; repaint(); }
 }
 
+void CircularMeter::setSelectedChannel (int channel)
+{
+    const int c = isPositiveAndBelow (channel, numCh_) ? channel : -1;
+    if (c != selected_) { selected_ = c; repaint(); }
+}
+
 void CircularMeter::mouseUp (const MouseEvent& e)
+{
+    // A click selects; resetting moved to the double click so the two gestures
+    // do not fight. Clicking off the wedges clears the selection.
+    const int ch = channelAt (e.position);
+    if (ch != selected_)
+    {
+        setSelectedChannel (ch);
+        if (onChannelSelected != nullptr)
+            onChannelSelected (ch);
+    }
+}
+
+void CircularMeter::mouseDoubleClick (const MouseEvent& e)
 {
     const int ch = channelAt (e.position);
 
@@ -257,7 +276,8 @@ void CircularMeter::paint (Graphics& g)
         {
             Path p;
             p.addPieSegment (box, a0, a1, innerR_ / outerR_);
-            g.setColour (Colours::white.withAlpha (ch == hovered_ ? 0.14f : 0.07f));
+            g.setColour (Colours::white.withAlpha (ch == selected_ ? 0.22f
+                                                  : ch == hovered_ ? 0.14f : 0.07f));
             g.fillPath (p);
         }
 
@@ -311,12 +331,15 @@ void CircularMeter::paint (Graphics& g)
             g.drawLine ({ p0, p1 }, 0.6f);
         }
 
-        // Channel numbers outside the rim, thinned as the ring fills.
-        if (labelAll || ch % labelEvery == 0)
+        // Channel numbers outside the rim, thinned as the ring fills. The
+        // selected one is always numbered, or the selection has no anchor.
+        if (labelAll || ch % labelEvery == 0 || ch == selected_)
         {
             const auto lp = centre_ + Point<float> (std::sin (a), -std::cos (a)) * (outerR_ + 13.f);
-            g.setColour (Colours::white.withAlpha (ch == hovered_ ? 1.f : 0.55f));
-            g.setFont (Font (FontOptions (numCh_ > 64 ? 9.f : 11.f, Font::plain)));
+            g.setColour (ch == selected_ ? Colours::aquamarine
+                                         : Colours::white.withAlpha (ch == hovered_ ? 1.f : 0.55f));
+            g.setFont (Font (FontOptions (numCh_ > 64 ? 9.f : 11.f,
+                                          ch == selected_ ? Font::bold : Font::plain)));
             g.drawText (String (ch + 1), (int) lp.x - 14, (int) lp.y - 7, 28, 14,
                         Justification::centred, false);
         }
@@ -351,23 +374,38 @@ void CircularMeter::paint (Graphics& g)
 
     // --- hub readout: at high counts this answers "which wedge is that?"
     //     better than any label scheme could ---
-    if (hovered_ >= 0)
+    // The hover previews; the selection is what stays once the mouse leaves.
+    const int readout = hovered_ >= 0 ? hovered_ : selected_;
+
+    if (isPositiveAndBelow (readout, numCh_))
     {
-        const auto& L = levels_[(size_t) hovered_];
-        g.setColour (Colours::white);
+        const auto& L = levels_[(size_t) readout];
+        auto dbText = [this] (float db)
+        {
+            return db <= -199.f ? String ("-inf") : String (db - (float) offset_, 1) + " dB";
+        };
+        const int x = (int) (centre_.x - innerR_), w = (int) (innerR_ * 2.f);
+
+        g.setColour (readout == selected_ && hovered_ < 0 ? Colours::aquamarine : Colours::white);
         g.setFont (Font (FontOptions (15.f, Font::bold)));
-        g.drawText ("ch " + String (hovered_ + 1),
-                    (int) (centre_.x - innerR_), (int) (centre_.y - innerR_ * 0.55f),
-                    (int) (innerR_ * 2.f), 18, Justification::centred, false);
+        g.drawText ("ch " + String (readout + 1),
+                    x, (int) (centre_.y - innerR_ * 0.62f), w, 18, Justification::centred, false);
+
         g.setFont (Font (FontOptions (13.f, Font::plain)));
-        g.setColour (Colours::white.withAlpha (0.8f));
-        g.drawText (L.rmsDb <= -199.f ? "-inf" : String (L.rmsDb - (float) offset_, 1) + " dB",
-                    (int) (centre_.x - innerR_), (int) (centre_.y - 2.f),
-                    (int) (innerR_ * 2.f), 18, Justification::centred, false);
-        g.setColour (Colours::white.withAlpha (0.5f));
-        g.setFont (Font (FontOptions (11.f, Font::plain)));
-        g.drawText (L.peakDb <= -199.f ? "" : "pk " + String (L.peakDb - (float) offset_, 1),
-                    (int) (centre_.x - innerR_), (int) (centre_.y + 17.f),
-                    (int) (innerR_ * 2.f), 16, Justification::centred, false);
+        g.setColour (Colours::white.withAlpha (0.85f));
+        g.drawText ("rms " + dbText (L.rmsDb),
+                    x, (int) (centre_.y - 12.f), w, 18, Justification::centred, false);
+
+        g.setColour (Colours::white.withAlpha (0.6f));
+        g.setFont (Font (FontOptions (12.f, Font::plain)));
+        g.drawText ("pk " + dbText (L.peakDb),
+                    x, (int) (centre_.y + 6.f), w, 16, Justification::centred, false);
+
+        if (peakHold_)
+        {
+            g.setColour (Colours::yellow.withAlpha (0.7f));
+            g.drawText ("hold " + dbText (L.holdDb),
+                        x, (int) (centre_.y + 22.f), w, 16, Justification::centred, false);
+        }
     }
 }

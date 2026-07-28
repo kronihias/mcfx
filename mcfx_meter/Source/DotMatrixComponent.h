@@ -50,7 +50,18 @@ public:
     void setOffset (int offsetDb);
     void setPeakHoldVisible (bool shouldBeVisible);
 
-    /** Clicking a dot resets that channel; clicking the gaps resets all. */
+    /** Sticky highlight, -1 for none. Its level is printed in full at the
+        bottom of the view, which is the point: the dots answer "is it there",
+        the readout answers "how much, exactly". */
+    void setSelectedChannel (int channel);
+    int  getSelectedChannel() const { return selected_; }
+
+    /** Fired when a click changes the selection, so a host control can follow.
+        Passes -1 when a click off the dots clears it. */
+    std::function<void (int)> onChannelSelected;
+
+    /** A single click selects; resetting is the double click, so the two do not
+        fight over the same gesture. Off the dots, double click resets all. */
     std::function<void (int)> onChannelReset;
     std::function<void()>     onResetAll;
 
@@ -69,6 +80,7 @@ public:
     void mouseMove (const MouseEvent&) override;
     void mouseExit (const MouseEvent&) override;
     void mouseUp (const MouseEvent&) override;
+    void mouseDoubleClick (const MouseEvent&) override;
 
 private:
     struct ChannelLevel { float rmsDb = -200.f, peakDb = -200.f, holdDb = -200.f; };
@@ -81,6 +93,7 @@ private:
     int   offset_   = 0;
     bool  peakHold_ = false;
     int   hovered_  = -1;
+    int   selected_ = -1;
 
     Grid  grid_;
     Image gradientImage_;

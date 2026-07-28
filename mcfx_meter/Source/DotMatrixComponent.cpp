@@ -28,6 +28,9 @@ namespace
     constexpr int   kRampSize   = 128;
     // Below this a channel counts as silent and draws as an outline only.
     constexpr float kSilenceDb  = -90.f;
+    // Strip along the bottom for the selected channel's numbers. Taken out of
+    // the grid rather than drawn over it, or the readout covers the last row.
+    constexpr float kReadoutH   = 18.f;
 }
 
 DotMatrixComponent::DotMatrixComponent()
@@ -121,7 +124,8 @@ DotMatrixComponent::Grid DotMatrixComponent::computeGrid (int numChannels, float
 
 void DotMatrixComponent::resized()
 {
-    grid_ = computeGrid (numCh_, (float) getWidth(), (float) getHeight());
+    grid_ = computeGrid (numCh_, (float) getWidth(),
+                         jmax (10.f, (float) getHeight() - kReadoutH));
 }
 
 Point<float> DotMatrixComponent::dotCentre (int channel) const
@@ -166,7 +170,26 @@ void DotMatrixComponent::mouseExit (const MouseEvent&)
     if (hovered_ != -1) { hovered_ = -1; repaint(); }
 }
 
+void DotMatrixComponent::setSelectedChannel (int channel)
+{
+    const int c = isPositiveAndBelow (channel, numCh_) ? channel : -1;
+    if (c != selected_) { selected_ = c; repaint(); }
+}
+
 void DotMatrixComponent::mouseUp (const MouseEvent& e)
+{
+    // Selecting, not resetting: the selection has to survive the mouse leaving,
+    // so it cannot be the hover, and a click is the obvious way to set it.
+    const int ch = channelAt (e.position);
+    if (ch != selected_)
+    {
+        setSelectedChannel (ch);
+        if (onChannelSelected != nullptr)
+            onChannelSelected (ch);
+    }
+}
+
+void DotMatrixComponent::mouseDoubleClick (const MouseEvent& e)
 {
     const int ch = channelAt (e.position);
 
@@ -225,7 +248,12 @@ void DotMatrixComponent::paint (Graphics& g)
             g.drawEllipse (box, 1.f);
         }
 
-        if (ch == hovered_)
+        if (ch == selected_)
+        {
+            g.setColour (Colours::aquamarine);
+            g.drawEllipse (box.expanded (r * 0.45f), jmax (1.5f, r * 0.12f));
+        }
+        else if (ch == hovered_)
         {
             g.setColour (Colours::white.withAlpha (0.75f));
             g.drawEllipse (box.expanded (r * 0.45f), 1.f);
@@ -241,15 +269,29 @@ void DotMatrixComponent::paint (Graphics& g)
         }
     }
 
-    // Hovered channel's level, bottom-left, where it never covers the grid.
-    if (hovered_ >= 0)
+    // Numbers for one channel, bottom-left where they never cover the grid.
+    // The hover previews; the selection is what stays once the mouse leaves.
+    const int readout = hovered_ >= 0 ? hovered_ : selected_;
+
+    if (isPositiveAndBelow (readout, numCh_))
     {
-        const auto& L = levels_[(size_t) hovered_];
-        g.setColour (Colours::white);
+        const auto& L = levels_[(size_t) readout];
+        auto dbText = [this] (float db)
+        {
+            return db <= -199.f ? String ("-inf")
+                                : String (db - (float) offset_, 1) + " dB";
+        };
+
+        String s;
+        s << "ch " << (readout + 1)
+          << "    rms " << dbText (L.rmsDb)
+          << "    pk "  << dbText (L.peakDb);
+        if (peakHold_)
+            s << "    hold " << dbText (L.holdDb);
+
         g.setFont (Font (FontOptions (12.f, Font::bold)));
-        g.drawText ("ch " + String (hovered_ + 1) + "   "
-                        + (L.rmsDb <= -199.f ? String ("-inf")
-                                             : String (L.rmsDb - (float) offset_, 1) + " dB"),
-                    4, getHeight() - 16, 200, 14, Justification::centredLeft, false);
+        g.setColour (readout == selected_ && hovered_ < 0 ? Colours::aquamarine : Colours::white);
+        g.drawText (s, 4, (int) ((float) getHeight() - kReadoutH), getWidth() - 8, (int) kReadoutH,
+                    Justification::centredLeft, false);
     }
 }

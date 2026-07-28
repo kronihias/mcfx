@@ -58,6 +58,14 @@ public:
     /** Called with a 0-based channel when the user clicks its wedge. */
     std::function<void (int)> onChannelReset;
 
+    /** Sticky highlight, -1 for none. Its levels are printed in the hub, so the
+        numbers stay put once the mouse leaves the wedge. */
+    void setSelectedChannel (int channel);
+    int  getSelectedChannel() const { return selected_; }
+
+    /** Fired when a click changes the selection. -1 when it is cleared. */
+    std::function<void (int)> onChannelSelected;
+
     /** Called when the user clicks the hub or outside the ring. The bar view
         resets every channel on a click anywhere off a strip; this component
         covers the whole area below the control strip, so without this the
@@ -95,6 +103,7 @@ public:
     void mouseMove (const MouseEvent&) override;
     void mouseExit (const MouseEvent&) override;
     void mouseUp (const MouseEvent&) override;
+    void mouseDoubleClick (const MouseEvent&) override;
 
 private:
     struct ChannelLevel { float rmsDb = -200.f, peakDb = -200.f, holdDb = -200.f; };
@@ -110,7 +119,8 @@ private:
     int   numCh_   = 0;
     int   offset_  = 0;
     bool  peakHold_ = false;
-    int   hovered_ = -1;
+    int   hovered_  = -1;
+    int   selected_ = -1;
 
     // Geometry, recomputed on resize.
     Point<float> centre_;

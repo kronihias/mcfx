@@ -157,7 +157,7 @@ private:
     Label label3;
     ToggleButton tgl_pkhold;
     ComboBox cb_view;
-    ComboBox cb_wf_channel;
+    ComboBox cb_channel;
     Slider sld_offset;
 
 

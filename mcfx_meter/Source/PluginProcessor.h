@@ -101,13 +101,16 @@ public:
     // Editor size remembered per view, so switching back and forth does not
     // forget how the user sized each one. Bars derives its size from the
     // channel count and ignores these.
-    int _size_circle_w = 640, _size_circle_h = 700;
+    int _size_circle_w = 700, _size_circle_h = 700;
     int _size_wf_w     = 900, _size_wf_h     = 560;
     int _size_dots_w   = 420, _size_dots_h   = 260;
 
-    /** Channel highlighted in the waterfall, -1 for none. A view setting like
-        _view_mode, so it is a named XML attribute rather than a parameter. */
-    int _wf_selected_ch = -1;
+    /** Highlighted channel, -1 for none. Shared by the ring, the waterfall and
+        the dots: it is one idea — which channel you are looking at — so it
+        survives switching between them. A view setting like _view_mode, so a
+        named XML attribute rather than a parameter. Its key is still "wf_sel",
+        from when only the waterfall had it, so old sessions keep working. */
+    int _selected_ch = -1;
 
     /** Per-channel band levels for the waterfall view. Idle — and unallocated —
         until the editor switches that view on. */

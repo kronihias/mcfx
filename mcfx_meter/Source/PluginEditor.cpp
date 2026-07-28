@@ -134,14 +134,27 @@ AudioProcessorEditor (ownerFilter)
     // rebuildChannelStrips() above, which happens before this block. Making it
     // visible here would override that decision and leave an empty selector
     // sitting in the strip in bar and circle mode.
-    addChildComponent (cb_wf_channel);
-    cb_wf_channel.addListener (this);
-    cb_wf_channel.setTooltip ("Keep one channel highlighted in the waterfall. "
-                              "Clicking a channel number on the depth axis selects it too.");
+    addChildComponent (cb_channel);
+    cb_channel.addListener (this);
+    cb_channel.setTooltip ("Keep one channel highlighted, and read its level. "
+                           "Clicking it in the view selects it too; clicking the "
+                           "background clears it. Double click resets peak hold.");
 
     addChildComponent (_circular);
     addChildComponent (_waterfall);
     addChildComponent (_dots);
+    auto selectChannel = [this] (int ch)
+    {
+        getProcessor()->_selected_ch = ch;
+        _circular.setSelectedChannel (ch);
+        _waterfall.setSelectedChannel (ch);
+        _dots.setSelectedChannel (ch);
+        cb_channel.setSelectedId (ch + 2, dontSendNotification);
+    };
+    _circular.onChannelSelected  = selectChannel;
+    _waterfall.onChannelSelected = selectChannel;
+    _dots.onChannelSelected      = selectChannel;
+
     _dots.onResetAll = [this] { resetAllMeters(); };
     _dots.onChannelReset = [this] (int ch)
     {
@@ -150,11 +163,7 @@ AudioProcessorEditor (ownerFilter)
             p->_my_meter_dsp.getUnchecked (ch)->reset();
     };
     _waterfall.setAnalyser (&getProcessor()->_band_analyser);
-    _waterfall.onChannelSelected = [this] (int ch)
-    {
-        getProcessor()->_wf_selected_ch = ch;
-        cb_wf_channel.setSelectedId (ch + 2, dontSendNotification);
-    };
+
     _circular.onResetAll = [this] { resetAllMeters(); };
     _circular.onChannelReset = [this] (int ch)
     {
@@ -231,22 +240,33 @@ void Ambix_meterAudioProcessorEditor::resized()
     const bool bars = mode == Ambix_meterAudioProcessor::ViewMode::Bars;
     const bool wf   = mode == Ambix_meterAudioProcessor::ViewMode::Waterfall;
 
-    // Below the strip's natural width there is only room for the title and the
-    // view selector, which is what lets the ring shrink to a corner-of-the-
-    // screen glance. The level controls are the ones to drop: the ring still
-    // reads without them, and they mean nothing to the waterfall at all.
-    const bool compact       = getWidth() < kMinEditorWidth;
-    const bool showLevelCtls = ! wf && ! compact;
-
-    // The view selector sits next to the title, since which view you are in is
-    // the first thing you choose and the first thing you read. The level
-    // controls follow it, shifted right of their original positions by exactly
-    // the width it takes.
+    // Strip order: title, which view, which channel, then the level controls.
+    // The two selectors belong together — both answer "what am I looking at" —
+    // and the level controls are the ones that can go when space runs out.
     const int kViewComboX = 108;
-    const int kCtlShift   = 96;
+    const int kChanComboX = 204;
+
+    // Only the bars have no channel selection, so only they get that space
+    // back. The level controls shift by whatever precedes them.
+    const bool hasChanCombo = ! bars;
+    const int  kCtlShift    = hasChanCombo ? 192 : 96;
+
+    // Below the width its own controls need, the strip keeps the selectors and
+    // drops the level controls — which is what lets the ring shrink to a
+    // corner-of-the-screen glance. They mean nothing to the waterfall or the
+    // dots in any case.
+    const int  needed        = hasChanCombo ? 673 : kMinEditorWidth;
+    const bool showLevelCtls = ! wf && mode != Ambix_meterAudioProcessor::ViewMode::Dots
+                                   && getWidth() >= needed;
 
     label.setBounds (0, 0, 104, 16);
     cb_view.setBounds (kViewComboX, 1, 92, 22);
+    cb_channel.setBounds (kChanComboX, 1, 88, 22);
+
+    // Goes too once the window is narrower than it is wide — at the ring's
+    // 230 px minimum it would hang off the edge. Clicking a wedge still selects
+    // a channel there, so nothing is lost but the drop-down.
+    cb_channel.setVisible (hasChanCombo && getWidth() >= kChanComboX + 92);
 
     label2.setBounds (111 + kCtlShift, 3, 64, 16);
     sld_hold.setBounds (166 + kCtlShift, 0, 70, 24);
@@ -259,11 +279,6 @@ void Ambix_meterAudioProcessorEditor::resized()
     sld_hold.setVisible (showLevelCtls);
     sld_fall.setVisible (showLevelCtls);
     tgl_pkhold.setVisible (showLevelCtls);
-
-    // Directly after the view selector: this one only ever shows in the
-    // waterfall, where the level controls are hidden, so placing it past where
-    // they would have been just leaves a gap in the middle of the strip.
-    cb_wf_channel.setBounds (kViewComboX + 96, 1, 88, 22);
 
     // Bars keep the original fixed slider; the resizable views stretch it.
     sld_offset.setBounds (4, 23, 18, bars ? 167 : jmax (60, getHeight() - 31));
@@ -490,7 +505,7 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
     for (auto* s : _scales) s->setVisible (bars);
 
     const auto mode = getProcessor()->_view_mode;
-    const bool wf = mode == Ambix_meterAudioProcessor::ViewMode::Waterfall;
+    const bool wf   = mode == Ambix_meterAudioProcessor::ViewMode::Waterfall;
 
     _circular.setNumChannels (_cachedNumCh);
     _circular.setVisible (mode == Ambix_meterAudioProcessor::ViewMode::Circle);
@@ -500,12 +515,13 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
 
     _dots.setNumChannels (_cachedNumCh);
     _dots.setVisible (mode == Ambix_meterAudioProcessor::ViewMode::Dots);
-    cb_wf_channel.setVisible (wf);
+    // cb_channel's visibility is resized()'s call: it depends on the width as
+    // well as the mode.
 
     // Hold time, fall rate and the peak-hold toggle are laid out and shown or
     // hidden by resized(), which is the one place that knows the width as well
     // as the mode.
-    if (wf)
+    if (! bars)
         rebuildChannelSelector();
 
     // The analyser is the only expensive thing here, so it runs only while its
@@ -528,19 +544,21 @@ void Ambix_meterAudioProcessorEditor::rebuildChannelSelector()
 
     // Rebuilt only when the count changes: refilling on every mode switch would
     // close the popup out from under the user.
-    if (cb_wf_channel.getNumItems() != n + 1)
+    if (cb_channel.getNumItems() != n + 1)
     {
-        cb_wf_channel.clear (dontSendNotification);
-        cb_wf_channel.addItem ("no highlight", 1);
+        cb_channel.clear (dontSendNotification);
+        cb_channel.addItem ("no highlight", 1);
         for (int ch = 0; ch < n; ++ch)
-            cb_wf_channel.addItem ("ch " + String (ch + 1), ch + 2);
+            cb_channel.addItem ("ch " + String (ch + 1), ch + 2);
     }
 
-    if (p->_wf_selected_ch >= n)
-        p->_wf_selected_ch = -1;
+    if (p->_selected_ch >= n)
+        p->_selected_ch = -1;
 
-    _waterfall.setSelectedChannel (p->_wf_selected_ch);
-    cb_wf_channel.setSelectedId (p->_wf_selected_ch + 2, dontSendNotification);
+    _circular.setSelectedChannel (p->_selected_ch);
+    _waterfall.setSelectedChannel (p->_selected_ch);
+    _dots.setSelectedChannel (p->_selected_ch);
+    cb_channel.setSelectedId (p->_selected_ch + 2, dontSendNotification);
 }
 
 void Ambix_meterAudioProcessorEditor::applyModeSizing()
@@ -651,12 +669,14 @@ void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster 
 
 void Ambix_meterAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
-    if (comboBoxThatHasChanged == &cb_wf_channel)
+    if (comboBoxThatHasChanged == &cb_channel)
     {
-        const int ch = cb_wf_channel.getSelectedId() - 2;   // id 1 == no highlight
-        getProcessor()->_wf_selected_ch = ch;
+        const int ch = cb_channel.getSelectedId() - 2;   // id 1 == no highlight
+        getProcessor()->_selected_ch = ch;
+        _circular.setSelectedChannel (ch);
         _waterfall.setSelectedChannel (ch);
-        _waterfall.repaint();
+        _dots.setSelectedChannel (ch);
+        repaint();
         return;
     }
 

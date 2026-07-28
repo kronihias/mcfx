@@ -319,7 +319,7 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("circle_h", _size_circle_h);
     xml.setAttribute ("wf_w",     _size_wf_w);
     xml.setAttribute ("wf_h",     _size_wf_h);
-    xml.setAttribute ("wf_sel",   _wf_selected_ch);
+    xml.setAttribute ("wf_sel",   _selected_ch);
     xml.setAttribute ("dots_w",   _size_dots_w);
     xml.setAttribute ("dots_h",   _size_dots_h);
 
@@ -350,7 +350,7 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
             _size_circle_h = xmlState->getIntAttribute ("circle_h", _size_circle_h);
             _size_wf_w     = xmlState->getIntAttribute ("wf_w",     _size_wf_w);
             _size_wf_h     = xmlState->getIntAttribute ("wf_h",     _size_wf_h);
-            _wf_selected_ch = xmlState->getIntAttribute ("wf_sel", -1);
+            _selected_ch = xmlState->getIntAttribute ("wf_sel", -1);
             _size_dots_w   = xmlState->getIntAttribute ("dots_w",   _size_dots_w);
             _size_dots_h   = xmlState->getIntAttribute ("dots_h",   _size_dots_h);
         }
