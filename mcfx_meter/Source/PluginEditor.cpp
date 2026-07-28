@@ -131,6 +131,7 @@ AudioProcessorEditor (ownerFilter)
     addChildComponent (_circular);
     addChildComponent (_waterfall);
     _waterfall.setAnalyser (&getProcessor()->_band_analyser);
+    _circular.onResetAll = [this] { resetAllMeters(); };
     _circular.onChannelReset = [this] (int ch)
     {
         Ambix_meterAudioProcessor* p = getProcessor();
@@ -320,6 +321,7 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
             MyMeterDsp* d = ourProcessor->_my_meter_dsp.getUnchecked (i);
             _circular.setValue (i, d->getRMS(), d->getPeak(), d->getPeakHold());
         }
+        _circular.setOffset ((int) ourProcessor->_offset);
         _circular.repaint();
     }
     else
@@ -537,20 +539,25 @@ void Ambix_meterAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHas
     applyModeSizing();          // applies visibility too
 }
 
-void Ambix_meterAudioProcessorEditor::mouseDown (const MouseEvent& e)
+void Ambix_meterAudioProcessorEditor::resetAllMeters()
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+
+    // Walk the DSP array, not _meters: the bar strips only exist in bar mode,
+    // and the ring needs every channel cleared too.
+    for (int i = 0; i < ourProcessor->_my_meter_dsp.size(); ++i)
+        ourProcessor->_my_meter_dsp.getUnchecked (i)->reset();
+
+    for (int i = 0; i < _meters.size(); ++i)
+        _meters.getUnchecked (i)->reset();
+
+    _circular.repaint();
+}
+
+void Ambix_meterAudioProcessorEditor::mouseDown (const MouseEvent& e)
+{
     //[UserCode_mouseDown] -- Add your code here...
-    for (int i=0; i<_meters.size(); i++)
-    {
-
-        // ourProcessor->_kmdsp.getUnchecked(i)->reset();
-
-        ourProcessor->_my_meter_dsp.getUnchecked(i)->reset();
-
-        _meters.getUnchecked(i)->reset();
-
-    }
+    resetAllMeters();
     //[/UserCode_mouseDown]
 }
 

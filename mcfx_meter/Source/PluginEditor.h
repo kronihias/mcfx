@@ -93,6 +93,10 @@ private:
     // Alternate view: per-channel spectra receding into depth.
     WaterfallComponent _waterfall;
 
+    // Clear peak/peak-hold on every channel. Shared by the bar view's
+    // click-anywhere gesture and the ring's click-off-the-wedges one.
+    void resetAllMeters();
+
     // Show only the components the current view uses.
     void applyModeVisibility();
 

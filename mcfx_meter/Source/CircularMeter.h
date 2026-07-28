@@ -58,6 +58,12 @@ public:
     /** Called with a 0-based channel when the user clicks its wedge. */
     std::function<void (int)> onChannelReset;
 
+    /** Called when the user clicks the hub or outside the ring. The bar view
+        resets every channel on a click anywhere off a strip; this component
+        covers the whole area below the control strip, so without this the
+        editor's own mouseDown never sees those clicks. */
+    std::function<void()> onResetAll;
+
     /** Angle of a channel's wedge centre, in JUCE's convention: radians
         clockwise from 12 o'clock. Channel 0 sits at the top. */
     static float channelAngle (int channel, int numChannels,

@@ -195,8 +195,16 @@ void CircularMeter::mouseExit (const MouseEvent&)
 void CircularMeter::mouseUp (const MouseEvent& e)
 {
     const int ch = channelAt (e.position);
-    if (ch >= 0 && onChannelReset != nullptr)
-        onChannelReset (ch);
+
+    if (ch >= 0)
+    {
+        if (onChannelReset != nullptr)
+            onChannelReset (ch);
+    }
+    else if (onResetAll != nullptr)
+    {
+        onResetAll();
+    }
 }
 
 void CircularMeter::paint (Graphics& g)
