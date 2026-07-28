@@ -26,6 +26,7 @@
 #include "meter.h"
 #include "MeterScale.h"
 #include "CircularMeter.h"
+#include "WaterfallComponent.h"
 
 
 #define METER_WIDTH 16
@@ -89,6 +90,9 @@ private:
     // hidden, rather than rebuilt on every mode change.
     CircularMeter _circular;
 
+    // Alternate view: per-channel spectra receding into depth.
+    WaterfallComponent _waterfall;
+
     // Show only the components the current view uses.
     void applyModeVisibility();
 
@@ -110,6 +114,13 @@ private:
     // channels, which is why the strip already clipped before the selector
     // existed.
     static constexpr int kMinEditorWidth = 581;
+
+    // How many channels the band analyser transforms per timer tick. Bounds the
+    // per-tick cost so it does not grow with the channel count.
+    static constexpr int kWaterfallChannelsPerTick = 32;
+
+    // Counts ticks so the waterfall repaints once per analyser sweep.
+    int _wf_tick = 0;
 
     int _cachedNumCh = 0;
 
