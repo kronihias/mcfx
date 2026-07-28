@@ -128,7 +128,12 @@ AudioProcessorEditor (ownerFilter)
                         "shows up as a break in its symmetry.");
     cb_view.setSelectedId ((int) getProcessor()->_view_mode + 1, dontSendNotification);
 
-    addAndMakeVisible (cb_wf_channel);
+    // addChildComponent, not addAndMakeVisible: this one belongs to the
+    // waterfall only, and applyModeVisibility() has already run by now — via
+    // rebuildChannelStrips() above, which happens before this block. Making it
+    // visible here would override that decision and leave an empty selector
+    // sitting in the strip in bar and circle mode.
+    addChildComponent (cb_wf_channel);
     cb_wf_channel.addListener (this);
     cb_wf_channel.setTooltip ("Keep one channel highlighted in the waterfall. "
                               "Clicking a channel number on the depth axis selects it too.");
@@ -148,6 +153,10 @@ AudioProcessorEditor (ownerFilter)
         if (isPositiveAndBelow (ch, p->_my_meter_dsp.size()))
             p->_my_meter_dsp.getUnchecked (ch)->reset();
     };
+
+    // Everything the mode governs is a child by now, so settle visibility once
+    // more rather than relying on the order of the two constructor blocks.
+    applyModeVisibility();
 
     // Resizable, but the bar view pins min == max in applyModeSizing() so it
     // behaves exactly as it always has.
@@ -441,6 +450,17 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
     _waterfall.setNumChannels (_cachedNumCh);
     _waterfall.setVisible (wf);
     cb_wf_channel.setVisible (wf);
+
+    // Peak hold time, fall rate and the peak-hold toggle drive MyMeterDsp, which
+    // only the bar and ring meters read — the waterfall shows band levels and
+    // has no peak to hold, it smooths in the analyser instead. Hidden rather
+    // than left sitting there doing nothing. The offset slider stays: it shifts
+    // the level scale in all three views.
+    sld_hold.setVisible (! wf);
+    sld_fall.setVisible (! wf);
+    label2.setVisible (! wf);
+    label3.setVisible (! wf);
+    tgl_pkhold.setVisible (! wf);
     if (wf)
         rebuildChannelSelector();
 
