@@ -93,7 +93,8 @@ public:
     void setSelectedChannel (int channel);
     int  getSelectedChannel() const { return selected_; }
 
-    /** Fired when a click changes the selection, so a host control can follow. */
+    /** Fired when a click changes the selection, so a host control can follow.
+        Passes -1 when a click off the plot clears it. */
     std::function<void (int)> onChannelSelected;
 
     /** Which channel number on the depth axis a point falls on, or -1.

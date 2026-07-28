@@ -386,7 +386,10 @@ void WaterfallComponent::mouseDown (const MouseEvent& e)
     if (ch < 0)
         ch = channelAt (e.position);
 
-    if (ch >= 0 && ch != selected_)
+    // Neither: the click landed off the plot, which clears the selection. That
+    // gives the gesture somewhere to undo itself, instead of the drop-down
+    // being the only way back to no highlight.
+    if (ch != selected_)
     {
         setSelectedChannel (ch);
         if (onChannelSelected != nullptr)
