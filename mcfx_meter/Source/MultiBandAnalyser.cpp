@@ -18,6 +18,7 @@
  */
 
 #include "MultiBandAnalyser.h"
+#include "Fftw/FftwPlanner.h"
 
 float MultiBandAnalyser::getBandCentreHz (int band)
 {
@@ -57,6 +58,9 @@ void MultiBandAnalyser::prepare (double sampleRate, int numChannels)
     sampleRate_  = sampleRate;
     numChannels_ = nCh;
     fftSize_     = 1 << fftOrder_;
+    // juce::dsp::FFT plans here when built against FFTW, and FFTW's
+    // planner is process-global and not thread-safe.
+    mcfx::ensureFftwPlannerThreadSafe();
     fft_         = std::make_unique<juce::dsp::FFT> (fftOrder_);
 
     // Blackman-Harris, matching SpectrumAnalyzer, with the same coherent-gain

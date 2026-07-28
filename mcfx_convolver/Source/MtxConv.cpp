@@ -17,6 +17,7 @@
  */
 
 #include "MtxConv.h"
+#include "Fftw/FftwPlanner.h"
 
 // #define DEBUG_COUT 1
 
@@ -44,7 +45,13 @@ MtxConvMaster::MtxConvMaster() : inbuf_(1,256),
 #endif
 
 #if !SPLIT_COMPLEX
-    fftwf_make_planner_thread_safe(); // this works since fftw-3.3.6-pl2
+    // Was a direct fftwf_make_planner_thread_safe() here. That only covered the
+    // case where this engine is the first thing in the process to plan, which
+    // stopped being true once juce::dsp::FFT was built with its FFTW engine and
+    // started planning from the analysers. The guard now installs at load time;
+    // this call is kept so the ordering requirement stays visible at the site
+    // that needs it, and is a no-op after the first.
+    mcfx::ensureFftwPlannerThreadSafe();
 #endif
 }
 

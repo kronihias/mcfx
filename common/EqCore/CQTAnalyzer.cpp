@@ -18,6 +18,7 @@
  */
 
 #include "CQTAnalyzer.h"
+#include "Fftw/FftwPlanner.h"
 
 namespace
 {
@@ -50,6 +51,9 @@ void CQTAnalyzer::prepare (double sampleRate)
     sampleRate_ = sampleRate;
     fftOrder_   = chooseFFTOrder (sampleRate);
     fftSize_    = 1 << fftOrder_;
+    // FFTW's planner is process-global and not thread-safe; juce::dsp::FFT
+    // plans here when built against it.
+    mcfx::ensureFftwPlannerThreadSafe();
     fft_        = std::make_unique<juce::dsp::FFT> (fftOrder_);
     frame_.assign ((size_t) (2 * fftSize_), 0.f);
 

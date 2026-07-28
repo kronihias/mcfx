@@ -68,6 +68,16 @@ if(BUILD_STANDALONE)
     endif()
 endif()
 
+# FFTW's planner is global process state shared by every plug-in that links it,
+# and planning is not thread-safe. This installs the lock at load time; it is
+# compiled into every FFTW-linking target rather than into one plug-in, because
+# whichever of them plans first is the one that has to have installed it.
+# Compiled into every target, not only the FFTW-linking ones: its body is
+# #if'd out without MCFX_HAS_FFTW3, so this costs nothing there, and callers can
+# then use it unconditionally instead of guarding each call site.
+list(APPEND _MCFX_SOURCE ${SRC_DIR}/common/Fftw/FftwPlanner.cpp)
+list(APPEND _MCFX_HEADER ${SRC_DIR}/common/Fftw/FftwPlanner.h)
+
 list(SORT _MCFX_SOURCE)
 
 set(MCFX_TARGETS "")
@@ -130,6 +140,7 @@ if(MCFX_BUILD_VST2_PER_CHANNEL AND MCFX_FORMATS_VST2)
         target_link_libraries(${_vst2_target} PRIVATE
             ${FFTW3F_LIBRARY}
             ${FFTW3F_THREADS_LIBRARY})
+        target_compile_definitions(${_vst2_target} PRIVATE MCFX_HAS_FFTW3=1)
     endif()
 
     list(APPEND MCFX_TARGETS ${_vst2_target})
@@ -192,6 +203,7 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
         target_link_libraries(${_mc_target} PRIVATE
             ${FFTW3F_LIBRARY}
             ${FFTW3F_THREADS_LIBRARY})
+        target_compile_definitions(${_mc_target} PRIVATE MCFX_HAS_FFTW3=1)
     endif()
 
     list(APPEND MCFX_TARGETS ${_mc_target})
