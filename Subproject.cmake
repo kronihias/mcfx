@@ -78,6 +78,12 @@ endif()
 list(APPEND _MCFX_SOURCE ${SRC_DIR}/common/Fftw/FftwPlanner.cpp)
 list(APPEND _MCFX_HEADER ${SRC_DIR}/common/Fftw/FftwPlanner.h)
 
+# Real-input FFT on the platform's own vector library — Accelerate on Apple,
+# FFTW elsewhere. Not juce::dsp::FFT: its real-only call repacks split-complex
+# into interleaved on every invocation, which costs as much as the transform.
+list(APPEND _MCFX_SOURCE ${SRC_DIR}/common/Dsp/RealFFT.cpp)
+list(APPEND _MCFX_HEADER ${SRC_DIR}/common/Dsp/RealFFT.h)
+
 list(SORT _MCFX_SOURCE)
 
 set(MCFX_TARGETS "")

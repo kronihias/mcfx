@@ -21,6 +21,7 @@
 #define SPECTRUMANALYZER_H_INCLUDED
 
 #include "JuceHeader.h"
+#include "Dsp/RealFFT.h"
 #include <vector>
 #include <atomic>
 
@@ -80,7 +81,9 @@ public:
 private:
     void computeFFT();
 
-    juce::dsp::FFT fft_;
+    // Accelerate / FFTW directly — see common/Dsp/RealFFT.h for why this does
+    // not go through juce::dsp::FFT.
+    mcfx::RealFFT fft_;
     double sampleRate_ = 48000.0;
     int numChannels_ = 0;
 
@@ -93,7 +96,7 @@ private:
     int writePos_ = 0;
 
     // FFT working buffers
-    std::vector<float> fftData_;      // 2 * kFFTSize (JUCE FFT needs 2x)
+    std::vector<float> magSq_;        // kSpecLen bin powers
     std::vector<float> tmpMag_;       // kSpecLen
     std::vector<float> magnitude_;    // kSpecLen — smoothed output
 

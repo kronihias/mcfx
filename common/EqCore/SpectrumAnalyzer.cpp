@@ -20,7 +20,7 @@
 #include "SpectrumAnalyzer.h"
 
 SpectrumAnalyzer::SpectrumAnalyzer()
-    : fft_(kFFTOrder)
+
 {
     // Blackman-Harris window
     window_.resize(kFFTSize);
@@ -35,7 +35,8 @@ SpectrumAnalyzer::SpectrumAnalyzer()
     }
     windowCoherentGain_ = (float)(windowSum / (double)kFFTSize);
 
-    fftData_.resize(kFFTSize * 2, 0.f);
+    fft_.prepare(kFFTOrder);
+    magSq_.resize(kSpecLen, 0.f);
     tmpMag_.resize(kSpecLen, 0.f);
     magnitude_.resize(kSpecLen, 0.f);
 }
@@ -111,23 +112,15 @@ void SpectrumAnalyzer::computeFFT()
     // Lambda: compute FFT magnitude for one channel into tmpMag_
     auto computeChannelMag = [&](int ch)
     {
-        // Copy windowed signal into FFT buffer
-        FloatVectorOperations::copy(fftData_.data(), ringBuffer_.getReadPointer(ch), kFFTSize);
-        FloatVectorOperations::multiply(fftData_.data(), window_.data(), kFFTSize);
+        // Window straight into the transform's own buffer — no staging copy.
+        float* t = fft_.getTimeBuffer();
+        FloatVectorOperations::copy(t, ringBuffer_.getReadPointer(ch), kFFTSize);
+        FloatVectorOperations::multiply(t, window_.data(), kFFTSize);
 
-        // Zero the second half (JUCE FFT expects 2*N buffer)
-        FloatVectorOperations::clear(fftData_.data() + kFFTSize, kFFTSize);
+        fft_.magnitudesSquared(magSq_.data());
 
-        // Forward FFT
-        fft_.performRealOnlyForwardTransform(fftData_.data());
-
-        // Compute magnitude from interleaved real/imag pairs
         for (int i = 0; i < kSpecLen; ++i)
-        {
-            float re = fftData_[i * 2];
-            float im = fftData_[i * 2 + 1];
-            tmpMag_[i] = std::sqrt(re * re + im * im) * fftScale;
-        }
+            tmpMag_[i] = std::sqrt(magSq_[i]) * fftScale;
     };
 
     if (analyzerCh > 0 && analyzerCh <= numChannels_)

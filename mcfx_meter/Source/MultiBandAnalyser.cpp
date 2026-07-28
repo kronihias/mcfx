@@ -58,10 +58,7 @@ void MultiBandAnalyser::prepare (double sampleRate, int numChannels)
     sampleRate_  = sampleRate;
     numChannels_ = nCh;
     fftSize_     = 1 << fftOrder_;
-    // juce::dsp::FFT plans here when built against FFTW, and FFTW's
-    // planner is process-global and not thread-safe.
-    mcfx::ensureFftwPlannerThreadSafe();
-    fft_         = std::make_unique<juce::dsp::FFT> (fftOrder_);
+    fft_.prepare (fftOrder_);
 
     // Blackman-Harris, matching SpectrumAnalyzer, with the same coherent-gain
     // normalisation so a full-scale sine reads 1.0 in its band.
@@ -79,7 +76,7 @@ void MultiBandAnalyser::prepare (double sampleRate, int numChannels)
 
     buildBandTable();
 
-    scratch_.assign ((size_t) (2 * fftSize_), 0.f);
+    magSq_.assign ((size_t) (fftSize_ / 2 + 1), 0.f);
     levels_.assign ((size_t) numChannels_ * kNumBands, 0.f);
     nextChannel_ = 0;
 
@@ -165,7 +162,7 @@ void MultiBandAnalyser::push (const AudioSampleBuffer& buffer, int numSamples)
 
 void MultiBandAnalyser::computeNext (int maxChannels)
 {
-    if (! ready_ || fft_ == nullptr || numChannels_ <= 0)
+    if (! ready_ || ! fft_.isReady() || numChannels_ <= 0)
         return;
 
     const int todo = jlimit (1, numChannels_, maxChannels);
@@ -186,16 +183,16 @@ void MultiBandAnalyser::computeNext (int maxChannels)
             const int wp = writePos_.load (std::memory_order_acquire);
             const float* src = ring_.getReadPointer (ch);
             const int first = size - wp;
-            // Oldest-to-newest, so the frame ends at the write head.
-            FloatVectorOperations::copy (scratch_.data(), src + wp, first);
+            // Oldest-to-newest, so the frame ends at the write head. Copied
+            // straight into the transform's own buffer — no staging array.
+            float* t = fft_.getTimeBuffer();
+            FloatVectorOperations::copy (t, src + wp, first);
             if (wp > 0)
-                FloatVectorOperations::copy (scratch_.data() + first, src, wp);
+                FloatVectorOperations::copy (t + first, src, wp);
         }
 
-        FloatVectorOperations::multiply (scratch_.data(), window_.data(), fftSize_);
-        FloatVectorOperations::clear (scratch_.data() + fftSize_, fftSize_);
-
-        fft_->performRealOnlyForwardTransform (scratch_.data(), true);
+        FloatVectorOperations::multiply (fft_.getTimeBuffer(), window_.data(), fftSize_);
+        fft_.magnitudesSquared (magSq_.data());
 
         // Sum power across each band, then take the root: that makes a band's
         // reading independent of how many bins happen to fall inside it, which
@@ -203,17 +200,27 @@ void MultiBandAnalyser::computeNext (int maxChannels)
         const float norm = 1.f / (windowGain_ * (float) fftSize_);
         float* out = levels_.data() + (size_t) ch * kNumBands;
 
+        const float* mag = magSq_.data();
+
         for (int b = 0; b < kNumBands; ++b)
         {
             const auto& e = bands_[(size_t) b];
-            float power = 0.f;
-            for (int bin = e.lo; bin <= e.hi; ++bin)
+            float power;
+
+            if (e.hi == e.lo)
             {
-                const float re = scratch_[(size_t) (2 * bin)];
-                const float im = scratch_[(size_t) (2 * bin + 1)];
-                const float w = (bin == e.lo ? e.wLo : 1.f) * (bin == e.hi ? e.wHi : 1.f);
-                power += w * (re * re + im * im);
+                // Band inside a single bin. The weight applies once — the old
+                // form multiplied the low and high weights together and so
+                // squared a fraction, under-reading every sub-bin-wide band.
+                power = e.wLo * mag[e.lo];
             }
+            else
+            {
+                power = e.wLo * mag[e.lo] + e.wHi * mag[e.hi];
+                for (int bin = e.lo + 1; bin < e.hi; ++bin)
+                    power += mag[bin];
+            }
+
             // 2x for the negative-frequency half a real transform folds away.
             out[b] = std::sqrt (2.f * power) * norm;
         }

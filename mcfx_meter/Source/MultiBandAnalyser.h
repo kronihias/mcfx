@@ -21,6 +21,7 @@
 #define MULTIBANDANALYSER_H_INCLUDED
 
 #include "JuceHeader.h"
+#include "Dsp/RealFFT.h"
 #include <atomic>
 #include <vector>
 
@@ -101,7 +102,9 @@ private:
 
     std::atomic<bool> active_ { false };
 
-    std::unique_ptr<juce::dsp::FFT> fft_;
+    // Accelerate on Apple, FFTW elsewhere — see RealFFT for why this does not
+    // go through juce::dsp::FFT.
+    mcfx::RealFFT fft_;
     std::vector<float> window_;
     float windowGain_ = 1.f;
 
@@ -118,7 +121,7 @@ private:
     std::atomic<int>  writePos_ { 0 };
     juce::SpinLock    ringLock_;
 
-    std::vector<float> scratch_;      // 2 * fftSize_
+    std::vector<float> magSq_;        // fftSize_/2 + 1 bin powers
     std::vector<float> levels_;       // numChannels_ * kNumBands
     int nextChannel_ = 0;             // round-robin cursor
 

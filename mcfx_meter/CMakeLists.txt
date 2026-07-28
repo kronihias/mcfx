@@ -11,11 +11,11 @@ endif()
 
 SET(MC_PLUGIN_CODE "Mmc0")
 
-# No FFT backend is selected here on purpose. The band analyser behind the
-# waterfall runs 4096-point transforms through juce::dsp::FFT, and
-# JUCE_USE_VDSP_FRAMEWORK was measured against the default fallback on Apple
-# Silicon at 4096/8192/32768 points: identical within run-to-run noise. FFTW is
-# not linked either — that would add a dependency to a plug-in which currently
-# has none, to save ~0.3 ms a tick against a ~20 ms repaint.
-
 INCLUDE(${SRC_DIR}/Subproject.cmake)
+
+# The band analyser's transform goes straight to Accelerate (common/Dsp/RealFFT).
+IF(APPLE)
+    foreach(tgt IN LISTS MCFX_TARGETS)
+        target_link_libraries(${tgt} PRIVATE "-framework Accelerate")
+    endforeach()
+ENDIF()
