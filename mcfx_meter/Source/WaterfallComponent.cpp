@@ -255,17 +255,28 @@ void WaterfallComponent::paintRidges (Graphics& g)
     if (analyser_ == nullptr || ! analyser_->isReady() || numCh_ <= 0)
         return;
 
+    // Back to front: each fill occludes what is behind it, which is exact here
+    // because the ridges are parallel planes that cannot intersect.
+    for (int ch = numCh_ - 1; ch >= 0; --ch)
+        paintRidge (g, ch, false);
+
+    // The selected ridge again, on top and unoccluded. Redrawing it rather than
+    // reordering keeps the depth cue honest — it stays at its own depth, it is
+    // just no longer buried by whatever happens to be in front of it.
+    if (isPositiveAndBelow (selected_, numCh_))
+        paintRidge (g, selected_, true);
+}
+
+void WaterfallComponent::paintRidge (Graphics& g, int ch, bool highlighted)
+{
     const int nBands = MultiBandAnalyser::kNumBands;
     const float resFloorNorm = freqToNorm (analyser_->getResolutionFloorHz());
     const float denom = jmax (1.f, (float) (numCh_ - 1));
 
-    // Back to front: each fill occludes what is behind it, which is exact here
-    // because the ridges are parallel planes that cannot intersect.
-    for (int ch = numCh_ - 1; ch >= 0; --ch)
     {
         const float* bands = analyser_->getChannelBands (ch);
         if (bands == nullptr)
-            continue;
+            return;
 
         const float depth = (float) ch / denom;          // 1 = furthest away
 
@@ -294,16 +305,27 @@ void WaterfallComponent::paintRidges (Graphics& g)
 
         // The fill is what hides the ridges behind. Slightly translucent so the
         // stack still reads as depth rather than as a wall.
-        g.setColour (Colour::fromFloatRGBA (0.05f, 0.055f, 0.075f, 0.90f)
-                         .brighter (0.16f * depth));
+        g.setColour (highlighted
+                         ? Colour::fromFloatRGBA (0.10f, 0.12f, 0.17f, 0.97f)
+                         : Colour::fromFloatRGBA (0.05f, 0.055f, 0.075f, 0.90f)
+                               .brighter (0.16f * depth));
         g.fillPath (skirt_);
+
+        if (highlighted)
+        {
+            // An outline all the way round, so the selected channel reads as one
+            // surface rather than as a brighter line among many.
+            g.setColour (Colours::white.withAlpha (0.30f));
+            g.strokePath (skirt_, PathStrokeType (1.f));
+        }
 
         // Stroke segment by segment so one hot band glows on an otherwise cool
         // ridge — that is what makes an outlier findable at 128 channels.
         // Measured: batching these into per-colour paths and calling strokePath
         // is *slower* than drawLine, which has a fast path for a single segment.
-        const float alpha = (ch == hovered_) ? 1.f : (0.95f - 0.45f * depth);
-        const float thick = (ch == hovered_) ? 1.8f : 1.1f;
+        const bool  lit   = highlighted || ch == hovered_;
+        const float alpha = lit ? 1.f : (0.95f - 0.45f * depth);
+        const float thick = highlighted ? 2.2f : (ch == hovered_ ? 1.8f : 1.1f);
 
         for (int b = 1; b < nBands; ++b)
         {
@@ -320,6 +342,55 @@ void WaterfallComponent::paintRidges (Graphics& g)
                              .withAlpha (alpha * dim));
             g.drawLine (pA.x, pA.y, pB.x, pB.y, thick);
         }
+    }
+}
+
+int WaterfallComponent::labelEvery() const
+{
+    // Thinned as the rows compress: at 128 channels they are under 4 px apart,
+    // so labelling every ridge would just be a grey bar.
+    return numCh_ <= 16 ? 1 : (numCh_ <= 64 ? 4 : 8);
+}
+
+int WaterfallComponent::channelLabelAt (Point<float> p) const
+{
+    if (numCh_ <= 0)
+        return -1;
+
+    const int every = labelEvery();
+    for (int ch = 0; ch < numCh_; ++ch)
+    {
+        if (ch != 0 && ch != numCh_ - 1 && (ch % every) != 0)
+            continue;
+
+        const auto q = project (0.f, 0.f, ch);
+        // Matches the drawText rectangle in paint(), padded so the numbers are
+        // clickable at the pitch they are drawn at.
+        if (Rectangle<float> (q.x - 26.f, q.y - 8.f, 24.f, 16.f).contains (p))
+            return ch;
+    }
+    return -1;
+}
+
+void WaterfallComponent::setSelectedChannel (int channel)
+{
+    const int c = isPositiveAndBelow (channel, numCh_) ? channel : -1;
+    if (c != selected_) { selected_ = c; repaint(); }
+}
+
+void WaterfallComponent::mouseDown (const MouseEvent& e)
+{
+    // The axis numbers first — they sit over the ridges, so a hit there has to
+    // win, otherwise the number for a buried channel would be unclickable.
+    int ch = channelLabelAt (e.position);
+    if (ch < 0)
+        ch = channelAt (e.position);
+
+    if (ch >= 0 && ch != selected_)
+    {
+        setSelectedChannel (ch);
+        if (onChannelSelected != nullptr)
+            onChannelSelected (ch);
     }
 }
 
@@ -375,18 +446,27 @@ void WaterfallComponent::paint (Graphics& g)
     // --- channel labels along the receding left edge ---
     if (numCh_ > 0)
     {
-        // Thin the numbers out as the rows compress: at 128 channels they are
-        // under 4 px apart, so labelling every ridge would just be a grey bar.
-        const int every = numCh_ <= 16 ? 1 : (numCh_ <= 64 ? 4 : 8);
-        g.setFont (Font (FontOptions (9.f, Font::plain)));
+        const int every = labelEvery();
 
         for (int ch = 0; ch < numCh_; ++ch)
         {
-            if (ch != 0 && ch != numCh_ - 1 && (ch % every) != 0)
+            // The selected channel keeps its number even when thinning would
+            // have dropped it — otherwise the selection has no anchor on screen.
+            const bool always = ch == 0 || ch == numCh_ - 1 || ch == selected_;
+            if (! always && (ch % every) != 0)
                 continue;
 
             const auto p = project (0.f, 0.f, ch);
-            g.setColour (Colours::white.withAlpha (ch == hovered_ ? 1.f : 0.4f));
+            const bool sel = ch == selected_;
+
+            if (sel)
+            {
+                g.setColour (Colours::white.withAlpha (0.22f));
+                g.fillRoundedRectangle (p.x - 26.f, p.y - 8.f, 24.f, 16.f, 3.f);
+            }
+
+            g.setFont (Font (FontOptions (9.f, sel ? Font::bold : Font::plain)));
+            g.setColour (Colours::white.withAlpha (sel ? 1.f : (ch == hovered_ ? 1.f : 0.4f)));
             g.drawText (String (ch + 1), (int) (p.x - 24.f), (int) (p.y - 7.f), 20, 14,
                         Justification::centredRight, false);
         }

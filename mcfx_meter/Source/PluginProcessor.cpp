@@ -319,6 +319,7 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("circle_h", _size_circle_h);
     xml.setAttribute ("wf_w",     _size_wf_w);
     xml.setAttribute ("wf_h",     _size_wf_h);
+    xml.setAttribute ("wf_sel",   _wf_selected_ch);
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -347,6 +348,7 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
             _size_circle_h = xmlState->getIntAttribute ("circle_h", _size_circle_h);
             _size_wf_w     = xmlState->getIntAttribute ("wf_w",     _size_wf_w);
             _size_wf_h     = xmlState->getIntAttribute ("wf_h",     _size_wf_h);
+            _wf_selected_ch = xmlState->getIntAttribute ("wf_sel", -1);
         }
 
     }

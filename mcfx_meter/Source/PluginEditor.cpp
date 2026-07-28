@@ -128,9 +128,19 @@ AudioProcessorEditor (ownerFilter)
                         "shows up as a break in its symmetry.");
     cb_view.setSelectedId ((int) getProcessor()->_view_mode + 1, dontSendNotification);
 
+    addAndMakeVisible (cb_wf_channel);
+    cb_wf_channel.addListener (this);
+    cb_wf_channel.setTooltip ("Keep one channel highlighted in the waterfall. "
+                              "Clicking a channel number on the depth axis selects it too.");
+
     addChildComponent (_circular);
     addChildComponent (_waterfall);
     _waterfall.setAnalyser (&getProcessor()->_band_analyser);
+    _waterfall.onChannelSelected = [this] (int ch)
+    {
+        getProcessor()->_wf_selected_ch = ch;
+        cb_wf_channel.setSelectedId (ch + 2, dontSendNotification);
+    };
     _circular.onResetAll = [this] { resetAllMeters(); };
     _circular.onChannelReset = [this] (int ch)
     {
@@ -208,6 +218,9 @@ void Ambix_meterAudioProcessorEditor::resized()
 
     sld_offset.setBounds (4, 23, 18, 167);
     cb_view.setBounds (481, 1, 92, 22);
+    // Only ever shown in the waterfall view, whose minimum width is 700 —
+    // wide enough for this, unlike the 581 the other views allow.
+    cb_wf_channel.setBounds (577, 1, 88, 22);
 
     // The ring and the waterfall each own everything below the control strip.
     _circular.setBounds  (0, 28, getWidth(), jmax (0, getHeight() - 28));
@@ -427,6 +440,9 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
 
     _waterfall.setNumChannels (_cachedNumCh);
     _waterfall.setVisible (wf);
+    cb_wf_channel.setVisible (wf);
+    if (wf)
+        rebuildChannelSelector();
 
     // The analyser is the only expensive thing here, so it runs only while its
     // view is actually on screen. prepare() allocates, hence the GUI thread.
@@ -435,6 +451,28 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
         p->_band_analyser.prepare (p->getSampleRate() > 0.0 ? p->getSampleRate() : 48000.0,
                                    jmax (1, _cachedNumCh));
     p->_band_analyser.setActive (wf);
+}
+
+void Ambix_meterAudioProcessorEditor::rebuildChannelSelector()
+{
+    Ambix_meterAudioProcessor* p = getProcessor();
+    const int n = jmax (1, _cachedNumCh);
+
+    // Rebuilt only when the count changes: refilling on every mode switch would
+    // close the popup out from under the user.
+    if (cb_wf_channel.getNumItems() != n + 1)
+    {
+        cb_wf_channel.clear (dontSendNotification);
+        cb_wf_channel.addItem ("no highlight", 1);
+        for (int ch = 0; ch < n; ++ch)
+            cb_wf_channel.addItem ("ch " + String (ch + 1), ch + 2);
+    }
+
+    if (p->_wf_selected_ch >= n)
+        p->_wf_selected_ch = -1;
+
+    _waterfall.setSelectedChannel (p->_wf_selected_ch);
+    cb_wf_channel.setSelectedId (p->_wf_selected_ch + 2, dontSendNotification);
 }
 
 void Ambix_meterAudioProcessorEditor::applyModeSizing()
@@ -527,6 +565,15 @@ void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster 
 
 void Ambix_meterAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHasChanged)
 {
+    if (comboBoxThatHasChanged == &cb_wf_channel)
+    {
+        const int ch = cb_wf_channel.getSelectedId() - 2;   // id 1 == no highlight
+        getProcessor()->_wf_selected_ch = ch;
+        _waterfall.setSelectedChannel (ch);
+        _waterfall.repaint();
+        return;
+    }
+
     if (comboBoxThatHasChanged != &cb_view)
         return;
 

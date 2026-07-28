@@ -87,10 +87,24 @@ public:
     /** dB to 0..1 against the current floor and offset. */
     float levelToNorm (float db) const;
 
+    /** Sticky highlight, -1 for none. The selected ridge is redrawn on top of
+        the painter's-algorithm pass, so it stays readable even when channels in
+        front of it would otherwise bury it. */
+    void setSelectedChannel (int channel);
+    int  getSelectedChannel() const { return selected_; }
+
+    /** Fired when a click changes the selection, so a host control can follow. */
+    std::function<void (int)> onChannelSelected;
+
+    /** Which channel number on the depth axis a point falls on, or -1.
+        Public because it is the inverse of where paint() puts those labels. */
+    int channelLabelAt (Point<float> p) const;
+
     void paint (Graphics&) override;
     void resized() override;
     void mouseMove (const MouseEvent&) override;
     void mouseExit (const MouseEvent&) override;
+    void mouseDown (const MouseEvent&) override;
 
 private:
     void rebuildLayout();
@@ -100,12 +114,20 @@ private:
     /** Which channel's ridge a point is nearest, judged along the depth axis. */
     int channelAt (Point<float> p) const;
 
+    /** Label thinning, shared by paint() and the hit-test so they cannot
+        disagree about which numbers are on screen. */
+    int labelEvery() const;
+
+    /** One ridge: filled skirt, then the level-coloured stroke. */
+    void paintRidge (Graphics&, int channel, bool highlighted);
+
     MultiBandAnalyser* analyser_ = nullptr;
 
     int   numCh_   = 0;
     int   offset_  = 0;
     float floorDb_ = -80.f;
-    int   hovered_ = -1;
+    int   hovered_  = -1;
+    int   selected_ = -1;
 
     Layout layout_;
 

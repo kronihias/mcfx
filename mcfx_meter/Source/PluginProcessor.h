@@ -104,6 +104,10 @@ public:
     int _size_circle_w = 640, _size_circle_h = 700;
     int _size_wf_w     = 900, _size_wf_h     = 560;
 
+    /** Channel highlighted in the waterfall, -1 for none. A view setting like
+        _view_mode, so it is a named XML attribute rather than a parameter. */
+    int _wf_selected_ch = -1;
+
     /** Per-channel band levels for the waterfall view. Idle — and unallocated —
         until the editor switches that view on. */
     MultiBandAnalyser _band_analyser;

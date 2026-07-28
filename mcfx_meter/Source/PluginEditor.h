@@ -93,6 +93,10 @@ private:
     // Alternate view: per-channel spectra receding into depth.
     WaterfallComponent _waterfall;
 
+    // Refill the waterfall's channel selector for the current channel count and
+    // show the processor's remembered choice.
+    void rebuildChannelSelector();
+
     // Clear peak/peak-hold on every channel. Shared by the bar view's
     // click-anywhere gesture and the ring's click-off-the-wedges one.
     void resetAllMeters();
@@ -149,6 +153,7 @@ private:
     Label label3;
     ToggleButton tgl_pkhold;
     ComboBox cb_view;
+    ComboBox cb_wf_channel;
     Slider sld_offset;
 
 
