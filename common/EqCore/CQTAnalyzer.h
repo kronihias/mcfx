@@ -21,6 +21,7 @@
 #define CQTANALYZER_H_INCLUDED
 
 #include "JuceHeader.h"
+#include "Dsp/RealFFT.h"
 #include <atomic>
 #include <complex>
 #include <vector>
@@ -98,7 +99,10 @@ private:
     int    numBins_    = 0;
     bool   ready_      = false;
 
-    std::unique_ptr<juce::dsp::FFT> fft_;
+    // Accelerate / FFTW directly — see common/Dsp/RealFFT.h. The kernel
+    // construction below still uses juce::dsp::FFT: that one is a genuine
+    // complex transform, and it runs once per prepare().
+    mcfx::RealFFT fft_;
 
     // Sparse spectral kernels, flattened: bin k spans [offset_[k], offset_[k+1]).
     std::vector<int>                  kernelIndex_;
@@ -113,7 +117,8 @@ private:
     juce::SpinLock     ringLock_;
 
     // compute() scratch + results.
-    std::vector<float> frame_;        // 2 * fftSize_ (JUCE FFT needs the headroom)
+    // No frame buffer: the ring is copied straight into the transform's own
+    // input buffer.
     std::vector<float> magnitude_;    // numBins_, smoothed
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CQTAnalyzer)

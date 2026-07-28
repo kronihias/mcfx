@@ -96,6 +96,86 @@ void RealFFT::prepare (int order)
 #endif
 }
 
+void RealFFT::transformRaw() noexcept
+{
+#if MCFX_REALFFT_VDSP
+    DSPSplitComplex sc { re_.data(), im_.data() };
+
+    // Pack the real frame as N/2 interleaved complex values, which is the
+    // layout vDSP's real FFT consumes.
+    vDSP_ctoz (reinterpret_cast<const DSPComplex*> (time_.data()), 2, &sc, 1,
+               (vDSP_Length) (size_ / 2));
+    vDSP_fft_zrip (static_cast<FFTSetup> (setup_), &sc, 1, (vDSP_Length) order_,
+                   FFT_FORWARD);
+#elif MCFX_REALFFT_FFTW
+    fftwf_execute_dft_r2c (static_cast<fftwf_plan> (plan_), time_.data(),
+                           static_cast<fftwf_complex*> (freq_));
+#else
+    juce::FloatVectorOperations::copy (scratch_.data(), time_.data(), size_);
+    juce::FloatVectorOperations::clear (scratch_.data() + size_, size_);
+    static_cast<juce::dsp::FFT*> (fft_)->performRealOnlyForwardTransform (scratch_.data(), true);
+#endif
+}
+
+int RealFFT::binStride() const noexcept
+{
+#if MCFX_REALFFT_VDSP
+    return 1;
+#else
+    return 2;
+#endif
+}
+
+const float* RealFFT::realData() const noexcept
+{
+#if MCFX_REALFFT_VDSP
+    return re_.data();
+#elif MCFX_REALFFT_FFTW
+    return reinterpret_cast<const float*> (freq_);
+#else
+    return scratch_.data();
+#endif
+}
+
+const float* RealFFT::imagData() const noexcept
+{
+#if MCFX_REALFFT_VDSP
+    return im_.data();
+#elif MCFX_REALFFT_FFTW
+    return reinterpret_cast<const float*> (freq_) + 1;
+#else
+    return scratch_.data() + 1;
+#endif
+}
+
+void RealFFT::forward() noexcept
+{
+    if (! isReady())
+        return;
+
+    transformRaw();
+
+    const int half = size_ / 2;
+
+#if MCFX_REALFFT_VDSP
+    // zrip returns twice the mathematical DFT; bring both parts back to it so
+    // callers see the same numbers on every backend.
+    const float halfScale = 0.5f;
+    vDSP_vsmul (re_.data(), 1, &halfScale, re_.data(), 1, (vDSP_Length) half);
+    vDSP_vsmul (im_.data(), 1, &halfScale, im_.data(), 1, (vDSP_Length) half);
+
+    // Bin 0 carries DC in the real part and Nyquist in the imaginary part.
+    // Lift Nyquist out and clear it, so bin 0 is the purely-real term it is.
+    nyquist_ = im_[0];
+    im_[0]   = 0.f;
+#elif MCFX_REALFFT_FFTW
+    const fftwf_complex* f = static_cast<const fftwf_complex*> (freq_);
+    nyquist_ = f[half][0];
+#else
+    nyquist_ = scratch_[(size_t) (2 * half)];
+#endif
+}
+
 void RealFFT::magnitudesSquared (float* magSqOut) noexcept
 {
     if (! isReady() || magSqOut == nullptr)
@@ -103,15 +183,10 @@ void RealFFT::magnitudesSquared (float* magSqOut) noexcept
 
     const int half = size_ / 2;
 
+    transformRaw();
+
 #if MCFX_REALFFT_VDSP
     DSPSplitComplex sc { re_.data(), im_.data() };
-
-    // Pack the real frame as N/2 interleaved complex values, which is the
-    // layout vDSP's real FFT consumes.
-    vDSP_ctoz (reinterpret_cast<const DSPComplex*> (time_.data()), 2, &sc, 1,
-               (vDSP_Length) half);
-    vDSP_fft_zrip (static_cast<FFTSetup> (setup_), &sc, 1, (vDSP_Length) order_,
-                   FFT_FORWARD);
 
     // One vector call for every bin's power.
     vDSP_zvmags (&sc, 1, magSqOut, 1, (vDSP_Length) half);
@@ -129,19 +204,12 @@ void RealFFT::magnitudesSquared (float* magSqOut) noexcept
     magSqOut[half] = nyq * nyq;
 
 #elif MCFX_REALFFT_FFTW
-    fftwf_execute_dft_r2c (static_cast<fftwf_plan> (plan_), time_.data(),
-                           static_cast<fftwf_complex*> (freq_));
-
     // Already the mathematical DFT, and already only the non-negative half.
     const fftwf_complex* f = static_cast<const fftwf_complex*> (freq_);
     for (int k = 0; k <= half; ++k)
         magSqOut[k] = f[k][0] * f[k][0] + f[k][1] * f[k][1];
 
 #else
-    juce::FloatVectorOperations::copy (scratch_.data(), time_.data(), size_);
-    juce::FloatVectorOperations::clear (scratch_.data() + size_, size_);
-    static_cast<juce::dsp::FFT*> (fft_)->performRealOnlyForwardTransform (scratch_.data(), true);
-
     for (int k = 0; k <= half; ++k)
     {
         const float re = scratch_[(size_t) (2 * k)];

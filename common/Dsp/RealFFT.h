@@ -84,8 +84,32 @@ public:
         values. The time buffer's contents are not preserved. */
     void magnitudesSquared (float* magSqOut) noexcept;
 
+    /** Transform the time buffer and leave the complex spectrum accessible
+        through the accessors below, for callers that need phase — a sparse
+        constant-Q kernel dot, say — rather than power.
+
+        The layout differs per backend and is described by binStride() rather
+        than converted, because converting is exactly the cost this class exists
+        to avoid: vDSP keeps real and imaginary in separate arrays (stride 1),
+        FFTW and JUCE interleave them (stride 2). Read bin k as
+        realData()[k * binStride()] and imagData()[k * binStride()]. */
+    void forward() noexcept;
+
+    int getNumComplexBins() const noexcept { return size_ / 2; }   // 0 .. N/2-1
+    int binStride() const noexcept;
+    const float* realData() const noexcept;
+    const float* imagData() const noexcept;
+
+    /** Nyquist is real-valued and has no slot in the complex layout — vDSP in
+        particular hides it in bin 0's imaginary part, which forward() clears so
+        bin 0 reads as the purely-real DC term it is. */
+    float getNyquist() const noexcept { return nyquist_; }
+
 private:
+    void transformRaw() noexcept;
     void release();
+
+    float nyquist_ = 0.f;
 
     int size_  = 0;
     int order_ = 0;

@@ -51,11 +51,7 @@ void CQTAnalyzer::prepare (double sampleRate)
     sampleRate_ = sampleRate;
     fftOrder_   = chooseFFTOrder (sampleRate);
     fftSize_    = 1 << fftOrder_;
-    // FFTW's planner is process-global and not thread-safe; juce::dsp::FFT
-    // plans here when built against it.
-    mcfx::ensureFftwPlannerThreadSafe();
-    fft_        = std::make_unique<juce::dsp::FFT> (fftOrder_);
-    frame_.assign ((size_t) (2 * fftSize_), 0.f);
+    fft_.prepare (fftOrder_);
 
     buildKernels();                    // the expensive part, no lock held
     magnitude_.assign ((size_t) jmax (1, numBins_), 0.f);
@@ -195,7 +191,7 @@ void CQTAnalyzer::push (const AudioSampleBuffer& buffer, int numSamples, int cha
 
 void CQTAnalyzer::compute()
 {
-    if (! ready_ || fft_ == nullptr)
+    if (! ready_ || ! fft_.isReady())
         return;
 
     // Copy the ring oldest-to-newest so the frame ends at the write head. The
@@ -205,16 +201,17 @@ void CQTAnalyzer::compute()
     // part, and costs nothing here: every kernel is concentrated around its own
     // centre frequency, so no kernel index reaches past the Nyquist bin that the
     // real transform stops at.
-    std::fill (frame_.begin(), frame_.end(), 0.f);
+    float* frame = fft_.getTimeBuffer();
+    std::fill (frame, frame + fftSize_, 0.f);
     {
         const juce::SpinLock::ScopedLockType sl (ringLock_);
-        const int size = (int) ring_.size();
+        const int size = jmin ((int) ring_.size(), fftSize_);
         const int wp = writePos_.load (std::memory_order_acquire);
         for (int i = 0; i < size; ++i)
-            frame_[(size_t) i] = ring_[(size_t) ((wp + i) % size)];
+            frame[i] = ring_[(size_t) ((wp + i) % ring_.size())];
     }
 
-    fft_->performRealOnlyForwardTransform (frame_.data(), true);
+    fft_.forward();
 
     // Kernels carry a unit-sum window, so the dot product comes out scaled by
     // the frame length and by the half-amplitude of a real sine's analytic part.
@@ -223,13 +220,20 @@ void CQTAnalyzer::compute()
     // constant-Q windows exist to provide.
     const float cal = 2.f / (float) fftSize_;
 
+    // Backend-agnostic bin access: stride 1 into two arrays on vDSP, stride 2
+    // into one interleaved array otherwise. Reading it in place is the whole
+    // point — repacking to a common layout is what made juce::dsp::FFT slow.
+    const float* rp = fft_.realData();
+    const float* ip = fft_.imagData();
+    const int    st = fft_.binStride();
+
     for (int k = 0; k < numBins_; ++k)
     {
         std::complex<float> acc (0.f, 0.f);
         for (int j = kernelOffset_[(size_t) k]; j < kernelOffset_[(size_t) k + 1]; ++j)
         {
             const int b = kernelIndex_[(size_t) j];
-            acc += std::complex<float> (frame_[(size_t) (2 * b)], frame_[(size_t) (2 * b + 1)])
+            acc += std::complex<float> (rp[(size_t) (b * st)], ip[(size_t) (b * st)])
                        * kernelValue_[(size_t) j];
         }
         magnitude_[(size_t) k] = std::abs (acc) * cal;
