@@ -95,7 +95,7 @@ public:
         parameter: it is a view setting, so it has no business being automatable,
         and adding a fifth parameter would change getNumParameters() — which is
         the bound of the state loop below and of the host's parameter list. */
-    enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2 };
+    enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2, Dots = 3 };
     ViewMode _view_mode = ViewMode::Bars;
 
     // Editor size remembered per view, so switching back and forth does not
@@ -103,6 +103,7 @@ public:
     // channel count and ignores these.
     int _size_circle_w = 640, _size_circle_h = 700;
     int _size_wf_w     = 900, _size_wf_h     = 560;
+    int _size_dots_w   = 420, _size_dots_h   = 260;
 
     /** Channel highlighted in the waterfall, -1 for none. A view setting like
         _view_mode, so it is a named XML attribute rather than a parameter. */

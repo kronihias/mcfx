@@ -27,6 +27,7 @@
 #include "MeterScale.h"
 #include "CircularMeter.h"
 #include "WaterfallComponent.h"
+#include "DotMatrixComponent.h"
 
 
 #define METER_WIDTH 16
@@ -92,6 +93,9 @@ private:
 
     // Alternate view: per-channel spectra receding into depth.
     WaterfallComponent _waterfall;
+
+    // Alternate view: one colour-mapped dot per channel — the compact one.
+    DotMatrixComponent _dots;
 
     // Refill the waterfall's channel selector for the current channel count and
     // show the processor's remembered choice.

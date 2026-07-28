@@ -122,6 +122,7 @@ AudioProcessorEditor (ownerFilter)
     cb_view.addItem ("bars",   1);
     cb_view.addItem ("circle", 2);
     cb_view.addItem ("waterfall", 3);
+    cb_view.addItem ("dots", 4);
     cb_view.addListener (this);
     cb_view.setTooltip ("How the channels are laid out. The ring keeps a square "
                         "footprint whatever the channel count, and an odd channel "
@@ -140,6 +141,14 @@ AudioProcessorEditor (ownerFilter)
 
     addChildComponent (_circular);
     addChildComponent (_waterfall);
+    addChildComponent (_dots);
+    _dots.onResetAll = [this] { resetAllMeters(); };
+    _dots.onChannelReset = [this] (int ch)
+    {
+        Ambix_meterAudioProcessor* p = getProcessor();
+        if (isPositiveAndBelow (ch, p->_my_meter_dsp.size()))
+            p->_my_meter_dsp.getUnchecked (ch)->reset();
+    };
     _waterfall.setAnalyser (&getProcessor()->_band_analyser);
     _waterfall.onChannelSelected = [this] (int ch)
     {
@@ -229,12 +238,21 @@ void Ambix_meterAudioProcessorEditor::resized()
     const bool compact       = getWidth() < kMinEditorWidth;
     const bool showLevelCtls = ! wf && ! compact;
 
+    // The view selector sits next to the title, since which view you are in is
+    // the first thing you choose and the first thing you read. The level
+    // controls follow it, shifted right of their original positions by exactly
+    // the width it takes.
+    const int kViewComboX = 108;
+    const int kCtlShift   = 96;
+
     label.setBounds (0, 0, 104, 16);
-    sld_hold.setBounds (166, 0, 70, 24);
-    sld_fall.setBounds (307, 0, 70, 24);
-    label2.setBounds (111, 3, 64, 16);
-    label3.setBounds (239, 3, 77, 16);
-    tgl_pkhold.setBounds (382, 0, 91, 24);
+    cb_view.setBounds (kViewComboX, 1, 92, 22);
+
+    label2.setBounds (111 + kCtlShift, 3, 64, 16);
+    sld_hold.setBounds (166 + kCtlShift, 0, 70, 24);
+    label3.setBounds (239 + kCtlShift, 3, 77, 16);
+    sld_fall.setBounds (307 + kCtlShift, 0, 70, 24);
+    tgl_pkhold.setBounds (382 + kCtlShift, 0, 91, 24);
 
     label2.setVisible (showLevelCtls);
     label3.setVisible (showLevelCtls);
@@ -242,10 +260,10 @@ void Ambix_meterAudioProcessorEditor::resized()
     sld_fall.setVisible (showLevelCtls);
     tgl_pkhold.setVisible (showLevelCtls);
 
-    // Slides left to sit beside the title once the controls between them are
-    // gone, so the selector never falls off a narrow window.
-    cb_view.setBounds (compact ? 108 : 481, 1, 92, 22);
-    cb_wf_channel.setBounds (compact ? 204 : 577, 1, 88, 22);
+    // Directly after the view selector: this one only ever shows in the
+    // waterfall, where the level controls are hidden, so placing it past where
+    // they would have been just leaves a gap in the middle of the strip.
+    cb_wf_channel.setBounds (kViewComboX + 96, 1, 88, 22);
 
     // Bars keep the original fixed slider; the resizable views stretch it.
     sld_offset.setBounds (4, 23, 18, bars ? 167 : jmax (60, getHeight() - 31));
@@ -256,6 +274,7 @@ void Ambix_meterAudioProcessorEditor::resized()
     const int viewX = 26;
     _circular.setBounds  (viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28));
     _waterfall.setBounds (viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28));
+    _dots.setBounds      (viewX, 30, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 34));
 
     const int row_y_offset = 215;
 
@@ -294,6 +313,10 @@ void Ambix_meterAudioProcessorEditor::resized()
         case Ambix_meterAudioProcessor::ViewMode::Waterfall:
             ourProcessor->_size_wf_w = getWidth();
             ourProcessor->_size_wf_h = getHeight();
+            break;
+        case Ambix_meterAudioProcessor::ViewMode::Dots:
+            ourProcessor->_size_dots_w = getWidth();
+            ourProcessor->_size_dots_h = getHeight();
             break;
         default: break;
     }
@@ -357,16 +380,19 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
             _meters.getUnchecked(i)->setValue(ourProcessor->_my_meter_dsp.getUnchecked(i)->getRMS(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeak(), ourProcessor->_my_meter_dsp.getUnchecked(i)->getPeakHold());
         }
     }
-    else if (ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Circle)
+    else if (ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Circle
+             || ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Dots)
     {
+        const bool ring = ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Circle;
         const int n = jmin (_cachedNumCh, ourProcessor->_my_meter_dsp.size());
         for (int i = 0; i < n; ++i)
         {
             MyMeterDsp* d = ourProcessor->_my_meter_dsp.getUnchecked (i);
-            _circular.setValue (i, d->getRMS(), d->getPeak(), d->getPeakHold());
+            if (ring) _circular.setValue (i, d->getRMS(), d->getPeak(), d->getPeakHold());
+            else      _dots.setValue     (i, d->getRMS(), d->getPeak(), d->getPeakHold());
         }
-        _circular.setOffset ((int) ourProcessor->_offset);
-        _circular.repaint();
+        if (ring) { _circular.setOffset ((int) ourProcessor->_offset); _circular.repaint(); }
+        else      { _dots.setOffset     ((int) ourProcessor->_offset); _dots.repaint(); }
     }
     else
     {
@@ -471,6 +497,9 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
 
     _waterfall.setNumChannels (_cachedNumCh);
     _waterfall.setVisible (wf);
+
+    _dots.setNumChannels (_cachedNumCh);
+    _dots.setVisible (mode == Ambix_meterAudioProcessor::ViewMode::Dots);
     cb_wf_channel.setVisible (wf);
 
     // Hold time, fall rate and the peak-hold toggle are laid out and shown or
@@ -557,6 +586,19 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
             break;
         }
 
+        case Ambix_meterAudioProcessor::ViewMode::Dots:
+        {
+            const int w = ourProcessor->_size_dots_w;
+            const int h = ourProcessor->_size_dots_h;
+            // The compact one: it only needs the strip's compacted width and
+            // enough height for a row of dots.
+            setResizeLimits (210, 90, 2000, 2000);
+            _width  = w;
+            _height = h;
+            setSize (w, h);
+            break;
+        }
+
         case Ambix_meterAudioProcessor::ViewMode::Waterfall:
         {
             const int w = ourProcessor->_size_wf_w;
@@ -586,6 +628,8 @@ void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster 
 
     _circular.setOffset ((int) ourProcessor->_offset);
     _circular.setPeakHoldVisible (ourProcessor->_pk_hold);
+    _dots.setOffset ((int) ourProcessor->_offset);
+    _dots.setPeakHoldVisible (ourProcessor->_pk_hold);
 
     sld_hold.setValue(ourProcessor->_hold,dontSendNotification);
     sld_fall.setValue(ourProcessor->_fall,dontSendNotification);
@@ -620,7 +664,7 @@ void Ambix_meterAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHas
         return;
 
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    const auto mode = (Ambix_meterAudioProcessor::ViewMode) jlimit (0, 2, cb_view.getSelectedId() - 1);
+    const auto mode = (Ambix_meterAudioProcessor::ViewMode) jlimit (0, 3, cb_view.getSelectedId() - 1);
     if (mode == ourProcessor->_view_mode)
         return;
 
