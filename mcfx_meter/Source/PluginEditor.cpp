@@ -218,6 +218,17 @@ void Ambix_meterAudioProcessorEditor::resized()
     _width  = getWidth();
     _height = getHeight();
 
+    const auto mode = getProcessor()->_view_mode;
+    const bool bars = mode == Ambix_meterAudioProcessor::ViewMode::Bars;
+    const bool wf   = mode == Ambix_meterAudioProcessor::ViewMode::Waterfall;
+
+    // Below the strip's natural width there is only room for the title and the
+    // view selector, which is what lets the ring shrink to a corner-of-the-
+    // screen glance. The level controls are the ones to drop: the ring still
+    // reads without them, and they mean nothing to the waterfall at all.
+    const bool compact       = getWidth() < kMinEditorWidth;
+    const bool showLevelCtls = ! wf && ! compact;
+
     label.setBounds (0, 0, 104, 16);
     sld_hold.setBounds (166, 0, 70, 24);
     sld_fall.setBounds (307, 0, 70, 24);
@@ -225,15 +236,26 @@ void Ambix_meterAudioProcessorEditor::resized()
     label3.setBounds (239, 3, 77, 16);
     tgl_pkhold.setBounds (382, 0, 91, 24);
 
-    sld_offset.setBounds (4, 23, 18, 167);
-    cb_view.setBounds (481, 1, 92, 22);
-    // Only ever shown in the waterfall view, whose minimum width is 700 —
-    // wide enough for this, unlike the 581 the other views allow.
-    cb_wf_channel.setBounds (577, 1, 88, 22);
+    label2.setVisible (showLevelCtls);
+    label3.setVisible (showLevelCtls);
+    sld_hold.setVisible (showLevelCtls);
+    sld_fall.setVisible (showLevelCtls);
+    tgl_pkhold.setVisible (showLevelCtls);
 
-    // The ring and the waterfall each own everything below the control strip.
-    _circular.setBounds  (0, 28, getWidth(), jmax (0, getHeight() - 28));
-    _waterfall.setBounds (0, 28, getWidth(), jmax (0, getHeight() - 28));
+    // Slides left to sit beside the title once the controls between them are
+    // gone, so the selector never falls off a narrow window.
+    cb_view.setBounds (compact ? 108 : 481, 1, 92, 22);
+    cb_wf_channel.setBounds (compact ? 204 : 577, 1, 88, 22);
+
+    // Bars keep the original fixed slider; the resizable views stretch it.
+    sld_offset.setBounds (4, 23, 18, bars ? 167 : jmax (60, getHeight() - 31));
+
+    // Inset past the offset slider. These used to start at x=0 and, being added
+    // after it, sat on top of it and swallowed every click — the slider was
+    // unreachable in both of these views even though its value worked.
+    const int viewX = 26;
+    _circular.setBounds  (viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28));
+    _waterfall.setBounds (viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28));
 
     const int row_y_offset = 215;
 
@@ -451,16 +473,9 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
     _waterfall.setVisible (wf);
     cb_wf_channel.setVisible (wf);
 
-    // Peak hold time, fall rate and the peak-hold toggle drive MyMeterDsp, which
-    // only the bar and ring meters read — the waterfall shows band levels and
-    // has no peak to hold, it smooths in the analyser instead. Hidden rather
-    // than left sitting there doing nothing. The offset slider stays: it shifts
-    // the level scale in all three views.
-    sld_hold.setVisible (! wf);
-    sld_fall.setVisible (! wf);
-    label2.setVisible (! wf);
-    label3.setVisible (! wf);
-    tgl_pkhold.setVisible (! wf);
+    // Hold time, fall rate and the peak-hold toggle are laid out and shown or
+    // hidden by resized(), which is the one place that knows the width as well
+    // as the mode.
     if (wf)
         rebuildChannelSelector();
 
@@ -532,7 +547,10 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
         {
             const int w = ourProcessor->_size_circle_w;
             const int h = ourProcessor->_size_circle_h;
-            setResizeLimits (kMinEditorWidth, 560, 2000, 2000);
+            // Far below the strip's natural width: resized() compacts the
+            // strip to title + view selector, so the ring stays usable as a
+            // small always-there window rather than a full-size panel.
+            setResizeLimits (230, 220, 2000, 2000);
             _width  = w;
             _height = h;
             setSize (w, h);

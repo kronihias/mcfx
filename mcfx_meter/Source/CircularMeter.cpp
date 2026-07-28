@@ -317,11 +317,21 @@ void CircularMeter::paint (Graphics& g)
     //     levels are doing. Each label sits just inside its own ring, on the
     //     vertical, over a dark plate. ---
     g.setFont (Font (FontOptions (10.f, Font::plain)));
+
+    // Thinned by the space actually between the rings, not by a fixed list:
+    // iec_scale bunches the quiet end up, and in a small window the whole scale
+    // is only a few tens of pixels wide, so labelling all of them would stack
+    // them on top of each other.
+    float lastLabelR = 1.0e9f;
+
     for (float db : kRingDb)
     {
         const float r = radiusForDb (db);
         if (r < innerR_ + 7.f)              // too close to the hub to place
             continue;
+        if (std::abs (db) > 0.01f && lastLabelR - r < 13.f)
+            continue;                       // 0 dB is always labelled
+        lastLabelR = r;
 
         const auto plate = Rectangle<float> (centre_.x - 13.f, centre_.y - r + 1.f, 26.f, 12.f);
         g.setColour (Colours::black.withAlpha (0.62f));
