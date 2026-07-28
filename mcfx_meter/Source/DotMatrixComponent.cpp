@@ -276,10 +276,13 @@ void DotMatrixComponent::paint (Graphics& g)
     if (isPositiveAndBelow (readout, numCh_))
     {
         const auto& L = levels_[(size_t) readout];
-        auto dbText = [this] (float db)
+        // The real level, with no offset in it. The offset is a scale shift: it
+        // moves what the gradations are *called*, so reading a meter against
+        // them already gives true dBFS. Subtracting it here as well would
+        // count it twice and print a number that is not the signal's level.
+        auto dbText = [] (float db)
         {
-            return db <= -199.f ? String ("-inf")
-                                : String (db - (float) offset_, 1) + " dB";
+            return db <= -199.f ? String ("-inf") : String (db, 1) + " dB";
         };
 
         String s;

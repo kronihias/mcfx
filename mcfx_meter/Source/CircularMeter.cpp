@@ -380,9 +380,11 @@ void CircularMeter::paint (Graphics& g)
     if (isPositiveAndBelow (readout, numCh_))
     {
         const auto& L = levels_[(size_t) readout];
-        auto dbText = [this] (float db)
+        // True dBFS, no offset: it shifts the scale's labels, not the signal,
+        // so applying it here too would count it twice. See radiusForScaleDb().
+        auto dbText = [] (float db)
         {
-            return db <= -199.f ? String ("-inf") : String (db - (float) offset_, 1) + " dB";
+            return db <= -199.f ? String ("-inf") : String (db, 1) + " dB";
         };
         const int x = (int) (centre_.x - innerR_), w = (int) (innerR_ * 2.f);
 
