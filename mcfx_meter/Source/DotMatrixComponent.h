@@ -47,6 +47,11 @@ public:
     /** Linear values, exactly as MeterComponent::setValue takes them. */
     void setValue (int channel, float rms, float peak, float peakHold);
 
+    /** True once any setValue() since the last call moved a level visibly.
+        Clears on read. Lets the editor's timer skip repainting an idle grid —
+        this view's stated use is sitting in a corner, mostly idle. */
+    bool takeDirty();
+
     void setOffset (int offsetDb);
     void setPeakHoldVisible (bool shouldBeVisible);
 
@@ -92,6 +97,7 @@ private:
     int   numCh_    = 0;
     int   offset_   = 0;
     bool  peakHold_ = false;
+    bool  dirty_    = true;
     int   hovered_  = -1;
     int   selected_ = -1;
 

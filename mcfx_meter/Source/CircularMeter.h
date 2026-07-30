@@ -52,6 +52,11 @@ public:
     /** Linear values, exactly as MeterComponent::setValue takes them. */
     void setValue (int channel, float rms, float peak, float peakHold);
 
+    /** True once any setValue() since the last call moved a level visibly.
+        Clears on read. Lets the editor's timer skip repainting an idle ring —
+        the same guard the bar view has always had. */
+    bool takeDirty();
+
     void setOffset (int offsetDb);
     void setPeakHoldVisible (bool shouldBeVisible);
 
@@ -119,8 +124,15 @@ private:
     int   numCh_   = 0;
     int   offset_  = 0;
     bool  peakHold_ = false;
+    bool  dirty_    = true;
     int   hovered_  = -1;
     int   selected_ = -1;
+
+    // Reused per frame, batched by fill: one gradient setup for every RMS
+    // wedge instead of one per channel, and one rasterization per colour for
+    // the tracks and ticks instead of one per path. Members so their storage
+    // survives between frames.
+    Path trackPath_, rmsPath_, tickPath_, tickHotPath_, holdPath_, holdHotPath_;
 
     // Geometry, recomputed on resize.
     Point<float> centre_;

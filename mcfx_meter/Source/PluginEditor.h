@@ -127,12 +127,14 @@ private:
     // existed.
     static constexpr int kMinEditorWidth = 581;
 
-    // How many channels the band analyser transforms per timer tick. Bounds the
-    // per-tick cost so it does not grow with the channel count.
-    static constexpr int kWaterfallChannelsPerTick = 32;
-
     // Counts ticks so the waterfall repaints once per analyser sweep.
     int _wf_tick = 0;
+
+    // The gradient background, rendered once per size. The animated views are
+    // non-opaque children covering most of the window, so every one of their
+    // repaints re-fills the editor behind them — as a blit, not a per-pixel
+    // radial-gradient rasterization.
+    Image _background;
 
     int _cachedNumCh = 0;
 

@@ -202,18 +202,29 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
     //[UserPrePaint] Add your own custom painting code here..
     //[/UserPrePaint]
 
-    g.fillAll (Colour (0xff1a1a1a));
-
-    g.setGradientFill (ColourGradient (Colour (0xff4e4e4e),
-                                       (float) (proportionOfWidth (0.6400f)), (float) (proportionOfHeight (0.6933f)),
-                                       Colours::black,
-                                       (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
-                                       true));
     // Fill what the editor actually is, not what it was last sized to. The
     // resizable views let the user change the window without going through
     // applyModeSizing(), and filling a stale _width/_height left the gradient
     // as a visible rectangle over part of the background.
-    g.fillRect (getLocalBounds());
+    //
+    // Rendered once per size and blitted: the animated views are non-opaque
+    // children covering most of the window, and every one of their 25 fps
+    // repaints re-fills the editor behind them. Rasterizing a radial gradient
+    // is per-pixel work — at waterfall window sizes it cost more than the view
+    // being painted over it.
+    if (_background.getWidth() != getWidth() || _background.getHeight() != getHeight())
+    {
+        _background = Image (Image::RGB, jmax (1, getWidth()), jmax (1, getHeight()), false);
+        Graphics bg (_background);
+        bg.fillAll (Colour (0xff1a1a1a));
+        bg.setGradientFill (ColourGradient (Colour (0xff4e4e4e),
+                                            (float) (proportionOfWidth (0.6400f)), (float) (proportionOfHeight (0.6933f)),
+                                            Colours::black,
+                                            (float) (proportionOfWidth (0.1143f)), (float) (proportionOfHeight (0.0800f)),
+                                            true));
+        bg.fillRect (getLocalBounds());
+    }
+    g.drawImageAt (_background, 0, 0);
 
     /* Version text */
     g.setColour (Colours::white);
@@ -406,8 +417,12 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
             if (ring) _circular.setValue (i, d->getRMS(), d->getPeak(), d->getPeakHold());
             else      _dots.setValue     (i, d->getRMS(), d->getPeak(), d->getPeakHold());
         }
-        if (ring) { _circular.setOffset ((int) ourProcessor->_offset); _circular.repaint(); }
-        else      { _dots.setOffset     ((int) ourProcessor->_offset); _dots.repaint(); }
+        // Repaint only when a level actually moved — the same guard the bar
+        // view has always had. An idle plugin left open (the dots view's
+        // stated use case) then paints nothing at all. setOffset() and the
+        // hover/selection handlers issue their own repaints.
+        if (ring) { _circular.setOffset ((int) ourProcessor->_offset); if (_circular.takeDirty()) _circular.repaint(); }
+        else      { _dots.setOffset     ((int) ourProcessor->_offset); if (_dots.takeDirty())     _dots.repaint(); }
     }
     else
     {

@@ -79,10 +79,27 @@ void CircularMeter::setValue (int channel, float rms, float peak, float peakHold
     if (! isPositiveAndBelow (channel, numCh_))
         return;
 
+    const float rmsDb  = Decibels::gainToDecibels (rms,      -200.f);
+    const float peakDb = Decibels::gainToDecibels (peak,     -200.f);
+    const float holdDb = Decibels::gainToDecibels (peakHold, -200.f);
+
     auto& L = levels_[(size_t) channel];
-    L.rmsDb  = Decibels::gainToDecibels (rms,      -200.f);
-    L.peakDb = Decibels::gainToDecibels (peak,     -200.f);
-    L.holdDb = Decibels::gainToDecibels (peakHold, -200.f);
+    // 0.05 dB is well under a pixel anywhere on the ring.
+    if (std::abs (rmsDb  - L.rmsDb)  > 0.05f
+     || std::abs (peakDb - L.peakDb) > 0.05f
+     || std::abs (holdDb - L.holdDb) > 0.05f)
+        dirty_ = true;
+
+    L.rmsDb  = rmsDb;
+    L.peakDb = peakDb;
+    L.holdDb = holdDb;
+}
+
+bool CircularMeter::takeDirty()
+{
+    const bool d = dirty_;
+    dirty_ = false;
+    return d;
 }
 
 void CircularMeter::setOffset (int offsetDb)
@@ -260,10 +277,23 @@ void CircularMeter::paint (Graphics& g)
         g.drawEllipse (centre_.x - r, centre_.y - r, r * 2.f, r * 2.f, zero ? 1.2f : 0.6f);
     }
 
-    // --- per-channel wedges ---
+    // --- per-channel wedges, accumulated into per-fill paths ---
+    //     The wedges of different channels never overlap, so batching by fill
+    //     draws the same picture while setting up each fill once per frame
+    //     instead of once per channel — the gradient in particular rebuilds its
+    //     lookup table on every setGradientFill.
     const float thick = tickThickness (outerR_ - innerR_);
     const bool  labelAll = numCh_ <= 24;
     const int   labelEvery = numCh_ <= 24 ? 1 : (numCh_ <= 64 ? 4 : 8);
+
+    trackPath_.clear();
+    rmsPath_.clear();
+    tickPath_.clear();
+    tickHotPath_.clear();
+    holdPath_.clear();
+    holdHotPath_.clear();
+    trackPath_.preallocateSpace (numCh_ * 48);
+    rmsPath_.preallocateSpace (numCh_ * 48);
 
     for (int ch = 0; ch < numCh_; ++ch)
     {
@@ -273,75 +303,102 @@ void CircularMeter::paint (Graphics& g)
         const auto& L  = levels_[(size_t) ch];
 
         // Track: the "off" part of the scale, so an idle channel still reads.
+        // The hovered and selected tracks are brighter, so they get their own
+        // fill — there are at most two of them.
+        if (ch == selected_ || ch == hovered_)
         {
             Path p;
             p.addPieSegment (box, a0, a1, innerR_ / outerR_);
-            g.setColour (Colours::white.withAlpha (ch == selected_ ? 0.22f
-                                                  : ch == hovered_ ? 0.14f : 0.07f));
+            g.setColour (Colours::white.withAlpha (ch == selected_ ? 0.22f : 0.14f));
             g.fillPath (p);
+        }
+        else
+        {
+            trackPath_.addPieSegment (box, a0, a1, innerR_ / outerR_);
         }
 
         // RMS wedge.
         const float rRms = radiusForDb (L.rmsDb);
         if (rRms > innerR_ + 0.5f)
-        {
-            Path p;
-            p.addPieSegment (Rectangle<float> (centre_.x - rRms, centre_.y - rRms,
-                                               rRms * 2.f, rRms * 2.f),
-                             a0, a1, innerR_ / rRms);
-            g.setGradientFill (fill_);
-            g.fillPath (p);
-        }
+            rmsPath_.addPieSegment (Rectangle<float> (centre_.x - rRms, centre_.y - rRms,
+                                                      rRms * 2.f, rRms * 2.f),
+                                    a0, a1, innerR_ / rRms);
 
         // Peak tick — the ring's answer to the bar's 2 px marker.
         {
             const float r = radiusForDb (L.peakDb);
             if (r > innerR_)
-            {
-                Path p;
-                p.addPieSegment (Rectangle<float> (centre_.x - r, centre_.y - r, r * 2.f, r * 2.f),
-                                 a0, a1, jmax (0.f, (r - thick) / r));
-                g.setColour (L.peakDb - (float) offset_ > 0.f ? Colours::red : Colours::white);
-                g.fillPath (p);
-            }
+                (L.peakDb - (float) offset_ > 0.f ? tickHotPath_ : tickPath_)
+                    .addPieSegment (Rectangle<float> (centre_.x - r, centre_.y - r, r * 2.f, r * 2.f),
+                                    a0, a1, jmax (0.f, (r - thick) / r));
         }
 
-        // Peak hold, drawn last so it stays visible in the busy outer rim.
+        // Peak hold, in its own pass below so it stays visible in the busy
+        // outer rim.
         if (peakHold_)
         {
             const float r = radiusForDb (L.holdDb);
             if (r > innerR_)
-            {
-                Path p;
-                p.addPieSegment (Rectangle<float> (centre_.x - r, centre_.y - r, r * 2.f, r * 2.f),
-                                 a0, a1, jmax (0.f, (r - thick) / r));
-                g.setColour (L.holdDb - (float) offset_ > 0.f ? Colours::red : Colours::yellow);
-                g.fillPath (p);
-            }
+                (L.holdDb - (float) offset_ > 0.f ? holdHotPath_ : holdPath_)
+                    .addPieSegment (Rectangle<float> (centre_.x - r, centre_.y - r, r * 2.f, r * 2.f),
+                                    a0, a1, jmax (0.f, (r - thick) / r));
         }
+    }
 
-        // Group separators every GROUP_CHANNELS, keeping the bar view's
-        // count-in-fours affordance.
-        if (numCh_ > 8 && ch % 4 == 0)
+    g.setColour (Colours::white.withAlpha (0.07f));
+    g.fillPath (trackPath_);
+    g.setGradientFill (fill_);
+    g.fillPath (rmsPath_);
+    g.setColour (Colours::white);
+    g.fillPath (tickPath_);
+    g.setColour (Colours::red);
+    g.fillPath (tickHotPath_);
+    if (peakHold_)
+    {
+        g.setColour (Colours::yellow);
+        g.fillPath (holdPath_);
+        g.setColour (Colours::red);
+        g.fillPath (holdHotPath_);
+    }
+
+    // Group separators every GROUP_CHANNELS, keeping the bar view's
+    // count-in-fours affordance. They live in the gaps between wedges, so
+    // drawing them after the fills changes nothing visually.
+    if (numCh_ > 8)
+    {
+        g.setColour (Colours::white.withAlpha (0.16f));
+        for (int ch = 0; ch < numCh_; ch += 4)
         {
-            const float sa = a - per * 0.5f;
+            const float sa = angles_[(size_t) ch] - per * 0.5f;
             const auto  p0 = centre_ + Point<float> (std::sin (sa), -std::cos (sa)) * innerR_;
             const auto  p1 = centre_ + Point<float> (std::sin (sa), -std::cos (sa)) * (outerR_ + 3.f);
-            g.setColour (Colours::white.withAlpha (0.16f));
             g.drawLine ({ p0, p1 }, 0.6f);
         }
+    }
 
-        // Channel numbers outside the rim, thinned as the ring fills. The
-        // selected one is always numbered, or the selection has no anchor.
-        if (labelAll || ch % labelEvery == 0 || ch == selected_)
+    // Channel numbers outside the rim, thinned as the ring fills. The
+    // selected one is always numbered, or the selection has no anchor.
+    {
+        const float pt = numCh_ > 64 ? 9.f : 11.f;
+        const Font plainFont (FontOptions (pt, Font::plain));
+        const Font boldFont  (FontOptions (pt, Font::bold));
+        g.setFont (plainFont);
+
+        for (int ch = 0; ch < numCh_; ++ch)
         {
-            const auto lp = centre_ + Point<float> (std::sin (a), -std::cos (a)) * (outerR_ + 13.f);
+            if (! (labelAll || ch % labelEvery == 0 || ch == selected_))
+                continue;
+
+            const float a  = angles_[(size_t) ch];
+            const auto  lp = centre_ + Point<float> (std::sin (a), -std::cos (a)) * (outerR_ + 13.f);
             g.setColour (ch == selected_ ? Colours::aquamarine
                                          : Colours::white.withAlpha (ch == hovered_ ? 1.f : 0.55f));
-            g.setFont (Font (FontOptions (numCh_ > 64 ? 9.f : 11.f,
-                                          ch == selected_ ? Font::bold : Font::plain)));
+            if (ch == selected_)
+                g.setFont (boldFont);
             g.drawText (String (ch + 1), (int) lp.x - 14, (int) lp.y - 7, 28, 14,
                         Justification::centred, false);
+            if (ch == selected_)
+                g.setFont (plainFont);
         }
     }
 

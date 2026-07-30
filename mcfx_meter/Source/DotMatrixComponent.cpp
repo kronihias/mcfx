@@ -82,10 +82,27 @@ void DotMatrixComponent::setValue (int channel, float rms, float peak, float pea
     if (! isPositiveAndBelow (channel, numCh_))
         return;
 
+    const float rmsDb  = Decibels::gainToDecibels (rms,      -200.f);
+    const float peakDb = Decibels::gainToDecibels (peak,     -200.f);
+    const float holdDb = Decibels::gainToDecibels (peakHold, -200.f);
+
     auto& L = levels_[(size_t) channel];
-    L.rmsDb  = Decibels::gainToDecibels (rms,      -200.f);
-    L.peakDb = Decibels::gainToDecibels (peak,     -200.f);
-    L.holdDb = Decibels::gainToDecibels (peakHold, -200.f);
+    // 0.05 dB is below what a dot's colour or size can show.
+    if (std::abs (rmsDb  - L.rmsDb)  > 0.05f
+     || std::abs (peakDb - L.peakDb) > 0.05f
+     || std::abs (holdDb - L.holdDb) > 0.05f)
+        dirty_ = true;
+
+    L.rmsDb  = rmsDb;
+    L.peakDb = peakDb;
+    L.holdDb = holdDb;
+}
+
+bool DotMatrixComponent::takeDirty()
+{
+    const bool d = dirty_;
+    dirty_ = false;
+    return d;
 }
 
 void DotMatrixComponent::setOffset (int offsetDb)
@@ -214,6 +231,11 @@ void DotMatrixComponent::paint (Graphics& g)
     const bool  labels   = grid_.cell >= 26.f;
     const float labelPt  = jlimit (8.f, 13.f, grid_.cell * 0.30f);
 
+    // One font for every label — constructing it per dot went through the
+    // typeface cache once per channel per frame.
+    if (labels)
+        g.setFont (Font (FontOptions (labelPt, Font::plain)));
+
     for (int ch = 0; ch < numCh_; ++ch)
     {
         const auto  c  = dotCentre (ch);
@@ -261,7 +283,6 @@ void DotMatrixComponent::paint (Graphics& g)
 
         if (labels)
         {
-            g.setFont (Font (FontOptions (labelPt, Font::plain)));
             // Dark text on a lit dot, light on an unlit one.
             g.setColour (on ? Colours::black.withAlpha (0.65f)
                             : Colours::white.withAlpha (0.45f));
