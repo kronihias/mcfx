@@ -11,6 +11,13 @@ endif()
 
 SET(MC_PLUGIN_CODE "Mmc0")
 
+# The band analyser's transform goes through common/Dsp/RealFFT, which is only
+# fast off Apple when FFTW is linked — without this it silently compiles the
+# juce::dsp::FFT fallback it was written to avoid.
+IF(NOT APPLE)
+    SET(WITH_FFTW3 TRUE)
+ENDIF()
+
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 
 # The band analyser's transform goes straight to Accelerate (common/Dsp/RealFFT).
