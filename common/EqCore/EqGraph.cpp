@@ -90,6 +90,13 @@ void EqGraph::paint(Graphics& g)
     // Draw spectrum analyzer (or rolling spectrogram) behind the EQ curves
     if (analyzerOn_ && (inputAnalyzer_ != nullptr || outputAnalyzer_ != nullptr))
     {
+        // The transform runs here, on the GUI thread — pushBuffer() only
+        // copies. A cheap no-op until half a window of new audio has arrived.
+        if (inputAnalyzer_ != nullptr)
+            inputAnalyzer_->update();
+        if (outputAnalyzer_ != nullptr)
+            outputAnalyzer_->update();
+
         if (spectrogramMode_)
         {
             Rectangle<int> plot((int)xmargin_, (int)(ymargin_ / 2.f),

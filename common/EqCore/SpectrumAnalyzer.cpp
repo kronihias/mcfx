@@ -17,6 +17,12 @@
  ==============================================================================
  */
 
+// Before SpectrumAnalyzer.h: JuceHeader's `using namespace juce` makes
+// Carbon's Point ambiguous if Accelerate is parsed after it.
+#if defined(__APPLE__)
+ #include <Accelerate/Accelerate.h>
+#endif
+
 #include "SpectrumAnalyzer.h"
 
 SpectrumAnalyzer::SpectrumAnalyzer()
@@ -38,6 +44,7 @@ SpectrumAnalyzer::SpectrumAnalyzer()
     fft_.prepare(kFFTOrder);
     magSq_.resize(kSpecLen, 0.f);
     tmpMag_.resize(kSpecLen, 0.f);
+    accum_.resize(kSpecLen, 0.f);
     magnitude_.resize(kSpecLen, 0.f);
 }
 
@@ -45,9 +52,13 @@ void SpectrumAnalyzer::prepare(double sampleRate, int numChannels)
 {
     sampleRate_ = sampleRate;
     numChannels_ = numChannels;
-    ringBuffer_.setSize(numChannels, kFFTSize);
-    ringBuffer_.clear();
-    writePos_ = 0;
+    {
+        const juce::SpinLock::ScopedLockType sl(ringLock_);
+        ringBuffer_.setSize(numChannels, kFFTSize);
+        ringBuffer_.clear();
+        writePos_.store(0, std::memory_order_relaxed);
+    }
+    samplesSinceFFT_.store(0, std::memory_order_relaxed);
     std::fill(magnitude_.begin(), magnitude_.end(), 0.f);
 
     // Adjust smoothing based on sample rate (similar to mcfx_filter)
@@ -61,45 +72,55 @@ void SpectrumAnalyzer::prepare(double sampleRate, int numChannels)
 
 void SpectrumAnalyzer::reset()
 {
+    {
+        const juce::SpinLock::ScopedLockType sl(ringLock_);
+        ringBuffer_.clear();
+        writePos_.store(0, std::memory_order_relaxed);
+    }
+    samplesSinceFFT_.store(0, std::memory_order_relaxed);
     std::fill(magnitude_.begin(), magnitude_.end(), 0.f);
-    writePos_ = 0;
-    ringBuffer_.clear();
 }
 
 void SpectrumAnalyzer::pushBuffer(const AudioSampleBuffer& buffer, int numSamples)
 {
-    int chans = jmin(buffer.getNumChannels(), numChannels_);
-    int srcPos = 0;
-    int remaining = numSamples;
+    // Skip the block rather than write into a ring prepare() may be replacing.
+    const juce::SpinLock::ScopedTryLockType sl(ringLock_);
+    if (!sl.isLocked() || ringBuffer_.getNumSamples() < kFFTSize)
+        return;
 
-    while (remaining > 0)
+    const int chans = jmin(buffer.getNumChannels(), numChannels_);
+    const int n     = jmin(numSamples, kFFTSize);
+    const int skip  = numSamples - n;         // oversized block: keep the newest
+    const int wp    = writePos_.load(std::memory_order_relaxed);
+
+    // Two contiguous segments per channel, never a per-sample wrap.
+    const int first = jmin(n, kFFTSize - wp);
+    const int rest  = n - first;
+
+    for (int ch = 0; ch < chans; ++ch)
     {
-        int space = kFFTSize - writePos_;
-        int toCopy = jmin(remaining, space);
-
-        for (int ch = 0; ch < chans; ++ch)
-            ringBuffer_.copyFrom(ch, writePos_, buffer.getReadPointer(ch) + srcPos, toCopy);
-
-        writePos_ += toCopy;
-        srcPos += toCopy;
-        remaining -= toCopy;
-
-        if (writePos_ >= kFFTSize)
-        {
-            computeFFT();
-
-            // 50% overlap: shift second half to first half
-            int half = kFFTSize / 2;
-            for (int ch = 0; ch < chans; ++ch)
-            {
-                FloatVectorOperations::copy(
-                    ringBuffer_.getWritePointer(ch),
-                    ringBuffer_.getReadPointer(ch, half),
-                    half);
-            }
-            writePos_ = half;
-        }
+        const float* src = buffer.getReadPointer(ch) + skip;
+        ringBuffer_.copyFrom(ch, wp, src, first);
+        if (rest > 0)
+            ringBuffer_.copyFrom(ch, 0, src + first, rest);
     }
+
+    writePos_.store((wp + n) % kFFTSize, std::memory_order_release);
+    samplesSinceFFT_.fetch_add(numSamples, std::memory_order_relaxed);
+}
+
+void SpectrumAnalyzer::update()
+{
+    if (numChannels_ <= 0 || !fft_.isReady())
+        return;
+
+    // Half a window is the hop the inline version had, so the effective FFT
+    // rate — and the smoothing calibrated to it in prepare() — is unchanged.
+    if (samplesSinceFFT_.load(std::memory_order_relaxed) < kFFTSize / 2)
+        return;
+    samplesSinceFFT_.store(0, std::memory_order_relaxed);
+
+    computeFFT();
 }
 
 void SpectrumAnalyzer::computeFFT()
@@ -109,18 +130,41 @@ void SpectrumAnalyzer::computeFFT()
     const float fftScale = 1.f / (windowCoherentGain_ * (float)kFFTSize);
     const int analyzerCh = analyzerChannel_.load(std::memory_order_relaxed);
 
+    // Latched once so the averaged mode reads every channel from the same
+    // instant. Audio pushed while the pass runs can overwrite at most a
+    // block's worth of the window's oldest samples — invisible under the
+    // window's own taper.
+    const int wp = writePos_.load(std::memory_order_acquire);
+
     // Lambda: compute FFT magnitude for one channel into tmpMag_
     auto computeChannelMag = [&](int ch)
     {
-        // Window straight into the transform's own buffer — no staging copy.
-        float* t = fft_.getTimeBuffer();
-        FloatVectorOperations::copy(t, ringBuffer_.getReadPointer(ch), kFFTSize);
-        FloatVectorOperations::multiply(t, window_.data(), kFFTSize);
+        // Ring to time buffer in two segments, oldest to newest, so the frame
+        // ends at the write head. Hold the lock only for the copy — holding it
+        // across the transform would make the audio thread drop blocks.
+        {
+            const juce::SpinLock::ScopedLockType sl(ringLock_);
+            if (ch >= ringBuffer_.getNumChannels())
+                return;
+            const float* src = ringBuffer_.getReadPointer(ch);
+            float* t = fft_.getTimeBuffer();
+            FloatVectorOperations::copy(t, src + wp, kFFTSize - wp);
+            if (wp > 0)
+                FloatVectorOperations::copy(t + (kFFTSize - wp), src, wp);
+        }
+
+        FloatVectorOperations::multiply(fft_.getTimeBuffer(), window_.data(), kFFTSize);
 
         fft_.magnitudesSquared(magSq_.data());
 
+#if defined(__APPLE__)
+        const int n = kSpecLen;
+        vvsqrtf(tmpMag_.data(), magSq_.data(), &n);
+        FloatVectorOperations::multiply(tmpMag_.data(), fftScale, kSpecLen);
+#else
         for (int i = 0; i < kSpecLen; ++i)
             tmpMag_[i] = std::sqrt(magSq_[i]) * fftScale;
+#endif
     };
 
     if (analyzerCh > 0 && analyzerCh <= numChannels_)
@@ -133,17 +177,17 @@ void SpectrumAnalyzer::computeFFT()
     else
     {
         // Average across all channels
-        std::vector<float> accum(kSpecLen, 0.f);
+        FloatVectorOperations::clear(accum_.data(), kSpecLen);
         for (int ch = 0; ch < numChannels_; ++ch)
         {
             computeChannelMag(ch);
-            FloatVectorOperations::add(accum.data(), tmpMag_.data(), kSpecLen);
+            FloatVectorOperations::add(accum_.data(), tmpMag_.data(), kSpecLen);
         }
         float scale = 1.f / (float)jmax(1, numChannels_);
-        FloatVectorOperations::multiply(accum.data(), scale, kSpecLen);
+        FloatVectorOperations::multiply(accum_.data(), scale, kSpecLen);
 
         for (int i = 0; i < kSpecLen; ++i)
-            magnitude_[i] = alpha * magnitude_[i] + oneMinusAlpha * accum[i];
+            magnitude_[i] = alpha * magnitude_[i] + oneMinusAlpha * accum_[i];
     }
 }
 

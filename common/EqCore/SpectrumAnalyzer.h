@@ -25,17 +25,25 @@
 #include <vector>
 #include <atomic>
 
-/** Lock-free spectrum analyzer that accumulates audio in a ring buffer,
-    computes FFT magnitude on the audio thread, and exposes smoothed
-    magnitude data for the GUI to read.
+/** Spectrum analyzer with the transform kept off the audio thread.
 
     Usage:
       1. Call prepare() with sample rate and max block size.
-      2. Call pushSamples() from processBlock() for input and/or output.
-      3. Call getMagnitude(freqHz) from the GUI to read smoothed spectrum.
+      2. Call pushBuffer() from processBlock() for input and/or output.
+      3. Call update() from the GUI timer, then getMagnitude(freqHz).
 
-    Thread safety: pushSamples() runs on the audio thread.
-    getMagnitude() can be called from any thread (reads smoothed data). */
+    Threading follows CQTAnalyzer and mcfx_meter's MultiBandAnalyser: the audio
+    thread only ever copies samples into a ring (a try-lock, so a resize in
+    prepare() costs a dropped block, never a stall), and the transform runs on
+    the GUI thread from update(). It used to run inline in pushBuffer(), which
+    concentrated numChannels FFTs of kFFTSize — for BOTH the input and output
+    analyzer, whose hops land on the same sample — into whichever block crossed
+    the hop boundary.
+
+    update() transforms only when at least half a window of new audio has
+    arrived, so the effective rate (and with it the smoothing calibration in
+    prepare()) stays what the inline version had, merely quantised to the GUI
+    timer. */
 class SpectrumAnalyzer
 {
 public:
@@ -55,9 +63,13 @@ public:
     /** Prepare for a given sample rate and max number of channels. */
     void prepare(double sampleRate, int numChannels);
 
-    /** Push a block of audio from an AudioSampleBuffer (all channels at once).
-        Internally accumulates and performs FFT + smoothing when buffer is full. */
+    /** Audio thread: append a block. Copy only — no transform here. */
     void pushBuffer(const AudioSampleBuffer& buffer, int numSamples);
+
+    /** GUI thread: transform the newest window, if at least half a window of
+        new audio has arrived since the last transform. Cheap no-op otherwise,
+        so calling it every paint is fine. */
+    void update();
 
     /** Get interpolated smoothed magnitude at a given frequency (Hz).
         Returns linear magnitude (not dB). Thread-safe for GUI reads. */
@@ -91,13 +103,19 @@ private:
     std::vector<float> window_;
     float windowCoherentGain_ = 1.f;
 
-    // Multi-channel ring buffer: [channel][sample]
+    // Multi-channel ring buffer: [channel][sample]. All channels share one
+    // write position so the averaged mode reads every channel from the same
+    // instant. The lock covers the buffer against prepare(); the audio thread
+    // only ever try-locks it.
     AudioSampleBuffer ringBuffer_;
-    int writePos_ = 0;
+    std::atomic<int>  writePos_ { 0 };
+    std::atomic<int>  samplesSinceFFT_ { 0 };
+    juce::SpinLock    ringLock_;
 
-    // FFT working buffers
+    // FFT working buffers (GUI thread)
     std::vector<float> magSq_;        // kSpecLen bin powers
     std::vector<float> tmpMag_;       // kSpecLen
+    std::vector<float> accum_;        // kSpecLen — all-channels average
     std::vector<float> magnitude_;    // kSpecLen — smoothed output
 
     float smoothAlpha_ = 0.85f;       // exponential smoothing factor
