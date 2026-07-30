@@ -111,7 +111,6 @@ private:
     void calcAnalyzerPaths();
     void writeSpectroRow();
     void drawSpectrogram(Graphics& g, Rectangle<int> plot);
-    Colour spectroColour(float v01) const;
     void rebuildGridPaths();
     void drawGrid(Graphics& g);
     void drawBandHandles(Graphics& g);
@@ -175,6 +174,7 @@ private:
     int   visibleRows_ = kSpecH;    // newest rows actually drawn (short spans)
     float rowsPerTick_ = 1.f;
     std::vector<float> specSmoothDb_;          // per-column temporal smoothing
+    std::vector<double> spectroHz_;            // column centre frequencies, built once
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqGraph)
 };

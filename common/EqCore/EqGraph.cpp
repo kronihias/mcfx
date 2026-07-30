@@ -19,6 +19,8 @@
 
 #include "EqGraph.h"
 
+#include <array>
+
 // Distinct band colours similar to IEM MultiEQ
 static const Colour bandColours[] = {
     Colour(0xff80c0a0),  // 1: muted green
@@ -486,14 +488,6 @@ void EqGraph::setSpectrogramMode(bool on)
     repaint();
 }
 
-Colour EqGraph::spectroColour(float v01) const
-{
-    const float v   = jlimit(0.f, 1.f, v01);
-    const float hue = 0.66f * (1.f - v);            // blue (low) -> red (high)
-    const float bri = std::pow(v, 0.55f);
-    return Colour::fromHSV(hue, 0.82f, bri, 1.f);
-}
-
 void EqGraph::writeSpectroRow()
 {
     SpectrumAnalyzer* an = spectroPost_ ? outputAnalyzer_ : inputAnalyzer_;
@@ -512,12 +506,21 @@ void EqGraph::writeSpectroRow()
         cqt_->compute();
     }
 
-    const double ratio = (double)maxf_ / (double)minf_;
+    // Column frequencies never change (minf_/maxf_ are fixed), so the pow per
+    // column per row is paid once.
+    if (spectroHz_.empty())
+    {
+        const double ratio = (double)maxf_ / (double)minf_;
+        spectroHz_.resize(kSpecW);
+        for (int i = 0; i < kSpecW; ++i)
+            spectroHz_[(size_t)i] = (double)minf_ * std::pow(ratio, (double)i / kSpecW);
+    }
+
     float col[kSpecW];
     float peak = -250.f;
     for (int i = 0; i < kSpecW; ++i)
     {
-        const double hz = (double)minf_ * std::pow(ratio, (double)i / kSpecW);
+        const double hz = spectroHz_[(size_t)i];
         const float  mag = useCQT && cqt_->isReady() ? cqt_->getMagnitude(hz)
                                                      : an->getMagnitude(hz);
         const float  db = 20.f * std::log10(mag + 1e-12f);
@@ -538,10 +541,39 @@ void EqGraph::writeSpectroRow()
     const float offset  = analyzerAutoNormalize_ ? -peak : analyzerOffset_;
     const float floorDb = -kSpectroRangeDb;         // top of the scale is 0 dB
 
+    // The colour ramp — blue (low) through to red (high), with a 0.55 gamma on
+    // brightness. One-dimensional, so 256 quantized entries replace a pow plus
+    // an HSV conversion per pixel; the raw line pointer replaces
+    // setPixelColour's per-pixel format dispatch (the image is created as
+    // Image::RGB above, so the rows are PixelRGB).
+    static const auto rampLUT = []
+    {
+        std::array<PixelARGB, 256> a;
+        for (size_t i = 0; i < a.size(); ++i)
+        {
+            const float v   = (float)i / (float)(a.size() - 1);
+            const float hue = 0.66f * (1.f - v);
+            const float bri = std::pow(v, 0.55f);
+            a[i] = Colour::fromHSV(hue, 0.82f, bri, 1.f).getPixelARGB();
+        }
+        return a;
+    }();
+
+    // The row is written through the real pixel stride, not an assumed one:
+    // an Image::RGB created with the default (native) image type is stored as
+    // 32-bit ARGB on macOS, where CoreGraphics has no 24-bit layout — only the
+    // software backend gives 3-byte rows.
     Image::BitmapData bd(spectro_, Image::BitmapData::writeOnly);
+    uint8* row = bd.getLinePointer(specWrite_);
     for (int i = 0; i < kSpecW; ++i)
-        bd.setPixelColour(i, specWrite_,
-                          spectroColour((col[i] + offset - floorDb) / kSpectroRangeDb));
+    {
+        const float v = (col[i] + offset - floorDb) / kSpectroRangeDb;
+        const PixelARGB& p = rampLUT[(size_t)jlimit(0, 255, (int)(v * 255.f + 0.5f))];
+        if (bd.pixelStride == 4)
+            reinterpret_cast<PixelARGB*>(row)[i].set(p);
+        else
+            reinterpret_cast<PixelRGB*>(row)[i].set(p);
+    }
 
     specWrite_ = (specWrite_ + 1) % kSpecH;         // newest scrolls in at the bottom
 }
