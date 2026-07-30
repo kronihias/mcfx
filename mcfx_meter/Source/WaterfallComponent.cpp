@@ -19,6 +19,8 @@
 
 #include "WaterfallComponent.h"
 
+#include <array>
+
 namespace
 {
     // Axis gutters. The left one holds the dB scale; the channel numbers sit in
@@ -60,11 +62,23 @@ namespace
         return String ((int) hz);
     }
 
-    /** Cool to hot, so a loud band glows along an otherwise quiet ridge. */
+    /** Cool to hot, so a loud band glows along an otherwise quiet ridge.
+        A 65-entry table rather than fromHSV per call: at 128 channels the
+        ridges ask for ~7,800 colours a paint, and a 1/64 level step is well
+        below what the ramp can show. */
     Colour levelColour (float t)
     {
-        t = jlimit (0.f, 1.f, t);
-        return Colour::fromHSV ((1.f - t) * 0.68f, 0.82f, 0.45f + 0.55f * t, 1.f);
+        static const auto lut = []
+        {
+            std::array<Colour, 65> a;
+            for (size_t i = 0; i < a.size(); ++i)
+            {
+                const float u = (float) i / (float) (a.size() - 1);
+                a[i] = Colour::fromHSV ((1.f - u) * 0.68f, 0.82f, 0.45f + 0.55f * u, 1.f);
+            }
+            return a;
+        }();
+        return lut[(size_t) jlimit (0, 64, (int) (t * 64.f + 0.5f))];
     }
 }
 
@@ -184,6 +198,7 @@ void WaterfallComponent::paintGrid (Graphics& g) const
     // --- floor lines, one per decade marker, receding into depth ---
     const bool sparseLabels = layout_.plotW < 300.f;
     int idx = 0;
+    g.setFont (Font (FontOptions (10.f, Font::plain)));
     for (float hz : kGridFreqs)
     {
         const float fn = freqToNorm (hz);
@@ -196,7 +211,6 @@ void WaterfallComponent::paintGrid (Graphics& g) const
         if (! sparseLabels || (idx % 2) == 0)
         {
             g.setColour (Colours::white.withAlpha (0.45f));
-            g.setFont (Font (FontOptions (10.f, Font::plain)));
             g.drawText (freqLabel (hz), (int) (a.x - 20.f), (int) (a.y + 4.f), 40, 14,
                         Justification::centred, false);
         }
@@ -255,22 +269,25 @@ void WaterfallComponent::paintRidges (Graphics& g)
     if (analyser_ == nullptr || ! analyser_->isReady() || numCh_ <= 0)
         return;
 
+    // Frame-constant, and a pow plus a log to derive — once per paint, not
+    // once per ridge.
+    const float resFloorNorm = freqToNorm (analyser_->getResolutionFloorHz());
+
     // Back to front: each fill occludes what is behind it, which is exact here
     // because the ridges are parallel planes that cannot intersect.
     for (int ch = numCh_ - 1; ch >= 0; --ch)
-        paintRidge (g, ch, false);
+        paintRidge (g, ch, false, resFloorNorm);
 
     // The selected ridge again, on top and unoccluded. Redrawing it rather than
     // reordering keeps the depth cue honest — it stays at its own depth, it is
     // just no longer buried by whatever happens to be in front of it.
     if (isPositiveAndBelow (selected_, numCh_))
-        paintRidge (g, selected_, true);
+        paintRidge (g, selected_, true, resFloorNorm);
 }
 
-void WaterfallComponent::paintRidge (Graphics& g, int ch, bool highlighted)
+void WaterfallComponent::paintRidge (Graphics& g, int ch, bool highlighted, float resFloorNorm)
 {
     const int nBands = MultiBandAnalyser::kNumBands;
-    const float resFloorNorm = freqToNorm (analyser_->getResolutionFloorHz());
     const float denom = jmax (1.f, (float) (numCh_ - 1));
 
     {
@@ -450,6 +467,9 @@ void WaterfallComponent::paint (Graphics& g)
     if (numCh_ > 0)
     {
         const int every = labelEvery();
+        const Font plainFont (FontOptions (9.f, Font::plain));
+        const Font boldFont  (FontOptions (9.f, Font::bold));
+        g.setFont (plainFont);
 
         for (int ch = 0; ch < numCh_; ++ch)
         {
@@ -466,12 +486,15 @@ void WaterfallComponent::paint (Graphics& g)
             {
                 g.setColour (Colours::white.withAlpha (0.22f));
                 g.fillRoundedRectangle (p.x - 26.f, p.y - 8.f, 24.f, 16.f, 3.f);
+                g.setFont (boldFont);
             }
 
-            g.setFont (Font (FontOptions (9.f, sel ? Font::bold : Font::plain)));
             g.setColour (Colours::white.withAlpha (sel ? 1.f : (ch == hovered_ ? 1.f : 0.4f)));
             g.drawText (String (ch + 1), (int) (p.x - 24.f), (int) (p.y - 7.f), 20, 14,
                         Justification::centredRight, false);
+
+            if (sel)
+                g.setFont (plainFont);
         }
     }
 

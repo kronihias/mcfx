@@ -142,6 +142,7 @@ void MultiBandAnalyser::push (const AudioSampleBuffer& buffer, int numSamples)
     const int size = ring_.getNumSamples();
     const int nCh  = jmin (buffer.getNumChannels(), ring_.getNumChannels());
     const int n    = jmin (numSamples, size);
+    const int skip = numSamples - n;          // oversized block: keep the newest
     const int wp   = writePos_.load (std::memory_order_relaxed);
 
     // Two segments per channel rather than a per-sample modulo: at 128 channels
@@ -151,7 +152,7 @@ void MultiBandAnalyser::push (const AudioSampleBuffer& buffer, int numSamples)
 
     for (int ch = 0; ch < nCh; ++ch)
     {
-        const float* src = buffer.getReadPointer (ch);
+        const float* src = buffer.getReadPointer (ch) + skip;
         ring_.copyFrom (ch, wp, src, first);
         if (rest > 0)
             ring_.copyFrom (ch, 0, src + first, rest);

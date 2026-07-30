@@ -120,7 +120,9 @@ private:
     int labelEvery() const;
 
     /** One ridge: filled skirt, then the level-coloured stroke. */
-    void paintRidge (Graphics&, int channel, bool highlighted);
+    /** resFloorNorm is passed in because it is frame-constant and costs a pow
+        and a log to derive — see paintRidges. */
+    void paintRidge (Graphics&, int channel, bool highlighted, float resFloorNorm);
 
     MultiBandAnalyser* analyser_ = nullptr;
 
