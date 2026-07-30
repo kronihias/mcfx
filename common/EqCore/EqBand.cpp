@@ -670,13 +670,7 @@ void EqBand::syncParametersFrom(const EqBand& source)
     // but preserve our filter state and SmoothedValue ramp state
     // so the transition is smooth (no click)
 
-    bool needsCoeffUpdate = false;
-
-    if (type_ != source.type_)
-    {
-        type_ = source.type_;
-        needsCoeffUpdate = true;
-    }
+    type_ = source.type_;
 
     enabled_ = source.enabled_;
 
@@ -713,7 +707,6 @@ void EqBand::syncParametersFrom(const EqBand& source)
         {
             iirSubType_ = source.iirSubType_;
             hasRawCoeffs_ = source.hasRawCoeffs_;
-            needsCoeffUpdate = true;
         }
 
         originalSampleRate_ = source.originalSampleRate_;
@@ -739,16 +732,22 @@ void EqBand::syncParametersFrom(const EqBand& source)
             tiltLoHz_      = source.tiltLoHz_;
             tiltHiHz_      = source.tiltHiHz_;
 
-            if (needsCoeffUpdate || usesCascade())
+            if (usesCascade())
             {
-                // Structural change or cascade type: recompute coefficients
-                // (cascade types use coefficient interpolation)
-                updateIIRCoefficients();
+                // The cascade designs (the tilt fit, the Butterworth/elliptic
+                // prototypes) are far too heavy for the audio thread, and the
+                // model band already ran them on the GUI thread when its
+                // parameter changed — copy the result, the same way raw
+                // coefficients are copied above. Allocation-free once the
+                // section count has settled; a count change is a structural
+                // edit, for which startSmoothing() snaps rather than ramps.
+                cascadeCoeffs_ = source.cascadeCoeffs_;
+                startSmoothing();
             }
             else
             {
-                // Single biquad: update display coefficients and set SmoothedValue targets
-                // The audio processing loop will smoothly recalculate per-sample
+                // Single biquad: closed-form recompute, sets SmoothedValue
+                // targets that the processing loop ramps per-sample.
                 updateIIRCoefficients();
             }
         }
