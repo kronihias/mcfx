@@ -162,31 +162,41 @@ void CQTAnalyzer::push (const AudioSampleBuffer& buffer, int numSamples, int cha
         return;
 
     const int size = (int) ring_.size();
-    int wp = writePos_.load (std::memory_order_relaxed);
+    const int wp   = writePos_.load (std::memory_order_relaxed);
+    const int n    = jmin (numSamples, size);
+    const int skip = numSamples - n;          // oversized block: keep the newest
 
-    if (channel >= 1 && channel <= numCh)
-    {
-        const float* src = buffer.getReadPointer (channel - 1);
-        for (int i = 0; i < numSamples; ++i)
-        {
-            ring_[(size_t) wp] = src[i];
-            wp = (wp + 1) % size;
-        }
-    }
-    else
-    {
-        const float scale = 1.f / (float) numCh;
-        for (int i = 0; i < numSamples; ++i)
-        {
-            float sum = 0.f;
-            for (int ch = 0; ch < numCh; ++ch)
-                sum += buffer.getReadPointer (ch)[i];
-            ring_[(size_t) wp] = sum * scale;
-            wp = (wp + 1) % size;
-        }
-    }
+    // Two contiguous segments, never a per-sample wrap; the averaged mode mixes
+    // straight into the ring with vector ops instead of a per-sample channel sum.
+    const int first = jmin (n, size - wp);
+    const int rest  = n - first;
 
-    writePos_.store (wp, std::memory_order_release);
+    auto writeSegment = [&] (int dst, int srcOffset, int len)
+    {
+        if (len <= 0)
+            return;
+        if (channel >= 1 && channel <= numCh)
+        {
+            FloatVectorOperations::copy (ring_.data() + dst,
+                                         buffer.getReadPointer (channel - 1) + srcOffset, len);
+        }
+        else
+        {
+            const float scale = 1.f / (float) numCh;
+            FloatVectorOperations::copyWithMultiply (ring_.data() + dst,
+                                                     buffer.getReadPointer (0) + srcOffset,
+                                                     scale, len);
+            for (int ch = 1; ch < numCh; ++ch)
+                FloatVectorOperations::addWithMultiply (ring_.data() + dst,
+                                                        buffer.getReadPointer (ch) + srcOffset,
+                                                        scale, len);
+        }
+    };
+
+    writeSegment (wp, skip, first);
+    writeSegment (0, skip + first, rest);
+
+    writePos_.store ((wp + n) % size, std::memory_order_release);
 }
 
 void CQTAnalyzer::compute()
@@ -202,13 +212,19 @@ void CQTAnalyzer::compute()
     // centre frequency, so no kernel index reaches past the Nyquist bin that the
     // real transform stops at.
     float* frame = fft_.getTimeBuffer();
-    std::fill (frame, frame + fftSize_, 0.f);
     {
+        // Two memcpys rather than a per-sample modulo: the lock is held for
+        // microseconds instead of the length of a 32k scalar loop, during
+        // which the audio thread's try-lock would drop its block.
         const juce::SpinLock::ScopedLockType sl (ringLock_);
         const int size = jmin ((int) ring_.size(), fftSize_);
         const int wp = writePos_.load (std::memory_order_acquire);
-        for (int i = 0; i < size; ++i)
-            frame[i] = ring_[(size_t) ((wp + i) % ring_.size())];
+        const int first = size - wp;
+        FloatVectorOperations::copy (frame, ring_.data() + wp, first);
+        if (wp > 0)
+            FloatVectorOperations::copy (frame + first, ring_.data(), wp);
+        if (size < fftSize_)
+            FloatVectorOperations::clear (frame + size, fftSize_ - size);
     }
 
     fft_.forward();
