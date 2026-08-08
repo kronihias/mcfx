@@ -105,6 +105,10 @@ if(MCFX_BUILD_VST2_PER_CHANNEL AND MCFX_FORMATS_VST2)
         PRODUCT_NAME             ${_vst2_target}
         FORMATS                  ${MCFX_FORMATS_VST2}
         VERSION                  ${VERSION}
+        # Without the usage-description plist key macOS hard-denies audio input
+        # for the standalone — no prompt, the device just delivers zeros.
+        MICROPHONE_PERMISSION_ENABLED TRUE
+        MICROPHONE_PERMISSION_TEXT "Audio input is needed to process and meter the incoming channels."
         LV2URI                   http://www.matthiaskronlachner.com/${_vst2_target})
 
     juce_generate_juce_header(${_vst2_target})
@@ -169,6 +173,10 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
         PRODUCT_NAME             ${_mc_target}
         FORMATS                  ${MCFX_FORMATS_MC}
         VERSION                  ${VERSION}
+        # Without the usage-description plist key macOS hard-denies audio input
+        # for the standalone — no prompt, the device just delivers zeros.
+        MICROPHONE_PERMISSION_ENABLED TRUE
+        MICROPHONE_PERMISSION_TEXT "Audio input is needed to process and meter the incoming channels."
         LV2URI                   http://www.matthiaskronlachner.com/${_mc_target})
 
     juce_generate_juce_header(${_mc_target})
