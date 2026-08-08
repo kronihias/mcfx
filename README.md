@@ -42,6 +42,9 @@ mcfx is free software licensed under the **GNU General Public License version 3 
 
 Multichannel convolution matrix.
 
+<img src="screenshots/mcfx_convolver.png" width="450" alt="mcfx_convolver">
+
+
 - Highly optimized non-uniformly partitioned fast convolution using SIMD for Intel and Apple Silicon
 - Loads configuration files compatible with jconvolver `.conf` format
 - Supports loading `.wav` files directly, optionally reading input channel metadata
@@ -65,6 +68,9 @@ Multichannel convolution matrix.
 
 Transforms (almost) any audio plug-in into a multichannel plug-in.
 
+<img src="screenshots/mcfx_anything.png" width="586" alt="mcfx_anything hosting a stereo plug-in across a multichannel bus">
+
+
 - Scans and hosts VST2, VST3, and AU plug-ins; scanning runs out-of-process for speed and crash-resistance
 - Runs as many instances as needed to cover all channels of the mcfx multichannel bus — one instance per stereo (or N-channel) pair
 - All instances stay in sync: parameter changes on the master instance are automatically mirrored to all slave instances
@@ -75,6 +81,8 @@ Transforms (almost) any audio plug-in into a multichannel plug-in.
 ---
 
 ### mcfx_graph
+
+<img src="screenshots/mcfx_graph.png" width="620" alt="mcfx_graph editor">
 
 Flexible plug-in graph / patchbay. Load VST2 / VST3 / AU plug-ins as nodes, wire them together with bezier connections, and build entire signal flows inside one mcfx_graph instance. Multiple connections feeding the same input are summed automatically.
 
@@ -91,6 +99,9 @@ See [mcfx_graph/README.md](mcfx_graph/README.md) for the full feature list and t
 ### mcfx_mimoeq
 
 Multichannel MIMO (Multiple Input Multiple Output) parametric equalizer.
+
+<img src="screenshots/mcfx_mimoeq.png" width="620" alt="mcfx_mimoeq editor">
+
 
 - Applies per-channel EQ on the diagonal (optionally restricted to a subset of channels) and per input-to-output path EQ chains for cross-channel processing
 - Diagonal chain supports up to 24 automated IIR bands (HP, low shelf, peak, high shelf, LP) with host automation via VST3 parameters
@@ -109,6 +120,9 @@ Multichannel MIMO (Multiple Input Multiple Output) parametric equalizer.
 
 Delays all channels by the same amount.
 
+<img src="screenshots/mcfx_delay.png" width="190" alt="mcfx_delay">
+
+
 - Maximum delay time is set at compile time via `MAX_DELAYTIME_S` (default: 0.5 s)
 
 ---
@@ -116,6 +130,9 @@ Delays all channels by the same amount.
 ### mcfx_filter
 
 Applies identical filter settings to all channels, with a frequency analyzer showing the sum of all channels.
+
+<img src="screenshots/mcfx_filter.png" width="620" alt="mcfx_filter editor">
+
 
 - Low/high pass: 2nd-order Butterworth or cascaded 4th-order (Linkwitz–Riley) for crossover use
 - 2× parametric peak filters ±18 dB
@@ -129,6 +146,9 @@ Applies identical filter settings to all channels, with a frequency analyzer sho
 
 Per-channel gain and delay calibration tool, useful for multi-speaker setups.
 
+<img src="screenshots/mcfx_gain_delay.png" width="310" alt="mcfx_gain_delay with signal generator">
+
+
 - Individual gain and delay per channel with phase, solo, and mute buttons
 - Built-in signal generator (sine, toneburst) for testing individual channels; sine frequency range down to 10 Hz
 - Paste gain/delay values directly from the clipboard (semicolon, comma, newline, tab, or space separated)
@@ -140,11 +160,19 @@ Per-channel gain and delay calibration tool, useful for multi-speaker setups.
 
 Multichannel level meter with RMS, peak, and peak hold.
 
+<img src="screenshots/mcfx_meter.png" width="581" alt="mcfx_meter with 16 channels">
+
+
 ---
 
 ### mcfx_send / mcfx_receive
 
 Simply send multichannel audio via network, with low latency, auto-discovery and optional password protection.
+
+<p>
+<img src="screenshots/mcfx_send.png" width="330" alt="mcfx_send">
+<img src="screenshots/mcfx_receive.png" width="330" alt="mcfx_receive">
+</p>
 
 Note: Don't use for sensitive audio content, there is no encryption for lowest CPU load and latency.
 
@@ -263,6 +291,8 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 ## Changelog
 ### Unreleased
+
+- macOS standalones: request microphone permission properly (`NSMicrophoneUsageDescription`). Without the key macOS silently denied audio input — the device opened but delivered only zeros, so meters and analyzers showed nothing from live input.
 
 - `mcfx_mimoeq`: **tilt** is also available in the linear-phase FIR designer — the same straight-line-in-dB shape as the IIR band, but realised exactly (the FIR is designed from the target line itself rather than approximated by a filter cascade) and with linear phase. It has the same min/max frequency limits as the IIR band, and being designed straight from the target line it follows them exactly instead of rounding the corners. The bottom octaves need a long filter to resolve, so check the realised-magnitude preview when using short lengths.
 - `mcfx_mimoeq`: the linear-phase FIR designer's low/high pass now has a continuous **slope** control in dB per octave (3–48) in place of Q. Because the FIR is designed from a target magnitude rather than from a biquad, the roll-off doesn't have to land on a whole filter order — 7.5 dB/oct is as designable as 12. The corner stays at -3 dB (Butterworth), and 12 dB/oct reproduces the previous 2nd-order default.
