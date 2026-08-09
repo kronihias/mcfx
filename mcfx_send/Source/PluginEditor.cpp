@@ -252,14 +252,18 @@ McfxSendAudioProcessorEditor::McfxSendAudioProcessorEditor (McfxSendAudioProcess
     addAndMakeVisible (meter);
     meter.setMeterBank (&processor.getMeters());
 
-    constrainer.setMinimumSize (560, 720);
+    // The receivers list is the only element that gives way when the window
+    // shrinks (the meter keeps its full height at the bottom), and a couple of
+    // visible rows is plenty — there are rarely many peers on a network. The
+    // floor leaves room for about two rows; the default for about five.
+    constrainer.setMinimumSize (560, 540);
     constrainer.setMaximumSize (1600, 1400);
     setResizable (true, true);
     setConstrainer (&constrainer);
     resizer = std::make_unique<juce::ResizableCornerComponent> (this, &constrainer);
     addAndMakeVisible (*resizer);
 
-    setSize (660, 800);
+    setSize (660, 620);
     rebuildUnifiedRows();
     timerCallback();
     startTimerHz (2);

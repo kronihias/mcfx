@@ -292,6 +292,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
+- `mcfx_send`/`mcfx_receive`: smaller default window and a much lower minimum size. The peer list is what gives way when the window shrinks — the meter keeps its full height — and it now defaults to a handful of visible rows instead of a mostly-empty page, since a network rarely has more than a few peers.
 - macOS standalones: request microphone permission properly (`NSMicrophoneUsageDescription`). Without the key macOS silently denied audio input — the device opened but delivered only zeros, so meters and analyzers showed nothing from live input.
 
 - `mcfx_mimoeq`: **tilt** is also available in the linear-phase FIR designer — the same straight-line-in-dB shape as the IIR band, but realised exactly (the FIR is designed from the target line itself rather than approximated by a filter cascade) and with linear phase. It has the same min/max frequency limits as the IIR band, and being designed straight from the target line it follows them exactly instead of rounding the corners. The bottom octaves need a long filter to resolve, so check the realised-magnitude preview when using short lengths.
