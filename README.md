@@ -68,7 +68,7 @@ Multichannel convolution matrix.
 
 Transforms (almost) any audio plug-in into a multichannel plug-in.
 
-<img src="screenshots/mcfx_anything.png" width="586" alt="mcfx_anything hosting a stereo plug-in across a multichannel bus">
+<img src="screenshots/mcfx_anything.png" width="800" alt="mcfx_anything hosting a stereo plug-in across a multichannel bus">
 
 
 - Scans and hosts VST2, VST3, and AU plug-ins; scanning runs out-of-process for speed and crash-resistance
@@ -82,7 +82,7 @@ Transforms (almost) any audio plug-in into a multichannel plug-in.
 
 ### mcfx_graph
 
-<img src="screenshots/mcfx_graph.png" width="620" alt="mcfx_graph editor">
+<img src="screenshots/mcfx_graph.png" width="800" alt="mcfx_graph editor">
 
 Flexible plug-in graph / patchbay. Load VST2 / VST3 / AU plug-ins as nodes, wire them together with bezier connections, and build entire signal flows inside one mcfx_graph instance. Multiple connections feeding the same input are summed automatically.
 
@@ -100,7 +100,7 @@ See [mcfx_graph/README.md](mcfx_graph/README.md) for the full feature list and t
 
 Multichannel MIMO (Multiple Input Multiple Output) parametric equalizer.
 
-<img src="screenshots/mcfx_mimoeq.png" width="620" alt="mcfx_mimoeq editor">
+<img src="screenshots/mcfx_mimoeq.png" width="700" alt="mcfx_mimoeq editor">
 
 
 - Applies per-channel EQ on the diagonal (optionally restricted to a subset of channels) and per input-to-output path EQ chains for cross-channel processing
@@ -146,7 +146,7 @@ Applies identical filter settings to all channels, with a frequency analyzer sho
 
 Per-channel gain and delay calibration tool, useful for multi-speaker setups.
 
-<img src="screenshots/mcfx_gain_delay.png" width="310" alt="mcfx_gain_delay with signal generator">
+<img src="screenshots/mcfx_gain_delay.png" width="543" alt="mcfx_gain_delay with signal generator">
 
 
 - Individual gain and delay per channel with phase, solo, and mute buttons
@@ -158,9 +158,16 @@ Per-channel gain and delay calibration tool, useful for multi-speaker setups.
 
 ### mcfx_meter
 
-Multichannel level meter with RMS, peak, and peak hold.
+Multichannel level meter with RMS, peak, and peak hold. Four views: the classic bars, a ring that stays compact at any channel count, a dot grid small enough to leave open in a corner, and a 3D waterfall showing every channel's spectrum at once.
 
-<img src="screenshots/mcfx_meter.png" width="581" alt="mcfx_meter with 16 channels">
+<img src="screenshots/mcfx_meter_bars.png" width="700" alt="mcfx_meter bar view">
+
+<p>
+<img src="screenshots/mcfx_meter_circle.png" width="330" alt="mcfx_meter circle view">
+<img src="screenshots/mcfx_meter_dots.png" width="330" alt="mcfx_meter dots view">
+</p>
+
+<img src="screenshots/mcfx_meter_waterfall.png" width="700" alt="mcfx_meter waterfall view">
 
 
 ---
