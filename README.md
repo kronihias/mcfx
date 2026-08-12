@@ -150,7 +150,7 @@ Per-channel gain and delay calibration tool, useful for multi-speaker setups.
 
 
 - Individual gain and delay per channel with phase, solo, and mute buttons
-- Built-in signal generator (sine, toneburst) for testing individual channels; sine frequency range down to 10 Hz
+- Built-in signal generator (white/pink noise, sine, sawtooth, square, dirac, toneburst — steady or pulsed) for testing individual channels, or stepping automatically through all of them; sine frequency range down to 10 Hz
 - Paste gain/delay values directly from the clipboard (semicolon, comma, newline, tab, or space separated)
 - Maximum delay time set at compile time via `MAX_DELAYTIME_S`
 
