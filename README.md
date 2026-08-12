@@ -297,7 +297,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
-### Unreleased
+### 0.8.9 (2026-08-12)
 
 - `mcfx_send`/`mcfx_receive`: smaller default window and a much lower minimum size. The peer list is what gives way when the window shrinks — the meter keeps its full height — and it now defaults to a handful of visible rows instead of a mostly-empty page, since a network rarely has more than a few peers.
 - macOS standalones: request microphone permission properly (`NSMicrophoneUsageDescription`). Without the key macOS silently denied audio input — the device opened but delivered only zeros, so meters and analyzers showed nothing from live input.
