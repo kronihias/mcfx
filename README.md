@@ -299,6 +299,8 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### 0.8.9 (2026-08-12)
 
+- `mcfx_meter`: three new views alongside the classic bars — a **circle** that stays compact at any channel count, a **dots** grid small enough for a corner of the screen, and a 3D **waterfall** showing every channel's spectrum at once; channel selection is shared across views
+- performance: the analysers' FFTs go straight to Accelerate (macOS) / FFTW (Win/Linux); `mcfx_mimoeq` no longer runs filter design or the spectrum FFT on the audio thread; much cheaper meter painting, and none at all when idle
 - `mcfx_send`/`mcfx_receive`: smaller default window and a much lower minimum size. The peer list is what gives way when the window shrinks — the meter keeps its full height — and it now defaults to a handful of visible rows instead of a mostly-empty page, since a network rarely has more than a few peers.
 - macOS standalones: request microphone permission properly (`NSMicrophoneUsageDescription`). Without the key macOS silently denied audio input — the device opened but delivered only zeros, so meters and analyzers showed nothing from live input.
 
