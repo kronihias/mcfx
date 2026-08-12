@@ -109,7 +109,7 @@ Multichannel MIMO (Multiple Input Multiple Output) parametric equalizer.
 - Lookahead is per band; the plugin latency-compensates all paths (diagonal + MIMO, including FIR latency) and reports the total to the host
 - Individual input-to-output path chains for routing-aware corrections (e.g. speaker crosstalk compensation), supporting IIR, FIR (partitioned convolution), delay, and gain nodes
 - Routing can be visualized as a matrix or wires view
-- Built-in spectrum analyzer with per-channel or summed display
+- Built-in spectrum analyzer with per-channel or summed display, plus a rolling constant-Q spectrogram view (pre- or post-EQ, selectable time span)
 - Loads and saves configuration as JSON files (allows importing automated speaker/room EQ configurations for large multichannel installations)
 - Built-in undo/redo
 - Can also be seen as a more flexible `mcfx_convolver`, but for dense filter matrices `mcfx_convolver` will be more efficient
@@ -129,7 +129,7 @@ Delays all channels by the same amount.
 
 ### mcfx_filter
 
-Applies identical filter settings to all channels, with a frequency analyzer showing the sum of all channels.
+Applies identical filter settings to all channels, with a frequency analyzer showing the sum of all channels or a single selected channel.
 
 <img src="screenshots/mcfx_filter.png" width="620" alt="mcfx_filter editor">
 
