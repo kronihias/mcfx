@@ -706,6 +706,41 @@ float LowhighpassAudioProcessor::outMagnitude(double f)
     return _out_mag[b0] + frac * (_out_mag[b1] - _out_mag[b0]);
 }
 
+// RMS over the bins a span covers — see FilterInfo.h for why. Narrower than a
+// bin (the low end of the log axis), fall back to the interpolated read so the
+// curve stays smooth there instead of turning into a staircase.
+static float bandMagnitude(const float* mag, double fLo, double fHi,
+                           double sampleRate, float fallback)
+{
+    const double binScale = (double)FFT_LENGTH / sampleRate;
+    const double lo = fLo * binScale;
+    const double hi = fHi * binScale;
+
+    if (!(hi - lo >= 1.0))
+        return fallback;
+
+    const int b0 = jlimit(0, FFT_LENGTH/2, (int)lo);
+    const int b1 = jlimit(0, FFT_LENGTH/2, (int)hi);
+
+    float power = 0.f;
+    for (int b = b0; b <= b1; ++b)
+        power += mag[b] * mag[b];
+
+    return sqrtf(power / (float)(b1 - b0 + 1));
+}
+
+float LowhighpassAudioProcessor::inMagnitudeBand(double fLo, double fHi)
+{
+    return bandMagnitude(_in_mag, fLo, fHi, getSampleRate(),
+                         inMagnitude(0.5 * (fLo + fHi)));
+}
+
+float LowhighpassAudioProcessor::outMagnitudeBand(double fLo, double fHi)
+{
+    return bandMagnitude(_out_mag, fLo, fHi, getSampleRate(),
+                         outMagnitude(0.5 * (fLo + fHi)));
+}
+
 void LowhighpassAudioProcessor::freqanalysis(bool activate)
 {
     _freqanalysis = activate;

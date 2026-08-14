@@ -297,6 +297,10 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### Unreleased
+
+- `mcfx_filter`: 1/24-octave smoothing for the analyzer curves. One FFT bin per pixel left the top octaves ragged no matter the temporal smoothing — each pixel now reads the RMS over at least 1/24 octave, which flattens noise while keeping resonances and comb notches visible.
+
 ### 0.8.9 (2026-08-12)
 
 - `mcfx_meter`: three new views alongside the classic bars — a **circle** that stays compact at any channel count, a **dots** grid small enough for a corner of the screen, and a 3D **waterfall** showing every channel's spectrum at once; channel selection is shared across views

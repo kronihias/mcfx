@@ -35,6 +35,15 @@ public:
 
     virtual float inMagnitude(double f) = 0;
     virtual float outMagnitude(double f) = 0;
+
+    /** RMS magnitude over a frequency span. High on the log axis one pixel
+        covers many FFT bins; sampling a single bin there plots one noisy
+        realisation per pixel and the curve stays ragged no matter how much
+        temporal smoothing is applied. Averaging the power across the pixel's
+        own span shrinks that variance with the bin count, which is what makes
+        the high end read as a line instead of fuzz. */
+    virtual float inMagnitudeBand(double fLo, double fHi) = 0;
+    virtual float outMagnitudeBand(double fLo, double fHi) = 0;
 };
 
 

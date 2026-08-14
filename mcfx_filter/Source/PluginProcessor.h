@@ -142,6 +142,8 @@ public:
 
     float inMagnitude(double f) override;
     float outMagnitude(double f) override;
+    float inMagnitudeBand(double fLo, double fHi) override;
+    float outMagnitudeBand(double fLo, double fHi) override;
 
     void freqanalysis(bool activate);
 

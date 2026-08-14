@@ -216,25 +216,48 @@ void  FilterGraph::calcPathAnalyzer()
     // magnitude floor to prevent log10(0) = -inf creating invalid paths
     const float magFloor = 1e-10f;
 
-    // plot input magnitude — no spatial smoothing (temporal smoothing is sufficient)
+    // 1/24-octave smoothing: each pixel reads the RMS over a window of at
+    // least 1/24 octave around its centre (a pixel's own span, ~1/100 octave,
+    // whichever is wider). Sampling a single bin per pixel left the top
+    // octaves ragged however much temporal smoothing was applied — high on
+    // the log axis 1/24 octave covers dozens of FFT bins, and averaging them
+    // is what straightens the curve. 1/24 rather than 1/12 keeps resonances
+    // and comb notches visible, which is what this display is for. Low on the
+    // axis, where the window is narrower than a bin, the band read falls back
+    // to the old interpolation on its own.
+    const double kHalfWindow = std::pow(2.0, 1.0 / 48.0);
+
+    auto bandEdges = [&](int xPos, double& fLo, double& fHi) {
+        const double fc = xpostohz(xPos);
+        fLo = jmin((double)xpostohz(xPos),     fc / kHalfWindow);
+        fHi = jmax((double)xpostohz(xPos + 1), fc * kHalfWindow);
+    };
+
+    double fLo, fHi;
+
+    // plot input magnitude
     path_in_mag_.clear();
 
-    float y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz((int)xmargin)), magFloor))) );
+    bandEdges((int)xmargin, fLo, fHi);
+    float y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitudeBand(fLo, fHi), magFloor))) );
     path_in_mag_.startNewSubPath(xmargin, y);
 
     for (int xPos=(int)xmargin+1; xPos<width; xPos++) {
-        y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitude(xpostohz(xPos)), magFloor))) );
+        bandEdges(xPos, fLo, fHi);
+        y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->inMagnitudeBand(fLo, fHi), magFloor))) );
         path_in_mag_.lineTo((float)xPos, y);
     }
 
     // plot output magnitude
     path_out_mag_.clear();
 
-    y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz((int)xmargin)), magFloor))) );
+    bandEdges((int)xmargin, fLo, fHi);
+    y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitudeBand(fLo, fHi), magFloor))) );
     path_out_mag_.startNewSubPath(xmargin, y);
 
     for (int xPos=(int)xmargin+1; xPos<width; xPos++) {
-        y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitude(xpostohz(xPos)), magFloor))) );
+        bandEdges(xPos, fLo, fHi);
+        y = (float)dbtoypos( scale * (offset + 20.f*log10f(jmax(filterinfo_->outMagnitudeBand(fLo, fHi), magFloor))) );
         path_out_mag_.lineTo((float)xPos, y);
     }
 
