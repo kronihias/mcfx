@@ -103,6 +103,31 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
+      # pluginval (https://github.com/Tracktion/pluginval) drives every built
+      # VST3 through repeated prepare/release cycles, changing sample rates and
+      # block sizes, bus layouts, state round-trips and parameter fuzzing —
+      # the lifecycle coverage the pytest suite can't provide. tests/
+      # test_pluginval.py skips when PLUGINVAL is unset, so this step is what
+      # turns it on in CI.
+      - name: Install pluginval
+        shell: bash
+        run: |
+          set -e
+          case "${{ runner.os }}" in
+            macOS)   asset=pluginval_macOS.zip ;;
+            Windows) asset=pluginval_Windows.zip ;;
+            Linux)   asset=pluginval_Linux.zip ;;
+          esac
+          curl -sSL -o pluginval.zip \
+            "https://github.com/Tracktion/pluginval/releases/download/v1.0.3/$asset"
+          unzip -q pluginval.zip -d pluginval_bin
+          case "${{ runner.os }}" in
+            macOS)   echo "PLUGINVAL=$PWD/pluginval_bin/pluginval.app/Contents/MacOS/pluginval" >> $GITHUB_ENV ;;
+            Windows) echo "PLUGINVAL=$PWD/pluginval_bin/pluginval.exe" >> $GITHUB_ENV ;;
+            Linux)   chmod +x pluginval_bin/pluginval
+                     echo "PLUGINVAL=$PWD/pluginval_bin/pluginval" >> $GITHUB_ENV ;;
+          esac
+
       - name: Run test suite
         env:
           VCPKG_BINARY_SOURCES: ${{ runner.os == 'Windows' && 'clear;x-gha,readwrite' || '' }}
