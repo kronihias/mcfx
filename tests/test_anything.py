@@ -100,12 +100,13 @@ def test_anything_master_param_syncs_to_slaves(tmp_path):
     sf.write(in_wav, audio.T, SR, subtype="FLOAT")
     open(state, "wb").write(_build_anything_state(FILTER_VST3))
 
-    # "Param 1" on mcfx_anything is the first forwarded slot, bound to the
-    # inner plugin's first parameter. For mcfx_filter that's "LowCut On".
-    # Setting it to 1.0 engages a Butterworth high-pass on every slave —
-    # output spectra below the default cutoff drop, and all slave pairs must
-    # show the same drop if sync is working.
-    json.dump({"Param 1": 1.0}, open(params, "w"))
+    # A forwarding slot reports its BOUND parameter's name, not "Param N", so
+    # address it by the inner plugin's name: slot 0 binds mcfx_filter's first
+    # parameter, "LowCut On". Setting it to 1.0 engages a Butterworth
+    # high-pass on every slave — all slaves must show the same change if sync
+    # is working. (Using "Param 1" here matched nothing and the test failed
+    # with the output untouched.)
+    json.dump({"LowCut On": 1.0}, open(params, "w"))
 
     subprocess.run([
         TESTHOST_BIN,
