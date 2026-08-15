@@ -13,11 +13,12 @@
 #include <atomic>
 #include <vector>
 
-class GainNode : public juce::AudioProcessor
+class GainNode : public juce::AudioProcessor,
+                 private juce::AudioProcessorParameter::Listener
 {
 public:
     explicit GainNode (int numChannels);
-    ~GainNode() override = default;
+    ~GainNode() override;
 
     static constexpr const char* kTypeId = "gain";
 
@@ -58,6 +59,16 @@ public:
 
 private:
     static juce::AudioProcessor::BusesProperties makeBuses (int numChannels);
+
+    // One host-visible parameter per channel, so mcfx_graph's forwarding pool
+    // can expose them like a hosted plug-in's. The atomics below stay the
+    // authority for the audio thread; the parameters mirror them in both
+    // directions.
+    void parameterValueChanged (int parameterIndex, float newValue) override;
+    void parameterGestureChanged (int, bool) override {}
+
+    std::vector<juce::AudioParameterFloat*> gainParams_;   // owned by AudioProcessor
+    std::atomic<bool> applyingParam_ { false };
 
     const int numChannels_;
     std::atomic<bool> linked_ { true };

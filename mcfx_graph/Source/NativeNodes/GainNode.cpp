@@ -15,6 +15,40 @@ GainNode::GainNode (int numChannels)
 {
     for (auto& g : gainsDb_)
         g.store (0.0f, std::memory_order_relaxed);
+
+    // Range matches the panel's slider so a value set either way reads the
+    // same. Parameter ids are per-channel and never renumbered, so a saved
+    // exposure keeps pointing at the same channel.
+    gainParams_.reserve ((size_t) numChannels_);
+    for (int c = 0; c < numChannels_; ++c)
+    {
+        auto* p = new juce::AudioParameterFloat (
+            juce::ParameterID { "gain_" + juce::String (c), 1 },
+            "Gain " + juce::String (c + 1),
+            juce::NormalisableRange<float> (-120.0f, 40.0f, 0.1f), 0.0f);
+        addParameter (p);
+        p->addListener (this);
+        gainParams_.push_back (p);
+    }
+}
+
+GainNode::~GainNode()
+{
+    for (auto* p : gainParams_)
+        p->removeListener (this);
+}
+
+void GainNode::parameterValueChanged (int parameterIndex, float)
+{
+    if (! juce::isPositiveAndBelow (parameterIndex, (int) gainParams_.size()))
+        return;
+
+    // Re-entrancy guard: setGainDb writes the parameters back, and when
+    // linked it writes every channel's.
+    if (applyingParam_.exchange (true))
+        return;
+    setGainDb (parameterIndex, gainParams_[(size_t) parameterIndex]->get());
+    applyingParam_.store (false);
 }
 
 bool GainNode::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -47,11 +81,26 @@ void GainNode::setGainDb (int channel, float db) noexcept
 {
     if (channel < 0 || channel >= numChannels_) return;
 
-    if (linked_.load (std::memory_order_relaxed))
+    const bool linked = linked_.load (std::memory_order_relaxed);
+
+    if (linked)
         for (auto& g : gainsDb_)
             g.store (db, std::memory_order_relaxed);
     else
         gainsDb_[channel].store (db, std::memory_order_relaxed);
+
+    // Mirror into the host-visible parameters, unless we are being called
+    // from one of them.
+    if (! applyingParam_.load() && ! gainParams_.empty())
+    {
+        applyingParam_.store (true);
+        if (linked)
+            for (auto* p : gainParams_)
+                *p = db;
+        else
+            *gainParams_[(size_t) channel] = db;
+        applyingParam_.store (false);
+    }
 }
 
 float GainNode::getGainDb (int channel) const noexcept

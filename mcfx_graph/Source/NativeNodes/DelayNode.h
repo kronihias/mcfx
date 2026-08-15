@@ -16,11 +16,12 @@
 #include <vector>
 #include <memory>
 
-class DelayNode : public juce::AudioProcessor
+class DelayNode : public juce::AudioProcessor,
+                  private juce::AudioProcessorParameter::Listener
 {
 public:
     DelayNode (int numChannels, float maxDelaySamples = 48000.0f);
-    ~DelayNode() override = default;
+    ~DelayNode() override;
 
     static constexpr const char* kTypeId = "delay";
 
@@ -61,6 +62,15 @@ public:
 
 private:
     static juce::AudioProcessor::BusesProperties makeBuses (int numChannels);
+
+    // One host-visible parameter per channel, in samples, so mcfx_graph's
+    // forwarding pool can expose them like a hosted plug-in's. The atomics
+    // stay the authority for the audio thread; these mirror them both ways.
+    void parameterValueChanged (int parameterIndex, float newValue) override;
+    void parameterGestureChanged (int, bool) override {}
+
+    std::vector<juce::AudioParameterFloat*> delayParams_;  // owned by AudioProcessor
+    std::atomic<bool> applyingParam_ { false };
 
     using Line = juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Lagrange3rd>;
 

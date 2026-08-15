@@ -23,6 +23,39 @@ DelayNode::DelayNode (int numChannels, float maxDelaySamples)
         line->setMaximumDelayInSamples ((int) std::ceil (maxDelaySamples_) + 4);
         lines_.push_back (std::move (line));
     }
+
+    // In samples, matching the panel's slider and the node's own storage —
+    // milliseconds are a display mode, not a second source of truth.
+    delayParams_.reserve ((size_t) numChannels_);
+    for (int c = 0; c < numChannels_; ++c)
+    {
+        auto* p = new juce::AudioParameterFloat (
+            juce::ParameterID { "delay_" + juce::String (c), 1 },
+            "Delay " + juce::String (c + 1),
+            juce::NormalisableRange<float> (0.0f, maxDelaySamples_, 1.0f), 0.0f);
+        addParameter (p);
+        p->addListener (this);
+        delayParams_.push_back (p);
+    }
+}
+
+DelayNode::~DelayNode()
+{
+    for (auto* p : delayParams_)
+        p->removeListener (this);
+}
+
+void DelayNode::parameterValueChanged (int parameterIndex, float)
+{
+    if (! juce::isPositiveAndBelow (parameterIndex, (int) delayParams_.size()))
+        return;
+
+    // Re-entrancy guard: setDelaySamples writes the parameters back, and
+    // when linked it writes every channel's.
+    if (applyingParam_.exchange (true))
+        return;
+    setDelaySamples (parameterIndex, delayParams_[(size_t) parameterIndex]->get());
+    applyingParam_.store (false);
 }
 
 bool DelayNode::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -74,11 +107,26 @@ void DelayNode::setDelaySamples (int channel, float samples) noexcept
     if (channel < 0 || channel >= numChannels_) return;
     const float clamped = juce::jlimit (0.0f, maxDelaySamples_, samples);
 
-    if (linked_.load (std::memory_order_relaxed))
+    const bool linked = linked_.load (std::memory_order_relaxed);
+
+    if (linked)
         for (auto& t : targetSamples_)
             t.store (clamped, std::memory_order_relaxed);
     else
         targetSamples_[channel].store (clamped, std::memory_order_relaxed);
+
+    // Mirror into the host-visible parameters, unless we are being called
+    // from one of them.
+    if (! applyingParam_.load() && ! delayParams_.empty())
+    {
+        applyingParam_.store (true);
+        if (linked)
+            for (auto* p : delayParams_)
+                *p = clamped;
+        else
+            *delayParams_[(size_t) channel] = clamped;
+        applyingParam_.store (false);
+    }
 }
 
 float DelayNode::getDelaySamples (int channel) const noexcept
