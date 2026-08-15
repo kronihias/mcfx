@@ -297,7 +297,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
-### Unreleased
+### 0.8.10 (2026-08-15)
 
 - `mcfx_graph`: the **gain, delay and mute/phase nodes are automatable** — each publishes per-channel parameters that can be mapped to the plug-in's forwarding slots from the properties panel, the same way a hosted plug-in's parameters already could. Their panels follow values changed from the DAW, and a freshly mapped parameter reports its real value to the host straight away. (The matrix mixer stays out: an NxM matrix would publish far more parameters than the 256 slots available.)
 - `mcfx_mimoeq`: fix host automation being dropped when it arrives while the processing state is being rebuilt (right after a preset load or channel-count change) — the pending-sync flag was cleared by the rebuild, so the parameter change updated the model and the GUI but never reached the audio path.
