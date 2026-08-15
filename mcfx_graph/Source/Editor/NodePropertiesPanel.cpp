@@ -235,7 +235,9 @@ namespace
     // Per-kind subpanels. Each builds its own children in the constructor and
     // lays them out in resized().
 
-    class GainPropertiesPanel : public juce::Component, private juce::Slider::Listener
+    class GainPropertiesPanel : public juce::Component,
+                                private juce::Slider::Listener,
+                                private juce::Timer
     {
     public:
         GainPropertiesPanel (GainNode& g, Mcfx_graphAudioProcessor& proc, GraphNode& gn)
@@ -289,6 +291,11 @@ namespace
 
             setSize (260, kHeaderHeight + (gain_.getNumChannels() + 2) * kRowHeight
                           + exposure_->getPreferredHeight());
+
+            // The node's value can change without going through this panel —
+            // host automation of an exposed parameter writes it straight into
+            // the node — so poll it back into the sliders.
+            startTimerHz (15);
         }
 
         void resized() override
@@ -322,6 +329,24 @@ namespace
                 if (onResetCommit) onResetCommit();
             }
         };
+
+        void timerCallback() override
+        {
+            // Skip while the user is dragging, or the poll would fight them.
+            for (auto* sl : sliders_)
+                if (sl->isMouseButtonDown()) return;
+
+            for (int c = 0; c < sliders_.size(); ++c)
+            {
+                const float db = gain_.getGainDb (c);
+                const double shown = linearMode_
+                        ? (double) juce::Decibels::decibelsToGain (db, -120.0f)
+                        : (double) db;
+                if (std::abs (sliders_[c]->getValue() - shown) > 1.0e-4)
+                    sliders_[c]->setValue (shown, juce::dontSendNotification);
+            }
+            linkedToggle_.setToggleState (gain_.isLinked(), juce::dontSendNotification);
+        }
 
         void applyMode()
         {
@@ -383,7 +408,8 @@ namespace
     };
 
     //==========================================================================
-    class MutePhasePropertiesPanel : public juce::Component
+    class MutePhasePropertiesPanel : public juce::Component,
+                                     private juce::Timer
     {
     public:
         MutePhasePropertiesPanel (MutePhaseNode& m, Mcfx_graphAudioProcessor& proc, GraphNode& gn)
@@ -446,6 +472,20 @@ namespace
 
             setSize (260, kHeaderHeight + (mp_.getNumChannels() + 1) * kRowHeight
                           + exposure_->getPreferredHeight());
+
+            // Poll the node: host automation of an exposed parameter changes
+            // it without passing through this panel.
+            startTimerHz (15);
+        }
+
+        void timerCallback() override
+        {
+            for (int c = 0; c < muteButtons_.size(); ++c)
+            {
+                muteButtons_[c]->setToggleState (mp_.getMute   (c), juce::dontSendNotification);
+                invButtons_ [c]->setToggleState (mp_.getInvert (c), juce::dontSendNotification);
+            }
+            linkedToggle_.setToggleState (mp_.isLinked(), juce::dontSendNotification);
         }
 
         void resized() override
@@ -754,7 +794,9 @@ namespace
     };
 
     //==========================================================================
-    class DelayPropertiesPanel : public juce::Component, private juce::Slider::Listener
+    class DelayPropertiesPanel : public juce::Component,
+                                 private juce::Slider::Listener,
+                                 private juce::Timer
     {
     public:
         DelayPropertiesPanel (DelayNode& d, double sampleRate, Mcfx_graphAudioProcessor& proc, GraphNode& gn)
@@ -797,6 +839,10 @@ namespace
 
             setSize (260, kHeaderHeight + (delay_.getNumChannels() + 1) * kRowHeight
                           + exposure_->getPreferredHeight());
+
+            // Poll the node: host automation of an exposed parameter changes
+            // it without passing through this panel.
+            startTimerHz (15);
         }
 
         void resized() override
@@ -818,6 +864,23 @@ namespace
         }
 
     private:
+        void timerCallback() override
+        {
+            for (auto* sl : sliders_)
+                if (sl->isMouseButtonDown()) return;
+
+            const bool ms = unitToggle_.getToggleState();
+            for (int c = 0; c < sliders_.size(); ++c)
+            {
+                const double shown = (ms && sr_ > 0.0)
+                        ? (double) delay_.getDelaySamples (c) * 1000.0 / sr_
+                        : (double) delay_.getDelaySamples (c);
+                if (std::abs (sliders_[c]->getValue() - shown) > 1.0e-4)
+                    sliders_[c]->setValue (shown, juce::dontSendNotification);
+            }
+            linkedToggle_.setToggleState (delay_.isLinked(), juce::dontSendNotification);
+        }
+
         void repaintValues()
         {
             const bool ms = unitToggle_.getToggleState();
