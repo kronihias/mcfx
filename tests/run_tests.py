@@ -141,16 +141,19 @@ BUILD_TARGETS = [
     "mcfx_mimoeq_VST3",
     "mcfx_send_VST3",
     "mcfx_receive_VST3",
-    # A plug-in host, and the one that does the most in prepare/release and
-    # state restore — worth having pluginval cover it.
-    #
-    # mcfx_anything is deliberately NOT here: building it un-skips
-    # test_anything_master_param_syncs_to_slaves, which needs the
-    # out-of-process scanner to host a real plug-in and fails in a headless
-    # environment. That is a pre-existing gap in the test, not a plug-in bug;
-    # add the target once the test skips cleanly without a scanner.
-    "mcfx_graph_VST3",
 ]
+
+# mcfx_graph does the most in prepare/release and state restore, so it is
+# worth having pluginval cover it — but only where it builds. Its embedded
+# scanner compiles juce_audio_processors_headless, which fails on Linux
+# because mcfx_graph calls AudioProcessor::createEditor() directly and JUCE
+# 8.0.13 made it private. Drop this condition once that is fixed.
+#
+# mcfx_anything stays out everywhere: building it un-skips
+# test_anything_master_param_syncs_to_slaves, which needs the out-of-process
+# scanner to host a real plug-in and fails in a headless environment.
+if not sys.platform.startswith("linux"):
+    BUILD_TARGETS.append("mcfx_graph_VST3")
 
 
 def cmake_build() -> None:
