@@ -65,6 +65,7 @@ public:
 
         // ---- Parse arguments -------------------------------------------
         String pluginPath, paramsPath, inputPath, outputPath;
+        var pendingParams;   // parsed --params JSON, applied after prepareToPlay
         String loadStatePath, saveStatePath, loadInnerStatePath;
         String describePluginPath;
         int    numChannels = 2;
@@ -339,18 +340,12 @@ public:
                     }
                 }
 
-                // Use the modern AudioProcessorParameter API (non-deprecated).
-                const auto& params = plugin->getParameters();
-                for (auto* p : params)
-                {
-                    const String pname = p->getName(512);
-                    if (obj->hasProperty(pname))
-                    {
-                        const float val = static_cast<float>(
-                            static_cast<double>(obj->getProperty(pname)));
-                        p->setValue(val);
-                    }
-                }
+                // Parameter values are applied AFTER prepareToPlay (below):
+                // JUCE's VST3 hosting transfers setValue() calls to the
+                // processor via the parameter-changes queue of the next
+                // process call, and (re)activation drops what was queued
+                // before it — values set here would silently vanish.
+                pendingParams = parsed;
             }
         }
 
@@ -370,6 +365,23 @@ public:
         // only call setLatencySamples() once configuration loading completes.
         plugin->prepareToPlay(sampleRate, blockSize);
         const int latency = compensateLatency ? jmax(0, plugin->getLatencySamples()) : 0;
+
+        // ---- Apply generic parameters (deferred from the --params block) ----
+        if (auto* obj = pendingParams.getDynamicObject())
+        {
+            int applied = 0;
+            for (auto* p : plugin->getParameters())
+            {
+                const String pname = p->getName(512);
+                if (obj->hasProperty(pname))
+                {
+                    p->setValue(static_cast<float>(
+                        static_cast<double>(obj->getProperty(pname))));
+                    ++applied;
+                }
+            }
+            std::cerr << "mcfx_testhost: applied " << applied << " parameter(s)\n";
+        }
 
         // Run latency extra samples of silence through the plugin so the output
         // we keep is aligned to the input.  Without this, plugins that report a

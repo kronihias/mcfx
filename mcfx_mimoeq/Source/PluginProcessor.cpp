@@ -358,7 +358,12 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
         // Stash old state for GUI thread to delete (can't allocate/free on audio thread)
         garbageState_.store(activeState_, std::memory_order_release);
         activeState_ = pending;
-        needsParamSync_.store(false, std::memory_order_relaxed); // rebuild supersedes sync
+        // Do NOT clear needsParamSync_ here: a parameter change landing
+        // between the rebuild's model snapshot and this swap is not in the
+        // rebuilt copies, and clearing the flag silently dropped it (host
+        // automation written right after prepareToPlay never sounded). A
+        // redundant sync after a rebuild is cheap; a lost one is not.
+        needsParamSync_.store(true, std::memory_order_relaxed);
     }
 
     doParamSyncIfNeeded();
