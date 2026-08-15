@@ -59,6 +59,14 @@ def _find_pluginval() -> str | None:
 
 PLUGINVAL = _find_pluginval()
 
+# CI sets PLUGINVAL_REQUIRED so a broken install fails the run rather than
+# skipping every case and still reporting green.
+if PLUGINVAL is None and os.environ.get("PLUGINVAL_REQUIRED") == "1":
+    raise RuntimeError(
+        "PLUGINVAL_REQUIRED is set but pluginval was not found "
+        f"(PLUGINVAL={os.environ.get('PLUGINVAL')!r})"
+    )
+
 pytestmark = pytest.mark.skipif(
     PLUGINVAL is None,
     reason="pluginval not found — set PLUGINVAL to its path "

@@ -123,13 +123,18 @@ jobs:
           unzip -q pluginval.zip -d pluginval_bin
           case "${{ runner.os }}" in
             macOS)   echo "PLUGINVAL=$PWD/pluginval_bin/pluginval.app/Contents/MacOS/pluginval" >> $GITHUB_ENV ;;
-            Windows) echo "PLUGINVAL=$PWD/pluginval_bin/pluginval.exe" >> $GITHUB_ENV ;;
+            # pwd -W: Git Bash's $PWD is a Unix-style path that Python on
+            # Windows cannot open, which silently skipped every case.
+            Windows) echo "PLUGINVAL=$(pwd -W)/pluginval_bin/pluginval.exe" >> $GITHUB_ENV ;;
             Linux)   chmod +x pluginval_bin/pluginval
                      echo "PLUGINVAL=$PWD/pluginval_bin/pluginval" >> $GITHUB_ENV ;;
           esac
 
       - name: Run test suite
         env:
+          # CI installs pluginval, so a skip here means the install broke —
+          # fail instead of passing quietly.
+          PLUGINVAL_REQUIRED: '1'
           VCPKG_BINARY_SOURCES: ${{ runner.os == 'Windows' && 'clear;x-gha,readwrite' || '' }}
         # xvfb on Linux: pedalboard's VST3 loader and some JUCE init paths
         # touch the display server even for "headless" use, so give them a
