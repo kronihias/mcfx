@@ -149,11 +149,10 @@ BUILD_TARGETS = [
 # because mcfx_graph calls AudioProcessor::createEditor() directly and JUCE
 # 8.0.13 made it private. Drop this condition once that is fixed.
 #
-# mcfx_anything stays out everywhere: building it un-skips
-# test_anything_master_param_syncs_to_slaves, which needs the out-of-process
-# scanner to host a real plug-in and fails in a headless environment.
+# mcfx_anything hosts its inner plug-in by path (--describe-plugin), so no
+# scanner is involved, but it shares the same JUCE 8.0.13 limit.
 if not sys.platform.startswith("linux"):
-    BUILD_TARGETS.append("mcfx_graph_VST3")
+    BUILD_TARGETS += ["mcfx_graph_VST3", "mcfx_anything_VST3"]
 
 
 def cmake_build() -> None:
