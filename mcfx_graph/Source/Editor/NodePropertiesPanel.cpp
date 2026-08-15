@@ -92,13 +92,153 @@ namespace
     }
 
     //==========================================================================
+    /** The "Automation parameters" list: one row per parameter of a node's
+        processor, each with a button that binds it to one of mcfx_graph's
+        forwarding slots. Shared by every node kind that has parameters —
+        hosted plug-ins and the native gain / delay / mute-phase nodes. */
+    class ParameterExposureList : public juce::Component
+    {
+    public:
+        ParameterExposureList (Mcfx_graphAudioProcessor& outerProc, GraphNode& gn)
+            : outerProc_ (outerProc), node_ (gn)
+        {
+            if (node_.processor == nullptr) return;
+
+            paramsHeader_.setText ("Automation parameters", juce::dontSendNotification);
+            paramsHeader_.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
+            paramsHeader_.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.7f));
+            addAndMakeVisible (paramsHeader_);
+
+            slotsLabel_.setFont (juce::Font (juce::FontOptions (10.0f)));
+            slotsLabel_.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.5f));
+            addAndMakeVisible (slotsLabel_);
+
+            const auto& params = node_.processor->getParameters();
+            paramRows_.reserve ((size_t) params.size());
+
+            for (int i = 0; i < params.size(); ++i)
+            {
+                auto* p = params.getUnchecked (i);
+                if (p == nullptr) continue;
+
+                auto row = std::make_unique<ParamRow>();
+                row->paramIndex = i;
+
+                auto name = p->getName (40);
+                if (name.isEmpty()) name = "Param " + juce::String (i + 1);
+                row->nameLabel.setText (name, juce::dontSendNotification);
+                row->nameLabel.setColour (juce::Label::textColourId,
+                                          juce::Colours::white.withAlpha (0.85f));
+                row->nameLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
+                addAndMakeVisible (row->nameLabel);
+
+                auto& btn = row->exposeButton;
+                btn.setClickingTogglesState (false);
+                btn.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff333344));
+                btn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff3e6aa8));
+                btn.setTooltip ("Expose this parameter to the DAW so it can be automated. "
+                                "When bound, the button shows the slot index (e.g. \"P3\"). "
+                                "Click again to free the slot. mcfx_graph has 256 slots total.");
+                btn.onClick = [this, idx = i] { onExposeClicked (idx); };
+                addAndMakeVisible (btn);
+
+                paramRows_.push_back (std::move (row));
+            }
+
+            refreshExposureLabels();
+        }
+
+        bool isEmpty() const noexcept { return paramRows_.empty(); }
+
+        /** Height this list needs; 0 when the node has no parameters. */
+        int getPreferredHeight() const
+        {
+            return paramRows_.empty() ? 0
+                                      : 18 + 14 + 4 + (int) paramRows_.size() * kRowHeight;
+        }
+
+        void resized() override
+        {
+            if (paramRows_.empty()) return;
+
+            auto area = getLocalBounds();
+            paramsHeader_.setBounds (area.removeFromTop (18));
+            slotsLabel_.setBounds   (area.removeFromTop (14));
+            area.removeFromTop (4);
+
+            for (auto& row : paramRows_)
+            {
+                auto r = area.removeFromTop (kRowHeight);
+                row->exposeButton.setBounds (r.removeFromRight (44).reduced (1));
+                row->nameLabel  .setBounds (r);
+            }
+        }
+
+    private:
+        static constexpr int kRowHeight = 22;
+
+        struct ParamRow
+        {
+            int              paramIndex = -1;
+            juce::Label      nameLabel;
+            juce::TextButton exposeButton;
+        };
+
+        void onExposeClicked (int paramIndex)
+        {
+            if (outerProc_.getExposedSlotFor (node_.uuid, paramIndex) >= 0)
+                outerProc_.unexposeParameter (node_.uuid, paramIndex);
+            else
+                outerProc_.exposeParameter   (node_.uuid, paramIndex);
+
+            refreshExposureLabels();
+        }
+
+        void refreshExposureLabels()
+        {
+            int boundCount = 0;
+            for (auto& row : paramRows_)
+            {
+                const int slot = outerProc_.getExposedSlotFor (node_.uuid, row->paramIndex);
+                if (slot >= 0)
+                {
+                    row->exposeButton.setButtonText ("P" + juce::String (slot));
+                    row->exposeButton.setToggleState (true, juce::dontSendNotification);
+                    ++boundCount;
+                }
+                else
+                {
+                    row->exposeButton.setButtonText ("P");
+                    row->exposeButton.setToggleState (false, juce::dontSendNotification);
+                }
+            }
+
+            int totalBound = 0;
+            const int total = outerProc_.getForwardingParameterCount();
+            for (int i = 0; i < total; ++i)
+                if (auto* fp = outerProc_.getForwardingParameter (i))
+                    if (fp->isBound()) ++totalBound;
+
+            slotsLabel_.setText ("This node: " + juce::String (boundCount)
+                                  + "    Total used: " + juce::String (totalBound)
+                                  + " / " + juce::String (total),
+                                 juce::dontSendNotification);
+        }
+
+        Mcfx_graphAudioProcessor& outerProc_;
+        GraphNode& node_;
+        juce::Label paramsHeader_, slotsLabel_;
+        std::vector<std::unique_ptr<ParamRow>> paramRows_;
+    };
+
+    //==========================================================================
     // Per-kind subpanels. Each builds its own children in the constructor and
     // lays them out in resized().
 
     class GainPropertiesPanel : public juce::Component, private juce::Slider::Listener
     {
     public:
-        GainPropertiesPanel (GainNode& g, Mcfx_graphAudioProcessor& proc)
+        GainPropertiesPanel (GainNode& g, Mcfx_graphAudioProcessor& proc, GraphNode& gn)
             : gain_ (g), proc_ (proc)
         {
             linkedToggle_.setButtonText ("Linked");
@@ -144,7 +284,11 @@ namespace
 
             applyMode();
 
-            setSize (260, kHeaderHeight + (gain_.getNumChannels() + 2) * kRowHeight);
+            exposure_ = std::make_unique<ParameterExposureList> (proc_, gn);
+            addAndMakeVisible (*exposure_);
+
+            setSize (260, kHeaderHeight + (gain_.getNumChannels() + 2) * kRowHeight
+                          + exposure_->getPreferredHeight());
         }
 
         void resized() override
@@ -160,6 +304,9 @@ namespace
                 labels_[c] ->setBounds (row.removeFromLeft (kLabelWidth));
                 sliders_[c]->setBounds (row);
             }
+            if (exposure_ != nullptr && exposure_->getPreferredHeight() > 0)
+                exposure_->setBounds (area.removeFromTop (exposure_->getPreferredHeight()));
+
         }
 
     private:
@@ -232,13 +379,14 @@ namespace
         juce::ToggleButton modeToggle_;
         juce::OwnedArray<juce::Label>            labels_;
         juce::OwnedArray<ResetCommitSlider>      sliders_;
+        std::unique_ptr<ParameterExposureList> exposure_;
     };
 
     //==========================================================================
     class MutePhasePropertiesPanel : public juce::Component
     {
     public:
-        MutePhasePropertiesPanel (MutePhaseNode& m, Mcfx_graphAudioProcessor& proc)
+        MutePhasePropertiesPanel (MutePhaseNode& m, Mcfx_graphAudioProcessor& proc, GraphNode& gn)
             : mp_ (m), proc_ (proc)
         {
             linkedToggle_.setButtonText ("Linked");
@@ -293,7 +441,11 @@ namespace
                 addAndMakeVisible (inv);
             }
 
-            setSize (260, kHeaderHeight + (mp_.getNumChannels() + 1) * kRowHeight);
+            exposure_ = std::make_unique<ParameterExposureList> (proc_, gn);
+            addAndMakeVisible (*exposure_);
+
+            setSize (260, kHeaderHeight + (mp_.getNumChannels() + 1) * kRowHeight
+                          + exposure_->getPreferredHeight());
         }
 
         void resized() override
@@ -308,6 +460,9 @@ namespace
                 muteButtons_[c]->setBounds (row.removeFromLeft (60));
                 invButtons_[c]->setBounds  (row.removeFromLeft (60));
             }
+
+            if (exposure_ != nullptr && exposure_->getPreferredHeight() > 0)
+                exposure_->setBounds (area.removeFromTop (exposure_->getPreferredHeight()));
         }
 
     private:
@@ -317,6 +472,7 @@ namespace
         juce::OwnedArray<juce::Label>        labels_;
         juce::OwnedArray<juce::ToggleButton> muteButtons_;
         juce::OwnedArray<juce::ToggleButton> invButtons_;
+        std::unique_ptr<ParameterExposureList> exposure_;
     };
 
     //==========================================================================
@@ -601,7 +757,7 @@ namespace
     class DelayPropertiesPanel : public juce::Component, private juce::Slider::Listener
     {
     public:
-        DelayPropertiesPanel (DelayNode& d, double sampleRate, Mcfx_graphAudioProcessor& proc)
+        DelayPropertiesPanel (DelayNode& d, double sampleRate, Mcfx_graphAudioProcessor& proc, GraphNode& gn)
             : delay_ (d), sr_ (sampleRate), proc_ (proc)
         {
             linkedToggle_.setButtonText ("Linked");
@@ -636,7 +792,11 @@ namespace
                 addAndMakeVisible (s);
             }
 
-            setSize (260, kHeaderHeight + (delay_.getNumChannels() + 1) * kRowHeight);
+            exposure_ = std::make_unique<ParameterExposureList> (proc_, gn);
+            addAndMakeVisible (*exposure_);
+
+            setSize (260, kHeaderHeight + (delay_.getNumChannels() + 1) * kRowHeight
+                          + exposure_->getPreferredHeight());
         }
 
         void resized() override
@@ -703,6 +863,7 @@ namespace
         juce::ToggleButton unitToggle_;
         juce::OwnedArray<juce::Label>  labels_;
         juce::OwnedArray<juce::Slider> sliders_;
+        std::unique_ptr<ParameterExposureList> exposure_;
     };
 
     //==========================================================================
@@ -776,7 +937,8 @@ namespace
 
             // Parameter list. The "P" toggle on each row exposes the parameter
             // to the host as one of mcfx_graph's 256 forwarding parameters.
-            buildParameterList();
+            exposure_ = std::make_unique<ParameterExposureList> (outerProc_, node_);
+            addAndMakeVisible (*exposure_);
             relayout();
         }
 
@@ -788,105 +950,6 @@ namespace
             using juce::DocumentWindow::DocumentWindow;
             void closeButtonPressed() override { delete this; }
         };
-
-        struct ParamRow
-        {
-            int                    paramIndex = -1;
-            juce::Label            nameLabel;
-            juce::TextButton       exposeButton;
-        };
-
-        void buildParameterList()
-        {
-            paramRows_.clear();
-
-            if (node_.processor == nullptr) return;
-
-            paramsHeader_.setText ("Automation parameters", juce::dontSendNotification);
-            paramsHeader_.setFont (juce::Font (juce::FontOptions (12.0f, juce::Font::bold)));
-            paramsHeader_.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.7f));
-            addAndMakeVisible (paramsHeader_);
-
-            slotsLabel_.setFont (juce::Font (juce::FontOptions (10.0f)));
-            slotsLabel_.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.5f));
-            addAndMakeVisible (slotsLabel_);
-
-            const auto& params = node_.processor->getParameters();
-            paramRows_.reserve ((size_t) params.size());
-
-            for (int i = 0; i < params.size(); ++i)
-            {
-                auto* p = params.getUnchecked (i);
-                if (p == nullptr) continue;
-
-                auto row = std::make_unique<ParamRow>();
-                row->paramIndex = i;
-
-                auto name = p->getName (40);
-                if (name.isEmpty()) name = "Param " + juce::String (i + 1);
-                row->nameLabel.setText (name, juce::dontSendNotification);
-                row->nameLabel.setColour (juce::Label::textColourId,
-                                          juce::Colours::white.withAlpha (0.85f));
-                row->nameLabel.setFont (juce::Font (juce::FontOptions (12.0f)));
-                addAndMakeVisible (row->nameLabel);
-
-                auto& btn = row->exposeButton;
-                btn.setClickingTogglesState (false);
-                btn.setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff333344));
-                btn.setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff3e6aa8));
-                btn.setTooltip ("Expose this parameter to the DAW so it can be automated. "
-                                "When bound, the button shows the slot index (e.g. \"P3\"). "
-                                "Click again to free the slot. mcfx_graph has 256 slots total.");
-                btn.onClick = [this, idx = i] { onExposeClicked (idx); };
-                addAndMakeVisible (btn);
-
-                paramRows_.push_back (std::move (row));
-            }
-
-            refreshExposureLabels();
-        }
-
-        void onExposeClicked (int paramIndex)
-        {
-            const int currentSlot = outerProc_.getExposedSlotFor (node_.uuid, paramIndex);
-            if (currentSlot >= 0)
-                outerProc_.unexposeParameter (node_.uuid, paramIndex);
-            else
-                outerProc_.exposeParameter   (node_.uuid, paramIndex);
-
-            refreshExposureLabels();
-        }
-
-        void refreshExposureLabels()
-        {
-            int boundCount = 0;
-            for (auto& row : paramRows_)
-            {
-                const int slot = outerProc_.getExposedSlotFor (node_.uuid, row->paramIndex);
-                if (slot >= 0)
-                {
-                    row->exposeButton.setButtonText ("P" + juce::String (slot));
-                    row->exposeButton.setToggleState (true, juce::dontSendNotification);
-                    ++boundCount;
-                }
-                else
-                {
-                    row->exposeButton.setButtonText ("P");
-                    row->exposeButton.setToggleState (false, juce::dontSendNotification);
-                }
-            }
-
-            int totalBound = 0;
-            const int total = outerProc_.getForwardingParameterCount();
-            for (int i = 0; i < total; ++i)
-                if (auto* fp = outerProc_.getForwardingParameter (i))
-                    if (fp->isBound()) ++totalBound;
-
-            slotsLabel_.setText ("This node: " + juce::String (boundCount)
-                                  + "    Total used: " + juce::String (totalBound)
-                                  + " / " + juce::String (total),
-                                 juce::dontSendNotification);
-        }
 
         void relayout()
         {
@@ -900,25 +963,14 @@ namespace
                 area.removeFromTop (8);
             }
 
-            if (! paramRows_.empty())
-            {
-                paramsHeader_.setBounds (area.removeFromTop (18));
-                slotsLabel_.setBounds   (area.removeFromTop (14));
-                area.removeFromTop (4);
-
-                constexpr int rowH = 22;
-                for (auto& row : paramRows_)
-                {
-                    auto r = area.removeFromTop (rowH);
-                    row->exposeButton.setBounds (r.removeFromRight (44).reduced (1));
-                    row->nameLabel  .setBounds (r);
-                }
-            }
+            const int listH = exposure_ != nullptr ? exposure_->getPreferredHeight() : 0;
+            if (listH > 0)
+                exposure_->setBounds (area.removeFromTop (listH));
 
             // Keep the component tall enough for the viewport to scroll.
             const int neededHeight = 8 + 24 + 4
                                    + (openEditor_.isVisible() ? 32 + 8 : 0)
-                                   + (paramRows_.empty() ? 0 : 18 + 14 + 4 + (int) paramRows_.size() * 22)
+                                   + listH
                                    + 8;
             if (getHeight() != neededHeight)
                 setSize (juce::jmax (260, getWidth()), neededHeight);
@@ -984,10 +1036,8 @@ namespace
         Mcfx_graphAudioProcessor& outerProc_;
         GraphNode& node_;
         juce::Label  info_;
-        juce::Label  paramsHeader_;
-        juce::Label  slotsLabel_;
         juce::TextButton openEditor_;
-        std::vector<std::unique_ptr<ParamRow>> paramRows_;
+        std::unique_ptr<ParameterExposureList> exposure_;
     };
 }
 
@@ -1124,11 +1174,11 @@ NodePropertiesPanel::createBodyForNode (GraphEditorComponent& editor, GraphNode&
     {
         case NodeKind::Gain:
             if (auto* g = dynamic_cast<GainNode*> (node.processor))
-                return std::make_unique<GainPropertiesPanel> (*g, proc);
+                return std::make_unique<GainPropertiesPanel> (*g, proc, node);
             return nullptr;
         case NodeKind::MutePhase:
             if (auto* m = dynamic_cast<MutePhaseNode*> (node.processor))
-                return std::make_unique<MutePhasePropertiesPanel> (*m, proc);
+                return std::make_unique<MutePhasePropertiesPanel> (*m, proc, node);
             return nullptr;
         case NodeKind::MatrixMixer:
             if (auto* r = dynamic_cast<MatrixMixerNode*> (node.processor))
@@ -1140,7 +1190,7 @@ NodePropertiesPanel::createBodyForNode (GraphEditorComponent& editor, GraphNode&
                             *d, editor.getActiveController().getInputChannelCount() > 0
                                   ? d->getSampleRate()
                                   : 48000.0,
-                            proc);
+                            proc, node);
             return nullptr;
         case NodeKind::Subgraph:
             return std::make_unique<SubgraphPropertiesPanel> (editor, node);

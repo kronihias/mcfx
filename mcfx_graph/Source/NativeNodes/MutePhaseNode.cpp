@@ -16,6 +16,47 @@ MutePhaseNode::MutePhaseNode (int numChannels)
 {
     for (auto& m : mute_)   m.store (0, std::memory_order_relaxed);
     for (auto& i : invert_) i.store (0, std::memory_order_relaxed);
+
+    muteParams_.reserve ((size_t) numChannels_);
+    invertParams_.reserve ((size_t) numChannels_);
+    for (int c = 0; c < numChannels_; ++c)
+    {
+        auto* m = new juce::AudioParameterBool (
+            juce::ParameterID { "mute_" + juce::String (c), 1 },
+            "Mute " + juce::String (c + 1), false);
+        auto* i = new juce::AudioParameterBool (
+            juce::ParameterID { "invert_" + juce::String (c), 1 },
+            "Invert " + juce::String (c + 1), false);
+        addParameter (m);
+        addParameter (i);
+        m->addListener (this);
+        i->addListener (this);
+        muteParams_.push_back (m);
+        invertParams_.push_back (i);
+    }
+}
+
+MutePhaseNode::~MutePhaseNode()
+{
+    for (auto* p : muteParams_)   p->removeListener (this);
+    for (auto* p : invertParams_) p->removeListener (this);
+}
+
+void MutePhaseNode::parameterValueChanged (int parameterIndex, float)
+{
+    // Parameters were added in mute/invert pairs, so the index maps straight
+    // back to a channel and which of the two switches it is.
+    const int channel = parameterIndex / 2;
+    if (! juce::isPositiveAndBelow (channel, numChannels_))
+        return;
+
+    if (applyingParam_.exchange (true))
+        return;
+    if (parameterIndex % 2 == 0)
+        setMute   (channel, muteParams_[(size_t) channel]->get());
+    else
+        setInvert (channel, invertParams_[(size_t) channel]->get());
+    applyingParam_.store (false);
 }
 
 bool MutePhaseNode::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -53,11 +94,23 @@ void MutePhaseNode::setMute (int channel, bool m) noexcept
     if (channel < 0 || channel >= numChannels_) return;
     const uint8_t v = m ? 1 : 0;
 
-    if (linked_.load (std::memory_order_relaxed))
+    const bool linked = linked_.load (std::memory_order_relaxed);
+
+    if (linked)
         for (auto& a : mute_)
             a.store (v, std::memory_order_relaxed);
     else
         mute_[channel].store (v, std::memory_order_relaxed);
+
+    if (! applyingParam_.load() && ! muteParams_.empty())
+    {
+        applyingParam_.store (true);
+        if (linked)
+            for (auto* p : muteParams_) *p = m;
+        else
+            *muteParams_[(size_t) channel] = m;
+        applyingParam_.store (false);
+    }
 }
 
 bool MutePhaseNode::getMute (int channel) const noexcept
@@ -71,11 +124,23 @@ void MutePhaseNode::setInvert (int channel, bool i) noexcept
     if (channel < 0 || channel >= numChannels_) return;
     const uint8_t v = i ? 1 : 0;
 
-    if (linked_.load (std::memory_order_relaxed))
+    const bool linked = linked_.load (std::memory_order_relaxed);
+
+    if (linked)
         for (auto& a : invert_)
             a.store (v, std::memory_order_relaxed);
     else
         invert_[channel].store (v, std::memory_order_relaxed);
+
+    if (! applyingParam_.load() && ! invertParams_.empty())
+    {
+        applyingParam_.store (true);
+        if (linked)
+            for (auto* p : invertParams_) *p = i;
+        else
+            *invertParams_[(size_t) channel] = i;
+        applyingParam_.store (false);
+    }
 }
 
 bool MutePhaseNode::getInvert (int channel) const noexcept

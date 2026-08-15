@@ -12,11 +12,12 @@
 #include <atomic>
 #include <vector>
 
-class MutePhaseNode : public juce::AudioProcessor
+class MutePhaseNode : public juce::AudioProcessor,
+                      private juce::AudioProcessorParameter::Listener
 {
 public:
     explicit MutePhaseNode (int numChannels);
-    ~MutePhaseNode() override = default;
+    ~MutePhaseNode() override;
 
     static constexpr const char* kTypeId = "mute_phase";
 
@@ -56,6 +57,16 @@ public:
 
 private:
     static juce::AudioProcessor::BusesProperties makeBuses (int numChannels);
+
+    // Two host-visible switches per channel, so mcfx_graph's forwarding pool
+    // can expose them. The atomics below stay the authority for the audio
+    // thread; these mirror them both ways. Mute and invert alternate
+    // (mute 1, invert 1, mute 2, ...) so a channel's pair sits together.
+    void parameterValueChanged (int parameterIndex, float newValue) override;
+    void parameterGestureChanged (int, bool) override {}
+
+    std::vector<juce::AudioParameterBool*> muteParams_, invertParams_;
+    std::atomic<bool> applyingParam_ { false };
 
     const int numChannels_;
     std::atomic<bool> linked_ { false };
