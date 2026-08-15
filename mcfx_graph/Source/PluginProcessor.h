@@ -55,7 +55,9 @@ public:
     int getNumPrograms() override                       { return 1; }
     int getCurrentProgram() override                    { return 0; }
     void setCurrentProgram (int) override               {}
-    const juce::String getProgramName (int) override    { return {}; }
+    // A non-empty name: the VST3 validator's Scan Programs test fails on an
+    // unnamed program, and hosts that gate plug-ins on validation reject us.
+    const juce::String getProgramName (int) override    { return "Default"; }
     void changeProgramName (int, const juce::String&) override {}
 
     void getStateInformation (juce::MemoryBlock& destData) override;

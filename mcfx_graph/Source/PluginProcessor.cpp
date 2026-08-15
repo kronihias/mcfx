@@ -347,6 +347,8 @@ bool Mcfx_graphAudioProcessor::importFromVar (const juce::var& v, juce::String* 
                                           : juce::String ("Param ") + juce::String (paramIndex));
                 }
             }
+
+            updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
         }
     }
 
@@ -472,6 +474,9 @@ int Mcfx_graphAudioProcessor::exposeParameter (juce::Uuid nodeUuid, int paramInd
             const auto name = inner->getName (64);
             fp->bind (inner, nodeUuid, paramIndex,
                       name.isNotEmpty() ? name : juce::String ("Param ") + juce::String (paramIndex));
+            // Hosts cache parameter names — without this a bound slot keeps
+            // showing as an anonymous "Param N" in the host's parameter list.
+            updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
             return i;
         }
     }
@@ -482,14 +487,23 @@ void Mcfx_graphAudioProcessor::unexposeParameter (juce::Uuid nodeUuid, int param
 {
     const int slot = getExposedSlotFor (nodeUuid, paramIndex);
     if (slot >= 0)
+    {
         forwardingParameters_.getUnchecked (slot)->unbind();
+        updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
+    }
 }
 
 void Mcfx_graphAudioProcessor::unbindAllForNode (juce::Uuid nodeUuid)
 {
+    bool changed = false;
     for (auto* fp : forwardingParameters_)
         if (fp->isBound() && fp->getNodeUuid() == nodeUuid)
+        {
             fp->unbind();
+            changed = true;
+        }
+    if (changed)
+        updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
 }
 
 void Mcfx_graphAudioProcessor::rebindAllSlotsAfterRestore()
@@ -513,6 +527,8 @@ void Mcfx_graphAudioProcessor::rebindAllSlotsAfterRestore()
         else
             fp->unbind();
     }
+
+    updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
 }
 
 //==============================================================================
