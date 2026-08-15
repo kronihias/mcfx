@@ -299,6 +299,8 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
+- `mcfx_anything`: fix an intermittent crash when changing the **sidechain source** on packed-sidechain plug-ins — the layout switch reloaded the hosted plug-in (GUI teardown included) synchronously inside the routing menu's callback; it now goes through the deferred loader. The sidechain source is also a host-automatable **"Sidechain Source" parameter** now (0 = off, k = channel k), appended after the forwarding pool so existing parameter indices are unchanged.
+- `mcfx_graph`: hosts are now told when a forwarding slot is bound or unbound (`parameterInfoChanged`), so the exposed parameter's real name shows up in the host's parameter list instead of a stale generic entry. Also names the factory program — the VST3 validator fails an unnamed program, and hosts that gate on validation (e.g. Isadora) rejected the plug-in.
 - `mcfx_delay`/`mcfx_gain_delay`: fix a crash when the host re-prepares one instance at a lower sample rate after processing — the delay ring's write position survived `prepareToPlay` while the buffer size shrank beneath it, and the wrap arithmetic ran a copy off the end of the buffer. This is exactly the sequence Steinberg's plug-in validator runs, so hosts that gate plug-ins on validation (e.g. Isadora) rejected both.
 
 - `mcfx_filter`: 1/24-octave smoothing for the analyzer curves. One FFT bin per pixel left the top octaves ragged no matter the temporal smoothing — each pixel now reads the RMS over at least 1/24 octave, which flattens noise while keeping resonances and comb notches visible.

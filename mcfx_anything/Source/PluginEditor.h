@@ -332,6 +332,10 @@ private:
 public:
     void destroyHostedEditorsForUnload();
 
+    // Public: also called by the processor when the "Sidechain Source" host
+    // parameter changes, so the button reflects automation-driven routing.
+    void updateSidechainButton();
+
 private:
     void showPluginMenu();
     void showSettings();
@@ -340,7 +344,6 @@ private:
     void closeAllInspectorWindows();
     void updateHostedEditor();
     void updateSelectorButtonText();
-    void updateSidechainButton();
     void toggleMainEditorType();
 
     TextButton _pluginSelectorButton;

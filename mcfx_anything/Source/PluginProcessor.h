@@ -176,6 +176,10 @@ public:
     // Deferred plugin loading (called from setStateInformation)
     void handleDeferredLoad();
 
+    // Applies a host-driven "Sidechain Source" parameter change on the
+    // message thread (a packed-sidechain crossing reloads the plugin).
+    void applyScSourceParam();
+
     // Persistent plugin list cache (shared across all instances)
     void savePluginListToCache();
     void loadPluginListFromCache();
@@ -289,6 +293,26 @@ private:
     DeferredLoader _deferredLoader { *this };
     std::unique_ptr<PluginDescription> _pendingPluginDesc;
     MemoryBlock _pendingPluginState;
+
+    // "Sidechain Source" host parameter — appended after the forwarding pool
+    // so every existing parameter index stays stable. 0 = off, k = route
+    // input channel k. Host writes can arrive on the audio thread, and
+    // applying one may reload a packed-sidechain plugin, so the value is
+    // applied via this AsyncUpdater on the message thread.
+    class ScSourceApplier : public AsyncUpdater,
+                            public AudioProcessorParameter::Listener
+    {
+    public:
+        ScSourceApplier (Mcfx_anythingAudioProcessor& owner) : _owner (owner) {}
+        void parameterValueChanged (int, float) override  { triggerAsyncUpdate(); }
+        void parameterGestureChanged (int, bool) override {}
+        void handleAsyncUpdate() override                 { _owner.applyScSourceParam(); }
+    private:
+        Mcfx_anythingAudioProcessor& _owner;
+    };
+    AudioParameterInt* _scSourceParam = nullptr;      // owned by AudioProcessor
+    ScSourceApplier _scSourceApplier { *this };
+    std::atomic<bool> _applyingScSourceParam { false };
 
     // Host channel count that drove the current _numInstances value. Updated
     // in loadPlugin() and checked in prepareToPlay(): when the host

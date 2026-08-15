@@ -186,10 +186,20 @@ Mcfx_anythingAudioProcessor::Mcfx_anythingAudioProcessor()
         _forwardingParameters.add (fp);
         addParameter (fp);   // AudioProcessor takes ownership
     }
+
+    // "Sidechain Source" as a host-automatable parameter, appended AFTER the
+    // fixed pool so every existing parameter index is preserved.
+    // 0 = off, k = route input channel k to the sidechain bus.
+    _scSourceParam = new AudioParameterInt ({ "scsource", 1 }, "Sidechain Source",
+                                            0, NUM_CHANNELS, 0);
+    addParameter (_scSourceParam);
+    _scSourceParam->addListener (&_scSourceApplier);
 }
 
 Mcfx_anythingAudioProcessor::~Mcfx_anythingAudioProcessor()
 {
+    _scSourceParam->removeListener (&_scSourceApplier);
+    _scSourceApplier.cancelPendingUpdate();
     _paramSyncTimer.stopTimer();
     _knownPluginList.removeChangeListener (&_pluginListChangeListener);
     unloadPlugin();
@@ -477,6 +487,10 @@ void Mcfx_anythingAudioProcessor::setStateInformation (const void* data, int siz
     // Restore sidechain routing (applied after plugin loads)
     if (xml->hasAttribute ("sidechainSourceChannel"))
         _sidechainSourceChannel = xml->getIntAttribute ("sidechainSourceChannel", -1);
+
+    // Keep the host parameter in step with the restored routing.
+    if (_scSourceParam != nullptr)
+        *_scSourceParam = _sidechainSourceChannel + 1;
 
     // Restore current plugin description and schedule deferred loading.
     // CURRENT_PLUGIN is a wrapper around a <PLUGIN> child — we can't just
@@ -839,8 +853,13 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
             return;
         }
         disableNonMainBuses (*instance);
-        if (useReducedLayout)
-            applyReducedMainBus (*instance, packedReduced);
+        if (useReducedLayout && ! applyReducedMainBus (*instance, packedReduced))
+        {
+            // A sibling left on the full layout would expect more channels
+            // than the shared stride provides — safer to run without it.
+            fprintf (stderr, "  WARNING: instance %d rejected the reduced layout, skipping it\n", i);
+            continue;
+        }
         instance->prepareToPlay (_currentSampleRate, _currentBlockSize);
         newInstances.add (instance.release());
     }
@@ -1023,42 +1042,41 @@ void Mcfx_anythingAudioProcessor::setSidechainSourceChannel (int channel)
 
     _sidechainSourceChannel = newValue;
 
+    // Reflect editor-driven changes into the host parameter (skipped when the
+    // change came FROM the parameter, or automation would feed back).
+    if (_scSourceParam != nullptr && ! _applyingScSourceParam.load())
+        *_scSourceParam = newValue + 1;
+
     // For packed-sidechain plugins, crossing the on/off boundary requires
     // reloading the plugin with a different main-bus layout (reduced vs
-    // full). We save and restore the plugin state across the reload so the
-    // user doesn't lose parameter settings.
+    // full). The reload goes through the deferred loader rather than running
+    // here synchronously: this is reached from the editor's popup-menu
+    // callback, and tearing down and rebuilding the hosted plugin GUI inside
+    // that callback stack crashes some hosts. handleDeferredLoad also does
+    // the state restore and forwarding-proxy re-seed this used to duplicate.
     if (_packedSidechainCapable && crossing && _currentPluginDesc != nullptr)
     {
         MemoryBlock savedState;
-        if (_pluginInstances.size() > 0)
-            _pluginInstances.getUnchecked (0)->getStateInformation (savedState);
-
-        PluginDescription descCopy = *_currentPluginDesc;
-        loadPlugin (descCopy);
-
-        if (savedState.getSize() > 0)
         {
             const ScopedLock lock (_pluginLock);
-            for (auto* instance : _pluginInstances)
-                instance->setStateInformation (savedState.getData(),
-                                               (int) savedState.getSize());
-
-            // Re-seed forwarding proxies from the restored parameter values
-            // (same reason as in handleDeferredLoad).
             if (_pluginInstances.size() > 0)
-            {
-                auto masterParams = _pluginInstances.getFirst()->getParameters();
-                for (int p = 0; p < masterParams.size(); ++p)
-                {
-                    const float v = masterParams[p]->getValue();
-                    if (p < (int) _lastParameterValues.size())
-                        _lastParameterValues[(size_t) p] = v;
-                    if (auto* fp = getForwardingParameter (p))
-                        fp->updateFromInner (v);
-                }
-            }
+                _pluginInstances.getUnchecked (0)->getStateInformation (savedState);
         }
+
+        _pendingPluginDesc  = std::make_unique<PluginDescription> (*_currentPluginDesc);
+        _pendingPluginState = std::move (savedState);
+        _deferredLoader.triggerAsyncUpdate();
     }
+}
+
+void Mcfx_anythingAudioProcessor::applyScSourceParam()
+{
+    _applyingScSourceParam.store (true);
+    setSidechainSourceChannel (_scSourceParam->get() - 1);
+    _applyingScSourceParam.store (false);
+
+    if (auto* ed = dynamic_cast<Mcfx_anythingAudioProcessorEditor*> (getActiveEditor()))
+        ed->updateSidechainButton();
 }
 
 void Mcfx_anythingAudioProcessor::handleDeferredLoad()
