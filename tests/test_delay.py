@@ -160,3 +160,43 @@ def test_golden_regression(plugin_delay, request):
     else:
         golden = load_golden(GOLDEN_TAG)
         np.testing.assert_allclose(out, golden, atol=1e-6)
+
+
+# ---------------------------------------------------------------------------
+# Sample-rate change must not crash (rides in a subprocess: the failure mode
+# is a segfault, which would otherwise take the test runner down with it)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("plugin_name", ["mcfx_delay", "mcfx_gain_delay"])
+def test_rate_drop_after_processing_does_not_crash(plugin_name):
+    """Process at a high rate, then re-prepare at a low one on the SAME
+    instance. The delay ring's write position used to survive prepareToPlay
+    while _buf_size shrank beneath it, sending the wrap arithmetic negative —
+    a memmove off the end of the buffer (the crash Steinberg's
+    ProcessFormatTest, and with it Isadora's plug-in scan, kept hitting)."""
+    from conftest import vst3, vst3_load_path
+    import subprocess, textwrap
+
+    path = vst3(plugin_name)
+    if not os.path.exists(path):
+        pytest.skip(f"Plugin not built: {path}")
+
+    script = textwrap.dedent(f"""
+        import numpy as np, pedalboard
+        p = pedalboard.load_plugin({vst3_load_path(path)!r})
+        for k, prm in p.parameters.items():
+            if "delay" in k.lower():
+                prm.raw_value = 1.0
+        # push the ring's write position well past the low-rate buffer size
+        p(np.zeros((2, 90112), dtype=np.float32),
+          sample_rate=192000.0, buffer_size=512, reset=False)
+        p(np.zeros((2, 4096), dtype=np.float32),
+          sample_rate=44100.0, buffer_size=512, reset=False)
+        print("survived")
+    """)
+    r = subprocess.run([sys.executable, "-c", script],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, (
+        f"{plugin_name} crashed on sample-rate change "
+        f"(exit {r.returncode}): {r.stderr[-400:]}")
+    assert "survived" in r.stdout

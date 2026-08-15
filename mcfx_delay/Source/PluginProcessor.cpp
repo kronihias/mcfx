@@ -167,7 +167,19 @@ void Mcfx_delayAudioProcessor::prepareToPlay (double sampleRate, int samplesPerB
     _samplerate = sampleRate;
 
     _buf_size = (int)(MAX_DELAYTIME_S * sampleRate + samplesPerBlock + 1); // MAX_DELAYTIME_S maximum
+
+    // Allocate here and reset the ring. The wrap arithmetic in processBlock is
+    // relative to _buf_size, so a write position left over from a previous,
+    // higher sample rate can sit beyond the new, smaller size — the "samples
+    // until the end of the ring" count then goes negative and the copy runs
+    // off the buffer. Hosts and validators re-prepare one instance at several
+    // rates in a row (Steinberg's ProcessFormatTest does exactly this, and
+    // Isadora's plug-in scan crashed on it), so the position must not survive
+    // a prepare.
+    _delay_buffer.setSize(jmax(1, getTotalNumInputChannels()), _buf_size, false, false, true);
     _delay_buffer.clear();
+    _buf_write_pos = 0;
+
     _delay_smpls = (int)floor(_delay_ms*MAX_DELAYTIME_S*sampleRate+0.5f);
 }
 

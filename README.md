@@ -299,6 +299,8 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
+- `mcfx_delay`/`mcfx_gain_delay`: fix a crash when the host re-prepares one instance at a lower sample rate after processing — the delay ring's write position survived `prepareToPlay` while the buffer size shrank beneath it, and the wrap arithmetic ran a copy off the end of the buffer. This is exactly the sequence Steinberg's plug-in validator runs, so hosts that gate plug-ins on validation (e.g. Isadora) rejected both.
+
 - `mcfx_filter`: 1/24-octave smoothing for the analyzer curves. One FFT bin per pixel left the top octaves ragged no matter the temporal smoothing — each pixel now reads the RMS over at least 1/24 octave, which flattens noise while keeping resonances and comb notches visible.
 
 ### 0.8.9 (2026-08-12)
