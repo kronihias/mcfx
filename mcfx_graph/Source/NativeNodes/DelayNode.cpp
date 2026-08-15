@@ -29,32 +29,24 @@ DelayNode::DelayNode (int numChannels, float maxDelaySamples)
     delayParams_.reserve ((size_t) numChannels_);
     for (int c = 0; c < numChannels_; ++c)
     {
-        auto* p = new juce::AudioParameterFloat (
+        auto* p = new DelayParam (*this, c,
             juce::ParameterID { "delay_" + juce::String (c), 1 },
             "Delay " + juce::String (c + 1),
             juce::NormalisableRange<float> (0.0f, maxDelaySamples_, 1.0f), 0.0f);
         addParameter (p);
-        p->addListener (this);
         delayParams_.push_back (p);
     }
 }
 
-DelayNode::~DelayNode()
-{
-    for (auto* p : delayParams_)
-        p->removeListener (this);
-}
+DelayNode::~DelayNode() = default;
 
-void DelayNode::parameterValueChanged (int parameterIndex, float)
+void DelayNode::applyParamChange (int channel, float samples) noexcept
 {
-    if (! juce::isPositiveAndBelow (parameterIndex, (int) delayParams_.size()))
-        return;
-
-    // Re-entrancy guard: setDelaySamples writes the parameters back, and
-    // when linked it writes every channel's.
+    // Re-entrancy guard, and it keeps the not-realtime-safe write-back out of
+    // this path, which runs on the audio thread.
     if (applyingParam_.exchange (true))
         return;
-    setDelaySamples (parameterIndex, delayParams_[(size_t) parameterIndex]->get());
+    setDelaySamples (channel, samples);
     applyingParam_.store (false);
 }
 
@@ -122,9 +114,12 @@ void DelayNode::setDelaySamples (int channel, float samples) noexcept
         applyingParam_.store (true);
         if (linked)
             for (auto* p : delayParams_)
-                *p = clamped;
+                p->setValueNotifyingHost (p->convertTo0to1 (clamped));
         else
-            *delayParams_[(size_t) channel] = clamped;
+        {
+            auto* p = delayParams_[(size_t) channel];
+            p->setValueNotifyingHost (p->convertTo0to1 (clamped));
+        }
         applyingParam_.store (false);
     }
 }

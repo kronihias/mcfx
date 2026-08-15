@@ -812,6 +812,9 @@ namespace
                 labels_[c] ->setBounds (row.removeFromLeft (kLabelWidth));
                 sliders_[c]->setBounds (row);
             }
+            if (exposure_ != nullptr && exposure_->getPreferredHeight() > 0)
+                exposure_->setBounds (area.removeFromTop (exposure_->getPreferredHeight()));
+
         }
 
     private:

@@ -22,32 +22,25 @@ GainNode::GainNode (int numChannels)
     gainParams_.reserve ((size_t) numChannels_);
     for (int c = 0; c < numChannels_; ++c)
     {
-        auto* p = new juce::AudioParameterFloat (
+        auto* p = new GainParam (*this, c,
             juce::ParameterID { "gain_" + juce::String (c), 1 },
             "Gain " + juce::String (c + 1),
             juce::NormalisableRange<float> (-120.0f, 40.0f, 0.1f), 0.0f);
         addParameter (p);
-        p->addListener (this);
         gainParams_.push_back (p);
     }
 }
 
-GainNode::~GainNode()
-{
-    for (auto* p : gainParams_)
-        p->removeListener (this);
-}
+GainNode::~GainNode() = default;
 
-void GainNode::parameterValueChanged (int parameterIndex, float)
+void GainNode::applyParamChange (int channel, float db) noexcept
 {
-    if (! juce::isPositiveAndBelow (parameterIndex, (int) gainParams_.size()))
-        return;
-
     // Re-entrancy guard: setGainDb writes the parameters back, and when
-    // linked it writes every channel's.
+    // linked it writes every channel's. Also keeps the write-back — which is
+    // not realtime-safe — out of this path, which runs on the audio thread.
     if (applyingParam_.exchange (true))
         return;
-    setGainDb (parameterIndex, gainParams_[(size_t) parameterIndex]->get());
+    setGainDb (channel, db);
     applyingParam_.store (false);
 }
 
@@ -94,11 +87,16 @@ void GainNode::setGainDb (int channel, float db) noexcept
     if (! applyingParam_.load() && ! gainParams_.empty())
     {
         applyingParam_.store (true);
+        // setValueNotifyingHost, not operator=: the subclass's implicit
+        // copy-assignment hides the base's value assignment.
         if (linked)
             for (auto* p : gainParams_)
-                *p = db;
+                p->setValueNotifyingHost (p->convertTo0to1 (db));
         else
-            *gainParams_[(size_t) channel] = db;
+        {
+            auto* p = gainParams_[(size_t) channel];
+            p->setValueNotifyingHost (p->convertTo0to1 (db));
+        }
         applyingParam_.store (false);
     }
 }

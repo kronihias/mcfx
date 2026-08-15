@@ -16,8 +16,7 @@
 #include <vector>
 #include <memory>
 
-class DelayNode : public juce::AudioProcessor,
-                  private juce::AudioProcessorParameter::Listener
+class DelayNode : public juce::AudioProcessor
 {
 public:
     DelayNode (int numChannels, float maxDelaySamples = 48000.0f);
@@ -66,10 +65,21 @@ private:
     // One host-visible parameter per channel, in samples, so mcfx_graph's
     // forwarding pool can expose them like a hosted plug-in's. The atomics
     // stay the authority for the audio thread; these mirror them both ways.
-    void parameterValueChanged (int parameterIndex, float newValue) override;
-    void parameterGestureChanged (int, bool) override {}
+    // valueChanged() is what juce calls from AudioParameterFloat::setValue(),
+    // which is how a host write actually arrives — Listener only fires for
+    // setValueNotifyingHost.
+    struct DelayParam : juce::AudioParameterFloat
+    {
+        DelayParam (DelayNode& o, int ch, const juce::ParameterID& id,
+                    const juce::String& nm, juce::NormalisableRange<float> r, float def)
+            : juce::AudioParameterFloat (id, nm, r, def), owner (o), channel (ch) {}
+        void valueChanged (float newValue) override { owner.applyParamChange (channel, newValue); }
+        DelayNode& owner;
+        const int channel;
+    };
+    void applyParamChange (int channel, float samples) noexcept;
 
-    std::vector<juce::AudioParameterFloat*> delayParams_;  // owned by AudioProcessor
+    std::vector<DelayParam*> delayParams_;                 // owned by AudioProcessor
     std::atomic<bool> applyingParam_ { false };
 
     using Line = juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Lagrange3rd>;

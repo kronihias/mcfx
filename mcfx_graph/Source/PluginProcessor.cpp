@@ -477,6 +477,10 @@ int Mcfx_graphAudioProcessor::exposeParameter (juce::Uuid nodeUuid, int paramInd
             // Hosts cache parameter names — without this a bound slot keeps
             // showing as an anonymous "Param N" in the host's parameter list.
             updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
+            // bind() only seeds the slot's cached value; tell the host too, or
+            // its automation lane reads whatever the unbound slot held until
+            // the user first moves the control.
+            fp->updateFromInner (inner->getValue());
             return i;
         }
     }

@@ -12,8 +12,7 @@
 #include <atomic>
 #include <vector>
 
-class MutePhaseNode : public juce::AudioProcessor,
-                      private juce::AudioProcessorParameter::Listener
+class MutePhaseNode : public juce::AudioProcessor
 {
 public:
     explicit MutePhaseNode (int numChannels);
@@ -62,10 +61,22 @@ private:
     // can expose them. The atomics below stay the authority for the audio
     // thread; these mirror them both ways. Mute and invert alternate
     // (mute 1, invert 1, mute 2, ...) so a channel's pair sits together.
-    void parameterValueChanged (int parameterIndex, float newValue) override;
-    void parameterGestureChanged (int, bool) override {}
+    // valueChanged() is what juce calls from AudioParameterBool::setValue(),
+    // which is how a host write actually arrives — Listener only fires for
+    // setValueNotifyingHost.
+    struct SwitchParam : juce::AudioParameterBool
+    {
+        SwitchParam (MutePhaseNode& o, int ch, bool inv,
+                     const juce::ParameterID& id, const juce::String& nm)
+            : juce::AudioParameterBool (id, nm, false), owner (o), channel (ch), isInvert (inv) {}
+        void valueChanged (bool newValue) override { owner.applyParamChange (channel, isInvert, newValue); }
+        MutePhaseNode& owner;
+        const int  channel;
+        const bool isInvert;
+    };
+    void applyParamChange (int channel, bool isInvert, bool on) noexcept;
 
-    std::vector<juce::AudioParameterBool*> muteParams_, invertParams_;
+    std::vector<SwitchParam*> muteParams_, invertParams_;
     std::atomic<bool> applyingParam_ { false };
 
     const int numChannels_;

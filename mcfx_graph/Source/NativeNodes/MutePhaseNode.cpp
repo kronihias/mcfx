@@ -21,41 +21,29 @@ MutePhaseNode::MutePhaseNode (int numChannels)
     invertParams_.reserve ((size_t) numChannels_);
     for (int c = 0; c < numChannels_; ++c)
     {
-        auto* m = new juce::AudioParameterBool (
+        auto* m = new SwitchParam (*this, c, false,
             juce::ParameterID { "mute_" + juce::String (c), 1 },
-            "Mute " + juce::String (c + 1), false);
-        auto* i = new juce::AudioParameterBool (
+            "Mute " + juce::String (c + 1));
+        auto* i = new SwitchParam (*this, c, true,
             juce::ParameterID { "invert_" + juce::String (c), 1 },
-            "Invert " + juce::String (c + 1), false);
+            "Invert " + juce::String (c + 1));
         addParameter (m);
         addParameter (i);
-        m->addListener (this);
-        i->addListener (this);
         muteParams_.push_back (m);
         invertParams_.push_back (i);
     }
 }
 
-MutePhaseNode::~MutePhaseNode()
-{
-    for (auto* p : muteParams_)   p->removeListener (this);
-    for (auto* p : invertParams_) p->removeListener (this);
-}
+MutePhaseNode::~MutePhaseNode() = default;
 
-void MutePhaseNode::parameterValueChanged (int parameterIndex, float)
+void MutePhaseNode::applyParamChange (int channel, bool isInvert, bool on) noexcept
 {
-    // Parameters were added in mute/invert pairs, so the index maps straight
-    // back to a channel and which of the two switches it is.
-    const int channel = parameterIndex / 2;
-    if (! juce::isPositiveAndBelow (channel, numChannels_))
-        return;
-
+    // Re-entrancy guard, and it keeps the not-realtime-safe write-back out of
+    // this path, which runs on the audio thread.
     if (applyingParam_.exchange (true))
         return;
-    if (parameterIndex % 2 == 0)
-        setMute   (channel, muteParams_[(size_t) channel]->get());
-    else
-        setInvert (channel, invertParams_[(size_t) channel]->get());
+    if (isInvert) setInvert (channel, on);
+    else          setMute   (channel, on);
     applyingParam_.store (false);
 }
 
@@ -106,9 +94,9 @@ void MutePhaseNode::setMute (int channel, bool m) noexcept
     {
         applyingParam_.store (true);
         if (linked)
-            for (auto* p : muteParams_) *p = m;
+            for (auto* p : muteParams_) p->setValueNotifyingHost (m ? 1.0f : 0.0f);
         else
-            *muteParams_[(size_t) channel] = m;
+            muteParams_[(size_t) channel]->setValueNotifyingHost (m ? 1.0f : 0.0f);
         applyingParam_.store (false);
     }
 }
@@ -136,9 +124,9 @@ void MutePhaseNode::setInvert (int channel, bool i) noexcept
     {
         applyingParam_.store (true);
         if (linked)
-            for (auto* p : invertParams_) *p = i;
+            for (auto* p : invertParams_) p->setValueNotifyingHost (i ? 1.0f : 0.0f);
         else
-            *invertParams_[(size_t) channel] = i;
+            invertParams_[(size_t) channel]->setValueNotifyingHost (i ? 1.0f : 0.0f);
         applyingParam_.store (false);
     }
 }

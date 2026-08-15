@@ -13,8 +13,7 @@
 #include <atomic>
 #include <vector>
 
-class GainNode : public juce::AudioProcessor,
-                 private juce::AudioProcessorParameter::Listener
+class GainNode : public juce::AudioProcessor
 {
 public:
     explicit GainNode (int numChannels);
@@ -64,10 +63,22 @@ private:
     // can expose them like a hosted plug-in's. The atomics below stay the
     // authority for the audio thread; the parameters mirror them in both
     // directions.
-    void parameterValueChanged (int parameterIndex, float newValue) override;
-    void parameterGestureChanged (int, bool) override {}
+    // valueChanged() is what juce calls from AudioParameterFloat::setValue(),
+    // which is how a host write actually arrives. AudioProcessorParameter::
+    // Listener only fires for setValueNotifyingHost, so automation coming
+    // through mcfx_graph's forwarding slots would never reach the audio.
+    struct GainParam : juce::AudioParameterFloat
+    {
+        GainParam (GainNode& o, int ch, const juce::ParameterID& id,
+                   const juce::String& nm, juce::NormalisableRange<float> r, float def)
+            : juce::AudioParameterFloat (id, nm, r, def), owner (o), channel (ch) {}
+        void valueChanged (float newValue) override { owner.applyParamChange (channel, newValue); }
+        GainNode& owner;
+        const int channel;
+    };
+    void applyParamChange (int channel, float db) noexcept;
 
-    std::vector<juce::AudioParameterFloat*> gainParams_;   // owned by AudioProcessor
+    std::vector<GainParam*> gainParams_;                   // owned by AudioProcessor
     std::atomic<bool> applyingParam_ { false };
 
     const int numChannels_;
