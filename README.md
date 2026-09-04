@@ -297,6 +297,10 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### Unreleased
+
+- `mcfx_meter`: hovering the waterfall reads out the frequency under the pointer. A cursor is drawn on the hovered channel's own ridge, its height showing the level at that channel and frequency, with the level in dB beside it and the frequency on the axis below.
+
 ### 0.8.10 (2026-08-15)
 
 - `mcfx_graph`: the **gain, delay and mute/phase nodes are automatable** — each publishes per-channel parameters that can be mapped to the plug-in's forwarding slots from the properties panel, the same way a hosted plug-in's parameters already could. Their panels follow values changed from the DAW, and a freshly mapped parameter reports its real value to the host straight away. (The matrix mixer stays out: an NxM matrix would publish far more parameters than the 256 slots available.)

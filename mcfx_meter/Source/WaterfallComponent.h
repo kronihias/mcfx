@@ -84,6 +84,9 @@ public:
     /** Log position of a frequency along the x axis, 0..1. */
     static float freqToNorm (float hz);
 
+    /** Inverse of freqToNorm — the frequency at a 0..1 x position. */
+    static float normToFreq (float norm);
+
     /** dB to 0..1 against the current floor and offset. */
     float levelToNorm (float db) const;
 
@@ -119,6 +122,10 @@ private:
         disagree about which numbers are on screen. */
     int labelEvery() const;
 
+    /** The hovered frequency: a line at constant frequency running back
+        through the plot, plus a readout at the front. */
+    void paintFreqCursor (Graphics&) const;
+
     /** One ridge: filled skirt, then the level-coloured stroke. */
     /** resFloorNorm is passed in because it is frame-constant and costs a pow
         and a log to derive — see paintRidges. */
@@ -131,6 +138,12 @@ private:
     float floorDb_ = -80.f;
     int   hovered_  = -1;
     int   selected_ = -1;
+
+    // Frequency under the pointer, as a 0..1 x position, and the channel row
+    // it was measured against (the mapping is per-row because each ridge is
+    // shifted along the depth axis). -1 when the pointer is outside the plot.
+    float hoverFreqNorm_ = -1.f;
+    int   hoverFreqCh_   = 0;
 
     Layout layout_;
 

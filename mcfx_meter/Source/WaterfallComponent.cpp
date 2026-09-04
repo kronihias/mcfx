@@ -128,6 +128,12 @@ float WaterfallComponent::freqToNorm (float hz)
     return std::log (h / kFreqLoHz) / std::log (kFreqHiHz / kFreqLoHz);
 }
 
+float WaterfallComponent::normToFreq (float norm)
+{
+    const float n = jlimit (0.f, 1.f, norm);
+    return kFreqLoHz * std::exp (n * std::log (kFreqHiHz / kFreqLoHz));
+}
+
 float WaterfallComponent::levelToNorm (float db) const
 {
     return jlimit (0.f, 1.f, (db - (float) offset_ - floorDb_) / (-floorDb_));
@@ -362,6 +368,83 @@ void WaterfallComponent::paintRidge (Graphics& g, int ch, bool highlighted, floa
     }
 }
 
+void WaterfallComponent::paintFreqCursor (Graphics& g) const
+{
+    if (hoverFreqNorm_ < 0.f || numCh_ <= 0 || analyser_ == nullptr)
+        return;
+
+    const int   ch = jlimit (0, jmax (0, numCh_ - 1), hoverFreqCh_);
+    const float fn = hoverFreqNorm_;
+
+    const float* bands = analyser_->getChannelBands (ch);
+    if (bands == nullptr)
+        return;
+
+    // Level where the pointer is, interpolated between the two band points
+    // either side of it — the same straight-segment interpolation the ridge
+    // itself is drawn with, so the marker lands exactly on the curve.
+    const int nBands = MultiBandAnalyser::kNumBands;
+    int hi = 1;
+    while (hi < nBands - 1 && bandX_[(size_t) hi] < fn)
+        ++hi;
+    const int lo = hi - 1;
+
+    const float x0 = bandX_[(size_t) lo], x1 = bandX_[(size_t) hi];
+    const float t  = (x1 > x0) ? jlimit (0.f, 1.f, (fn - x0) / (x1 - x0)) : 0.f;
+
+    const float db0 = Decibels::gainToDecibels (bands[lo], -200.f);
+    const float db1 = Decibels::gainToDecibels (bands[hi], -200.f);
+    const float db  = db0 + t * (db1 - db0);
+    const float ln  = levelToNorm (db);
+
+    const auto base = project (fn, 0.f, ch);
+    const auto tip  = project (fn, ln,  ch);
+
+    // Faint constant-frequency line from the hovered ridge forward to the
+    // front row, so the marker is visibly tied to the frequency axis below.
+    if (ch > 0)
+    {
+        const auto axisEnd = project (fn, 0.f, 0);
+        g.setColour (Colours::aquamarine.withAlpha (0.18f));
+        g.drawLine (base.x, base.y, axisEnd.x, axisEnd.y, 0.8f);
+    }
+
+    // The cursor itself: baseline to the ridge, so its height *is* the level
+    // at this channel and frequency.
+    g.setColour (Colours::aquamarine.withAlpha (0.75f));
+    g.drawLine (base.x, base.y, tip.x, tip.y, 1.4f);
+    g.fillEllipse (tip.x - 2.5f, tip.y - 2.5f, 5.f, 5.f);
+
+    // Level readout beside the tip, nudged inside the component at the edges.
+    {
+        const auto  lvl = (db <= -199.f ? String ("-inf") : String (db, 1) + " dB");
+        const float w = 58.f, h = 13.f;
+        auto r = Rectangle<float> (tip.x + 6.f, tip.y - h * 0.5f, w, h);
+        if (r.getRight() > (float) getWidth() - 2.f)
+            r.setX (tip.x - 6.f - w);
+        g.setColour (Colours::black.withAlpha (0.7f));
+        g.fillRoundedRectangle (r, 3.f);
+        g.setColour (Colours::aquamarine.withAlpha (0.9f));
+        g.setFont (Font (FontOptions (10.f, Font::plain)));
+        g.drawText (lvl, r, Justification::centred, false);
+    }
+
+    // Frequency on the axis, under the front row — where the scale is.
+    {
+        const auto  axisPt = project (fn, 0.f, 0);
+        const auto  text   = freqLabel (normToFreq (fn)) + " Hz";
+        const float w = 62.f;
+        auto plate = Rectangle<float> (axisPt.x - w * 0.5f, axisPt.y + 3.f, w, 14.f);
+        plate.setX (jlimit (2.f, jmax (2.f, (float) getWidth() - w - 2.f), plate.getX()));
+
+        g.setColour (Colours::black.withAlpha (0.8f));
+        g.fillRoundedRectangle (plate, 3.f);
+        g.setColour (Colours::aquamarine);
+        g.setFont (Font (FontOptions (10.f, Font::bold)));
+        g.drawText (text, plate, Justification::centred, false);
+    }
+}
+
 int WaterfallComponent::labelEvery() const
 {
     // Thinned as the rows compress: at 128 channels they are under 4 px apart,
@@ -447,12 +530,45 @@ int WaterfallComponent::channelAt (Point<float> p) const
 void WaterfallComponent::mouseMove (const MouseEvent& e)
 {
     const int h = channelAt (e.position);
-    if (h != hovered_) { hovered_ = h; repaint(); }
+
+    // Which row to measure the frequency against. Each ridge is shifted along
+    // the depth axis, so the same x is a different frequency on every row.
+    // Prefer the ridge actually under the pointer; off a ridge, estimate the
+    // row from how far up the depth axis the pointer is, which keeps the
+    // reading continuous as the mouse moves through empty space.
+    int ch = h;
+    if (ch < 0)
+    {
+        const float rows = layout_.dy > 0.f
+                             ? (layout_.originY - e.position.y) / layout_.dy
+                             : 0.f;
+        ch = jlimit (0, jmax (0, numCh_ - 1), roundToInt (rows));
+    }
+
+    float fn = -1.f;
+    if (layout_.plotW > 0.f)
+    {
+        const float f = (e.position.x - layout_.originX - (float) ch * layout_.dx)
+                            / layout_.plotW;
+        if (f >= 0.f && f <= 1.f)
+            fn = f;
+    }
+
+    const bool freqMoved = ! approximatelyEqual (fn, hoverFreqNorm_) || ch != hoverFreqCh_;
+    hoverFreqNorm_ = fn;
+    hoverFreqCh_   = ch;
+
+    if (h != hovered_ || freqMoved) { hovered_ = h; repaint(); }
 }
 
 void WaterfallComponent::mouseExit (const MouseEvent&)
 {
-    if (hovered_ != -1) { hovered_ = -1; repaint(); }
+    if (hovered_ != -1 || hoverFreqNorm_ >= 0.f)
+    {
+        hovered_ = -1;
+        hoverFreqNorm_ = -1.f;
+        repaint();
+    }
 }
 
 void WaterfallComponent::paint (Graphics& g)
@@ -462,6 +578,7 @@ void WaterfallComponent::paint (Graphics& g)
 
     paintGrid (g);
     paintRidges (g);
+    paintFreqCursor (g);
 
     // --- channel labels along the receding left edge ---
     if (numCh_ > 0)
