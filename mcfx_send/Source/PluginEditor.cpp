@@ -398,7 +398,10 @@ void McfxSendAudioProcessorEditor::rebuildUnifiedRows()
         r.host       = d.host;
         r.project    = d.project;
         r.track      = d.track;
-        r.ip         = d.ip.toString();
+        // Show what we'll actually address. A peer on this machine is
+        // reached over loopback regardless of the address it advertised,
+        // so display that rather than a LAN address we won't use.
+        r.ip         = mcfx::net::preferLoopbackIfLocal (d.ip.toString());
         r.port       = d.port;
         r.channels   = d.channels;
         r.wireUid    = d.wireUid;

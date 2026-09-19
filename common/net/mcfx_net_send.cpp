@@ -413,9 +413,17 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
 // Target management
 // ---------------------------------------------------------------------------
 
-bool SendStream::addTarget (const juce::String& host, int port, std::uint32_t wireUid)
+bool SendStream::addTarget (const juce::String& hostIn, int port, std::uint32_t wireUid)
 {
-    if (host.isEmpty() || port < 1 || port > 65535) return false;
+    if (hostIn.isEmpty() || port < 1 || port > 65535) return false;
+
+    // A receiver on this same machine is addressed via loopback, whatever
+    // address it advertised. See preferLoopbackIfLocal() — the packets were
+    // already never leaving the machine; this just stops us depending on a
+    // Wi-Fi address that can go stale under us. Applied here as well as at
+    // the processor boundary so every caller (Direct IP field, restored
+    // session state, auto-reconnect) lands on the same key.
+    const juce::String host = preferLoopbackIfLocal (hostIn);
 
     sockaddr_in addr {};
     if (! resolveIPv4 (host, port, addr)) return false;
@@ -472,8 +480,12 @@ bool SendStream::addTarget (const juce::String& host, int port, std::uint32_t wi
     return true;
 }
 
-void SendStream::removeTarget (const juce::String& host, int port)
+void SendStream::removeTarget (const juce::String& hostIn, int port)
 {
+    // Same normalisation as addTarget, so a Disconnect click that carries
+    // the Bonjour-advertised LAN address still matches the stored entry.
+    const juce::String host = preferLoopbackIfLocal (hostIn);
+
     Target evicted;
     bool found = false;
     {

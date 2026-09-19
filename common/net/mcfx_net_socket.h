@@ -114,6 +114,71 @@ inline juce::StringArray getLocalIPv4Addresses()
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// Same-machine detection / loopback preference
+// ---------------------------------------------------------------------------
+
+// Snapshot of this machine's IPv4 addresses, refreshed at most every 2 s.
+// getLocalIPv4Addresses() walks getifaddrs() and the auto-reconnect timer
+// asks once per armed peer per tick, so the answer is cached. 2 s is well
+// inside the time it takes a DHCP renewal or an interface flap to matter.
+inline juce::StringArray getCachedLocalIPv4Addresses()
+{
+    static juce::CriticalSection cacheLock;
+    static juce::StringArray cached;
+    static juce::uint32 cachedAtMs = 0;
+    static bool primed = false;
+
+    const juce::ScopedLock sl (cacheLock);
+    const auto nowMs = juce::Time::getMillisecondCounter();
+    if (! primed || nowMs - cachedAtMs > 2000)
+    {
+        cached     = getLocalIPv4Addresses();
+        cachedAtMs = nowMs;
+        primed     = true;   // an empty result (no interface up) is a real
+                             // answer, not a reason to re-query every call
+    }
+    return cached;
+}
+
+// True when `host` is a dotted-quad IPv4 literal naming an address that is
+// configured on this machine — including the whole 127/8 loopback block.
+//
+// Literals only: resolving a hostname would mean a blocking getaddrinfo on
+// the message thread, and every caller that matters (Bonjour rows, restored
+// targets, the Direct IP field) hands us a dotted quad anyway.
+inline bool isOwnIPv4Address (const juce::String& host)
+{
+    if (host.isEmpty()) return false;
+    if (host.startsWith ("127.")) return true;
+    if (! host.containsOnly ("0123456789.")) return false;
+    return getCachedLocalIPv4Addresses().contains (host);
+}
+
+// Rewrite a same-machine destination to 127.0.0.1.
+//
+// Sending to your own LAN address never puts a packet on the wire in the
+// first place: the IP stack sees a locally-configured destination, routes it
+// over the loopback interface (lo0, MTU 16384) and the radio is never
+// touched. So this changes nothing about where the audio travels.
+//
+// What it removes is the *dependency* on that address staying valid. The
+// address a peer latches onto comes from the Bonjour TXT record, which
+// carries whatever the advertiser's interface address was at broadcast time.
+// On Wi-Fi that address churns — roaming, a DHCP renewal, or the link simply
+// dropping — and each churn either strands the stream on an address that no
+// longer exists or drives the auto-reconnect rematch through a needless
+// teardown/re-INVITE cycle, audible as a dropout. For two plugins inside the
+// same machine none of that has anything to do with the data path.
+// 127.0.0.1 never goes stale, and loopback traffic is also exempt from the
+// macOS local-network privacy gate.
+//
+// Idempotent: a loopback address in gives the same address back.
+inline juce::String preferLoopbackIfLocal (const juce::String& host)
+{
+    return isOwnIPv4Address (host) ? juce::String ("127.0.0.1") : host;
+}
+
 }} // namespace mcfx::net
 
 namespace mcfx { namespace net {

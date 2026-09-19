@@ -62,9 +62,14 @@ McfxReceiveAudioProcessor::~McfxReceiveAudioProcessor()
     stopTimer();
 }
 
-bool McfxReceiveAudioProcessor::inviteSender (const juce::String& host, int port,
+bool McfxReceiveAudioProcessor::inviteSender (const juce::String& hostIn, int port,
                                               std::uint32_t wireUid, bool isUserAction)
 {
+    // Normalise a same-machine peer to 127.0.0.1 before anything keys off
+    // the address — lastBonjour and armedPeers both use (host, port) as a
+    // map key, so this has to happen above the stream, not only inside it.
+    const juce::String host = mcfx::net::preferLoopbackIfLocal (hostIn);
+
     if (isUserAction)
     {
         cancelAutoReconnect();
@@ -86,9 +91,11 @@ bool McfxReceiveAudioProcessor::inviteSender (const juce::String& host, int port
     return stream.inviteSender (host, port, wireUid);
 }
 
-void McfxReceiveAudioProcessor::uninviteSender (const juce::String& host, int port,
+void McfxReceiveAudioProcessor::uninviteSender (const juce::String& hostIn, int port,
                                                 std::uint32_t wireUid, bool isUserAction)
 {
+    const juce::String host = mcfx::net::preferLoopbackIfLocal (hostIn);
+
     if (isUserAction)
     {
         cancelAutoReconnect();
@@ -302,7 +309,11 @@ void McfxReceiveAudioProcessor::timerCallback()
                     if (! it->hint.project.isEmpty() && s.project != it->hint.project) continue;
                     if (! it->hint.track  .isEmpty() && s.track   != it->hint.track)   continue;
 
-                    const auto newIp = s.ip.toString();
+                    // Normalise here too: an armed same-machine peer is
+                    // stored as 127.0.0.1, and comparing that against the
+                    // raw advertised LAN address would look like an address
+                    // change on every single tick and churn the connection.
+                    const auto newIp = mcfx::net::preferLoopbackIfLocal (s.ip.toString());
                     if (newIp != it->host || s.port != it->port)
                     {
                         Action a;

@@ -779,9 +779,15 @@ bool RecvStream::isAcceptedUid (uint32_t uid) const noexcept
     return false;
 }
 
-bool RecvStream::inviteSender (const juce::String& host, int port, std::uint32_t wireUid)
+bool RecvStream::inviteSender (const juce::String& hostIn, int port, std::uint32_t wireUid)
 {
-    if (host.isEmpty() || port < 1 || port > 65535) return false;
+    if (hostIn.isEmpty() || port < 1 || port > 65535) return false;
+
+    // A sender on this same machine is addressed via loopback, whatever
+    // address it advertised — see preferLoopbackIfLocal(). Mirrors
+    // SendStream::addTarget.
+    const juce::String host = preferLoopbackIfLocal (hostIn);
+
     sockaddr_in addr {};
     if (! resolveIPv4 (host, port, addr)) return false;
     if (! socketBound || ! socket) return false;
@@ -848,8 +854,12 @@ bool RecvStream::inviteSender (const juce::String& host, int port, std::uint32_t
     return true;
 }
 
-void RecvStream::uninviteSender (const juce::String& host, int port, std::uint32_t wireUid)
+void RecvStream::uninviteSender (const juce::String& hostIn, int port, std::uint32_t wireUid)
 {
+    // Same normalisation as inviteSender, so a Disconnect click carrying
+    // the Bonjour-advertised LAN address still matches the stored entry.
+    const juce::String host = preferLoopbackIfLocal (hostIn);
+
     // Two-pass eviction. First, find a matching entry — UID first when
     // the caller passed it (e.g. the user clicked Disconnect on a
     // Bonjour-paired row whose accepted entry's host:port may not match

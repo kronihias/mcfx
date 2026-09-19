@@ -173,9 +173,14 @@ void McfxSendAudioProcessor::setSendTarget (const juce::String& host, int port, 
     applyTargetIfChanged();
 }
 
-void McfxSendAudioProcessor::addTarget (const juce::String& host, int port,
+void McfxSendAudioProcessor::addTarget (const juce::String& hostIn, int port,
                                         std::uint32_t wireUid, bool isUserAction)
 {
+    // Normalise a same-machine peer to 127.0.0.1 before anything keys off
+    // the address — lastBonjour and armedPeers both use (host, port) as a
+    // map key, so this has to happen above the stream, not only inside it.
+    const juce::String host = mcfx::net::preferLoopbackIfLocal (hostIn);
+
     if (isUserAction)
     {
         cancelAutoReconnect();
@@ -199,8 +204,10 @@ void McfxSendAudioProcessor::addTarget (const juce::String& host, int port,
     stream.addTarget (host, port, wireUid);
 }
 
-void McfxSendAudioProcessor::removeTarget (const juce::String& host, int port, bool isUserAction)
+void McfxSendAudioProcessor::removeTarget (const juce::String& hostIn, int port, bool isUserAction)
 {
+    const juce::String host = mcfx::net::preferLoopbackIfLocal (hostIn);
+
     if (isUserAction)
     {
         cancelAutoReconnect();
@@ -430,7 +437,11 @@ void McfxSendAudioProcessor::timerCallback()
                     if (! it->hint.project.isEmpty() && s.project != it->hint.project) continue;
                     if (! it->hint.track  .isEmpty() && s.track   != it->hint.track)   continue;
 
-                    const auto newIp = s.ip.toString();
+                    // Normalise here too: an armed same-machine peer is
+                    // stored as 127.0.0.1, and comparing that against the
+                    // raw advertised LAN address would look like an address
+                    // change on every single tick and churn the connection.
+                    const auto newIp = mcfx::net::preferLoopbackIfLocal (s.ip.toString());
                     if (newIp != it->host || s.port != it->port)
                     {
                         Action a;
