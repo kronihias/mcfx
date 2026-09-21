@@ -21,12 +21,24 @@
  broadcast-port) pair, and fans out onChange notifications to every
  Discovery instance subscribed to that pair.
 
- Why this exists: AvailableServiceList listens on a fixed UDP port. When
- two plugin instances live in the same process and each create their own
- listener on the same port, both succeed in binding (JUCE sets
- SO_REUSEADDR), but on macOS the kernel only delivers each incoming
- broadcast packet to ONE of them. Symptom: only one plugin instance ever
- sees discovered peers.
+ Why this exists: AvailableServiceList listens on a fixed UDP port, so two
+ plugin instances in one process each creating their own listener collide
+ on that port. Symptom: only one plugin instance ever sees discovered
+ peers.
+
+ NOTE on the cause, which this comment (and the sonolink original) used to
+ state wrongly: it claimed both listeners bind and macOS then delivers
+ each broadcast to only ONE of them. The second bind in fact *fails*.
+ SO_REUSEADDR, set by DatagramSocket's constructor, does not permit two
+ UDP sockets on one port on BSD-derived stacks — SO_REUSEPORT does, and
+ stock JUCE never sets it. AvailableServiceList also discards
+ bindToPort()'s result, so the failure is silent. With SO_REUSEPORT set
+ everywhere, all listeners bind AND all receive each broadcast (broadcasts
+ go to every socket sharing the port; only a unicast goes to just one).
+
+ JUCE_patches/juce_network_discovery.patch now sets it and checks the
+ bind, which demotes this hub from a necessity to an optimisation — one
+ listener and one wakeup per process instead of N. Worth keeping.
 
  The hub takes the listener out of every plugin instance and hosts it
  once per process. Each Discovery (in browse mode) registers a callback

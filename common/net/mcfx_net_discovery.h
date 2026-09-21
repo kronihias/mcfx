@@ -31,9 +31,9 @@
  install can't see broadcasts at all.
 
  Uses a per-process DiscoveryHub so multiple plugin instances inside a
- single DAW share one underlying NSD listener — necessary because macOS
- only delivers each broadcast packet to *one* of the listeners bound to a
- given port, even with SO_REUSEADDR.
+ single DAW share one underlying NSD listener. See the note in
+ mcfx_net_discovery_hub.h: the cause is a failed second bind, not the
+ "macOS delivers to only one listener" story this comment used to tell.
 
  Lifted nearly verbatim from sonolink/Source/Discovery.h, simplified to
  use a callback instead of a ChangeBroadcaster and renamed from sonolink
@@ -56,13 +56,16 @@ class Discovery : private juce::Timer
 {
 public:
     // Bonjour-ish broadcast ports — one per UID. Originally both sides
-    // shared a single port, but JUCE's AvailableServiceList binds the
-    // broadcast port for its socket and on macOS the kernel only
-    // delivers each incoming broadcast to ONE of the listeners on a
-    // given port (even with SO_REUSEADDR). With sender + receiver in
-    // the same Reaper process that meant only one of the two browsers
-    // ever saw anything. Splitting the ports gives each browser its own
-    // socket and the conflict goes away.
+    // shared a single port; with sender + receiver in one Reaper process
+    // only one of the two browsers ever saw anything, and splitting the
+    // ports gave each browser its own socket.
+    //
+    // The cause was diagnosed wrongly at the time (as macOS delivering
+    // each broadcast to only ONE listener on a port): the second bind was
+    // simply failing, silently, for want of SO_REUSEPORT. That is fixed in
+    // JUCE_patches/juce_network_discovery.patch, so the split is no longer
+    // load-bearing — but these port numbers are wire protocol and every
+    // deployed build expects them, so they stay. Do not merge them back.
     static constexpr int kBroadcastPortSenderUID   = 35517;
     static constexpr int kBroadcastPortReceiverUID = 35518;
 
