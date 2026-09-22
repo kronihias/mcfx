@@ -73,6 +73,7 @@ public:
     void eqRedoRequested() override;
 
     // EqBandEditor::Listener
+    void bandAboutToChange(int bandIndex, bool continuous) override;
     void bandParameterChanged(int bandIndex) override;
     void bandEnableChanged(int bandIndex, bool enabled) override;
     void bandStructureChanged(int bandIndex) override;

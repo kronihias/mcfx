@@ -759,29 +759,32 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float ga
     notifyChainChanged();
 }
 
+void Mcfx_mimoeqAudioProcessorEditor::bandAboutToChange(int, bool continuous)
+{
+    // The snapshot has to happen here, before the band editor writes the change:
+    // taken from the "changed" callbacks it would already include it, and undo
+    // would restore the state you are already looking at. A slider drag reports
+    // continuous, so the whole gesture collapses into one undo step.
+    if (continuous && dragUndoPushed_)
+        return;
+
+    getProcessor()->pushUndoState();
+    dragUndoPushed_ = continuous;
+    updateUndoRedoButtons();
+}
+
 void Mcfx_mimoeqAudioProcessorEditor::bandParameterChanged(int)
 {
-    if (!dragUndoPushed_)
-    {
-        getProcessor()->pushUndoState();
-        dragUndoPushed_ = true;
-        updateUndoRedoButtons();
-    }
     notifyParameterChanged();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::bandEnableChanged(int, bool)
 {
-    getProcessor()->pushUndoState();
-    updateUndoRedoButtons();
     notifyParameterChanged();
 }
 
 void Mcfx_mimoeqAudioProcessorEditor::bandStructureChanged(int)
 {
-    dragUndoPushed_ = false;
-    getProcessor()->pushUndoState();
-    updateUndoRedoButtons();
     notifyChainChanged();
 }
 

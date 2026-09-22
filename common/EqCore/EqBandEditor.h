@@ -448,6 +448,13 @@ public:
     {
     public:
         virtual ~Listener() = default;
+        /** Called immediately BEFORE the band is mutated, so the host can snapshot
+            the old state for undo. Every edit below is preceded by exactly one of
+            these; a snapshot taken from the "changed" callbacks would already
+            contain the change and undo to a no-op.
+            @param continuous  true while a slider drag is in flight, so the whole
+                               gesture collapses into a single undo step. */
+        virtual void bandAboutToChange(int bandIndex, bool continuous) = 0;
         virtual void bandParameterChanged(int bandIndex) = 0;
         virtual void bandEnableChanged(int bandIndex, bool enabled) = 0;
         /** Called when band type, subtype, or order changes (structural — requires rebuild). */
@@ -476,6 +483,10 @@ public:
     void sliderValueChanged(Slider* s) override;
     void sliderDragStarted(Slider* s) override;
     void sliderDragEnded(Slider* s) override;
+
+    /** Tell the listener a mutation is coming, so it can snapshot for undo. */
+    void notifyAboutToChange(bool continuous = false);
+    bool sliderDragging_ = false;   // any slider, for undo coalescing
     void comboBoxChanged(ComboBox* cb) override;
     void buttonClicked(Button* b) override;
     void labelTextChanged(Label* l) override;

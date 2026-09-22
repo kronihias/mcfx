@@ -1033,10 +1033,18 @@ void EqBandEditor::resized()
         setSize(getWidth(), contentHeight_);
 }
 
+void EqBandEditor::notifyAboutToChange(bool continuous)
+{
+    if (listener_ != nullptr && band_ != nullptr && ! updating_)
+        listener_->bandAboutToChange(bandIndex_, continuous);
+}
+
 void EqBandEditor::sliderValueChanged(Slider* s)
 {
     if (updating_ || band_ == nullptr)
         return;
+
+    notifyAboutToChange(sliderDragging_);
 
     if (s == &sldFreq_)
         band_->setFrequency((float)sldFreq_.getValue());
@@ -1096,12 +1104,14 @@ void EqBandEditor::sliderValueChanged(Slider* s)
 
 void EqBandEditor::sliderDragStarted(Slider* s)
 {
+    sliderDragging_ = true;
     if (s == &sldDynLookahead_)
         dynLookaheadDragging_ = true;
 }
 
 void EqBandEditor::sliderDragEnded(Slider* s)
 {
+    sliderDragging_ = false;
     if (s == &sldDynLookahead_)
     {
         dynLookaheadDragging_ = false;
@@ -1118,6 +1128,8 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
 {
     if (updating_ || band_ == nullptr)
         return;
+
+    notifyAboutToChange();
 
     bool isStructuralChange = false;
 
@@ -1275,12 +1287,14 @@ void EqBandEditor::buttonClicked(Button* b)
 
     if (b == &btnEnable_)
     {
+        notifyAboutToChange();
         band_->setEnabled(btnEnable_.getToggleState());
         if (listener_ != nullptr)
             listener_->bandEnableChanged(bandIndex_, band_->isEnabled());
     }
     else if (b == &btnGainLinear_)
     {
+        notifyAboutToChange();
         band_->setUseLinearGain(btnGainLinear_.getToggleState());
         updateFromBand();
         if (listener_ != nullptr)
@@ -1288,6 +1302,7 @@ void EqBandEditor::buttonClicked(Button* b)
     }
     else if (b == &btnInvertGain_)
     {
+        notifyAboutToChange();
         band_->setInvertGain(btnInvertGain_.getToggleState());
         if (listener_ != nullptr)
             listener_->bandParameterChanged(bandIndex_);
@@ -1300,6 +1315,7 @@ void EqBandEditor::buttonClicked(Button* b)
     else if (b == &btnDynActive_)
     {
         // Toggling dynamic changes the processing topology (detectors) → rebuild.
+        notifyAboutToChange();
         band_->setDynamicActive(btnDynActive_.getToggleState());
         updateFromBand();   // reveal / hide the dynamic sub-controls
         if (listener_ != nullptr)
@@ -1308,12 +1324,14 @@ void EqBandEditor::buttonClicked(Button* b)
     else if (b == &btnDynLink_)
     {
         // Link mode changes the detector set (shared vs per-channel) → rebuild.
+        notifyAboutToChange();
         band_->setDynLinked(btnDynLink_.getToggleState());
         if (listener_ != nullptr)
             listener_->bandStructureChanged(bandIndex_);
     }
     else if (b == &btnDynAuto_)
     {
+        notifyAboutToChange();
         band_->setDynAuto(btnDynAuto_.getToggleState());
         sldDynThreshold_.setEnabled(!band_->getDynAuto());
         if (listener_ != nullptr)
@@ -1349,6 +1367,7 @@ void EqBandEditor::buttonClicked(Button* b)
             [this] (const std::vector<float>& coeffs, double sampleRate, const var& state)
             {
                 if (band_ == nullptr) return;
+                notifyAboutToChange();
                 band_->setFIRCoefficientsWithSampleRate (coeffs, sampleRate);
                 band_->setDesignerState (state);
                 updateFromBand();
@@ -1412,6 +1431,7 @@ void EqBandEditor::loadFIRFile(const File& file)
         }
         if (!coeffs.empty())
         {
+            notifyAboutToChange();
             band_->setFIRCoefficients(coeffs);
             String info;
             info << coeffs.size() << " taps";
@@ -1465,6 +1485,7 @@ void EqBandEditor::loadFIRAudioFile(const File& file, int channel)
 {
     if (band_ == nullptr) return;
 
+    notifyAboutToChange();
     if (band_->loadFIRFromFile(file, channel))
     {
         auto& coeffs = band_->getFIRCoefficients();
@@ -1593,6 +1614,7 @@ void EqBandEditor::pasteBiquadCoeffsFromClipboard()
     float a1 = tokens[4].getFloatValue();
     float a2 = tokens[5].getFloatValue();
 
+    notifyAboutToChange();
     band_->setRawCoefficients(b0, b1, b2, a0, a1, a2);
 
     // Update UI fields from the (possibly normalized) stored coefficients
@@ -1620,6 +1642,7 @@ void EqBandEditor::labelTextChanged(Label* l)
     if (l == &edB0_ || l == &edB1_ || l == &edB2_
         || l == &edA0_ || l == &edA1_ || l == &edA2_)
     {
+        notifyAboutToChange();
         applyBiquadCoeffsFromUI();
         if (listener_ != nullptr)
             listener_->bandStructureChanged(bandIndex_);
