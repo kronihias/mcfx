@@ -136,6 +136,7 @@ EqBandEditor::EqBandEditor()
     sldTiltLo_.setSkewFactorFromMidPoint(100.0);
     sldTiltLo_.setTextBoxStyle(Slider::TextBoxLeft, false, 78, 20);
     sldTiltLo_.setSliderStyle(Slider::LinearHorizontal);
+    sldTiltLo_.setTextValueSuffix(" Hz");
     sldTiltLo_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultLoHz);
     sldTiltLo_.setTooltip("Below this the tilt levels off instead of continuing to rise or fall");
     sldTiltLo_.addListener(this);
@@ -146,6 +147,7 @@ EqBandEditor::EqBandEditor()
     sldTiltHi_.setSkewFactorFromMidPoint(6000.0);
     sldTiltHi_.setTextBoxStyle(Slider::TextBoxLeft, false, 78, 20);
     sldTiltHi_.setSliderStyle(Slider::LinearHorizontal);
+    sldTiltHi_.setTextValueSuffix(" Hz");
     sldTiltHi_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultHiHz);
     sldTiltHi_.setTooltip("Above this the tilt levels off instead of continuing to rise or fall");
     sldTiltHi_.addListener(this);
@@ -644,30 +646,6 @@ void EqBandEditor::showControlsForType(EqBandType type)
             sldGain_.setRange(-60.0, 30.0, 0.1);
             sldGain_.setTextValueSuffix(" dB");
             sldGain_.setTooltip("Gain in dB. Double-click to reset to 0 dB");
-
-    // Tilt band limits — outside them the line levels off, so a steep slope
-    // cannot run away into huge boost at the extremes.
-    addAndMakeVisible(lblTiltLo_);
-    addAndMakeVisible(sldTiltLo_);
-    sldTiltLo_.setRange(10.0, 2000.0, 1.0);
-    sldTiltLo_.setSkewFactorFromMidPoint(100.0);
-    sldTiltLo_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
-    sldTiltLo_.setSliderStyle(Slider::LinearHorizontal);
-    sldTiltLo_.setTextValueSuffix(" Hz");
-    sldTiltLo_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultLoHz);
-    sldTiltLo_.setTooltip("Below this the tilt levels off instead of continuing to rise or fall");
-    sldTiltLo_.addListener(this);
-
-    addAndMakeVisible(lblTiltHi_);
-    addAndMakeVisible(sldTiltHi_);
-    sldTiltHi_.setRange(1000.0, 24000.0, 1.0);
-    sldTiltHi_.setSkewFactorFromMidPoint(6000.0);
-    sldTiltHi_.setTextBoxStyle(Slider::TextBoxLeft, false, 70, 20);
-    sldTiltHi_.setSliderStyle(Slider::LinearHorizontal);
-    sldTiltHi_.setTextValueSuffix(" Hz");
-    sldTiltHi_.setDoubleClickReturnValue(true, EqBand::kTiltDefaultHiHz);
-    sldTiltHi_.setTooltip("Above this the tilt levels off instead of continuing to rise or fall");
-    sldTiltHi_.addListener(this);
             sldGain_.setDoubleClickReturnValue(true, 0.0);
             sldFreq_.setDoubleClickReturnValue(false, 0.0);
             sldFreq_.setTooltip("Filter cutoff/center frequency");
@@ -963,6 +941,10 @@ void EqBandEditor::resized()
     sldDelay_.setBounds(x + lblW + 4, y, w - lblW - 110, rowH);
     lblSamples_.setBounds(sldDelay_.getRight() + 2, y, 40, rowH);
     btnDelayMs_.setBounds(lblSamples_.getRight() + 2, y, 50, rowH);
+    // The row has to count towards the content height, or the self-sizing below
+    // clips it away. FIR shares this y, but the two types are mutually exclusive.
+    if (lblDelay_.isVisible())
+        y += rowH + gap;
 
     // Sample rate selector (for IIR raw biquad and FIR — placed before FIR load or biquad coeffs)
     if (cbSampleRate_.isVisible() && !lblBiquad_.isVisible())
