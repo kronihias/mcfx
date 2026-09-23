@@ -77,6 +77,40 @@ target_link_libraries(mcfx_graph_plugin_scanner PRIVATE
     juce::juce_audio_utils
     juce::juce_recommended_config_flags)
 
+# Re-seal a macOS bundle after the scanner helper has been dropped into it.
+#
+# JUCE ad-hoc signs the VST3/AU/Standalone bundle inside its own POST_BUILD,
+# which by the ordering described above runs BEFORE ours. The helper therefore
+# arrives as an unsealed addition and `codesign -v` reports
+#
+#   a sealed resource is missing or invalid
+#   file added: .../Contents/Helpers/mcfx_graph_plugin_scanner
+#
+# The bundle still loads locally, because Gatekeeper only enforces on
+# quarantined code — which is why this went unnoticed — but it fails strict
+# validation, and "the signature is broken" is a thoroughly misleading thing
+# to discover while debugging a host that won't load the plug-in.
+#
+# Order mirrors codesign_bundles() in scripts/build_osx.sh: a nested helper
+# has to be signed before the bundle that seals it, or sealing it just
+# re-records an unsigned file. Releases re-sign everything afterwards with the
+# real Developer ID (and scanner.entitlements), so this only affects dev
+# builds — it costs them nothing and makes them verify.
+#
+# Guarded on Info.plist so a bundle JUCE never copied here (the BIN_DIR mirror
+# when JUCE_COPY_PLUGIN_AFTER_BUILD is off) is skipped rather than failing the
+# build on a directory holding nothing but Contents/Helpers.
+function(mcfx_graph_reseal_bundle target bundle_dir)
+    if(NOT APPLE)
+        return()
+    endif()
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+            "-DBUNDLE=${bundle_dir}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/reseal_bundle.cmake"
+        VERBATIM)
+endfunction()
+
 # Copy scanner into plugin bundles so the plugin can find it at runtime.
 #
 # The post-build is hooked on the *host plugin* target rather than the scanner,
@@ -101,6 +135,8 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                     "$<TARGET_FILE:mcfx_graph_plugin_scanner>"
                     "${BIN_DIR}/vst3/${tgt}.vst3/Contents/Helpers/"
                 VERBATIM)
+            mcfx_graph_reseal_bundle(${tgt}_VST3 "$<TARGET_BUNDLE_DIR:${tgt}_VST3>")
+            mcfx_graph_reseal_bundle(${tgt}_VST3 "${BIN_DIR}/vst3/${tgt}.vst3")
         elseif(WIN32)
             add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -134,6 +170,7 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                 "$<TARGET_FILE:mcfx_graph_plugin_scanner>"
                 "$<TARGET_BUNDLE_DIR:${tgt}_AU>/Contents/Helpers/"
             VERBATIM)
+        mcfx_graph_reseal_bundle(${tgt}_AU "$<TARGET_BUNDLE_DIR:${tgt}_AU>")
     endif()
     if(TARGET ${tgt}_Standalone)
         add_dependencies(${tgt}_Standalone mcfx_graph_plugin_scanner)
@@ -145,6 +182,7 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                     "$<TARGET_FILE:mcfx_graph_plugin_scanner>"
                     "$<TARGET_BUNDLE_DIR:${tgt}_Standalone>/Contents/Helpers/"
                 VERBATIM)
+            mcfx_graph_reseal_bundle(${tgt}_Standalone "$<TARGET_BUNDLE_DIR:${tgt}_Standalone>")
         else()
             add_custom_command(TARGET ${tgt}_Standalone POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
