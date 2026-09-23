@@ -8,6 +8,13 @@ PROJECT(mcfx_plugin_suite)
 ################################################
 #version
 file(READ VERSION VERSION)
+# A plain file(READ) is invisible to CMake's dependency graph, so bumping
+# VERSION left a persistent build tree silently stamping the old number
+# into -DVERSION until something else forced a re-configure. Release builds
+# never hit this (scripts/build_osx.sh wipes its tree each run); a dev tree
+# like _build does. Declare the file so a bump re-configures on its own.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
 ADD_DEFINITIONS(-DVERSION=${VERSION})
 
 ################################################
