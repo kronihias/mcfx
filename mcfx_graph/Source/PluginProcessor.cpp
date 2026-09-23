@@ -723,6 +723,11 @@ bool Mcfx_graphAudioProcessor::tryFastUpdate (const juce::var& v)
                 case NodeKind::MatrixMixer:
                     if (auto* n = dynamic_cast<MatrixMixerNode*> (gn->processor)) n->fromVar (data);
                     break;
+                case NodeKind::FeedbackSend:
+                case NodeKind::FeedbackReturn:
+                    // Nothing to restore — see the matching note in
+                    // GraphSerializer::nodeVarFromGraphNode.
+                    break;
                 case NodeKind::Delay:
                     if (auto* n = dynamic_cast<DelayNode*>     (gn->processor)) n->fromVar (data);
                     break;

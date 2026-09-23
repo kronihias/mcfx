@@ -4,6 +4,7 @@
 #include "../Graph/GraphController.h"
 #include "../Graph/SubgraphNode.h"
 #include "../NativeNodes/GainNode.h"
+#include "../NativeNodes/FeedbackNodes.h"
 #include "../NativeNodes/MutePhaseNode.h"
 #include "../NativeNodes/MatrixMixerNode.h"
 #include "../NativeNodes/DelayNode.h"
@@ -926,8 +927,17 @@ void NodeComponent::showChangeChannelCountPopup()
         linked = true;     // Gain / MutePhase / Delay are always in == out
     }
 
+    // A feedback send is N-in/0-out and a return 0-in/N-out, so exactly one
+    // side carries the width. The popup in linked mode shows a single
+    // "Channels:" row driven by the IN value, which would read 0 on a return —
+    // so feed it the side that exists.
+    int popupIn  = node_.channelCountIn;
+    int popupOut = node_.channelCountOut;
+    if (node_.kind == NodeKind::FeedbackSend)        popupOut = popupIn;
+    else if (node_.kind == NodeKind::FeedbackReturn) popupIn  = popupOut;
+
     auto popup = std::make_unique<ChannelCountPopup> (
-        node_.channelCountIn, node_.channelCountOut,
+        popupIn, popupOut,
         allowedIn, allowedOut, linked, headline,
         [this] (int newIn, int newOut)
         {
@@ -945,7 +955,23 @@ void NodeComponent::showChangeChannelCountPopup()
 
 void NodeComponent::changeNativeNodeChannelCount (int newChIn, int newChOut)
 {
-    if (newChIn <= 0 || newChOut <= 0) return;
+    const bool isFeedback = node_.kind == NodeKind::FeedbackSend
+                         || node_.kind == NodeKind::FeedbackReturn;
+
+    // Feedback nodes have one side at zero by design, so the usual
+    // both-sides-positive guard would reject every change to them.
+    if (newChIn <= 0 || (newChOut <= 0 && ! isFeedback)) return;
+
+    // Capture the pair before the replace: replaceNodeProcessor prunes any
+    // link whose ends disagree on width, so changing one end would otherwise
+    // silently drop the wire the user drew. Resize the partner to match
+    // instead and put the link back.
+    GraphController::FeedbackLinkInfo link {};
+    const bool wasLinked = isFeedback
+        && editor_.getController().findFeedbackLinkFor (node_.uuid, link);
+    const juce::Uuid partnerUuid = wasLinked
+        ? (link.sendUuid == node_.uuid ? link.returnUuid : link.sendUuid)
+        : juce::Uuid (juce::Uuid::null());
 
     std::unique_ptr<juce::AudioProcessor> newProc;
     auto newKind = node_.kind;
@@ -985,6 +1011,17 @@ void NodeComponent::changeNativeNodeChannelCount (int newChIn, int newChOut)
             newProc = std::move (p);
             break;
         }
+        case NodeKind::FeedbackSend:
+            newProc = std::make_unique<FeedbackSendNode> (newChIn);
+            newChOut = 0;                 // a send has no outputs
+            break;
+        case NodeKind::FeedbackReturn:
+            // Linked mode mirrors the single width into both, so newChIn is
+            // the number the user picked either way.
+            newProc = std::make_unique<FeedbackReturnNode> (newChIn);
+            newChOut = newChIn;
+            newChIn  = 0;                 // a return has no inputs
+            break;
         case NodeKind::Subgraph:
         {
             // Replacing a subgraph with new I/O sizes drops its inner graph —
@@ -997,9 +1034,49 @@ void NodeComponent::changeNativeNodeChannelCount (int newChIn, int newChOut)
             return;
     }
 
+    const auto thisUuid = node_.uuid;
+    const auto thisName = node_.displayName;
+
     editor_.getController().replaceNodeProcessor (
-        node_.uuid, std::move (newProc), newKind, node_.displayName,
+        thisUuid, std::move (newProc), newKind, thisName,
         newChIn, newChOut);
+
+    if (! wasLinked)
+        return;
+
+    // Bring the partner to the same width and restore the pairing, so a width
+    // change on either end keeps the loop intact rather than quietly unwiring
+    // it. The width the user picked is newChIn for a send, newChOut for a
+    // return — whichever of the two is non-zero.
+    const int width = juce::jmax (newChIn, newChOut);
+    auto& controller = editor_.getController();
+    auto* partner = controller.getNode (partnerUuid);
+    if (partner == nullptr)
+        return;
+
+    std::unique_ptr<juce::AudioProcessor> partnerProc;
+    int partnerIn = 0, partnerOut = 0;
+
+    if (partner->kind == NodeKind::FeedbackSend)
+    {
+        partnerProc = std::make_unique<FeedbackSendNode> (width);
+        partnerIn   = width;
+    }
+    else if (partner->kind == NodeKind::FeedbackReturn)
+    {
+        partnerProc = std::make_unique<FeedbackReturnNode> (width);
+        partnerOut  = width;
+    }
+    else
+    {
+        return;
+    }
+
+    controller.replaceNodeProcessor (partnerUuid, std::move (partnerProc),
+                                     partner->kind, partner->displayName,
+                                     partnerIn, partnerOut);
+
+    controller.addFeedbackLink (link.sendUuid, link.returnUuid);
 }
 
 void NodeComponent::changePluginNodeMainBusChannels (int newMainCh)

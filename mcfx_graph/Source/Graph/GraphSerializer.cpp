@@ -92,6 +92,12 @@ juce::var GraphSerializer::nodeVarFromGraphNode (const GraphNode& gn)
             if (auto* n = dynamic_cast<DelayNode*> (gn.processor))
                 nodeObj->setProperty ("data", n->toVar());
             break;
+        case NodeKind::FeedbackSend:
+        case NodeKind::FeedbackReturn:
+            // No per-node state: the width lives in the GraphNode and the
+            // pairing in the graph's "feedbackLinks". Listed explicitly so a
+            // future NodeKind still trips -Wswitch here.
+            break;
         case NodeKind::Subgraph:
             if (auto* sub = dynamic_cast<SubgraphNode*> (gn.processor))
                 nodeObj->setProperty ("data", graphToVar (sub->getInner()));

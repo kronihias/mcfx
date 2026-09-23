@@ -1262,6 +1262,12 @@ NodePropertiesPanel::createBodyForNode (GraphEditorComponent& editor, GraphNode&
             return std::make_unique<SubgraphPropertiesPanel> (editor, node);
         case NodeKind::Plugin:
             return std::make_unique<PluginPropertiesPanel> (editor.getProcessor(), node);
+        case NodeKind::FeedbackSend:
+        case NodeKind::FeedbackReturn:
+            // Width is changed from the node's own channel-count popup and the
+            // pairing by dragging the link pin, so there is nothing extra to
+            // edit here. The shared header still shows In/Out.
+            return nullptr;
         case NodeKind::InputTerminal:
         case NodeKind::OutputTerminal:
             // Terminals have no editable properties — the channel count comes
