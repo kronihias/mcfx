@@ -171,6 +171,12 @@ private:
     void loadPresetFile (const File& file);
     void savePresetFile (const File& file);
 
+    /** Which mode has something to show for the state the processor currently
+        holds. Returns @p current unless one side is empty and the other isn't. */
+    bool diagonalModeForContent (bool current);
+    /** Apply diagonalModeForContent(), switching the toolbar if it disagrees. */
+    void showTheModeWithContent();
+
     Label lblTitle_;
 
     int selectedBand_ = -1;

@@ -62,24 +62,25 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     // Make the active mode unmistakable at a glance: each mode gets its own
     // bright background colour (aquamarine for Diagonal — matches the title;
-    // warm orange for MIMO), with dark text on the active one. The inactive
-    // button recedes to a dim grey with low-contrast text. Without this the
+    // warm orange for MIMO), with dark text on the active one. Without this the
     // two buttons look identical under JUCE's default LookAndFeel and the
     // user has to read them to know which mode they're in.
+    //
+    // The unselected one keeps the LookAndFeel's ordinary button background and
+    // full-strength text, so it reads like the buttons beside it ("Ch: All",
+    // "Presets") rather than like a greyed-out control. Dimming it was the
+    // obvious way to recede, but a dim fill plus faded text is exactly how JUCE
+    // draws a disabled button, and the mode you are not in is still clickable.
     const Colour kDiagColour { 0xff5fdbb4 };  // aquamarine, matches lblTitle_
     const Colour kMimoColour { 0xffe88a3a };  // warm orange, distinct
-    const Colour kInactiveBg { 0xff2a2a2a };  // recedes into toolbar
-    const Colour kInactiveTx { Colours::white.withAlpha(0.55f) };
 
     btnModeDiag_.setColour(TextButton::buttonOnColourId,  kDiagColour);
-    btnModeDiag_.setColour(TextButton::buttonColourId,    kInactiveBg);
     btnModeDiag_.setColour(TextButton::textColourOnId,    Colours::black);
-    btnModeDiag_.setColour(TextButton::textColourOffId,   kInactiveTx);
+    btnModeDiag_.setColour(TextButton::textColourOffId,   Colours::white);
 
     btnModeMIMO_.setColour(TextButton::buttonOnColourId,  kMimoColour);
-    btnModeMIMO_.setColour(TextButton::buttonColourId,    kInactiveBg);
     btnModeMIMO_.setColour(TextButton::textColourOnId,    Colours::black);
-    btnModeMIMO_.setColour(TextButton::textColourOffId,   kInactiveTx);
+    btnModeMIMO_.setColour(TextButton::textColourOffId,   Colours::white);
 
     // Diagonal channel selector
     addAndMakeVisible(btnDiagChans_);
@@ -219,17 +220,10 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
 
     // If the user only ever populates MIMO paths, the saved editorDiagonalMode
     // can still be `true` (the factory default) and we'd land them on the empty
-    // Diagonal page. Override to MIMO when diagonal is empty AND at least one
-    // MIMO path is configured; the empty-both case (truly fresh instance) keeps
-    // the Diagonal default. Re-evaluated at every editor open from live state
-    // rather than persisted, so adding a single band to diagonal flips us back
-    // next reopen.
-    if (diagonalMode_
-        && processor->getDiagonalChain().getNumBands() == 0
-        && ! processor->getPathKeys().empty())
-    {
-        diagonalMode_ = false;
-    }
+    // Diagonal page. Re-evaluated at every editor open from live state rather
+    // than persisted, so adding a single band to diagonal flips us back next
+    // reopen.
+    diagonalMode_ = diagonalModeForContent(diagonalMode_);
 
     selectedPath_ = processor->editorSelectedPath;
     btnModeDiag_.setToggleState(diagonalMode_, dontSendNotification);
@@ -464,6 +458,31 @@ void Mcfx_mimoeqAudioProcessorEditor::rebuildPathDropdown()
     }
 
     btnRemovePath_.setEnabled(!keys.empty());
+}
+
+bool Mcfx_mimoeqAudioProcessorEditor::diagonalModeForContent(bool current)
+{
+    const bool diagonalIsEmpty = getProcessor()->getDiagonalChain().getNumBands() == 0;
+    const bool hasPaths        = ! getProcessor()->getPathKeys().empty();
+
+    // Only one side holds anything → show that one, whichever we were on. A
+    // config whose bands all live off the diagonal would otherwise open on a
+    // blank Diagonal page and look like nothing had loaded. Both empty (a fresh
+    // instance) or both populated: leave the choice to the user.
+    if (diagonalIsEmpty && hasPaths)      return false;
+    if (! diagonalIsEmpty && ! hasPaths)  return true;
+    return current;
+}
+
+void Mcfx_mimoeqAudioProcessorEditor::showTheModeWithContent()
+{
+    const bool wanted = diagonalModeForContent(diagonalMode_);
+    if (wanted == diagonalMode_)
+        return;
+
+    btnModeDiag_.setToggleState(wanted, dontSendNotification);
+    btnModeMIMO_.setToggleState(! wanted, dontSendNotification);
+    updatePathSelector();   // picks up diagonalMode_ and rebuilds the path list
 }
 
 EqChain* Mcfx_mimoeqAudioProcessorEditor::getActiveChain()
@@ -1446,6 +1465,8 @@ void Mcfx_mimoeqAudioProcessorEditor::loadPresetFile(const File& file)
         statusBar_.setText("Load failed", dontSendNotification);
         return;
     }
+
+    showTheModeWithContent();
 
     auto* chain = getActiveChain();
     graph_.setChain(chain); phaseGraph_.setChain(chain);
