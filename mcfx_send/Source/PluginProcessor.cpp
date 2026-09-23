@@ -628,6 +628,18 @@ void McfxSendAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
             auto it = lastBonjour.find (std::make_pair (t.host, t.port));
             if (it != lastBonjour.end()) hint = it->second;
         }
+        // A receiver that invited US was added by SendStream's NetThread
+        // and never passed through addTarget, so nothing recorded a hint
+        // for it. Resolve one from its live Bonjour service now. Without
+        // this the entry comes back next load with a port that is
+        // guaranteed stale (both ends bind ephemeral) and no durable
+        // identity for the rematch to recover it by — it just re-invites a
+        // dead address for 60 s. The wire UID itself is no use here: it is
+        // random per instantiation, so it only identifies the peer while
+        // this session lasts, which is exactly long enough to look up the
+        // name-based identity that does survive.
+        if (hint.host.isEmpty())
+            hint = lookupBonjourHint (t.receiverUid);
         if (! hint.host.isEmpty())    node.setProperty ("bj_host",    hint.host,    nullptr);
         if (! hint.project.isEmpty()) node.setProperty ("bj_project", hint.project, nullptr);
         if (! hint.track.isEmpty())   node.setProperty ("bj_track",   hint.track,   nullptr);
@@ -715,13 +727,22 @@ void McfxSendAudioProcessor::setStateInformation (const void* data, int sizeInBy
         // already-running plugin (preset switch).
         clearTargets (/*isUserAction=*/false);
 
+        // "Auto-reconnect on load" off means exactly that: touch nothing on
+        // the network. This used to issue the invites regardless and gate
+        // only the retry arming, which was the worst of both — a dead
+        // INVITE aimed at the peer's previous ephemeral port, and nothing
+        // armed to ever correct it. The result sat in the list forever as
+        // an unpairable "(direct)" row next to the same peer's live Bonjour
+        // entry.
+        if (! autoOn) return;
+
         // (Re)issue the connects. isUserAction=false so we don't cancel
         // ourselves before we even start the timer.
         for (const auto& s : saved)
             addTarget (s.host, s.port, /*wireUid=*/0, /*isUserAction=*/false);
 
         // Arm the auto-reconnect retry loop.
-        if (autoOn && ! saved.empty())
+        if (! saved.empty())
         {
             const auto nowT = juce::Time::getCurrentTime();
             {

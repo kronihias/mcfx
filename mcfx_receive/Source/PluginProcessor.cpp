@@ -529,6 +529,18 @@ void McfxReceiveAudioProcessor::getStateInformation (juce::MemoryBlock& dest)
             auto it = lastBonjour.find (std::make_pair (a.host, a.port));
             if (it != lastBonjour.end()) hint = it->second;
         }
+        // A sender that invited US was added by RecvStream's NetThread and
+        // never passed through inviteSender, so nothing recorded a hint for
+        // it. Resolve one from its live Bonjour service now. Without this
+        // the entry comes back next load with a port that is guaranteed
+        // stale (both ends bind ephemeral) and no durable identity for the
+        // rematch to recover it by — it just re-invites a dead address for
+        // 60 s. The wire UID itself is no use here: it is random per
+        // instantiation, so it only identifies the peer while this session
+        // lasts, which is exactly long enough to look up the name-based
+        // identity that does survive.
+        if (hint.host.isEmpty())
+            hint = lookupBonjourHint (a.uid);
         if (! hint.host.isEmpty())    node.setProperty ("bj_host",    hint.host,    nullptr);
         if (! hint.project.isEmpty()) node.setProperty ("bj_project", hint.project, nullptr);
         if (! hint.track.isEmpty())   node.setProperty ("bj_track",   hint.track,   nullptr);
@@ -588,10 +600,19 @@ void McfxReceiveAudioProcessor::setStateInformation (const void* data, int sizeI
         // plugin instance.
         uninviteAllSenders (/*isUserAction=*/false);
 
+        // "Auto-reconnect on load" off means exactly that: touch nothing on
+        // the network. This used to issue the invites regardless and gate
+        // only the retry arming, which was the worst of both — a dead
+        // INVITE aimed at the peer's previous ephemeral port, and nothing
+        // armed to ever correct it. The result sat in the list forever as
+        // an unpairable "(direct)" row next to the same peer's live Bonjour
+        // entry.
+        if (! autoOn) return;
+
         for (const auto& s : saved)
             inviteSender (s.host, s.port, /*wireUid=*/0, /*isUserAction=*/false);
 
-        if (autoOn && ! saved.empty())
+        if (! saved.empty())
         {
             const auto nowT = juce::Time::getCurrentTime();
             {
