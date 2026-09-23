@@ -43,6 +43,20 @@ void NodeComponent::rebuildPins()
         addAndMakeVisible (outputPins_.add (
             new PinComponent (editor_, node_.uuid, PinComponent::Direction::Output, c)));
 
+    // The feedback pair's link pin. A send is N-in/0-out and a return
+    // 0-in/N-out, so the diamond lands at index 0 of the otherwise-empty list
+    // and needs no special placement — it simply sits alone on the side that
+    // has no audio pins, which is exactly where the eye expects the loop to
+    // leave or re-enter the node.
+    if (node_.kind == NodeKind::FeedbackSend)
+        addAndMakeVisible (outputPins_.add (
+            new PinComponent (editor_, node_.uuid, PinComponent::Direction::Output,
+                              PinComponent::kLinkChannel)));
+    else if (node_.kind == NodeKind::FeedbackReturn)
+        addAndMakeVisible (inputPins_.add (
+            new PinComponent (editor_, node_.uuid, PinComponent::Direction::Input,
+                              PinComponent::kLinkChannel)));
+
     const int rows = juce::jmax (1, juce::jmax (node_.channelCountIn, node_.channelCountOut));
     setSize (kMinWidth, kHeaderH + 16 + rows * kPinSpacing);
     resized();
@@ -72,6 +86,8 @@ void NodeComponent::paint (juce::Graphics& g)
         case NodeKind::MutePhase:      fill = juce::Colour (0xff666644); break;
         case NodeKind::MatrixMixer:         fill = juce::Colour (0xff5a3a6a); break;
         case NodeKind::Delay:          fill = juce::Colour (0xff6a4a3a); break;
+        case NodeKind::FeedbackSend:   fill = juce::Colour (0xff4a3a6a); break;
+        case NodeKind::FeedbackReturn: fill = juce::Colour (0xff4a3a6a); break;
         case NodeKind::Subgraph:       fill = juce::Colour (0xff444466); break;
         case NodeKind::InputTerminal:  fill = juce::Colour (0xff223344); break;
         case NodeKind::OutputTerminal: fill = juce::Colour (0xff332233); break;

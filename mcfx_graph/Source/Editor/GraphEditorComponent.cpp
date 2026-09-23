@@ -1,6 +1,7 @@
 #include "GraphEditorComponent.h"
 #include "../PluginProcessor.h"
 #include "../NativeNodes/GainNode.h"
+#include "../NativeNodes/FeedbackNodes.h"
 #include "../NativeNodes/MutePhaseNode.h"
 #include "../NativeNodes/MatrixMixerNode.h"
 #include "../NativeNodes/DelayNode.h"
@@ -162,7 +163,12 @@ void GraphEditorComponent::updatePinDrag (juce::Point<int> pos)
         if (activePin_ != nullptr
             && p != activePin_
             && p->getNodeUuid() != activePin_->getNodeUuid()
-            && p->getDirection() != activePin_->getDirection())
+            && p->getDirection() != activePin_->getDirection()
+            // A link pin pairs only with a link pin. Letting a link meet an
+            // audio pin would either drop a wire the user drew or, worse,
+            // create a real graph edge into a feedback node and re-introduce
+            // the cycle the pair exists to avoid.
+            && p->isLink() == activePin_->isLink())
         {
             target = p;
         }
@@ -183,7 +189,8 @@ void GraphEditorComponent::endPinDrag (juce::Point<int> pos, bool shiftHeld)
     auto* target = findPinAt (pos);
     if (target != nullptr && target != activePin_
         && target->getNodeUuid() != activePin_->getNodeUuid()
-        && target->getDirection() != activePin_->getDirection())
+        && target->getDirection() != activePin_->getDirection()
+        && target->isLink() == activePin_->isLink())
     {
         // Normalize so source is the Output side
         const PinComponent* src = activePin_;
@@ -194,6 +201,24 @@ void GraphEditorComponent::endPinDrag (juce::Point<int> pos, bool shiftHeld)
         const auto dstUuid  = dst->getNodeUuid();
         const int  srcStart = src->getChannelIndex();
         const int  dstStart = dst->getChannelIndex();
+
+        if (src->isLink())
+        {
+            // Pairing, not a graph edge. The send always carries the Output
+            // side of the link pin, so after the normalisation above src is
+            // the send and dst the return.
+            const auto refusal = activeController_->describeFeedbackLinkRefusal (srcUuid, dstUuid);
+            if (refusal.isNotEmpty())
+                juce::NativeMessageBox::showMessageBoxAsync (
+                    juce::MessageBoxIconType::InfoIcon, "Can't link feedback pair", refusal);
+            else
+                activeController_->addFeedbackLink (srcUuid, dstUuid);
+
+            activePin_ = nullptr;
+            setHighlightedTargetPin (nullptr);
+            repaint();
+            return;
+        }
 
         activeController_->addConnection (srcUuid, srcStart, dstUuid, dstStart);
 
@@ -526,6 +551,25 @@ void GraphEditorComponent::paint (juce::Graphics& g)
                            isConnectionSelected (c));
     }
 
+    // Feedback links. Drawn like a connection but dashed and in the feedback
+    // colour, because it is emphatically not one: no audio travels along this
+    // line, it only says which send feeds which return. The return normally
+    // sits upstream of its send, so the wire runs backwards across the canvas
+    // — which is the clearest possible signal that a loop is here.
+    for (const auto& l : activeController_->getAllFeedbackLinks())
+    {
+        auto* sendNc = findNodeComponent (l.sendUuid);
+        auto* retNc  = findNodeComponent (l.returnUuid);
+        if (sendNc == nullptr || retNc == nullptr) continue;
+
+        auto* sendPin = sendNc->findPin (PinComponent::Direction::Output, PinComponent::kLinkChannel);
+        auto* retPin  = retNc ->findPin (PinComponent::Direction::Input,  PinComponent::kLinkChannel);
+        if (sendPin == nullptr || retPin == nullptr) continue;
+
+        drawFeedbackLink (g, sendPin->getCenterInGraphCoords().toFloat(),
+                             retPin ->getCenterInGraphCoords().toFloat());
+    }
+
     // Floating drag-in-progress wire
     if (activePin_ != nullptr)
     {
@@ -565,6 +609,33 @@ void GraphEditorComponent::drawConnection (juce::Graphics& g,
     g.setColour (highlighted ? juce::Colours::yellow
                              : juce::Colours::white.withAlpha (0.6f));
     g.strokePath (p, juce::PathStrokeType (highlighted ? 2.5f : 1.6f));
+}
+
+void GraphEditorComponent::drawFeedbackLink (juce::Graphics& g,
+                                             juce::Point<float> from,
+                                             juce::Point<float> to) const
+{
+    const auto p = makeConnectionPath (from, to);
+
+    const juce::Colour linkColour (0xff9b6bff);
+    g.setColour (linkColour.withAlpha (0.85f));
+
+    const float dashes[] { 7.0f, 5.0f };
+    juce::Path dashed;
+    juce::PathStrokeType (2.0f).createDashedStroke (dashed, p, dashes, 2);
+    g.fillPath (dashed);
+
+    // Label the cost. One block of delay is the whole point of the pair, and
+    // it follows the host's block size — so a loop tuned at 512 samples is a
+    // different loop at 128. Better stated on the wire than discovered later.
+    const auto mid = p.getPointAlongPath (p.getLength() * 0.5f);
+    const juce::Rectangle<float> badge (mid.x - 20.0f, mid.y - 8.0f, 40.0f, 16.0f);
+    g.setColour (juce::Colour (0xff202028).withAlpha (0.9f));
+    g.fillRoundedRectangle (badge, 4.0f);
+    g.setColour (linkColour);
+    g.drawRoundedRectangle (badge, 4.0f, 1.0f);
+    g.setFont (juce::Font (juce::FontOptions (10.0f)));
+    g.drawText ("1 blk", badge, juce::Justification::centred, false);
 }
 
 //==============================================================================
@@ -629,6 +700,17 @@ void GraphEditorComponent::showAddNodeMenu (juce::Point<int> localPos)
                         [this, addNativeNode, defaultCh]
                         { addNativeNode ([defaultCh] { return std::make_unique<DelayNode>     (defaultCh); },
                                          NodeKind::Delay,     "Delay",     defaultCh, defaultCh); });
+    nativeMenu.addSeparator();
+    nativeMenu.addItem ("Feedback Send (" + juce::String (defaultCh) + " ch)",
+                        [this, addNativeNode, defaultCh]
+                        { addNativeNode ([defaultCh] { return std::make_unique<FeedbackSendNode> (defaultCh); },
+                                         NodeKind::FeedbackSend,   "Fb Send",   defaultCh, 0); });
+    nativeMenu.addItem ("Feedback Return (" + juce::String (defaultCh) + " ch)",
+                        [this, addNativeNode, defaultCh]
+                        { addNativeNode ([defaultCh] { return std::make_unique<FeedbackReturnNode> (defaultCh); },
+                                         NodeKind::FeedbackReturn, "Fb Return", 0, defaultCh); });
+    nativeMenu.addSeparator();
+
     nativeMenu.addItem ("Subgraph (" + juce::String (defaultCh) + " in / "
                                      + juce::String (defaultCh) + " out)",
                         [this, addNativeNode, defaultCh]

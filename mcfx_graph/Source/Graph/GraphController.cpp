@@ -1,5 +1,6 @@
 #include "GraphController.h"
 #include "BypassMuteWrapper.h"
+#include "../NativeNodes/FeedbackNodes.h"
 
 using AGProc = juce::AudioProcessorGraph;
 
@@ -62,6 +63,11 @@ void GraphController::prepareToPlay (double sampleRate, int blockSize, int numIn
     inputTerminalMeta_.channelCountOut  = numIn;
     outputTerminalMeta_.channelCountIn  = numOut;
     outputTerminalMeta_.channelCountOut = 0;
+
+    // Feedback buses are sized in blocks, so they have to follow the host's
+    // block size. This is also why a loop's delay changes when the user
+    // changes buffer size — one block is one block.
+    prepareFeedbackBuses();
 }
 
 void GraphController::releaseResources()
@@ -72,6 +78,16 @@ void GraphController::releaseResources()
 void GraphController::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     graph_->processBlock (buffer, midi);
+
+    // Close every feedback loop, once, after the whole level has rendered.
+    // Doing it here rather than inside either node is what makes the result
+    // independent of the order JUCE happened to schedule the send and the
+    // return in — there is no edge between them to constrain it. A subgraph
+    // reaches this same function through SubgraphNode::processBlock, so each
+    // nesting level flips its own buses without any recursion here.
+    for (auto& bus : feedbackBuses_)
+        if (bus != nullptr)
+            bus->flip();
 }
 
 int GraphController::getLatencySamples() const
@@ -169,6 +185,16 @@ void GraphController::removeNode (const juce::Uuid& uuid)
 
     if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (gn->uuid);
 
+    // Drop any feedback link naming this node while its processor is still
+    // alive, so unbind can null the bus pointer out of it. Doing this after
+    // the detach below would leave the surviving end holding a bus nobody
+    // writes to — silence, but a wire still drawn to a node that is gone.
+    {
+        FeedbackLinkInfo l;
+        while (findFeedbackLinkFor (gn->uuid, l))
+            removeFeedbackLink (l.sendUuid, l.returnUuid);
+    }
+
     // The canvas rebuild that destroys this node's NodeComponent is deferred
     // (see GraphEditorComponent::hookTopologyListener), but a NodeComponent
     // holds a GraphNode& and paints node_.processor->getName(). Freeing the
@@ -204,6 +230,8 @@ void GraphController::clearAllUserNodes()
     // Same lifetime concern as removeNode(): NodeComponents reference these
     // GraphNodes (and their processors) and are only destroyed by the deferred
     // canvas rebuild. Keep both alive until after that rebuild runs.
+    clearAllFeedbackLinks();
+
     std::vector<juce::AudioProcessorGraph::Node::Ptr> removedNodes;
     for (auto* gn : userNodes_)
     {
@@ -336,6 +364,11 @@ bool GraphController::replaceNodeProcessor (const juce::Uuid& uuid,
                 addConnection (s.otherUuid, s.otherChannel, uuid, s.thisChannel);
         }
     }
+
+    // The old processor is gone, so any feedback link that named it now points
+    // at a stale pointer or a mismatched channel count. prune drops those and
+    // re-binds the survivors onto the new processor.
+    prepareFeedbackBuses();
 
     notifyTopologyChanged();
     return true;
@@ -497,4 +530,184 @@ void GraphController::notifyTopologyChanged()
 {
     if (topologyListener_)
         topologyListener_();
+}
+
+//==============================================================================
+// Feedback links
+//==============================================================================
+
+namespace
+{
+    // Either end of a pair, resolved to its concrete node type. Returns nullptr
+    // when the uuid is unknown or names a node of the wrong kind.
+    FeedbackSendNode* asSend (GraphNode* gn)
+    {
+        return gn != nullptr ? dynamic_cast<FeedbackSendNode*> (gn->processor) : nullptr;
+    }
+    FeedbackReturnNode* asReturn (GraphNode* gn)
+    {
+        return gn != nullptr ? dynamic_cast<FeedbackReturnNode*> (gn->processor) : nullptr;
+    }
+}
+
+juce::String GraphController::describeFeedbackLinkRefusal (const juce::Uuid& sendUuid,
+                                                           const juce::Uuid& returnUuid) const
+{
+    auto* sendGn = getNode (sendUuid);
+    auto* retGn  = getNode (returnUuid);
+
+    auto* send = asSend (sendGn);
+    auto* ret  = asReturn (retGn);
+
+    if (send == nullptr) return "That end is not a feedback send.";
+    if (ret  == nullptr) return "That end is not a feedback return.";
+
+    if (send->getNumChannels() != ret->getNumChannels())
+        return "Channel counts differ: send has "
+             + juce::String (send->getNumChannels()) + ", return has "
+             + juce::String (ret->getNumChannels()) + ".";
+
+    // 1:1 only. Fanning one send into several returns is a harmless later
+    // extension; several sends into one return needs a summing rule we have
+    // not defined, so refuse both rather than half-support it.
+    FeedbackLinkInfo existing;
+    if (findFeedbackLinkFor (sendUuid, existing))
+        return "That send is already linked.";
+    if (findFeedbackLinkFor (returnUuid, existing))
+        return "That return is already linked.";
+
+    return {};
+}
+
+bool GraphController::addFeedbackLink (const juce::Uuid& sendUuid,
+                                       const juce::Uuid& returnUuid)
+{
+    if (describeFeedbackLinkRefusal (sendUuid, returnUuid).isNotEmpty())
+        return false;
+
+    FeedbackLinkInfo link { sendUuid, returnUuid };
+    feedbackLinks_.push_back (link);
+    feedbackBuses_.push_back (std::make_shared<FeedbackBus>());
+
+    bindFeedbackLink (link);
+    notifyTopologyChanged();
+    return true;
+}
+
+bool GraphController::removeFeedbackLink (const juce::Uuid& sendUuid,
+                                          const juce::Uuid& returnUuid)
+{
+    for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)
+    {
+        if (feedbackLinks_[i].sendUuid == sendUuid
+            && feedbackLinks_[i].returnUuid == returnUuid)
+        {
+            unbindFeedbackLink (feedbackLinks_[i]);
+            feedbackLinks_.erase (feedbackLinks_.begin() + (long) i);
+            feedbackBuses_.erase (feedbackBuses_.begin() + (long) i);
+            notifyTopologyChanged();
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<GraphController::FeedbackLinkInfo> GraphController::getAllFeedbackLinks() const
+{
+    return feedbackLinks_;
+}
+
+bool GraphController::findFeedbackLinkFor (const juce::Uuid& nodeUuid,
+                                           FeedbackLinkInfo& out) const
+{
+    for (const auto& l : feedbackLinks_)
+    {
+        if (l.sendUuid == nodeUuid || l.returnUuid == nodeUuid)
+        {
+            out = l;
+            return true;
+        }
+    }
+    return false;
+}
+
+void GraphController::clearAllFeedbackLinks()
+{
+    for (const auto& l : feedbackLinks_)
+        unbindFeedbackLink (l);
+    feedbackLinks_.clear();
+    feedbackBuses_.clear();
+}
+
+void GraphController::bindFeedbackLink (const FeedbackLinkInfo& link)
+{
+    // Hand both ends the same bus. Called with the graph either not yet
+    // running or suspended by the caller, so the nodes' plain (non-atomic)
+    // pointer swap is safe.
+    for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)
+    {
+        if (feedbackLinks_[i] != link) continue;
+
+        auto bus = feedbackBuses_[i];
+        if (bus == nullptr) return;
+
+        auto* send = asSend   (getNode (link.sendUuid));
+        auto* ret  = asReturn (getNode (link.returnUuid));
+        if (send == nullptr || ret == nullptr) return;
+
+        if (blockSize_ > 0)
+            bus->prepare (send->getNumChannels(), blockSize_);
+
+        send->setBus (bus);
+        ret ->setBus (bus);
+        return;
+    }
+}
+
+void GraphController::unbindFeedbackLink (const FeedbackLinkInfo& link)
+{
+    if (auto* send = asSend (getNode (link.sendUuid)))
+        send->setBus (nullptr);
+    if (auto* ret = asReturn (getNode (link.returnUuid)))
+        ret->setBus (nullptr);
+}
+
+void GraphController::prepareFeedbackBuses()
+{
+    pruneFeedbackLinks();
+
+    for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)
+    {
+        auto& bus = feedbackBuses_[i];
+        if (bus == nullptr)
+            bus = std::make_shared<FeedbackBus>();
+
+        auto* send = asSend (getNode (feedbackLinks_[i].sendUuid));
+        if (send == nullptr || blockSize_ <= 0) continue;
+
+        bus->prepare (send->getNumChannels(), blockSize_);
+        bindFeedbackLink (feedbackLinks_[i]);
+    }
+}
+
+void GraphController::pruneFeedbackLinks()
+{
+    for (std::size_t i = feedbackLinks_.size(); i-- > 0;)
+    {
+        const auto& l = feedbackLinks_[i];
+        auto* send = asSend   (getNode (l.sendUuid));
+        auto* ret  = asReturn (getNode (l.returnUuid));
+
+        // A node was removed, or had its processor replaced with something
+        // else (or with a different channel count). Either way the pair is no
+        // longer meaningful — drop it rather than leave a wire pointing at
+        // nothing.
+        const bool stillValid = send != nullptr && ret != nullptr
+                             && send->getNumChannels() == ret->getNumChannels();
+        if (stillValid) continue;
+
+        unbindFeedbackLink (l);
+        feedbackLinks_.erase (feedbackLinks_.begin() + (long) i);
+        feedbackBuses_.erase (feedbackBuses_.begin() + (long) i);
+    }
 }

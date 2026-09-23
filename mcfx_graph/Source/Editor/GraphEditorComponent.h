@@ -143,6 +143,12 @@ private:
                          juce::Point<float> to,
                          bool highlighted) const;
 
+    /** Feedback-pair link: same bezier, dashed and badged, and carrying no
+        audio — see GraphController::FeedbackLinkInfo. */
+    void drawFeedbackLink (juce::Graphics& g,
+                           juce::Point<float> from,
+                           juce::Point<float> to) const;
+
     /** Build the cubic-bezier path used for both rendering and hit-testing. */
     juce::Path makeConnectionPath (juce::Point<float> from,
                                    juce::Point<float> to) const;

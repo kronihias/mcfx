@@ -21,10 +21,12 @@
 #pragma once
 
 #include <JuceHeader.h>
+#include "../NativeNodes/FeedbackBus.h"
 #include "GraphNode.h"
 #include <map>
 #include <unordered_map>
 #include <functional>
+#include <vector>
 
 class GraphController
 {
@@ -129,6 +131,47 @@ public:
     void clearAllConnections();
 
     //==============================================================================
+    // Feedback links. A link pairs a FeedbackSendNode with a FeedbackReturnNode
+    // so the loop closes through a shared FeedbackBus with one block of delay.
+    //
+    // A link is deliberately NOT a juce::AudioProcessorGraph connection: an edge
+    // from the send back to the return would close a cycle, and the graph cannot
+    // render cycles (the back edge silently reads an empty buffer). Keeping the
+    // pair unconnected leaves the graph acyclic. The editor still draws the link
+    // as a wire, because the user needs to see the loop they built — it is just
+    // ours to draw, not the graph's to schedule.
+
+    struct FeedbackLinkInfo
+    {
+        juce::Uuid sendUuid;
+        juce::Uuid returnUuid;
+
+        bool operator== (const FeedbackLinkInfo& o) const noexcept
+        {
+            return sendUuid == o.sendUuid && returnUuid == o.returnUuid;
+        }
+        bool operator!= (const FeedbackLinkInfo& o) const noexcept { return ! (*this == o); }
+    };
+
+    /** Pair a send with a return. Both UUIDs must name nodes of the matching
+        kind, both must currently be unlinked (1:1 only — several sends into one
+        return would need a summing rule we have not defined), and their channel
+        counts must agree. Returns false otherwise. */
+    bool addFeedbackLink    (const juce::Uuid& sendUuid, const juce::Uuid& returnUuid);
+    bool removeFeedbackLink (const juce::Uuid& sendUuid, const juce::Uuid& returnUuid);
+    std::vector<FeedbackLinkInfo> getAllFeedbackLinks() const;
+
+    /** The link involving this node, if any. Either end resolves to the pair. */
+    bool findFeedbackLinkFor (const juce::Uuid& nodeUuid, FeedbackLinkInfo& out) const;
+
+    /** Why a proposed link would be refused, for the editor to show. Empty when
+        the pair is legal. */
+    juce::String describeFeedbackLinkRefusal (const juce::Uuid& sendUuid,
+                                              const juce::Uuid& returnUuid) const;
+
+    void clearAllFeedbackLinks();
+
+    //==============================================================================
     /** RAII helper that pauses processing on the supplied AudioProcessor while
         a structural change is made, then resumes. Pass the OUTER plugin's
         AudioProcessor (the one whose suspendProcessing controls audio-thread
@@ -183,6 +226,17 @@ private:
     void rebuildIOTerminals (int numIn, int numOut);
     void notifyTopologyChanged();
 
+    /** (Re)allocate every linked bus for the current block size, and detach the
+        buses of any link whose nodes went away. */
+    void prepareFeedbackBuses();
+
+    /** Drop any link that names a node which no longer exists, or whose ends no
+        longer agree — called after node removal and processor replacement. */
+    void pruneFeedbackLinks();
+
+    void bindFeedbackLink   (const FeedbackLinkInfo& link);
+    void unbindFeedbackLink (const FeedbackLinkInfo& link);
+
     bool resolveEndpoint (const juce::Uuid& uuid,
                           juce::AudioProcessorGraph::NodeID& outId) const;
 
@@ -207,6 +261,11 @@ private:
     // string and use std::map (operator< on juce::String is fine).
     std::map<juce::String, GraphNode*> uuidToNode_;
     std::unordered_map<juce::uint32, GraphNode*> nodeIdToNode_;
+
+    std::vector<FeedbackLinkInfo> feedbackLinks_;
+    // Bus per link, same index. Held here so both nodes can share one and it
+    // outlives neither.
+    std::vector<FeedbackBus::Ptr> feedbackBuses_;
 
     TopologyListener             topologyListener_;
     NodeAboutToBeRemovedListener nodeAboutToBeRemovedListener_;

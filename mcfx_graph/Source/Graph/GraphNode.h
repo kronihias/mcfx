@@ -21,6 +21,8 @@ enum class NodeKind
     MutePhase,
     MatrixMixer,
     Delay,
+    FeedbackSend,
+    FeedbackReturn,
     Subgraph,
     InputTerminal,   // graph IO — references AudioGraphIOProcessor (audioInputNode)
     OutputTerminal   // graph IO — references AudioGraphIOProcessor (audioOutputNode)
@@ -35,6 +37,8 @@ inline juce::String nodeKindToString (NodeKind k)
         case NodeKind::MutePhase:      return "mute_phase";
         case NodeKind::MatrixMixer:    return "matrix_mixer";
         case NodeKind::Delay:          return "delay";
+        case NodeKind::FeedbackSend:   return "feedback_send";
+        case NodeKind::FeedbackReturn: return "feedback_return";
         case NodeKind::Subgraph:       return "subgraph";
         case NodeKind::InputTerminal:  return "input_terminal";
         case NodeKind::OutputTerminal: return "output_terminal";
@@ -49,6 +53,8 @@ inline NodeKind nodeKindFromString (const juce::String& s)
     if (s == "mute_phase")      return NodeKind::MutePhase;
     if (s == "matrix_mixer")    return NodeKind::MatrixMixer;
     if (s == "delay")           return NodeKind::Delay;
+    if (s == "feedback_send")   return NodeKind::FeedbackSend;
+    if (s == "feedback_return") return NodeKind::FeedbackReturn;
     if (s == "subgraph")        return NodeKind::Subgraph;
     if (s == "input_terminal")  return NodeKind::InputTerminal;
     if (s == "output_terminal") return NodeKind::OutputTerminal;

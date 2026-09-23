@@ -29,10 +29,32 @@ void PinComponent::paint (juce::Graphics& g)
         g.fillEllipse (getLocalBounds().toFloat().expanded (3.0f));
     }
 
-    g.setColour (hovered_ || dragTargetHighlight_ ? baseColour.brighter (0.5f) : baseColour);
+    const bool lit = hovered_ || dragTargetHighlight_;
+
+    if (isLink())
+    {
+        // A link pin is not an audio pin, and must not look like one or users
+        // will try to wire it to a channel. Diamond, in the feedback colour.
+        const auto c = area.getCentre();
+        juce::Path diamond;
+        diamond.startNewSubPath (c.x, area.getY());
+        diamond.lineTo (area.getRight(), c.y);
+        diamond.lineTo (c.x, area.getBottom());
+        diamond.lineTo (area.getX(), c.y);
+        diamond.closeSubPath();
+
+        const auto linkColour = juce::Colour (0xff9b6bff);
+        g.setColour (lit ? linkColour.brighter (0.5f) : linkColour);
+        g.fillPath (diamond);
+        g.setColour (lit ? juce::Colours::white : juce::Colours::black);
+        g.strokePath (diamond, juce::PathStrokeType (lit ? 1.5f : 1.0f));
+        return;
+    }
+
+    g.setColour (lit ? baseColour.brighter (0.5f) : baseColour);
     g.fillEllipse (area);
-    g.setColour (hovered_ || dragTargetHighlight_ ? juce::Colours::white : juce::Colours::black);
-    g.drawEllipse (area, hovered_ || dragTargetHighlight_ ? 1.5f : 1.0f);
+    g.setColour (lit ? juce::Colours::white : juce::Colours::black);
+    g.drawEllipse (area, lit ? 1.5f : 1.0f);
 }
 
 juce::Point<int> PinComponent::getCenterInGraphCoords() const

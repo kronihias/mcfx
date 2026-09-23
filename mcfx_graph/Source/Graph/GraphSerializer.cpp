@@ -1,6 +1,7 @@
 #include "GraphSerializer.h"
 #include "SubgraphNode.h"
 #include "../NativeNodes/GainNode.h"
+#include "../NativeNodes/FeedbackNodes.h"
 #include "../NativeNodes/MutePhaseNode.h"
 #include "../NativeNodes/MatrixMixerNode.h"
 #include "../NativeNodes/DelayNode.h"
@@ -153,6 +154,20 @@ juce::var GraphSerializer::graphToVar (const GraphController& controller)
     }
     root->setProperty ("connections", connsArr);
 
+    // Feedback links are pairings, not graph edges, so they get their own
+    // array rather than riding in "connections" — a reader that fed them to
+    // addConnection would re-create the very cycle the pair exists to avoid.
+    juce::Array<juce::var> fbArr;
+    for (const auto& l : controller.getAllFeedbackLinks())
+    {
+        auto* linkObj = new juce::DynamicObject();
+        linkObj->setProperty ("send",   l.sendUuid.toString());
+        linkObj->setProperty ("return", l.returnUuid.toString());
+        fbArr.add (juce::var (linkObj));
+    }
+    if (! fbArr.isEmpty())
+        root->setProperty ("feedbackLinks", fbArr);
+
     // Persist the I/O terminal positions so the user's layout survives reload
     // and undo/redo. Terminals themselves are not in the "nodes" array (their
     // identity is implicit), so positions ride along as separate fields.
@@ -298,6 +313,14 @@ std::unique_ptr<juce::AudioProcessor> GraphSerializer::buildProcessorFromNodeVar
             p->fromVar (data);
             return p;
         }
+        // Feedback nodes carry no per-node state of their own — the pairing
+        // lives in the graph's "feedbackLinks" array, restored after every
+        // node exists. A send is N-in/0-out and a return 0-in/N-out, so read
+        // the width from whichever side is non-zero.
+        case NodeKind::FeedbackSend:
+            return std::make_unique<FeedbackSendNode> (juce::jmax (1, chIn));
+        case NodeKind::FeedbackReturn:
+            return std::make_unique<FeedbackReturnNode> (juce::jmax (1, chOut));
         case NodeKind::MatrixMixer:
         {
             auto p = std::make_unique<MatrixMixerNode> (chIn, chOut);
@@ -466,6 +489,19 @@ bool GraphSerializer::graphFromVar (const juce::var& v,
             const int  toCh     = (int) toObj  ->getProperty ("channel");
 
             controller.addConnection (fromUuid, fromCh, toUuid, toCh);
+        }
+    }
+
+    // Links last: both ends have to exist as nodes before a pair can bind,
+    // and binding sizes the shared bus from the send's channel count.
+    if (auto* fbArr = obj->getProperty ("feedbackLinks").getArray())
+    {
+        for (const auto& lv : *fbArr)
+        {
+            auto* lObj = lv.getDynamicObject();
+            if (lObj == nullptr) continue;
+            controller.addFeedbackLink (juce::Uuid (lObj->getProperty ("send").toString()),
+                                        juce::Uuid (lObj->getProperty ("return").toString()));
         }
     }
 
