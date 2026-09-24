@@ -88,20 +88,24 @@ echo.
 
 REM ── VST3 + Standalone universal builds (single binary, up to 64 channels) ────
 REM   When both are requested they share one cmake configure + MSBuild pass.
+REM   A VST3 build always brings the mcfx_send / mcfx_receive standalones along
+REM   (VST3_STANDALONE_APPS): they go into the VST3 installer, since the network
+REM   tools are the only ones useful outside a host. "standalone" builds all.
+set VST3_STANDALONE_APPS=mcfx_send;mcfx_receive
 if "%BUILD_VST3%%BUILD_SA%"=="11" (
     echo ================================================================
     echo  BUILDING VST3 + Standalone  ^(universal, up to 64 channels^)
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 ) else if "%BUILD_VST3%"=="1" (
     echo ================================================================
-    echo  BUILDING VST3  ^(universal, up to 64 channels^)
+    echo  BUILDING VST3 + %VST3_STANDALONE_APPS% Standalone  ^(universal, up to 64 channels^)
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=FALSE -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE "-DMCFX_STANDALONE_PLUGINS=%VST3_STANDALONE_APPS%" -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 ) else if "%BUILD_SA%"=="1" (
@@ -109,7 +113,7 @@ if "%BUILD_VST3%%BUILD_SA%"=="11" (
     echo  BUILDING Standalone  ^(universal, up to 64 channels^)
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 )
@@ -139,8 +143,9 @@ if "%BUILD_VST3%"=="1" if "%SIGN%"=="1" (
     for /r "..\build\vst3" %%f in (*.vst3 *.exe) do call :do_sign "%%f"
 )
 
-REM Sign standalone executables (includes mcfx_plugin_scanner.exe)
-if "%BUILD_SA%"=="1" if "%SIGN%"=="1" (
+REM Sign standalone executables (includes mcfx_plugin_scanner.exe). A VST3
+REM build produces some too (VST3_STANDALONE_APPS), so sign whatever is there.
+if not "%BUILD_VST3%%BUILD_SA%"=="00" if "%SIGN%"=="1" if exist "..\build\standalone\*.exe" (
     echo Signing Standalone executables...
     call :do_sign "..\build\standalone\*.exe"
 )
@@ -153,7 +158,7 @@ if "%BUILD_VST2%"=="1" (
         echo  BUILDING VST2  %%x channels
         echo ================================================================
         pushd "%BUILD_DIR%"
-        cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=FALSE -DMCFX_BUILD_MC=OFF -DMCFX_BUILD_VST2_PER_CHANNEL=ON -DNUM_CHANNELS:STRING=%%x
+        cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=FALSE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=OFF -DMCFX_BUILD_VST2_PER_CHANNEL=ON -DNUM_CHANNELS:STRING=%%x
         %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
         popd
     )

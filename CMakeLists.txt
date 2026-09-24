@@ -26,6 +26,7 @@ SET(BUILD_VST3 TRUE CACHE BOOL "build VST3 plugins")
 SET(BUILD_VST TRUE CACHE BOOL "build VST2 plugins")
 SET(BUILD_AU FALSE CACHE BOOL "build AU plugins (macOS only)")
 SET(BUILD_STANDALONE FALSE CACHE BOOL "build standalone application (for those with editor)")
+SET(MCFX_STANDALONE_PLUGINS "" CACHE STRING "with BUILD_STANDALONE: only these plug-ins get a Standalone (e.g. \"mcfx_send;mcfx_receive\"); empty = all")
 SET(BUILD_LV2 FALSE CACHE BOOL "build LV2 plugins")
 SET(MCFX_DEV_CODESIGN_IDENTITY "-" CACHE STRING "macOS: identity the dev-build Standalone .app is sealed with (\"-\" = ad hoc; an Apple Development identity keeps the microphone grant across rebuilds)")
 

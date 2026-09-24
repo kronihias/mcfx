@@ -279,6 +279,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 | `BUILD_VST3` | Build VST3 plugins | `OFF` |
 | `BUILD_AU` | Build AU plugins (macOS only) | `OFF` |
 | `BUILD_STANDALONE` | Build standalone applications | `OFF` |
+| `MCFX_STANDALONE_PLUGINS` | With `BUILD_STANDALONE`: only these plug-ins get a standalone, e.g. `"mcfx_send;mcfx_receive"` (empty = all) | empty |
 | `BUILD_LV2` | Build LV2 plugins (per-channel, like VST2 — needs `MCFX_BUILD_VST2_PER_CHANNEL=ON`) | `OFF` |
 | `MCFX_BUILD_VST2_PER_CHANNEL` | Build per-channel VST2/LV2 variants (legacy) | `ON` |
 | `MCFX_BUILD_MC` | Build single multichannel VST3/AU/Standalone | `ON` |
@@ -299,6 +300,9 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
+- installers: the macOS and Windows VST3 installers now also include the **`mcfx_send` and `mcfx_receive` standalone apps** (macOS: `/Applications/mcfx`; Windows: `Program Files\mcfx` with Start menu shortcuts, an optional component). The effects stay plug-in only.
+- `mcfx_send` standalone: no longer passes its input through to the outputs, which on a laptop fed the built-in microphone straight into the speakers.
+- standalones: audio input is muted, with a banner saying why, when the device is a computer's own microphone and speakers, so a pass-through plug-in doesn't howl. On macOS the microphone permission is asked once at startup instead of up to four times.
 - `mcfx_meter`: hovering the waterfall reads out the frequency under the pointer. A cursor is drawn on the hovered channel's own ridge, its height showing the level at that channel and frequency, with the level in dB beside it and the frequency on the axis below.
 
 ### 0.8.10 (2026-08-15)

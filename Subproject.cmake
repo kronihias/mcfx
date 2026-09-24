@@ -165,6 +165,7 @@ endif()
 #------------------------------------------------------------------------------
 # Single multichannel VST3/AU/Standalone variant
 #------------------------------------------------------------------------------
+unset(_mc_formats)
 if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
     if(DEFINED SPECIFIC_PROJECTNAME)
         set(_mc_target ${SPECIFIC_PROJECTNAME})
@@ -172,12 +173,21 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
         set(_mc_target ${SUBDIRNAME})
     endif()
 
+    # MCFX_STANDALONE_PLUGINS narrows the Standalone format to the listed
+    # plug-ins (the release ships only mcfx_send/mcfx_receive as apps).
+    set(_mc_formats ${MCFX_FORMATS_MC})
+    if(MCFX_STANDALONE_PLUGINS AND NOT _mc_target IN_LIST MCFX_STANDALONE_PLUGINS)
+        list(REMOVE_ITEM _mc_formats Standalone)
+    endif()
+endif()
+
+if(MCFX_BUILD_MC AND _mc_formats AND DEFINED MC_PLUGIN_CODE)
     juce_add_plugin(${_mc_target}
         PLUGIN_MANUFACTURER_CODE Kron
         PLUGIN_CODE              ${MC_PLUGIN_CODE}
         COMPANY_NAME             "kronlachner"
         PRODUCT_NAME             ${_mc_target}
-        FORMATS                  ${MCFX_FORMATS_MC}
+        FORMATS                  ${_mc_formats}
         VERSION                  ${VERSION}
         # Without the usage-description plist key macOS hard-denies audio input
         # for the standalone — no prompt, the device just delivers zeros.
@@ -234,7 +244,7 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
     # for the other formats so every built artefact ends up under
     # ${BIN_DIR}/{vst,vst3,au,standalone} for easy access without digging
     # through the artefacts/ tree.
-    if("AU" IN_LIST MCFX_FORMATS_MC AND TARGET ${_mc_target}_AU)
+    if("AU" IN_LIST _mc_formats AND TARGET ${_mc_target}_AU)
         add_custom_command(TARGET ${_mc_target}_AU POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory  "${BIN_DIR}/au"
             COMMAND ${CMAKE_COMMAND} -E rm -rf          "${BIN_DIR}/au/${_mc_target}.component"
@@ -243,7 +253,7 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
             VERBATIM)
     endif()
 
-    if("Standalone" IN_LIST MCFX_FORMATS_MC AND TARGET ${_mc_target}_Standalone)
+    if("Standalone" IN_LIST _mc_formats AND TARGET ${_mc_target}_Standalone)
         if(APPLE)
             target_link_libraries(${_mc_target} PRIVATE "-framework AVFoundation")
 

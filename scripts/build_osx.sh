@@ -60,6 +60,8 @@ codesign_bundles() {
     local dir="$1"
     local ext="$2"
     local entitlements="$ROOT/scripts/scanner.entitlements"
+    local sa_entitlements="$ROOT/scripts/standalone.entitlements"
+    local sa_host_entitlements="$ROOT/scripts/standalone_host.entitlements"
 
     find "$dir" -type d -name "*.$ext" -print0 2>/dev/null | while IFS= read -r -d '' bundle; do
         # Sign any embedded *_plugin_scanner helper first, with the
@@ -73,16 +75,21 @@ codesign_bundles() {
                      "$helper"
         done < <(find "$bundle/Contents/Helpers" -type f -name "*_plugin_scanner" -print0 2>/dev/null)
 
-        # Outer bundle: for .app (Standalone) the main exe loads 3rd-party
-        # plugins in-process and needs the same entitlement. For .vst3 /
-        # .component / .vst the DAW is the loader, so its entitlements apply
-        # and the bundle stays without one. --deep is intentionally omitted —
-        # the helper above is already signed and would otherwise be re-signed
-        # without entitlements.
+        # Outer bundle: a .app (Standalone) needs audio input, which the
+        # hardened runtime blocks unless claimed. One that carries a scanner
+        # also loads 3rd-party plugins in-process and needs the scanner's
+        # entitlements too. For .vst3 / .component / .vst the DAW is the
+        # loader, so its entitlements apply and the bundle stays without one.
+        # --deep is intentionally omitted — the helper above is already signed
+        # and would otherwise be re-signed without entitlements.
         if [ "$ext" = "app" ]; then
+            local app_entitlements="$sa_entitlements"
+            if compgen -G "$bundle/Contents/Helpers/*_plugin_scanner" > /dev/null; then
+                app_entitlements="$sa_host_entitlements"
+            fi
             codesign -s "$CODESIGN_APP" \
                      --force --strict --verbose --timestamp --options=runtime \
-                     --entitlements "$entitlements" \
+                     --entitlements "$app_entitlements" \
                      "$bundle"
         else
             codesign -s "$CODESIGN_APP" \
@@ -98,14 +105,27 @@ build_installer() {
     local install_location="$3"
     local installer_name="$4"
 
+    # By default pkgbuild marks every bundle relocatable: if the Installer
+    # finds a bundle with the same identifier elsewhere on disk (a dev build,
+    # a copy on another volume) it updates that one instead of installing to
+    # install_location. Always install where we say.
+    local component_plist="${BUILD_DIR}/$(basename "$installer_name" .pkg)_components.plist"
+    pkgbuild --analyze --root "${pkg_root}" "${component_plist}"
+    local i=0
+    while /usr/libexec/PlistBuddy -c "Print :$i" "${component_plist}" > /dev/null 2>&1; do
+        /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "${component_plist}" 2> /dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :$i:BundleIsRelocatable bool false" "${component_plist}"
+        i=$((i + 1))
+    done
+
     if $NO_SIGN; then
-        pkgbuild --root "${pkg_root}" --identifier "${identifier}" --version ${VERSION} --install-location "${install_location}" "${installer_name}"
+        pkgbuild --root "${pkg_root}" --component-plist "${component_plist}" --identifier "${identifier}" --version ${VERSION} --install-location "${install_location}" "${installer_name}"
         return 0
     fi
 
     local unsigned="${BUILD_DIR}/$(basename "$installer_name" .pkg)_unsigned.pkg"
 
-    pkgbuild --root "${pkg_root}" --identifier "${identifier}" --version ${VERSION} --install-location "${install_location}" "${unsigned}"
+    pkgbuild --root "${pkg_root}" --component-plist "${component_plist}" --identifier "${identifier}" --version ${VERSION} --install-location "${install_location}" "${unsigned}"
 
     productsign --sign "$CODESIGN_INSTALLER" "${unsigned}" "${installer_name}"
     rm -rf "${unsigned}"
@@ -151,6 +171,7 @@ if $BUILD_VST2; then
             -DBUILD_STANDALONE=FALSE \
             -DMCFX_BUILD_VST2_PER_CHANNEL=ON \
             -DMCFX_BUILD_MC=OFF \
+            -DMCFX_STANDALONE_PLUGINS= \
             -DVST2SDKPATH="$VST2SDK"
         ninja
         popd
@@ -169,26 +190,44 @@ fi
 
 if $BUILD_VST3; then
     VST3_DIR=$BUILD_DIR/vst3
+    STANDALONE_DIR=$BUILD_DIR/standalone
 
-    echo ""; echo "=== Building VST3 multichannel v$VERSION ==="
+    # Standalone apps shipped alongside the VST3s. Only the network tools are
+    # useful outside a host; the effects stay plug-in only.
+    VST3_STANDALONE_APPS="mcfx_send;mcfx_receive"
+
+    echo ""; echo "=== Building VST3 multichannel (+ ${VST3_STANDALONE_APPS} Standalone) v$VERSION ==="
 
     pushd "$BUILD_DIR"
     cmake .. -G Ninja \
         -DBUILD_VST=TRUE \
         -DBUILD_VST3=TRUE \
         -DBUILD_AU=FALSE \
-        -DBUILD_STANDALONE=FALSE \
+        -DBUILD_STANDALONE=TRUE \
         -DMCFX_BUILD_VST2_PER_CHANNEL=OFF \
         -DMCFX_BUILD_MC=ON \
+        "-DMCFX_STANDALONE_PLUGINS=${VST3_STANDALONE_APPS}" \
         -DVST2SDKPATH="$VST2SDK"
     ninja
     popd
 
     echo ""; echo "codesigning VST3 plugins"
     codesign_bundles "$VST3_DIR" "vst3"
+    echo ""; echo "codesigning Standalone apps"
+    codesign_bundles "$STANDALONE_DIR" "app"
+
+    # One package, two destinations: stage a tree rooted at / .
+    PKG_ROOT=$BUILD_DIR/pkg_vst3
+    rm -rf "$PKG_ROOT"
+    mkdir -p "$PKG_ROOT/Library/Audio/Plug-Ins/VST3/mcfx" "$PKG_ROOT/Applications/mcfx"
+    ditto "$VST3_DIR" "$PKG_ROOT/Library/Audio/Plug-Ins/VST3/mcfx"
+    IFS=';' read -ra _apps <<< "$VST3_STANDALONE_APPS"
+    for app in "${_apps[@]}"; do
+        ditto "$STANDALONE_DIR/$app.app" "$PKG_ROOT/Applications/mcfx/$app.app"
+    done
 
     INSTALLER=${ROOT}/_OSX_RELEASE/mcfx_v${VERSION}_macos_vst3.pkg
-    build_installer "$VST3_DIR" "com.kronlachner.mcfx.vst3" "/Library/Audio/Plug-Ins/VST3/mcfx" "$INSTALLER"
+    build_installer "$PKG_ROOT" "com.kronlachner.mcfx.vst3" "/" "$INSTALLER"
 fi
 
 # =========================================================
@@ -208,6 +247,7 @@ if $BUILD_AU; then
         -DBUILD_STANDALONE=FALSE \
         -DMCFX_BUILD_VST2_PER_CHANNEL=OFF \
         -DMCFX_BUILD_MC=ON \
+        -DMCFX_STANDALONE_PLUGINS= \
         -DVST2SDKPATH="$VST2SDK"
     ninja
     popd
@@ -236,6 +276,7 @@ if $BUILD_STANDALONE; then
         -DBUILD_STANDALONE=TRUE \
         -DMCFX_BUILD_VST2_PER_CHANNEL=OFF \
         -DMCFX_BUILD_MC=ON \
+        -DMCFX_STANDALONE_PLUGINS= \
         -DVST2SDKPATH="$VST2SDK"
     ninja
     popd

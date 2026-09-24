@@ -26,19 +26,39 @@ RequestExecutionLevel admin
 
 ;--------------------------------
 ; Pages
-!insertmacro MUI_PAGE_WELCOME
-
 !define MUI_TEXT_WELCOME_INFO_TITLE "MCFX v${VERSION}"
-
+!insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_LICENSE "../README.md"
+!insertmacro MUI_PAGE_COMPONENTS
+; The directory page picks the VST3 folder; the apps always go to
+; $PROGRAMFILES64\mcfx.
+!insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
-Page directory
-Page instfiles
 
 ;--------------------------------
 
 ; The stuff to install
-Section
+Section "VST3 plug-ins" SecVST3
+    SectionIn RO
     SetOutPath "$INSTDIR"
     File /r "..\build\vst3\*.vst3"
 SectionEnd
+
+; Built alongside the VST3s by build_all_win64.bat (VST3_STANDALONE_APPS).
+; Only the network tools are shipped as apps; the effects are plug-in only.
+Section "mcfx_send / mcfx_receive standalone apps" SecApps
+    SetShellVarContext all   ; Start menu shortcuts for all users (admin install)
+    SetOutPath "$PROGRAMFILES64\mcfx"
+    File "..\build\standalone\mcfx_send.exe"
+    File "..\build\standalone\mcfx_receive.exe"
+
+    CreateDirectory "$SMPROGRAMS\mcfx"
+    CreateShortcut "$SMPROGRAMS\mcfx\mcfx_send.lnk"    "$PROGRAMFILES64\mcfx\mcfx_send.exe"
+    CreateShortcut "$SMPROGRAMS\mcfx\mcfx_receive.lnk" "$PROGRAMFILES64\mcfx\mcfx_receive.exe"
+SectionEnd
+
+!insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecVST3} "The mcfx VST3 plug-ins."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecApps} "Standalone mcfx_send and mcfx_receive, to stream multichannel audio over the network without a DAW. Installed to $PROGRAMFILES64\mcfx, with Start menu shortcuts."
+!insertmacro MUI_FUNCTION_DESCRIPTION_END

@@ -130,11 +130,13 @@ jobs:
           NOTARIZE_TEAM_ID="$NOTARIZE_TEAM_ID"
           EOF
 
-      - name: Build VST3 (signed + notarized)
+      # --vst3 also builds the mcfx_send / mcfx_receive standalone apps and
+      # packs them into the same .pkg (/Applications/mcfx).
+      - name: Build VST3 + standalone apps (signed + notarized)
         if: env.SIGN == 'true'
         run: ./scripts/build_osx.sh --vst3
 
-      - name: Build VST3 (unsigned)
+      - name: Build VST3 + standalone apps (unsigned)
         if: env.SIGN != 'true'
         run: ./scripts/build_osx.sh --vst3 --no-sign
 
@@ -147,6 +149,12 @@ jobs:
             exit 1
           fi
           ls -lh "$PKG"
+          for app in mcfx_send mcfx_receive; do
+            if ! pkgutil --payload-files "$PKG" | grep -qx "./Applications/mcfx/$app.app"; then
+              echo "::error::$app.app missing from $PKG"
+              exit 1
+            fi
+          done
 
       - name: Upload as workflow artifact
         if: github.event_name == 'workflow_dispatch'
@@ -267,13 +275,15 @@ jobs:
         shell: cmd
         run: if not exist build mkdir build
 
-      - name: Build VST3 (signed)
+      # "vst3" also builds the mcfx_send / mcfx_receive standalone apps and
+      # packs them into the same installer (optional component).
+      - name: Build VST3 + standalone apps (signed)
         if: env.SIGN == 'true'
         shell: cmd
         working-directory: scripts
         run: build_all_win64.bat vst3 sign
 
-      - name: Build VST3 (unsigned)
+      - name: Build VST3 + standalone apps (unsigned)
         if: env.SIGN != 'true'
         shell: cmd
         working-directory: scripts
@@ -289,6 +299,12 @@ jobs:
             exit /b 1
           )
           dir "%EXE%"
+          for %%a in (mcfx_send mcfx_receive) do (
+            if not exist "build\standalone\%%a.exe" (
+              echo ::error::build\standalone\%%a.exe was not built
+              exit /b 1
+            )
+          )
 
       - name: Upload as workflow artifact
         if: github.event_name == 'workflow_dispatch'
