@@ -582,6 +582,16 @@ void McfxSendAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer,
         meters.measureBlock (buffer);
     }
 
+    // The standalone only has outputs so the device opens symmetrically (see
+    // JSA_STANDALONE_SYMMETRIC_IO); nothing should come out of them. Passing
+    // the input through there drives the speakers from the microphone and
+    // feeds back.
+    if (wrapperType == wrapperType_Standalone)
+    {
+        buffer.clear();
+        return;
+    }
+
     // Passthrough — leave input samples in the output channels (buffer is
     // shared between in/out for symmetric layouts), clear any extras.
     for (int ch = numIn; ch < numOut; ++ch)

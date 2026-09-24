@@ -31,7 +31,9 @@ SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/net ${_MCFX_RESAMPLER_DIR})
 # requires in == out anyway. So open the device with matching in/out counts
 # (JSA_STANDALONE_SYMMETRIC_IO mirrors the input port count onto the output)
 # and use the linked "Channels" selector. The output ports exist but are unused.
-SET(MCFX_EXTRA_DEFS JSA_STANDALONE_SYMMETRIC_IO=1)
+# The standalone clears those outputs (processBlock), so there is no feedback
+# path and the host's mic+speakers input guard must not mute what we send.
+SET(MCFX_EXTRA_DEFS JSA_STANDALONE_SYMMETRIC_IO=1 JSA_STANDALONE_SILENT_OUTPUT=1)
 
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 
