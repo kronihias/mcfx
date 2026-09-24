@@ -88,10 +88,11 @@ echo.
 
 REM ── VST3 + Standalone universal builds (single binary, up to 64 channels) ────
 REM   When both are requested they share one cmake configure + MSBuild pass.
-REM   A VST3 build always brings the mcfx_send / mcfx_receive standalones along
-REM   (VST3_STANDALONE_APPS): they go into the VST3 installer, since the network
-REM   tools are the only ones useful outside a host. "standalone" builds all.
-set VST3_STANDALONE_APPS=mcfx_send;mcfx_receive
+REM   A VST3 build always brings the mcfx_send / mcfx_receive / mcfx_graph
+REM   standalones along (VST3_STANDALONE_APPS): they go into the VST3 installer,
+REM   since the network tools and the graph host are the ones useful outside a
+REM   DAW. "standalone" builds all.
+set VST3_STANDALONE_APPS=mcfx_send;mcfx_receive;mcfx_graph
 if "%BUILD_VST3%%BUILD_SA%"=="11" (
     echo ================================================================
     echo  BUILDING VST3 + Standalone  ^(universal, up to 64 channels^)
@@ -129,7 +130,8 @@ if "%BUILD_VST3%"=="1" if exist "..\build\vst3\mcfx_anything.vst3\Contents\x86_6
 if "%BUILD_VST3%"=="1" if exist "..\build\vst3\mcfx_graph.vst3\Contents\x86_64-win" (
     for /r "..\build\mcfx_graph\mcfx_graph_plugin_scanner_artefacts" %%f in (mcfx_graph_plugin_scanner.exe) do copy /Y "%%f" "..\build\vst3\mcfx_graph.vst3\Contents\x86_64-win\" >nul
 )
-if "%BUILD_SA%"=="1" if exist "..\build\standalone" (
+REM A VST3 build produces the mcfx_graph standalone too (VST3_STANDALONE_APPS).
+if not "%BUILD_VST3%%BUILD_SA%"=="00" if exist "..\build\standalone" (
     for /r "..\build\mcfx_anything\mcfx_plugin_scanner_artefacts" %%f in (mcfx_plugin_scanner.exe) do copy /Y "%%f" "..\build\standalone\" >nul
     for /r "..\build\mcfx_graph\mcfx_graph_plugin_scanner_artefacts" %%f in (mcfx_graph_plugin_scanner.exe) do copy /Y "%%f" "..\build\standalone\" >nul
 )

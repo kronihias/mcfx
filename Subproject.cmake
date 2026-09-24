@@ -174,7 +174,7 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
     endif()
 
     # MCFX_STANDALONE_PLUGINS narrows the Standalone format to the listed
-    # plug-ins (the release ships only mcfx_send/mcfx_receive as apps).
+    # plug-ins (the release ships only mcfx_send/mcfx_receive/mcfx_graph as apps).
     set(_mc_formats ${MCFX_FORMATS_MC})
     if(MCFX_STANDALONE_PLUGINS AND NOT _mc_target IN_LIST MCFX_STANDALONE_PLUGINS)
         list(REMOVE_ITEM _mc_formats Standalone)

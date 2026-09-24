@@ -130,7 +130,7 @@ jobs:
           NOTARIZE_TEAM_ID="$NOTARIZE_TEAM_ID"
           EOF
 
-      # --vst3 also builds the mcfx_send / mcfx_receive standalone apps and
+      # --vst3 also builds the mcfx_send / mcfx_receive / mcfx_graph standalone apps and
       # packs them into the same .pkg (/Applications/mcfx).
       - name: Build VST3 + standalone apps (signed + notarized)
         if: env.SIGN == 'true'
@@ -149,7 +149,7 @@ jobs:
             exit 1
           fi
           ls -lh "$PKG"
-          for app in mcfx_send mcfx_receive; do
+          for app in mcfx_send mcfx_receive mcfx_graph; do
             if ! pkgutil --payload-files "$PKG" | grep -qx "./Applications/mcfx/$app.app"; then
               echo "::error::$app.app missing from $PKG"
               exit 1
@@ -275,7 +275,7 @@ jobs:
         shell: cmd
         run: if not exist build mkdir build
 
-      # "vst3" also builds the mcfx_send / mcfx_receive standalone apps and
+      # "vst3" also builds the mcfx_send / mcfx_receive / mcfx_graph standalone apps and
       # packs them into the same installer (optional component).
       - name: Build VST3 + standalone apps (signed)
         if: env.SIGN == 'true'
@@ -299,7 +299,7 @@ jobs:
             exit /b 1
           )
           dir "%EXE%"
-          for %%a in (mcfx_send mcfx_receive) do (
+          for %%a in (mcfx_send mcfx_receive mcfx_graph mcfx_graph_plugin_scanner) do (
             if not exist "build\standalone\%%a.exe" (
               echo ::error::build\standalone\%%a.exe was not built
               exit /b 1

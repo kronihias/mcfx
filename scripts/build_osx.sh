@@ -192,9 +192,9 @@ if $BUILD_VST3; then
     VST3_DIR=$BUILD_DIR/vst3
     STANDALONE_DIR=$BUILD_DIR/standalone
 
-    # Standalone apps shipped alongside the VST3s. Only the network tools are
-    # useful outside a host; the effects stay plug-in only.
-    VST3_STANDALONE_APPS="mcfx_send;mcfx_receive"
+    # Standalone apps shipped alongside the VST3s: the network tools and the
+    # graph host are useful outside a DAW; the effects stay plug-in only.
+    VST3_STANDALONE_APPS="mcfx_send;mcfx_receive;mcfx_graph"
 
     echo ""; echo "=== Building VST3 multichannel (+ ${VST3_STANDALONE_APPS} Standalone) v$VERSION ==="
 

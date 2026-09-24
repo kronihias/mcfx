@@ -46,19 +46,23 @@ Section "VST3 plug-ins" SecVST3
 SectionEnd
 
 ; Built alongside the VST3s by build_all_win64.bat (VST3_STANDALONE_APPS).
-; Only the network tools are shipped as apps; the effects are plug-in only.
-Section "mcfx_send / mcfx_receive standalone apps" SecApps
+; The network tools and the graph host are shipped as apps; the effects are
+; plug-in only. mcfx_graph finds its plug-in scanner next to its .exe.
+Section "mcfx_send / mcfx_receive / mcfx_graph standalone apps" SecApps
     SetShellVarContext all   ; Start menu shortcuts for all users (admin install)
     SetOutPath "$PROGRAMFILES64\mcfx"
     File "..\build\standalone\mcfx_send.exe"
     File "..\build\standalone\mcfx_receive.exe"
+    File "..\build\standalone\mcfx_graph.exe"
+    File "..\build\standalone\mcfx_graph_plugin_scanner.exe"
 
     CreateDirectory "$SMPROGRAMS\mcfx"
     CreateShortcut "$SMPROGRAMS\mcfx\mcfx_send.lnk"    "$PROGRAMFILES64\mcfx\mcfx_send.exe"
     CreateShortcut "$SMPROGRAMS\mcfx\mcfx_receive.lnk" "$PROGRAMFILES64\mcfx\mcfx_receive.exe"
+    CreateShortcut "$SMPROGRAMS\mcfx\mcfx_graph.lnk"   "$PROGRAMFILES64\mcfx\mcfx_graph.exe"
 SectionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
     !insertmacro MUI_DESCRIPTION_TEXT ${SecVST3} "The mcfx VST3 plug-ins."
-    !insertmacro MUI_DESCRIPTION_TEXT ${SecApps} "Standalone mcfx_send and mcfx_receive, to stream multichannel audio over the network without a DAW. Installed to $PROGRAMFILES64\mcfx, with Start menu shortcuts."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecApps} "Standalone mcfx_send and mcfx_receive, to stream multichannel audio over the network without a DAW, and mcfx_graph, to host and route plug-ins. Installed to $PROGRAMFILES64\mcfx, with Start menu shortcuts."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END

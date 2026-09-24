@@ -300,7 +300,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
-- installers: the macOS and Windows VST3 installers now also include the **`mcfx_send` and `mcfx_receive` standalone apps** (macOS: `/Applications/mcfx`; Windows: `Program Files\mcfx` with Start menu shortcuts, an optional component). The effects stay plug-in only.
+- installers: the macOS and Windows VST3 installers now also include the **`mcfx_send`, `mcfx_receive` and `mcfx_graph` standalone apps** (macOS: `/Applications/mcfx`; Windows: `Program Files\mcfx` with Start menu shortcuts, an optional component). The effects stay plug-in only.
 - `mcfx_send` standalone: no longer passes its input through to the outputs, which on a laptop fed the built-in microphone straight into the speakers.
 - standalones: audio input is muted, with a banner saying why, when the device is a computer's own microphone and speakers, so a pass-through plug-in doesn't howl. On macOS the microphone permission is asked once at startup instead of up to four times.
 - `mcfx_meter`: hovering the waterfall reads out the frequency under the pointer. A cursor is drawn on the hovered channel's own ridge, its height showing the level at that channel and frequency, with the level in dB beside it and the frequency on the axis below.
