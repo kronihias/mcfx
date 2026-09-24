@@ -81,6 +81,8 @@ target_link_libraries(mcfx_plugin_scanner PRIVATE
 # AFTER JUCE's own JUCE_COPY_PLUGIN_AFTER_BUILD post-build (registered inside
 # juce_add_plugin). Hooking it on the scanner target instead races with JUCE's
 # copy and produces installer bundles missing Contents/Helpers/.
+include(${SRC_DIR}/cmake/McfxResealBundle.cmake)
+
 foreach(tgt IN LISTS MCFX_TARGETS)
     if(TARGET ${tgt}_VST3)
         add_dependencies(${tgt}_VST3 mcfx_plugin_scanner)
@@ -99,6 +101,8 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                     "$<TARGET_FILE:mcfx_plugin_scanner>"
                     "${BIN_DIR}/vst3/${tgt}.vst3/Contents/Helpers/"
                 VERBATIM)
+            mcfx_reseal_bundle(${tgt}_VST3 "$<TARGET_BUNDLE_DIR:${tgt}_VST3>" mcfx_plugin_scanner)
+            mcfx_reseal_bundle(${tgt}_VST3 "${BIN_DIR}/vst3/${tgt}.vst3" mcfx_plugin_scanner)
         elseif(WIN32)
             add_custom_command(TARGET ${tgt}_VST3 POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -133,6 +137,7 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                 "$<TARGET_FILE:mcfx_plugin_scanner>"
                 "$<TARGET_BUNDLE_DIR:${tgt}_AU>/Contents/Helpers/"
             VERBATIM)
+        mcfx_reseal_bundle(${tgt}_AU "$<TARGET_BUNDLE_DIR:${tgt}_AU>" mcfx_plugin_scanner)
     endif()
     if(TARGET ${tgt}_Standalone)
         add_dependencies(${tgt}_Standalone mcfx_plugin_scanner)
@@ -143,7 +148,18 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "$<TARGET_FILE:mcfx_plugin_scanner>"
                     "$<TARGET_BUNDLE_DIR:${tgt}_Standalone>/Contents/Helpers/"
+                # Subproject.cmake mirrors the .app into ${BIN_DIR}/standalone in
+                # a POST_BUILD registered before this one, so on a clean build
+                # the mirror is taken before the helper exists. Put it there
+                # too (same as the VST3 mirror above).
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "${BIN_DIR}/standalone/${tgt}.app/Contents/Helpers"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:mcfx_plugin_scanner>"
+                    "${BIN_DIR}/standalone/${tgt}.app/Contents/Helpers/"
                 VERBATIM)
+            mcfx_reseal_bundle(${tgt}_Standalone "$<TARGET_BUNDLE_DIR:${tgt}_Standalone>" mcfx_plugin_scanner)
+            mcfx_reseal_bundle(${tgt}_Standalone "${BIN_DIR}/standalone/${tgt}.app" mcfx_plugin_scanner)
         else()
             add_custom_command(TARGET ${tgt}_Standalone POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different

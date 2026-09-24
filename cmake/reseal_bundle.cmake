@@ -1,8 +1,10 @@
 # Re-seal a macOS bundle after the plugin-scanner helper has been copied into
 # Contents/Helpers.
 #
-# Invoked from mcfx_graph/CMakeLists.txt as a POST_BUILD step:
-#   cmake -DBUNDLE=<path to .vst3/.component/.app> -P reseal_bundle.cmake
+# Invoked through mcfx_reseal_bundle() (cmake/McfxResealBundle.cmake) as a
+# POST_BUILD step:
+#   cmake -DBUNDLE=<path to .vst3/.component/.app> -DHELPER=<scanner name>
+#         -P reseal_bundle.cmake
 #
 # Why a -P script rather than the codesign calls inline: the guard has to skip
 # a bundle that was never populated (the JUCE_VST3_COPY_DIR mirror when
@@ -17,11 +19,11 @@ if(NOT APPLE AND NOT CMAKE_HOST_APPLE)
     return()
 endif()
 
-if(NOT DEFINED BUNDLE)
-    message(FATAL_ERROR "reseal_bundle.cmake: BUNDLE not set")
+if(NOT DEFINED BUNDLE OR NOT DEFINED HELPER)
+    message(FATAL_ERROR "reseal_bundle.cmake: BUNDLE and HELPER must be set")
 endif()
 
-set(_helper "${BUNDLE}/Contents/Helpers/mcfx_graph_plugin_scanner")
+set(_helper "${BUNDLE}/Contents/Helpers/${HELPER}")
 
 # Skip quietly when there is nothing to do. Two distinct cases:
 #   * no helper — then nothing has been added since JUCE sealed the bundle;
