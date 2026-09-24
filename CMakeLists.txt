@@ -254,8 +254,16 @@ if (BUILD_STANDALONE)
         SET(JUCE_ALSA TRUE CACHE BOOL "build standalone app with ALSA support")
     ENDIF(UNIX AND NOT APPLE AND NOT ANDROID)
 
+    # JACK is the standalone backend on Linux. On macOS it is off by default
+    # (CoreAudio is the backend there); -DJUCE_JACK=ON opts in. The shipped,
+    # hardened-runtime apps could not load a libjack signed by another team
+    # anyway (library validation).
     IF(UNIX AND NOT ANDROID)
-        SET(JUCE_JACK TRUE CACHE BOOL "build standalone app with Jack support")
+        IF(APPLE)
+            SET(JUCE_JACK FALSE CACHE BOOL "build standalone app with Jack support")
+        ELSE()
+            SET(JUCE_JACK TRUE CACHE BOOL "build standalone app with Jack support")
+        ENDIF()
     ENDIF(UNIX AND NOT ANDROID)
 
     IF(JUCE_ASIO)
