@@ -298,12 +298,14 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
-### Unreleased
+### 0.8.11 (2026-09-24)
 
-- installers: the macOS and Windows VST3 installers now also include the **`mcfx_send`, `mcfx_receive` and `mcfx_graph` standalone apps** (macOS: `/Applications/mcfx`; Windows: `Program Files\mcfx` with Start menu shortcuts, an optional component). The effects stay plug-in only.
-- `mcfx_send` standalone: no longer passes its input through to the outputs, which on a laptop fed the built-in microphone straight into the speakers.
-- standalones: audio input is muted, with a banner saying why, when the device is a computer's own microphone and speakers, so a pass-through plug-in doesn't howl. On macOS the microphone permission is asked once at startup instead of up to four times.
-- `mcfx_meter`: hovering the waterfall reads out the frequency under the pointer. A cursor is drawn on the hovered channel's own ridge, its height showing the level at that channel and frequency, with the level in dB beside it and the frequency on the axis below.
+- installers: the VST3 installers (macOS, Windows) now include **`mcfx_send`, `mcfx_receive` and `mcfx_graph` as standalone apps**, with app icons.
+- standalones: resizable window with maximise/fullscreen; input is muted with a warning on a computer's own mic + speakers; macOS asks for microphone access once. `mcfx_send` no longer passes its input to the outputs.
+- `mcfx_graph`: feedback send/return node pair for loops (one block of delay).
+- `mcfx_send`/`mcfx_receive`: a saved peer reconnects after reloading a project, the off switch is honoured, same-machine peers use 127.0.0.1, and discovery works with several instances on one machine.
+- `mcfx_meter`: the waterfall reads out frequency and level under the pointer.
+- `mcfx_mimoeq`: undo of band edits works, a loaded config opens on the right mode, and the Delay row is no longer clipped.
 
 ### 0.8.10 (2026-08-15)
 
