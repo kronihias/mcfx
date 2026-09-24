@@ -27,6 +27,7 @@ SET(BUILD_VST TRUE CACHE BOOL "build VST2 plugins")
 SET(BUILD_AU FALSE CACHE BOOL "build AU plugins (macOS only)")
 SET(BUILD_STANDALONE FALSE CACHE BOOL "build standalone application (for those with editor)")
 SET(BUILD_LV2 FALSE CACHE BOOL "build LV2 plugins")
+SET(MCFX_DEV_CODESIGN_IDENTITY "-" CACHE STRING "macOS: identity the dev-build Standalone .app is sealed with (\"-\" = ad hoc; an Apple Development identity keeps the microphone grant across rebuilds)")
 
 # Single-binary multichannel build: produces ONE binary per plugin that the
 # host (Reaper, Max 9, ...) negotiates to the actual track channel count, up

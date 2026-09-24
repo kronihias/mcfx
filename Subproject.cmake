@@ -58,6 +58,12 @@ if(BUILD_STANDALONE)
     list(APPEND _MCFX_SOURCE ${SRC_DIR}/standalone-filter/StandaloneApp.cpp)
     list(APPEND _MCFX_HEADER ${SRC_DIR}/standalone-filter/StandaloneFilterWindow.h)
     list(APPEND _MCFX_HEADER ${SRC_DIR}/standalone-filter/AudioDeviceSelectorComponent.h)
+    if(APPLE)
+        # Asks for the audio-input permission once, before the device opens
+        # (see MacAudioInputPermission.h). Needs AVFoundation, linked below.
+        list(APPEND _MCFX_HEADER ${SRC_DIR}/standalone-filter/MacAudioInputPermission.h)
+        list(APPEND _MCFX_SOURCE ${SRC_DIR}/standalone-filter/MacAudioInputPermission.mm)
+    endif()
     # Vendored JACK backend: a standalone translation unit (namespace jsa, built
     # as its own .cpp so it is not part of the JUCE module unity build). JUCE is
     # built with JUCE_JACK undefined, so this is the only JACK type. Only compiled
@@ -239,7 +245,21 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
 
     if("Standalone" IN_LIST MCFX_FORMATS_MC AND TARGET ${_mc_target}_Standalone)
         if(APPLE)
+            target_link_libraries(${_mc_target} PRIVATE "-framework AVFoundation")
+
+            # Seal the whole .app before mirroring it. The linker only signs the
+            # executable (ad hoc), so the bundle itself stays unsigned and its
+            # Info.plist unbound. macOS then can't reliably tie the microphone
+            # grant to the app and asks again on each launch. Sealing it stops
+            # that. With an ad-hoc signature the grant still resets on every
+            # rebuild; set MCFX_DEV_CODESIGN_IDENTITY to an Apple Development
+            # identity to keep it. Releases re-sign with the Developer ID in
+            # scripts/build_osx.sh, so this only matters for dev builds.
+            # mcfx_graph's own POST_BUILD adds its scanner helper after this and
+            # re-seals the bundle itself (mcfx_graph/cmake/reseal_bundle.cmake).
             add_custom_command(TARGET ${_mc_target}_Standalone POST_BUILD
+                COMMAND codesign --force --sign "${MCFX_DEV_CODESIGN_IDENTITY}"
+                        "$<TARGET_BUNDLE_DIR:${_mc_target}_Standalone>"
                 COMMAND ${CMAKE_COMMAND} -E make_directory  "${BIN_DIR}/standalone"
                 COMMAND ${CMAKE_COMMAND} -E rm -rf          "${BIN_DIR}/standalone/${_mc_target}.app"
                 COMMAND ${CMAKE_COMMAND} -E copy_directory  "$<TARGET_BUNDLE_DIR:${_mc_target}_Standalone>"

@@ -5,6 +5,10 @@
 #include "StandaloneFilterWindow.h"
 #include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
 
+#if JUCE_MAC && ! defined (JSA_STANDALONE_NO_INPUT)
+ #include "MacAudioInputPermission.h"
+#endif
+
 #define VAL(str) #str
 #define TOSTRING(str) VAL(str)
 
@@ -79,6 +83,23 @@ public:
     {
         // This method is where you should put your application's initialisation code..
         juce::ignoreUnused (commandLine);
+
+       #if JUCE_MAC && ! defined (JSA_STANDALONE_NO_INPUT)
+        // Settle the audio-input permission before the window (and with it the
+        // device manager) exists, so startup's repeated device opens don't each
+        // raise their own prompt. See MacAudioInputPermission.h.
+        requestAudioInputPermissionThen ([this]
+        {
+            if (! isShuttingDown)
+                createAndShowMainWindow();
+        });
+       #else
+        createAndShowMainWindow();
+       #endif
+    }
+
+    void createAndShowMainWindow()
+    {
         // create the window
         // mainWindow.reset (new MainWindow (getApplicationName()));
         mainWindow.reset(createWindow());
@@ -97,6 +118,7 @@ public:
     {
         // Add your application's shutdown code here..
 
+        isShuttingDown = true;
         mainWindow = nullptr;
         appProperties.saveIfNeeded(); // (deletes our window)
     }
@@ -185,6 +207,7 @@ protected:
     ApplicationProperties appProperties;
     std::unique_ptr<StandaloneFilterWindow> mainWindow;
     // std::unique_ptr<MainWindow> mainWindow;
+    bool isShuttingDown = false;
 };
 
 } // namespace jsa
