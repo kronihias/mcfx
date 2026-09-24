@@ -182,6 +182,14 @@ if(MCFX_BUILD_MC AND MCFX_FORMATS_MC AND DEFINED MC_PLUGIN_CODE)
 endif()
 
 if(MCFX_BUILD_MC AND _mc_formats AND DEFINED MC_PLUGIN_CODE)
+    # App icon for the plug-ins that ship as standalones (drawn by
+    # scripts/make_app_icons.py). JUCE builds the .icns / .ico from it.
+    set(_mc_icon_args "")
+    set(_mc_icon "${SRC_DIR}/resources/icons/${_mc_target}.png")
+    if(EXISTS "${_mc_icon}")
+        set(_mc_icon_args ICON_BIG "${_mc_icon}" ICON_SMALL "${_mc_icon}")
+    endif()
+
     juce_add_plugin(${_mc_target}
         PLUGIN_MANUFACTURER_CODE Kron
         PLUGIN_CODE              ${MC_PLUGIN_CODE}
@@ -193,6 +201,7 @@ if(MCFX_BUILD_MC AND _mc_formats AND DEFINED MC_PLUGIN_CODE)
         # for the standalone — no prompt, the device just delivers zeros.
         MICROPHONE_PERMISSION_ENABLED TRUE
         MICROPHONE_PERMISSION_TEXT "Audio input is needed to process and meter the incoming channels."
+        ${_mc_icon_args}
         LV2URI                   http://www.matthiaskronlachner.com/${_mc_target})
 
     juce_generate_juce_header(${_mc_target})
