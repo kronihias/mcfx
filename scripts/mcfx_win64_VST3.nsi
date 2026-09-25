@@ -3,6 +3,8 @@
 ;--------------------------------
 !include x64.nsh
 !include "MUI2.nsh"
+!include "LogicLib.nsh"
+!include "Sections.nsh"
 
 ; load the version from file
 !define /file VERSION "../VERSION"
@@ -48,21 +50,37 @@ SectionEnd
 ; Built alongside the VST3s by build_all_win64.bat (VST3_STANDALONE_APPS).
 ; The network tools and the graph host are shipped as apps; the effects are
 ; plug-in only. mcfx_graph finds its plug-in scanner next to its .exe.
-Section "mcfx_send / mcfx_receive / mcfx_graph standalone apps" SecApps
-    SetShellVarContext all   ; Start menu shortcuts for all users (admin install)
-    SetOutPath "$PROGRAMFILES64\mcfx"
-    File "..\build\standalone\mcfx_send.exe"
-    File "..\build\standalone\mcfx_receive.exe"
-    File "..\build\standalone\mcfx_graph.exe"
-    File "..\build\standalone\mcfx_graph_plugin_scanner.exe"
+SectionGroup /e "Standalone apps" SecAppsGroup
+    Section "mcfx_send / mcfx_receive / mcfx_graph" SecApps
+        SetOutPath "$PROGRAMFILES64\mcfx"
+        File "..\build\standalone\mcfx_send.exe"
+        File "..\build\standalone\mcfx_receive.exe"
+        File "..\build\standalone\mcfx_graph.exe"
+        File "..\build\standalone\mcfx_graph_plugin_scanner.exe"
+    SectionEnd
 
-    CreateDirectory "$SMPROGRAMS\mcfx"
-    CreateShortcut "$SMPROGRAMS\mcfx\mcfx_send.lnk"    "$PROGRAMFILES64\mcfx\mcfx_send.exe"
-    CreateShortcut "$SMPROGRAMS\mcfx\mcfx_receive.lnk" "$PROGRAMFILES64\mcfx\mcfx_receive.exe"
-    CreateShortcut "$SMPROGRAMS\mcfx\mcfx_graph.lnk"   "$PROGRAMFILES64\mcfx\mcfx_graph.exe"
-SectionEnd
+    ; Optional; only meaningful with the apps (see .onSelChange).
+    Section "Start menu shortcuts" SecShortcuts
+        ${If} ${SectionIsSelected} ${SecApps}
+            SetShellVarContext all   ; for all users (admin install)
+            CreateDirectory "$SMPROGRAMS\mcfx"
+            CreateShortcut "$SMPROGRAMS\mcfx\mcfx_send.lnk"    "$PROGRAMFILES64\mcfx\mcfx_send.exe"
+            CreateShortcut "$SMPROGRAMS\mcfx\mcfx_receive.lnk" "$PROGRAMFILES64\mcfx\mcfx_receive.exe"
+            CreateShortcut "$SMPROGRAMS\mcfx\mcfx_graph.lnk"   "$PROGRAMFILES64\mcfx\mcfx_graph.exe"
+        ${EndIf}
+    SectionEnd
+SectionGroupEnd
+
+; Shortcuts without the apps would point at nothing: untick them together.
+Function .onSelChange
+    ${IfNot} ${SectionIsSelected} ${SecApps}
+        !insertmacro UnselectSection ${SecShortcuts}
+    ${EndIf}
+FunctionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
     !insertmacro MUI_DESCRIPTION_TEXT ${SecVST3} "The mcfx VST3 plug-ins."
-    !insertmacro MUI_DESCRIPTION_TEXT ${SecApps} "Standalone mcfx_send and mcfx_receive, to stream multichannel audio over the network without a DAW, and mcfx_graph, to host and route plug-ins. Installed to $PROGRAMFILES64\mcfx, with Start menu shortcuts."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecAppsGroup} "Standalone mcfx_send and mcfx_receive, to stream multichannel audio over the network without a DAW, and mcfx_graph, to host and route plug-ins."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecApps} "The standalone apps, installed to $PROGRAMFILES64\mcfx."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecShortcuts} "Start menu entries for the standalone apps (all users)."
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
