@@ -28,7 +28,8 @@
 #include <functional>
 #include <vector>
 
-class GraphController
+class GraphController : private juce::AudioProcessorListener,
+                        private juce::AsyncUpdater
 {
 public:
     GraphController();
@@ -41,6 +42,15 @@ public:
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi);
 
     int getLatencySamples() const;
+
+    /** Called whenever this level's total latency changes: after the graph
+        re-plans its delay compensation (a node added, removed or rewired, or
+        a node reporting a new latency). A SubgraphNode uses it to take on
+        its inner graph's latency; the plug-in uses it to tell the host.
+        Runs on whatever thread rebuilt the graph (normally the message
+        thread, or the caller of prepareToPlay). */
+    using LatencyListener = std::function<void()>;
+    void setLatencyListener (LatencyListener cb) { latencyListener_ = std::move (cb); }
 
     //==============================================================================
     // IO terminals
@@ -229,6 +239,21 @@ public:
 private:
     void rebuildIOTerminals (int numIn, int numOut);
 
+    // Delay compensation. We listen to every node's (wrapper) processor and
+    // to our own AudioProcessorGraph. A node reporting a new latency makes
+    // the graph re-plan (juce::AudioProcessorGraph doesn't watch its nodes'
+    // latency itself); the graph re-planning to a new total is passed on to
+    // latencyListener_.
+    void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
+    void audioProcessorChanged (juce::AudioProcessor* proc,
+                                const juce::AudioProcessorListener::ChangeDetails& details) override;
+    // Rebuild from the message thread, and never from inside a node's
+    // latency notice: that can arrive while the graph is preparing its nodes.
+    void handleAsyncUpdate() override;
+
+    void watchNodeLatency   (juce::AudioProcessorGraph::NodeID nid);
+    void unwatchNodeLatency (juce::AudioProcessorGraph::NodeID nid);
+
     /** Report a node about to go, and for a subgraph everything inside it
         first; then unhook the subgraph's inner graph from this one. */
     void announceRemoval (GraphNode& gn);
@@ -279,6 +304,7 @@ private:
     std::vector<FeedbackBus::Ptr> feedbackBuses_;
 
     TopologyListener             topologyListener_;
+    LatencyListener              latencyListener_;
     NodeAboutToBeRemovedListener nodeAboutToBeRemovedListener_;
     NodeAddedListener            nodeAddedListener_;
 };

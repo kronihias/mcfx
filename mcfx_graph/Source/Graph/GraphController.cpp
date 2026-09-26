@@ -40,11 +40,52 @@ GraphController::GraphController()
     uuidToNode_[outputTerminalUuid_.toString()] = &outputTerminalMeta_;
     nodeIdToNode_[inputTerminalNode_->nodeID.uid]  = &inputTerminalMeta_;
     nodeIdToNode_[outputTerminalNode_->nodeID.uid] = &outputTerminalMeta_;
+
+    graph_->addListener (this);
 }
 
 GraphController::~GraphController()
 {
+    cancelPendingUpdate();
+    graph_->removeListener (this);
+    for (auto* gn : userNodes_)
+        unwatchNodeLatency (gn->nodeId);
     // unique_ptr<AGProc> destroys all nodes in turn.
+}
+
+void GraphController::watchNodeLatency (juce::AudioProcessorGraph::NodeID nid)
+{
+    if (auto* node = graph_->getNodeForId (nid))
+        node->getProcessor()->addListener (this);
+}
+
+void GraphController::unwatchNodeLatency (juce::AudioProcessorGraph::NodeID nid)
+{
+    if (auto* node = graph_->getNodeForId (nid))
+        node->getProcessor()->removeListener (this);
+}
+
+void GraphController::audioProcessorChanged (juce::AudioProcessor* proc,
+                                             const juce::AudioProcessorListener::ChangeDetails& details)
+{
+    if (! details.latencyChanged)
+        return;
+
+    if (proc == graph_.get())
+    {
+        // The graph re-planned to a new total.
+        if (latencyListener_) latencyListener_();
+    }
+    else
+    {
+        // A node's latency changed: re-plan the compensation.
+        triggerAsyncUpdate();
+    }
+}
+
+void GraphController::handleAsyncUpdate()
+{
+    graph_->rebuild();
 }
 
 void GraphController::setNodeAboutToBeRemovedListener (NodeAboutToBeRemovedListener cb)
@@ -195,6 +236,7 @@ juce::Uuid GraphController::addNode (std::unique_ptr<juce::AudioProcessor> proc,
     auto wrapped   = std::make_unique<BypassMuteWrapper> (std::move (proc));
     auto nodePtr   = graph_->addNode (std::move (wrapped));
     if (nodePtr == nullptr) return {};
+    nodePtr->getProcessor()->addListener (this);
 
     auto* gn = new GraphNode();
     gn->uuid           = presetUuid.isNull() ? juce::Uuid() : presetUuid;
@@ -225,6 +267,7 @@ void GraphController::removeNode (const juce::Uuid& uuid)
     if (gn == &inputTerminalMeta_ || gn == &outputTerminalMeta_) return; // can't remove terminals
 
     announceRemoval (*gn);
+    unwatchNodeLatency (gn->nodeId);
 
     // Drop any feedback link naming this node while its processor is still
     // alive, so unbind can null the bus pointer out of it. Doing this after
@@ -277,6 +320,7 @@ void GraphController::clearAllUserNodes()
     for (auto* gn : userNodes_)
     {
         announceRemoval (*gn);
+        unwatchNodeLatency (gn->nodeId);
         removedNodes.push_back (graph_->removeNode (gn->nodeId));
         nodeIdToNode_.erase (gn->nodeId.uid);
         uuidToNode_.erase (gn->uuid.toString());
@@ -339,6 +383,7 @@ bool GraphController::replaceNodeProcessor (const juce::Uuid& uuid,
     // Drop any pointers external observers (e.g. forwarding-parameter slots)
     // hold to the old processor before we destroy it.
     announceRemoval (*gn);
+    unwatchNodeLatency (gn->nodeId);
 
     // Tear out the old processor.
     graph_->removeNode (gn->nodeId);
@@ -387,6 +432,7 @@ bool GraphController::replaceNodeProcessor (const juce::Uuid& uuid,
     gn->pluginDescription = std::move (newPluginDesc);
 
     nodeIdToNode_[nodePtr->nodeID.uid] = gn;
+    nodePtr->getProcessor()->addListener (this);
 
     forwardRemovalsFrom (*gn);
     if (nodeAddedListener_) nodeAddedListener_ (gn->uuid);

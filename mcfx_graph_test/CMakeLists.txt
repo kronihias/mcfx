@@ -42,6 +42,9 @@ target_include_directories(mcfx_graph_test PRIVATE ${_GRAPH_SRC})
 target_compile_definitions(mcfx_graph_test PRIVATE
     JUCE_USE_CURL=0
     JUCE_WEB_BROWSER=0
+    # The latency scenarios pump the message loop (runDispatchLoopUntil) so
+    # the graph's asynchronous re-planning runs.
+    JUCE_MODAL_LOOPS_PERMITTED=1
     _USE_MATH_DEFINES=1
 )
 

@@ -14,6 +14,12 @@ SubgraphNode::SubgraphNode (int numIn, int numOut)
       numOut_ (juce::jmax (1, numOut)),
       inner_ (std::make_unique<GraphController>())
 {
+    // Report the inner graph's total latency as our own, so the parent
+    // graph compensates parallel paths around this subgraph. JUCE's
+    // AudioProcessor::getLatencySamples() is not virtual, so the value has to
+    // be set, not computed on demand. This fires while the inner graph is
+    // being prepared too, i.e. before the parent reads it for its own plan.
+    inner_->setLatencyListener ([this] { setLatencySamples (inner_->getLatencySamples()); });
 }
 
 SubgraphNode::~SubgraphNode() = default;
@@ -55,7 +61,4 @@ std::unique_ptr<SubgraphNode> SubgraphNode::withChannelCounts (
     return resized;
 }
 
-int SubgraphNode::getLatencySamples() const noexcept
-{
-    return inner_->getLatencySamples();
-}
+

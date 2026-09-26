@@ -488,6 +488,163 @@ namespace
     }
 }
 
+namespace
+{
+    /** Stands in for a plug-in with latency (e.g. a lookahead limiter): a
+        pure delay that reports its delay as latency, so the graph's delay
+        compensation should line a parallel dry path up with it. */
+    class LatencyNode : public juce::AudioProcessor
+    {
+    public:
+        LatencyNode (int numChannels, int delaySamples)
+            : juce::AudioProcessor (BusesProperties()
+                  .withInput  ("In",  juce::AudioChannelSet::discreteChannels (numChannels), true)
+                  .withOutput ("Out", juce::AudioChannelSet::discreteChannels (numChannels), true))
+        {
+            setDelay (delaySamples);
+        }
+
+        /** Change the delay (and reported latency), e.g. while running. */
+        void setDelay (int samples)
+        {
+            delay_.store (samples);
+            setLatencySamples (samples);
+        }
+
+        void prepareToPlay (double, int) override
+        {
+            ring_.setSize (getTotalNumInputChannels(), kRingSize);
+            ring_.clear();
+            writePos_ = 0;
+        }
+        void releaseResources() override {}
+
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            const int d = delay_.load();
+            for (int i = 0; i < buffer.getNumSamples(); ++i)
+            {
+                const int readPos = (writePos_ - d + kRingSize) % kRingSize;
+                for (int c = 0; c < ring_.getNumChannels(); ++c)
+                {
+                    ring_.setSample (c, writePos_, buffer.getSample (c, i));
+                    buffer.setSample (c, i, ring_.getSample (c, readPos));
+                }
+                writePos_ = (writePos_ + 1) % kRingSize;
+            }
+        }
+
+        const juce::String getName() const override { return "Latency"; }
+        bool acceptsMidi() const override { return false; }
+        bool producesMidi() const override { return false; }
+        double getTailLengthSeconds() const override { return 0.0; }
+        bool hasEditor() const override { return false; }
+        juce::AudioProcessorEditor* createEditor() override { return nullptr; }
+        int getNumPrograms() override { return 1; }
+        int getCurrentProgram() override { return 0; }
+        void setCurrentProgram (int) override {}
+        const juce::String getProgramName (int) override { return {}; }
+        void changeProgramName (int, const juce::String&) override {}
+        void getStateInformation (juce::MemoryBlock&) override {}
+        void setStateInformation (const void*, int) override {}
+
+    private:
+        static constexpr int kRingSize = 8192;
+        juce::AudioBuffer<float> ring_;
+        int writePos_ = 0;
+        std::atomic<int> delay_ { 0 };
+    };
+
+    void pumpMessages()
+    {
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
+    }
+
+    /** out0 (through the latent path) against out1 (dry), from sample `from`. */
+    float pathDifference (const juce::AudioBuffer<float>& out, int from = 0)
+    {
+        float d = 0.0f;
+        for (int i = from; i < out.getNumSamples(); ++i)
+            d = juce::jmax (d, std::abs (out.getSample (0, i) - out.getSample (1, i)));
+        return d;
+    }
+
+    /** in0 -> [latent path] -> out0, and in0 -> out1 dry. With the latent
+        path inside a subgraph if `nested`. Returns the LatencyNode. */
+    LatencyNode* buildLatentAndDry (Fixture& f, int latency, bool nested)
+    {
+        auto latent = std::make_unique<LatencyNode> (1, latency);
+        auto* raw = latent.get();
+
+        if (nested)
+        {
+            auto sub = std::make_unique<SubgraphNode> (1, 1);
+            auto& inner = sub->getInner();
+            inner.prepareToPlay (kSampleRate, kBlockSize, 1, 1);
+            const auto l = inner.addNode (std::move (latent), NodeKind::Plugin, "Latency", 1, 1, { 300, 100 });
+            inner.addConnection (inner.getInputTerminalUuid(), 0, l, 0);
+            inner.addConnection (l, 0, inner.getOutputTerminalUuid(), 0);
+            f.nodes["P"] = f.graph.addNode (std::move (sub), NodeKind::Subgraph, "Subgraph", 1, 1, { 300, 100 });
+        }
+        else
+        {
+            f.nodes["P"] = f.graph.addNode (std::move (latent), NodeKind::Plugin, "Latency", 1, 1, { 300, 100 });
+        }
+
+        f.wire (f.in(), 0, f["P"], 0);
+        f.wire (f["P"], 0, f.out(), 0);
+        f.wire (f.in(), 0, f.out(), 1);
+        return raw;
+    }
+
+    void scenarioLatencyParallel()
+    {
+        Fixture f;
+        buildLatentAndDry (f, 64, false);
+        check (f.graph.getLatencySamples() == 64,
+               "graph latency is 64, got " + juce::String (f.graph.getLatencySamples()));
+        const auto out = render (f.graph);
+        check (peak (out) > 0.01f, "latent path produces audio");
+        check (pathDifference (out) == 0.0f, "dry path is delayed to match the latent one");
+    }
+
+    void scenarioLatencySubgraph()
+    {
+        // The same, with the latent node inside a subgraph: the subgraph has
+        // to report its inner latency for the parent to compensate.
+        Fixture f;
+        buildLatentAndDry (f, 64, true);
+        check (f.graph.getLatencySamples() == 64,
+               "graph latency is 64 through a subgraph, got " + juce::String (f.graph.getLatencySamples()));
+        check (pathDifference (render (f.graph)) == 0.0f,
+               "dry path matches a latent path inside a subgraph");
+    }
+
+    void scenarioLatencyRuntime()
+    {
+        // A node inside a subgraph changes its latency while running: the
+        // compensation re-plans and the new total reaches the top-level
+        // listener (which tells the host).
+        Fixture f;
+        int reported = -1;
+        f.graph.setLatencyListener ([&] { reported = f.graph.getLatencySamples(); });
+
+        auto* latent = buildLatentAndDry (f, 64, true);
+        render (f.graph);
+
+        latent->setDelay (200);
+        pumpMessages();   // the re-plan is asynchronous
+
+        check (f.graph.getLatencySamples() == 200,
+               "graph latency follows to 200, got " + juce::String (f.graph.getLatencySamples()));
+        check (reported == 200, "the top-level listener heard 200, got " + juce::String (reported));
+
+        // Past the switch-over transient, the paths line up again.
+        check (pathDifference (render (f.graph), 1024) == 0.0f,
+               "dry path matches after the latency change");
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -503,6 +660,9 @@ int main (int argc, char** argv)
         { "insert-partial",   scenarioInsertPartial },
         { "insert-refusals",  scenarioInsertRefusals },
         { "removal-notices",  scenarioRemovalNotices },
+        { "latency-parallel", scenarioLatencyParallel },
+        { "latency-subgraph", scenarioLatencySubgraph },
+        { "latency-runtime",  scenarioLatencyRuntime },
     };
 
     juce::String only;

@@ -56,7 +56,6 @@ public:
     void releaseResources() override;
     void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override;
 
-    int getLatencySamples() const noexcept;
 
 private:
     static juce::AudioProcessor::BusesProperties makeBuses (int numIn, int numOut);

@@ -134,6 +134,12 @@ Mcfx_graphAudioProcessor::Mcfx_graphAudioProcessor()
     // close any open plugin GUI window for the node so its content editor
     // doesn't outlive the processor (some plug-ins crash on destruction
     // while their GUI is still mounted).
+    // Tell the host whenever the graph's total latency changes (a latent
+    // plug-in added, removed or rewired, or one changing its latency while
+    // running), not only on prepareToPlay / state restore. Subgraphs pass
+    // their changes up to here (see SubgraphNode).
+    graph_->setLatencyListener ([this] { setLatencySamples (graph_->getLatencySamples()); });
+
     graph_->setNodeAboutToBeRemovedListener (
         [this] (juce::Uuid uuid)
         {
