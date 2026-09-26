@@ -810,6 +810,19 @@ void GraphEditorComponent::setSelectedNode (juce::Uuid uuid)
     for (auto* nc : nodeComps_) nc->repaint();
 }
 
+void GraphEditorComponent::selectAllNodes()
+{
+    selectedConnections_.clear();
+    selectedNodes_.clear();
+    for (auto* gn : activeController_->getAllNodesIncludingTerminals())
+        selectedNodes_.push_back (gn->uuid);
+
+    // One notification for the whole set, not one per node.
+    if (selectionListener_) selectionListener_ (getSelectedNodeUuid());
+    repaint();
+    for (auto* nc : nodeComps_) nc->repaint();
+}
+
 void GraphEditorComponent::addToSelection (juce::Uuid uuid)
 {
     if (uuid.isNull() || isSelected (uuid)) return;

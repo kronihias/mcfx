@@ -93,6 +93,11 @@ public:
     void clearSelection();
     bool isSelected (juce::Uuid uuid) const;
 
+    /** Select every node on the current level, terminals included (so a
+        drag moves the whole layout; copy / cut / convert skip terminals
+        anyway). Wires are deselected. Bound to Cmd/Ctrl+A. */
+    void selectAllNodes();
+
     /** Last-added selection — used by single-node consumers like the
         properties panel. Returns null Uuid if nothing is selected. */
     juce::Uuid  getSelectedNodeUuid() const;
