@@ -1422,7 +1422,8 @@ void EqBand::rebuildConvolver()
 
     convolver_ = std::make_unique<MtxConvMaster>();
     int maxPart = jmax(8192, maxBlockSize_);
-    if (!convolver_->Configure(1, 1, maxBlockSize_, firLen, maxBlockSize_, maxPart))
+    const bool safeMode = convolverSafeMode_.load();
+    if (!convolver_->Configure(1, 1, maxBlockSize_, firLen, maxBlockSize_, maxPart, safeMode))
     {
         convolver_.reset();
         // Convolver setup failed; still report group delay since the audio
@@ -1441,13 +1442,13 @@ void EqBand::rebuildConvolver()
     convolverIn_.clear();
     convolverOut_.clear();
     useConvolver_ = true;
-    // The convolver is configured with minpart == blocksize and no safe mode,
-    // i.e. MtxConvMaster's minimum-latency mode (outoffset = blocksize -
-    // minpart = 0): it adds no delay of its own, so the band's latency is
-    // just the FIR's group delay. Adding a block here, as safe mode would
-    // need, over-reported by one host block (1535 instead of 1023 for a
-    // 2047-tap FIR at 512).
-    convolverLatency_ = groupDelay;
+    // minpart == blocksize. In MtxConvMaster's minimum-latency mode
+    // (outoffset = blocksize - minpart = 0) the convolver adds no delay of its
+    // own, so the band's latency is just the FIR's group delay; reporting a
+    // block more over-compensated by one host block (1535 instead of 1023 for
+    // a 2047-tap FIR at 512). Safe mode (outoffset = -minpart), for hosts
+    // with irregular blocks, does add one block (minpart).
+    convolverLatency_ = groupDelay + (safeMode ? maxBlockSize_ : 0);
 }
 
 void EqBand::applyFIR(float* data, int numSamples)

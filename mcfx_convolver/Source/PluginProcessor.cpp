@@ -20,6 +20,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "mcfx_buses.h"
+#include "ConvolverSafeMode.h"
 
 #ifdef _WINDOWS
 #include <windows.h>
@@ -775,9 +776,9 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 #else
     _MaxPartSize = jmin(MAX_PART_SIZE, nextPowerOfTwo(_MaxPartSize));
 
-    // try autodetecting host and deciding whether we need safemode (to avoid having to add another user parameter - let's see how this works for testers)
-    PluginHostType me;
-    safemode_ = me.isAdobeAudition() || me.isPremiere() || me.isSteinberg(); // probably an incomplete list
+    // Safe mode for hosts that send irregular blocks (shared with
+    // mcfx_mimoeq's long FIRs, see common/ConvolverSafeMode.h).
+    safemode_ = mcfx::convolverNeedsSafeMode();
 
     mtxconv_.Configure(conv_data.getNumInputChannels(), conv_data.getNumOutputChannels(), _BufferSize, conv_data.getMaxLength(), _ConvBufferSize, _MaxPartSize, safemode_);
 

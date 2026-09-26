@@ -73,6 +73,7 @@ public:
         double sampleRate  = 48000.0;
         bool   noOutput    = false;
         bool   compensateLatency = true;
+        bool   randomBlocks = false;
 
         for (int i = 0; i < args.size(); ++i)
         {
@@ -90,6 +91,7 @@ public:
             else if (a == "--describe-plugin"  && i + 1 < args.size()) describePluginPath = args[++i];
             else if (a == "--no-output")                          noOutput    = true;
             else if (a == "--no-latency-compensation")            compensateLatency = false;
+            else if (a == "--random-blocks")                      randomBlocks = true;
         }
 
         // ---- One-shot mode: print PluginDescription XML and exit -------
@@ -137,7 +139,9 @@ public:
                 "                     [--load-inner-state <state.bin>]  (wrap raw bytes in VST3PluginState envelope, then load)\n"
                 "                     [--describe-plugin <path.vst3>]   (one-shot: print PluginDescription XML and exit)\n"
                 "                     [--no-output]  (skip writing output WAV; for benchmarking)\n"
-                "                     [--no-latency-compensation]  (write raw output; default: strip plugin's reported latency)\n";
+                "                     [--no-latency-compensation]  (write raw output; default: strip plugin's reported latency)\n"
+                "                     [--random-blocks]  (irregular block sizes, 1..blocksize, like Premiere / Nuendo send;\n"
+                "                                         prepareToPlay still gets blocksize as the maximum)\n";
             std::exit(1);
         }
 
@@ -413,9 +417,13 @@ public:
         // scripts can isolate the audio-thread cost.
         const auto procStartMs = juce::Time::getMillisecondCounterHiRes();
 
+        // Fixed seed: an irregular-block run is reproducible.
+        Random blockRng (12345);
+
         while (pos < processSamples)
         {
-            const int thisBlock = jmin(blockSize, processSamples - pos);
+            const int wanted    = randomBlocks ? 1 + blockRng.nextInt (blockSize) : blockSize;
+            const int thisBlock = jmin(wanted, processSamples - pos);
             AudioBuffer<float> block(numChannels, thisBlock);
 
             for (int ch = 0; ch < numChannels; ++ch)

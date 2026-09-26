@@ -144,7 +144,8 @@ def reset_mimoeq(plugin) -> None:
 
 def run_mimoeq_json(config: dict, audio: np.ndarray,
                    n_channels: int = 2,
-                   compensate_latency: bool = True) -> np.ndarray:
+                   compensate_latency: bool = True,
+                   random_blocks: bool = False) -> np.ndarray:
     """
     Write *config* to a temp JSON file, then run mcfx_mimoeq via testhost
     with "Mimoeq Config File" pointing to it.
@@ -163,7 +164,8 @@ def run_mimoeq_json(config: dict, audio: np.ndarray,
             json.dump(config, fp)
         params = {"Mimoeq Config File": cfg_path}
         return run_testhost("mcfx_mimoeq", params, audio, SR,
-                            compensate_latency=compensate_latency)
+                            compensate_latency=compensate_latency,
+                            random_blocks=random_blocks)
     finally:
         if os.path.exists(cfg_path):
             os.unlink(cfg_path)
@@ -1302,6 +1304,47 @@ def test_long_fir_reported_latency_matches_actual():
         peak = int(np.argmax(np.abs(out[0])))
         assert peak == at, (f"FIR N={N}: impulse at {at} came out at {peak} "
                             f"(reported latency off by {at - peak} samples)")
+
+
+def _long_fir_config(N: int = 2047):
+    n  = np.arange(N) - (N - 1) // 2
+    h  = np.sinc(n / 4.0) * np.hanning(N)
+    h /= h.sum()
+    h  = h.astype(np.float32)
+    return h, {"sample_rate": SR, "sos": [{"diagonal": True, "parameters": {
+        "type": "fir", "coefficients": h.tolist()}}]}
+
+
+def test_long_fir_safe_mode_handles_irregular_blocks(monkeypatch):
+    """Long FIRs run through MtxConvMaster. Its minimum-latency mode needs every
+    block to be full, so hosts that send irregular blocks (Adobe, Steinberg)
+    get safe mode, as in mcfx_convolver (common/ConvolverSafeMode.h). Forced
+    here via MCFX_CONVOLVER_SAFEMODE: with random block sizes the output must
+    match the exact convolution, latency-compensated by the reported latency
+    (group delay + one block)."""
+    monkeypatch.setenv("MCFX_CONVOLVER_SAFEMODE", "1")
+    N = 2047
+    h, config = _long_fir_config(N)
+    rng = np.random.default_rng(3)
+    audio = (rng.standard_normal((2, 8 * BLOCK)) * 0.1).astype(np.float32)
+
+    out = run_mimoeq_json(config, audio, random_blocks=True)
+    ref = np.convolve(audio[0], h)[(N - 1) // 2:][:out.shape[1]]
+    np.testing.assert_allclose(out[0], ref, atol=1e-4,
+        err_msg="safe-mode FIR is wrong with irregular blocks, or its latency is misreported")
+
+
+def test_long_fir_minimum_latency_mode_by_default(monkeypatch):
+    """Outside the listed hosts the convolver stays in minimum-latency mode:
+    the reported latency is just the group delay."""
+    monkeypatch.setenv("MCFX_CONVOLVER_SAFEMODE", "0")
+    N = 2047
+    _, config = _long_fir_config(N)
+    at = 3000
+    audio = np.zeros((2, 4 * BLOCK + N), dtype=np.float32)
+    audio[:, at] = 1.0
+    raw = run_mimoeq_json(config, audio, compensate_latency=False)
+    assert int(np.argmax(np.abs(raw[0]))) == at + (N - 1) // 2
 
 
 def test_disabled_fir_band_reports_no_latency():

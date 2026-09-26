@@ -20,6 +20,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "mcfx_buses.h"
+#include "ConvolverSafeMode.h"
 
 Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
     : AudioProcessor (
@@ -33,6 +34,10 @@ Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
       ),
       apvts(*this, nullptr, "PARAMETERS", createParameters())
 {
+    // Long FIR bands: safe-mode convolution in hosts that send irregular
+    // blocks (as mcfx_convolver does). Before any band is prepared.
+    EqBand::setConvolverSafeMode (mcfx::convolverNeedsSafeMode());
+
     // Register APVTS parameter listeners for host automation
     for (int i = 1; i <= kMaxAutomatedBands; ++i)
     {

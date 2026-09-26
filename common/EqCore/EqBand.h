@@ -23,6 +23,7 @@
 #include "JuceHeader.h"
 #include "MtxConv.h"
 #include <array>
+#include <atomic>
 #include <complex>
 #include <memory>
 #include <vector>
@@ -212,6 +213,12 @@ public:
 
     /** Returns the latency introduced by the partitioned convolver (0 if not active). */
     int getConvolverLatency() const { return convolverLatency_; }
+
+    /** Run long FIRs' partitioned convolver in safe mode (works with any host
+        block size, one block of extra latency), for hosts that send irregular
+        blocks. Process-wide, since it depends on the host; set it before the
+        bands are prepared. See common/ConvolverSafeMode.h. */
+    static void setConvolverSafeMode (bool safe) { convolverSafeMode_.store (safe); }
 
     // --- Raw IIR coefficients (direct biquad) ---
     struct BiquadCoeffs { float b0, b1, b2, a0, a1, a2; };
@@ -490,6 +497,7 @@ private:
     AudioSampleBuffer convolverIn_, convolverOut_;
     bool useConvolver_ = false;
     int convolverLatency_ = 0;
+    static inline std::atomic<bool> convolverSafeMode_ { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqBand)
 };

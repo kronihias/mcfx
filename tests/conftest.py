@@ -173,9 +173,12 @@ def pytest_addoption(parser):
 # ---------------------------------------------------------------------------
 
 def run_testhost(plugin_name: str, params: dict, audio: np.ndarray,
-                 fs: int = SR, compensate_latency: bool = True) -> np.ndarray:
+                 fs: int = SR, compensate_latency: bool = True,
+                 random_blocks: bool = False) -> np.ndarray:
     """
     Call the mcfx_testhost CLI binary, return processed audio as numpy array.
+
+    random_blocks: irregular block sizes (1..512), as some hosts send.
 
     Requires:
       - BUILD_TESTHOST=ON when configuring CMake
@@ -215,6 +218,8 @@ def run_testhost(plugin_name: str, params: dict, audio: np.ndarray,
         ]
         if not compensate_latency:
             cmd.append("--no-latency-compensation")
+        if random_blocks:
+            cmd.append("--random-blocks")
         subprocess.run(cmd, check=True, capture_output=True)
 
         data, _ = sf.read(out_wav, dtype="float32")
