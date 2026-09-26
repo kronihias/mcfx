@@ -105,6 +105,11 @@ public:
     /** Remove every currently-selected wire from the active graph. */
     void deleteSelectedConnections();
 
+    /** Cut: copy these nodes (with the wires between them) to the clipboard,
+        then remove them. Terminals are skipped, as by Copy. Bound to
+        Cmd/Ctrl+X and the node context menu. */
+    void cutNodes (const std::vector<juce::Uuid>& nodeUuids);
+
     using SelectionListener = std::function<void (juce::Uuid)>;
     void setSelectionListener (SelectionListener cb) { selectionListener_ = std::move (cb); }
 

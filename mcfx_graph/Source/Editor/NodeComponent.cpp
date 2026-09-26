@@ -556,6 +556,14 @@ void NodeComponent::showContextMenu()
                    GraphClipboard::copySelection (editor_.getController(), targetSel);
                });
 
+    // Deferred through the canvas: the removal destroys this component (the
+    // canvas rebuilds asynchronously, so not mid-callback).
+    m.addItem ("Cut", ! isTerminal, false,
+               [&editor = editor_, targetSel]
+               {
+                   editor.cutNodes (targetSel);
+               });
+
     m.addItem ("Duplicate", ! isTerminal, false,
                [this, targetSel]
                {

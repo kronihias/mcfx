@@ -61,6 +61,8 @@ namespace
                 "                          connections preserved). Some hosts\n"
                 "                          (e.g. Reaper) intercept Cmd+C — use\n"
                 "                          right-click → Copy / Duplicate instead.\n"
+                "  Cmd / Ctrl + X          Cut selected nodes (copy, then delete;\n"
+                "                          also right-click → Cut)\n"
                 "  Cmd / Ctrl + V          Paste at the cursor (or offset from\n"
                 "                          the originals if cursor is off-canvas).\n"
                 "                          Right-click empty canvas → Paste also\n"
@@ -290,6 +292,12 @@ bool Mcfx_graphAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
     {
         GraphClipboard::copySelection (canvas_.getActiveController(),
                                        canvas_.getSelection());
+        return true;
+    }
+
+    if (key == juce::KeyPress ('x', cmd, 0))
+    {
+        canvas_.cutNodes (canvas_.getSelection());
         return true;
     }
 

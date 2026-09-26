@@ -875,6 +875,20 @@ bool GraphEditorComponent::isConnectionSelected (const ConnectionInfo& c) const
            != selectedConnections_.end();
 }
 
+void GraphEditorComponent::cutNodes (const std::vector<juce::Uuid>& nodeUuids)
+{
+    // Nothing is removed unless the copy worked, so a cut never loses nodes.
+    if (! GraphClipboard::copySelection (*activeController_, nodeUuids))
+        return;
+
+    // Drop the selection first so the properties panel lets go of the nodes.
+    // The removals notify the topology listener, which rebuilds the canvas
+    // and commits one undo snapshot asynchronously.
+    clearSelection();
+    for (const auto& uuid : nodeUuids)
+        activeController_->removeNode (uuid);   // ignores terminals
+}
+
 void GraphEditorComponent::deleteSelectedConnections()
 {
     if (selectedConnections_.empty() || activeController_ == nullptr) return;
