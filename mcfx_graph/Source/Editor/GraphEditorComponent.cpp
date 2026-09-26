@@ -756,6 +756,23 @@ void GraphEditorComponent::showPluginSearchPopup (juce::Point<int> localPos)
                    return a.name.compareIgnoreCase (b.name) < 0;
                });
 
+    // Remember the format filter (VST / VST3 / AudioUnit ...) per machine, in
+    // the same settings file as the scan folders. Stored as the formats that
+    // are OFF, so one that shows up later (e.g. after a rescan) starts on.
+    // Flush pending writes (the scan-folders dialog relies on the timed
+    // auto-save) and re-read, so another mcfx_graph instance's last choice
+    // counts too.
+    static constexpr const char* kDisabledFormatsKey = "addPluginDisabledFormats";
+    auto* settings = processor_.getPluginList().getSettings();
+    juce::StringArray disabledFormats;
+    if (settings != nullptr)
+    {
+        settings->saveIfNeeded();
+        settings->reload();
+        disabledFormats.addTokens (settings->getValue (kDisabledFormatsKey), "|", "");
+        disabledFormats.removeEmptyStrings();
+    }
+
     auto popup = std::make_unique<PluginSearchPopup> (sorted,
         [this, sorted, localPos] (int index)
         {
@@ -790,6 +807,13 @@ void GraphEditorComponent::showPluginSearchPopup (juce::Point<int> localPos)
                                                     canvasToWorld (localPos));
             if (auto* gn = activeController_->getNode (uuid))
                 gn->pluginDescription = std::move (pluginDesc);
+        },
+        disabledFormats,
+        [settings] (const juce::StringArray& off)
+        {
+            if (settings == nullptr) return;
+            settings->setValue (kDisabledFormatsKey, off.joinIntoString ("|"));
+            settings->saveIfNeeded();
         });
 
     // Anchor the call-out at the canvas position the user right-clicked.

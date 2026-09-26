@@ -1,8 +1,12 @@
 #include "PluginSearchPopup.h"
 
 PluginSearchPopup::PluginSearchPopup (juce::Array<juce::PluginDescription> allTypes,
-                                       std::function<void (int)> onPicked)
-    : all_ (std::move (allTypes)), onPicked_ (std::move (onPicked))
+                                       std::function<void (int)> onPicked,
+                                       const juce::StringArray& disabledFormats,
+                                       std::function<void (const juce::StringArray&)> onFormatFilterChanged)
+    : all_ (std::move (allTypes)),
+      onPicked_ (std::move (onPicked)),
+      onFormatFilterChanged_ (std::move (onFormatFilterChanged))
 {
     search_.setTextToShowWhenEmpty ("Type to search...", juce::Colours::grey);
     search_.addListener (this);
@@ -20,10 +24,21 @@ PluginSearchPopup::PluginSearchPopup (juce::Array<juce::PluginDescription> allTy
     {
         auto* b = new juce::TextButton (fmt);
         b->setClickingTogglesState (true);
-        b->setToggleState (true, juce::dontSendNotification);
+        b->setToggleState (! disabledFormats.contains (fmt), juce::dontSendNotification);
         b->setColour (juce::TextButton::buttonColourId,   juce::Colour (0xff3a3a3a));
         b->setColour (juce::TextButton::buttonOnColourId, juce::Colour (0xff3e6aa8));
-        b->onClick = [this] { rebuildFiltered(); };
+        b->onClick = [this]
+        {
+            rebuildFiltered();
+            if (onFormatFilterChanged_)
+            {
+                juce::StringArray off;
+                for (auto* fb : formatButtons_)
+                    if (! fb->getToggleState())
+                        off.add (fb->getButtonText());
+                onFormatFilterChanged_ (off);
+            }
+        };
         addAndMakeVisible (b);
         formatButtons_.add (b);
     }

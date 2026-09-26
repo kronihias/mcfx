@@ -302,6 +302,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 
 - `mcfx_graph`: **convert to subgraph** — select nodes, then right-click → Convert to subgraph (or Cmd/Ctrl+G). The nodes move into a new subgraph and every connection stays intact: wires crossing the boundary go through new subgraph inputs/outputs, one per distinct source. One undo step.
 - `mcfx_graph`: **trackpad pinch zooms** the canvas around the cursor; two-finger swipes keep panning.
+- `mcfx_graph`: the add-plug-in dialog remembers its format filter (AudioUnit / VST / VST3).
 - `mcfx_graph`: **Cmd/Ctrl+A** selects every node on the current level.
 - `mcfx_graph`: **cut** selected nodes (Cmd/Ctrl+X, or right-click → Cut), next to copy/paste.
 - `mcfx_graph`: **drop a node onto a wire to insert it** — Option/Alt-drag an unwired node over a wire; the wires between those two nodes are highlighted and on release run through the node, channel by channel.

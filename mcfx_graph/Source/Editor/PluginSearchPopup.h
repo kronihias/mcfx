@@ -25,8 +25,14 @@ class PluginSearchPopup : public juce::Component,
                           private juce::ListBoxModel
 {
 public:
+    /** `disabledFormats`: format buttons that start switched off (the filter
+        the user left last time). `onFormatFilterChanged` gets the formats
+        switched off whenever a format button is toggled, so the caller can
+        remember them. */
     PluginSearchPopup (juce::Array<juce::PluginDescription> allTypes,
-                       std::function<void (int)> onPicked);
+                       std::function<void (int)> onPicked,
+                       const juce::StringArray& disabledFormats = {},
+                       std::function<void (const juce::StringArray&)> onFormatFilterChanged = {});
 
     void resized() override;
     void paint (juce::Graphics& g) override;
@@ -54,4 +60,5 @@ private:
     juce::OwnedArray<juce::TextButton> formatButtons_;
     juce::ListBox list_;
     std::function<void (int)> onPicked_;
+    std::function<void (const juce::StringArray&)> onFormatFilterChanged_;
 };
