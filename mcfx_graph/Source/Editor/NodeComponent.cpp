@@ -1033,10 +1033,14 @@ void NodeComponent::changeNativeNodeChannelCount (int newChIn, int newChOut)
             break;
         case NodeKind::Subgraph:
         {
-            // Replacing a subgraph with new I/O sizes drops its inner graph —
-            // the old inner-graph state can't be reconciled with a different
-            // outer bus size.
-            newProc = std::make_unique<SubgraphNode> (newChIn, newChOut);
+            // Keep the inner graph: only wires to Input / Output channels
+            // that no longer exist are dropped.
+            auto* old = dynamic_cast<SubgraphNode*> (node_.processor);
+            if (old == nullptr) return;
+            auto& plugins = editor_.getProcessor().getPluginList();
+            newProc = old->withChannelCounts (newChIn, newChOut,
+                                              plugins.getFormatManager(),
+                                              &plugins.getKnownPluginList());
             break;
         }
         default:

@@ -28,6 +28,14 @@ public:
     GraphController& getInner() noexcept { return *inner_; }
     const GraphController& getInner() const noexcept { return *inner_; }
 
+    /** A copy of this subgraph with different I/O widths, for a channel-count
+        change. The inner graph is rebuilt from its saved form: every node and
+        wire is kept, except wires to Input / Output channels that no longer
+        exist. Hosted plug-ins are re-instantiated from their state. */
+    std::unique_ptr<SubgraphNode> withChannelCounts (int numIn, int numOut,
+                                                     juce::AudioPluginFormatManager& formatManager,
+                                                     const juce::KnownPluginList* knownPluginList) const;
+
     //==============================================================================
     const juce::String getName() const override        { return "Subgraph"; }
     bool acceptsMidi()  const override                 { return false; }

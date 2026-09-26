@@ -284,6 +284,55 @@ namespace
         check (! convert (f, {}).succeeded(), "empty selection is refused");
     }
 
+    int wiresTouching (const GraphController& g, const juce::Uuid& terminal)
+    {
+        int n = 0;
+        for (const auto& c : g.getAllConnections())
+            if (c.fromUuid == terminal || c.toUuid == terminal) ++n;
+        return n;
+    }
+
+    void scenarioResize()
+    {
+        // Changing a subgraph's channel count keeps what's inside it.
+        Fixture reference;
+        buildMixed (reference);
+
+        Fixture f;
+        buildMixed (f);
+        auto r = convert (f, { f["G1"], f["D1"], f["G2"] });
+        check (r.succeeded(), "conversion: " + r.error);
+        auto* sub = subgraphOf (f, r.subgraphUuid);
+        if (sub == nullptr) return;
+
+        const auto innerWires = sub->getInner().getAllConnections().size();
+
+        // Grow by one input: nothing is lost and it sounds the same.
+        f.graph.replaceNodeProcessor (r.subgraphUuid, sub->withChannelCounts (5, 3, formats(), nullptr),
+                                      NodeKind::Subgraph, "Subgraph", 5, 3);
+        sub = subgraphOf (f, r.subgraphUuid);
+        check (sub != nullptr && sub->getNumIn() == 5, "grown to 5 inputs");
+        if (sub == nullptr) return;
+        check (sub->getInner().getAllUserNodes().size() == 3, "grow keeps the inner nodes");
+        check (sub->getInner().getAllConnections().size() == innerWires, "grow keeps the inner wires");
+        f.graph.prepareToPlay (kSampleRate, kBlockSize, kChannels, kChannels);
+        check (maxDifference (render (reference.graph), render (f.graph)) == 0.0f,
+               "grown subgraph sounds identical");
+
+        // Shrink to 2 inputs: the nodes stay, only wires from the dropped
+        // inputs 2 and 3 go (in2 -> D1.0, in3 -> D1.1).
+        const int inWiresBefore = wiresTouching (sub->getInner(), sub->getInner().getInputTerminalUuid());
+        f.graph.replaceNodeProcessor (r.subgraphUuid, sub->withChannelCounts (2, 3, formats(), nullptr),
+                                      NodeKind::Subgraph, "Subgraph", 2, 3);
+        sub = subgraphOf (f, r.subgraphUuid);
+        if (sub == nullptr) { check (false, "shrunk subgraph exists"); return; }
+        check (sub->getInner().getAllUserNodes().size() == 3, "shrink keeps the inner nodes");
+        const int inWiresAfter = wiresTouching (sub->getInner(), sub->getInner().getInputTerminalUuid());
+        check (inWiresAfter == inWiresBefore - 2,
+               "shrink drops just the 2 wires from removed inputs ("
+               + juce::String (inWiresBefore) + " -> " + juce::String (inWiresAfter) + ")");
+    }
+
     void scenarioNested()
     {
         // Convert, then convert again inside the new subgraph: still identical.
@@ -317,6 +366,7 @@ int main (int argc, char** argv)
         { "feedback",  scenarioFeedbackPairMovesWhole },
         { "refusals",  scenarioRefusals },
         { "nested",    scenarioNested },
+        { "resize",    scenarioResize },
     };
 
     juce::String only;
