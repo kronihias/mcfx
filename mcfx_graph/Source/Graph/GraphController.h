@@ -204,14 +204,15 @@ public:
     void setTopologyListener (TopologyListener cb) { topologyListener_ = std::move (cb); }
 
     /** Fired BEFORE a node's processor is destroyed (remove or replace), so
-        external observers like the parameter-forwarding pool can drop their
-        cached pointers. The uuid passed in is still valid at the moment of
-        the callback. */
+        external observers like the parameter-forwarding pool or the node's
+        open window can let go of it. The uuid passed in is still valid at the
+        moment of the callback.
+
+        Covers every nesting level: removing a subgraph first reports each
+        node inside it (innermost first), and a subgraph's inner graph reports
+        its own removals up to this listener. */
     using NodeAboutToBeRemovedListener = std::function<void (juce::Uuid)>;
-    void setNodeAboutToBeRemovedListener (NodeAboutToBeRemovedListener cb)
-    {
-        nodeAboutToBeRemovedListener_ = std::move (cb);
-    }
+    void setNodeAboutToBeRemovedListener (NodeAboutToBeRemovedListener cb);
 
     /** Fired AFTER a user node is added (or its processor swapped via
         replaceNodeProcessor). Lets external observers attach themselves —
@@ -227,6 +228,13 @@ public:
 
 private:
     void rebuildIOTerminals (int numIn, int numOut);
+
+    /** Report a node about to go, and for a subgraph everything inside it
+        first; then unhook the subgraph's inner graph from this one. */
+    void announceRemoval (GraphNode& gn);
+
+    /** Make a subgraph node's inner graph report its removals to this one. */
+    void forwardRemovalsFrom (GraphNode& gn);
     void notifyTopologyChanged();
 
     /** (Re)allocate every linked bus for the current block size, and detach the

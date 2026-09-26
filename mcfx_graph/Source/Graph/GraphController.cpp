@@ -1,5 +1,6 @@
 #include "GraphController.h"
 #include "BypassMuteWrapper.h"
+#include "SubgraphNode.h"
 #include "../NativeNodes/FeedbackNodes.h"
 
 using AGProc = juce::AudioProcessorGraph;
@@ -44,6 +45,45 @@ GraphController::GraphController()
 GraphController::~GraphController()
 {
     // unique_ptr<AGProc> destroys all nodes in turn.
+}
+
+void GraphController::setNodeAboutToBeRemovedListener (NodeAboutToBeRemovedListener cb)
+{
+    nodeAboutToBeRemovedListener_ = std::move (cb);
+
+    // Subgraphs already in place (e.g. built from a saved graph before this
+    // controller had a listener) report through us too.
+    for (auto* gn : userNodes_)
+        forwardRemovalsFrom (*gn);
+}
+
+void GraphController::forwardRemovalsFrom (GraphNode& gn)
+{
+    if (gn.kind != NodeKind::Subgraph) return;
+    if (auto* sub = dynamic_cast<SubgraphNode*> (gn.processor))
+        sub->getInner().setNodeAboutToBeRemovedListener ([this] (juce::Uuid u)
+        {
+            if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (u);
+        });
+}
+
+void GraphController::announceRemoval (GraphNode& gn)
+{
+    if (gn.kind == NodeKind::Subgraph)
+    {
+        if (auto* sub = dynamic_cast<SubgraphNode*> (gn.processor))
+        {
+            auto& inner = sub->getInner();
+            for (auto* innerNode : inner.getAllUserNodes())
+                inner.announceRemoval (*innerNode);   // reports up through the forwarder
+
+            // The subgraph outlives this call (removal is deferred), but must
+            // not report through us any more: we may be gone by then.
+            inner.setNodeAboutToBeRemovedListener (nullptr);
+        }
+    }
+
+    if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (gn.uuid);
 }
 
 //==============================================================================
@@ -170,6 +210,7 @@ juce::Uuid GraphController::addNode (std::unique_ptr<juce::AudioProcessor> proc,
     uuidToNode_[gn->uuid.toString()] = gn;
     nodeIdToNode_[nodePtr->nodeID.uid] = gn;
 
+    forwardRemovalsFrom (*gn);
     if (nodeAddedListener_) nodeAddedListener_ (gn->uuid);
     notifyTopologyChanged();
     return gn->uuid;
@@ -183,7 +224,7 @@ void GraphController::removeNode (const juce::Uuid& uuid)
     GraphNode* gn = it->second;
     if (gn == &inputTerminalMeta_ || gn == &outputTerminalMeta_) return; // can't remove terminals
 
-    if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (gn->uuid);
+    announceRemoval (*gn);
 
     // Drop any feedback link naming this node while its processor is still
     // alive, so unbind can null the bus pointer out of it. Doing this after
@@ -235,7 +276,7 @@ void GraphController::clearAllUserNodes()
     std::vector<juce::AudioProcessorGraph::Node::Ptr> removedNodes;
     for (auto* gn : userNodes_)
     {
-        if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (gn->uuid);
+        announceRemoval (*gn);
         removedNodes.push_back (graph_->removeNode (gn->nodeId));
         nodeIdToNode_.erase (gn->nodeId.uid);
         uuidToNode_.erase (gn->uuid.toString());
@@ -297,7 +338,7 @@ bool GraphController::replaceNodeProcessor (const juce::Uuid& uuid,
 
     // Drop any pointers external observers (e.g. forwarding-parameter slots)
     // hold to the old processor before we destroy it.
-    if (nodeAboutToBeRemovedListener_) nodeAboutToBeRemovedListener_ (gn->uuid);
+    announceRemoval (*gn);
 
     // Tear out the old processor.
     graph_->removeNode (gn->nodeId);
@@ -347,6 +388,7 @@ bool GraphController::replaceNodeProcessor (const juce::Uuid& uuid,
 
     nodeIdToNode_[nodePtr->nodeID.uid] = gn;
 
+    forwardRemovalsFrom (*gn);
     if (nodeAddedListener_) nodeAddedListener_ (gn->uuid);
 
     // Re-apply connections that still fit. Out-of-range channels become

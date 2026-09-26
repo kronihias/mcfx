@@ -440,6 +440,54 @@ namespace
     }
 }
 
+namespace
+{
+    // The top-level "node about to be removed" listener is what closes a
+    // node's open window; it has to hear about every level of nesting.
+    void scenarioRemovalNotices()
+    {
+        Fixture f;
+        std::vector<juce::Uuid> heard;
+        f.graph.setNodeAboutToBeRemovedListener ([&heard] (juce::Uuid u) { heard.push_back (u); });
+        auto heardOf = [&heard] (const juce::Uuid& u)
+        {
+            return std::find (heard.begin(), heard.end(), u) != heard.end();
+        };
+
+        buildMixed (f);
+        auto r = convert (f, { f["G1"], f["D1"], f["G2"] });
+        check (r.succeeded(), "conversion: " + r.error);
+        check (heardOf (f["G1"]) && heardOf (f["D1"]) && heardOf (f["G2"]),
+               "moving nodes into a subgraph reports the originals");
+        auto* sub = subgraphOf (f, r.subgraphUuid);
+        if (sub == nullptr) return;
+
+        // A second level, built by converting inside the first.
+        f.graph.prepareToPlay (kSampleRate, kBlockSize, kChannels, kChannels);
+        auto r2 = SubgraphConversion::convert (sub->getInner(), { f["G1"], f["G2"] }, formats(), nullptr);
+        check (r2.succeeded(), "inner conversion: " + r2.error);
+        auto* innerSub = sub != nullptr ? dynamic_cast<SubgraphNode*> (sub->getInner().getNode (r2.subgraphUuid)->processor)
+                                        : nullptr;
+        if (innerSub == nullptr) { check (false, "inner subgraph exists"); return; }
+
+        // Removing a node two levels down reaches the top.
+        heard.clear();
+        innerSub->getInner().removeNode (f["G2"]);
+        check (heard.size() == 1 && heardOf (f["G2"]), "removal two levels down is reported at the top");
+
+        // Removing the outer subgraph reports everything inside it, innermost
+        // first, then the subgraph itself.
+        heard.clear();
+        f.graph.removeNode (r.subgraphUuid);
+        check (heardOf (f["G1"]) && heardOf (f["D1"]) && heardOf (r2.subgraphUuid),
+               "removing a subgraph reports every nested node");
+        check (! heard.empty() && heard.back() == r.subgraphUuid, "the subgraph itself is reported last");
+        const auto posG1  = std::find (heard.begin(), heard.end(), f["G1"]);
+        const auto posSub = std::find (heard.begin(), heard.end(), r2.subgraphUuid);
+        check (posG1 < posSub, "nested nodes before the subgraph that holds them");
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -454,6 +502,7 @@ int main (int argc, char** argv)
         { "insert",           scenarioInsert },
         { "insert-partial",   scenarioInsertPartial },
         { "insert-refusals",  scenarioInsertRefusals },
+        { "removal-notices",  scenarioRemovalNotices },
     };
 
     juce::String only;

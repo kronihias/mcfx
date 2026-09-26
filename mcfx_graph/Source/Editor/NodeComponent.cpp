@@ -347,22 +347,15 @@ void NodeComponent::mouseDoubleClick (const juce::MouseEvent&)
 
 namespace
 {
-    struct AutoDeleteWindow : juce::DocumentWindow
+    // A node's window (a hosted plug-in's GUI, or a native node's property
+    // editor) that registers itself with the outer plug-in's window registry
+    // on construction and removes itself on destruction, so the processor
+    // closes it BEFORE the node goes: some plug-ins crash if their editor is
+    // still mounted when the AudioProcessor is freed, and a native node's
+    // editor holds a reference to the GraphNode itself.
+    struct TrackedNodeWindow : juce::DocumentWindow
     {
-        using juce::DocumentWindow::DocumentWindow;
-        void closeButtonPressed() override { delete this; }
-    };
-
-    // Plugin GUI window that registers itself with the outer plug-in's window
-    // registry on construction and removes itself on destruction, so the
-    // processor knows to close it BEFORE destroying the inner plug-in
-    // instance (some plug-ins crash if their editor is still mounted when
-    // the AudioProcessor is freed). Used only for hosted-plugin GUIs —
-    // native-node property windows are owned by the editor lifetime and
-    // don't outlive the node.
-    struct TrackedPluginWindow : juce::DocumentWindow
-    {
-        TrackedPluginWindow (Mcfx_graphAudioProcessor& outer,
+        TrackedNodeWindow (Mcfx_graphAudioProcessor& outer,
                               juce::Uuid nodeUuid,
                               const juce::String& name,
                               juce::Colour bg,
@@ -375,7 +368,7 @@ namespace
             outer_.registerPluginWindow (nodeUuid_, this);
         }
 
-        ~TrackedPluginWindow() override
+        ~TrackedNodeWindow() override
         {
             outer_.unregisterPluginWindow (this);
         }
@@ -404,9 +397,9 @@ void NodeComponent::openPluginEditor()
 
     const auto title = node_.displayName.isNotEmpty() ? node_.displayName : p->getName();
 
-    auto* dw = new TrackedPluginWindow (editor_.getProcessor(), node_.uuid,
-                                         title, juce::Colours::darkgrey,
-                                         juce::DocumentWindow::closeButton, true);
+    auto* dw = new TrackedNodeWindow (editor_.getProcessor(), node_.uuid,
+                                       title, juce::Colours::darkgrey,
+                                       juce::DocumentWindow::closeButton, true);
     dw->setUsingNativeTitleBar (true);
     dw->setContentOwned (ed, true);
     dw->setResizable (isGeneric, false);
@@ -523,8 +516,9 @@ void NodeComponent::openNativePropertiesWindow()
                           ? node_.displayName
                           : juce::String (nodeKindToString (node_.kind));
 
-    auto* dw = new AutoDeleteWindow (title, juce::Colours::darkgrey,
-                                     juce::DocumentWindow::closeButton, true);
+    auto* dw = new TrackedNodeWindow (editor_.getProcessor(), node_.uuid,
+                                       title, juce::Colours::darkgrey,
+                                       juce::DocumentWindow::closeButton, true);
     dw->setUsingNativeTitleBar (true);
     dw->setContentOwned (content.release(), true);
     dw->setResizable (true, false);
