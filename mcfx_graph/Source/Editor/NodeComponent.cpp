@@ -255,13 +255,10 @@ void NodeComponent::mouseDrag (const juce::MouseEvent& e)
 
     dragger_.dragComponent (this, e, nullptr);
 
-    // Translate the canvas-local position (post-zoom) back to world coords
-    // on the GraphNode. Pan is handled by the surrounding Viewport so it
-    // doesn't enter the equation here.
-    const float zoom = editor_.getZoom();
-    const auto  cur  = getPosition();
-    node_.editorPosition.x = juce::roundToInt (cur.x / zoom);
-    node_.editorPosition.y = juce::roundToInt (cur.y / zoom);
+    // The component's position IS its world position: the canvas zooms it
+    // with a transform (see GraphEditorComponent::layoutNodeComponents), and
+    // ComponentDragger moves it in those untransformed coordinates.
+    node_.editorPosition = getPosition();
 
     // If multiple nodes are selected and this one is among them, move every
     // other selected node by the same world-space delta — group drag.

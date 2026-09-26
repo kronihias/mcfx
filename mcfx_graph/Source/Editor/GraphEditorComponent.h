@@ -69,6 +69,12 @@ public:
     float getZoom() const noexcept { return zoom_; }
     void  resetZoom();
 
+    /** Canvas-local (zoomed) point -> world coordinates, as stored in
+        GraphNode::editorPosition. Node components sit at their world
+        position with a scale(zoom) transform, so on screen they appear at
+        world * zoom. */
+    juce::Point<int> canvasToWorld (juce::Point<int> canvasPos) const;
+
 
     void mouseWheelMove (const juce::MouseEvent& e,
                          const juce::MouseWheelDetails& wheel) override;

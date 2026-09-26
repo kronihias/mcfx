@@ -126,10 +126,7 @@ void GraphEditorComponent::onNodeMoved (NodeComponent& node)
         {
             if (nc == &node) continue;
             if (! isSelected (nc->getNode().uuid)) continue;
-            const auto world = nc->getNode().editorPosition;
-            nc->setTopLeftPosition (
-                (int) std::round (world.x * zoom_),
-                (int) std::round (world.y * zoom_));
+            nc->setTopLeftPosition (nc->getNode().editorPosition);
         }
     }
     repaint();
@@ -370,7 +367,8 @@ void GraphEditorComponent::mouseUp (const juce::MouseEvent& e)
     // With shift/cmd, ADD nodes/wires that intersect the marquee.
     for (auto* nc : nodeComps_)
     {
-        if (! nc->getBounds().intersects (rect)) continue;
+        // On-screen bounds (the scale transform applied), like the marquee.
+        if (! nc->getBoundsInParent().intersects (rect)) continue;
         addToSelection (nc->getNode().uuid);
     }
 
@@ -661,10 +659,7 @@ void GraphEditorComponent::showAddNodeMenu (juce::Point<int> localPos)
     m.addItem ("Paste", canPaste, false,
                [this, localPos]
                {
-                   const float zoom = juce::jmax (0.001f, zoom_);
-                   const juce::Point<int> worldPos {
-                       (int) std::round (localPos.x / zoom),
-                       (int) std::round (localPos.y / zoom) };
+                   const auto worldPos = canvasToWorld (localPos);
 
                    const auto newUuids = GraphClipboard::pasteFromClipboard (
                        *activeController_,
@@ -688,7 +683,8 @@ void GraphEditorComponent::showAddNodeMenu (juce::Point<int> localPos)
                                            int chIn, int chOut)
     {
         auto proc = factory();
-        activeController_->addNode (std::move (proc), kind, name, chIn, chOut, localPos);
+        activeController_->addNode (std::move (proc), kind, name, chIn, chOut,
+                                    canvasToWorld (localPos));
     };
 
     // Default channel count for newly-added native nodes: match the host bus
@@ -790,7 +786,8 @@ void GraphEditorComponent::showPluginSearchPopup (juce::Point<int> localPos)
             auto pluginDesc = std::make_unique<juce::PluginDescription> (desc);
 
             auto uuid = activeController_->addNode (std::move (inst), NodeKind::Plugin,
-                                                    desc.name, chIn, chOut, localPos);
+                                                    desc.name, chIn, chOut,
+                                                    canvasToWorld (localPos));
             if (auto* gn = activeController_->getNode (uuid))
                 gn->pluginDescription = std::move (pluginDesc);
         });
@@ -1253,12 +1250,21 @@ void GraphEditorComponent::mouseWheelMove (const juce::MouseEvent& e,
 
 void GraphEditorComponent::layoutNodeComponents()
 {
+    // Position in world coordinates and let the transform do all the
+    // scaling. A component's transform applies to its position as well as
+    // its size, so scaling the position here too put nodes at world * zoom^2
+    // while their size went with zoom: zooming out crowded them into each
+    // other, zooming in spread them apart.
     for (auto* nc : nodeComps_)
     {
-        const auto world = nc->getNode().editorPosition;
-        nc->setTopLeftPosition (
-            (int) std::round (world.x * zoom_),
-            (int) std::round (world.y * zoom_));
+        nc->setTopLeftPosition (nc->getNode().editorPosition);
         nc->setTransform (juce::AffineTransform::scale (zoom_));
     }
+}
+
+juce::Point<int> GraphEditorComponent::canvasToWorld (juce::Point<int> canvasPos) const
+{
+    const float zoom = juce::jmax (0.001f, zoom_);
+    return { (int) std::round (canvasPos.x / zoom),
+             (int) std::round (canvasPos.y / zoom) };
 }
