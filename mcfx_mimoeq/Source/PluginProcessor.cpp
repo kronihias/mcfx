@@ -107,6 +107,7 @@ Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
 
 Mcfx_mimoeqAudioProcessor::~Mcfx_mimoeqAudioProcessor()
 {
+    cancelPendingUpdate();
     delete activeState_;
     delete pendingState_.load(std::memory_order_acquire);
     delete garbageState_.load(std::memory_order_acquire);
@@ -142,10 +143,41 @@ bool Mcfx_mimoeqAudioProcessor::isBusesLayoutSupported (const BusesLayout& layou
 #endif
 }
 
+uint32 Mcfx_mimoeqAudioProcessor::computeLatencySignature() const
+{
+    const double sr = currentSampleRate_;
+    uint32 sig = 2166136261u;   // FNV-1a over (chain, latency) pairs
+    auto mix = [&sig](int v) { sig = (sig ^ (uint32) v) * 16777619u; };
+
+    mix(diagonalChain_.getChainLatencySamples(sr));
+    for (const auto& kv : pathChains_)
+    {
+        mix(kv.first.first);
+        mix(kv.first.second);
+        mix(kv.second != nullptr ? kv.second->getChainLatencySamples(sr) : 0);
+    }
+    return sig;
+}
+
+void Mcfx_mimoeqAudioProcessor::requestParameterSync()
+{
+    needsParamSync_.store(true, std::memory_order_release);
+
+    // The lightweight sync copies parameters (incl. a band's enabled flag) to
+    // the processing chains, but latency accounting and the compensation
+    // delays are only worked out in rebuildProcessingChains(). Without this,
+    // switching off an FIR band stopped its delay in the audio while the old
+    // latency stayed reported, and the other channels stayed delayed to match.
+    if (computeLatencySignature() != latencySignatureAtRebuild_.load(std::memory_order_acquire))
+        triggerAsyncUpdate();
+}
+
 void Mcfx_mimoeqAudioProcessor::rebuildProcessingChains()
 {
     // Clean up garbage from previous swap (safe: called on GUI/host thread)
     delete garbageState_.exchange(nullptr, std::memory_order_acquire);
+
+    latencySignatureAtRebuild_.store(computeLatencySignature(), std::memory_order_release);
 
     int numCh = getTotalNumInputChannels();
     auto* newState = new ProcessingState();

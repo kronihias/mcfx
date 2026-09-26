@@ -1280,6 +1280,30 @@ def test_symmetric_fir_group_delay_matches_centre_tap():
                     f"vs centre-tap {h[(N-1)//2]:.4f}")
 
 
+def test_disabled_fir_band_reports_no_latency():
+    """A disabled FIR band passes audio through untouched, so it must not add
+    to the reported latency either. The testhost strips the reported latency
+    from the output: had the disabled band's group delay (+ partitioned-
+    convolver block) still been reported, the output would come out shifted
+    and truncated instead of equal to the input."""
+    N  = 1023                                   # long: partitioned convolver
+    n  = np.arange(N) - (N - 1) // 2
+    h  = np.sinc(n / 4.0) * np.hanning(N)
+    h /= h.sum()
+
+    config = {
+        "sample_rate": SR,
+        "sos": [{"diagonal": True, "enabled": False, "parameters": {
+            "type": "fir", "coefficients": h.astype(np.float32).tolist(),
+        }}],
+    }
+    rng = np.random.default_rng(7)
+    audio = (rng.standard_normal((2, 4 * BLOCK)) * 0.1).astype(np.float32)
+    out = run_mimoeq_json(config, audio)            # latency compensation on
+    np.testing.assert_allclose(out, audio, atol=1e-6,
+        err_msg="disabled FIR band still shifted the output (latency reported)")
+
+
 # ===========================================================================
 # Tier-2 — Dynamic EQ (per-band dynamics)
 # ===========================================================================

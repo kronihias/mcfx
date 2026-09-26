@@ -73,7 +73,8 @@ struct ProcessingState
 
 class Mcfx_mimoeqAudioProcessor : public AudioProcessor,
                                    public ChangeBroadcaster,
-                                   private AudioProcessorValueTreeState::Listener
+                                   private AudioProcessorValueTreeState::Listener,
+                                   private AsyncUpdater
 {
 public:
     Mcfx_mimoeqAudioProcessor();
@@ -191,8 +192,12 @@ public:
     void requestRebuild() { rebuildProcessingChains(); }
 
     /** Lightweight parameter sync: propagates parameter changes to per-channel
-        copies without rebuilding (preserves filter state for click-free updates). */
-    void requestParameterSync() { needsParamSync_.store(true, std::memory_order_release); }
+        copies without rebuilding (preserves filter state for click-free updates).
+        If the change moves any chain's latency (a band with an FIR or lookahead
+        switched on or off, a lookahead time changed), a full rebuild is queued
+        as well, since latency accounting and compensation are only worked out
+        there. Safe from the audio thread (host automation of "Enable"). */
+    void requestParameterSync();
 
     // --- Undo / Redo ---
     String captureState();                // serialize current state to JSON string
@@ -234,6 +239,14 @@ private:
     void doParamSyncIfNeeded();
 
     int lastReportedLatency_ = -1;   // gate setLatencySamples() to actual changes
+
+    // Fingerprint of every chain's latency in the model, as of the last full
+    // rebuild. requestParameterSync() compares against it to catch changes
+    // that the lightweight sync can't handle. No allocation, so it's fine on
+    // the audio thread.
+    uint32 computeLatencySignature() const;
+    std::atomic<uint32> latencySignatureAtRebuild_ { 0 };
+    void handleAsyncUpdate() override { rebuildProcessingChains(); }
 
     // Live dynamic-offset meters for the diagonal chain (audio→GUI, lock-free).
     std::array<std::atomic<float>, kMaxAutomatedBands> diagDynMeter_ {};

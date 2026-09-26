@@ -103,7 +103,8 @@ int EqChain::getConvolverLatency() const
 {
     int total = 0;
     for (auto* band : bands_)
-        total += band->getConvolverLatency();
+        if (band->isEnabled())
+            total += band->getConvolverLatency();
     return total;
 }
 
@@ -111,7 +112,8 @@ int EqChain::getChainLatencySamples(double sampleRate) const
 {
     int total = 0;
     for (auto* band : bands_)
-        total += band->getConvolverLatency() + band->getLookaheadSamples(sampleRate);
+        if (band->isEnabled())
+            total += band->getConvolverLatency() + band->getLookaheadSamples(sampleRate);
     return total;
 }
 
@@ -119,7 +121,8 @@ int EqChain::getAccumLatencyBeforeBand(int idx, double sampleRate) const
 {
     int total = 0;
     for (int i = 0; i < idx && i < bands_.size(); ++i)
-        total += bands_[i]->getConvolverLatency() + bands_[i]->getLookaheadSamples(sampleRate);
+        if (bands_[i]->isEnabled())
+            total += bands_[i]->getConvolverLatency() + bands_[i]->getLookaheadSamples(sampleRate);
     return total;
 }
 
