@@ -510,6 +510,16 @@ void Mcfx_graphAudioProcessor::unbindAllForNode (juce::Uuid nodeUuid)
         updateHostDisplay (AudioProcessorListener::ChangeDetails{}.withParameterInfoChanged (true));
 }
 
+int Mcfx_graphAudioProcessor::countExposedSlotsFor (const std::vector<juce::Uuid>& nodeUuids) const
+{
+    int n = 0;
+    for (auto* fp : forwardingParameters_)
+        if (fp->isBound()
+            && std::find (nodeUuids.begin(), nodeUuids.end(), fp->getNodeUuid()) != nodeUuids.end())
+            ++n;
+    return n;
+}
+
 void Mcfx_graphAudioProcessor::rebindAllSlotsAfterRestore()
 {
     // After a JSON-restore the parameter pointers held by each slot point at

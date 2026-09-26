@@ -100,6 +100,7 @@ def cmake_configure() -> None:
         "-DBUILD_VST=OFF",
         "-DBUILD_TESTHOST=ON",
         "-DBUILD_NET_TESTS=ON",
+        "-DBUILD_GRAPH_TESTS=ON",
     ]
 
     if IS_WINDOWS:
@@ -133,6 +134,9 @@ def cmake_configure() -> None:
 BUILD_TARGETS = [
     "mcfx_testhost",
     "mcfx_net_loopback_test",
+    # mcfx_graph's graph logic only (no editor, no scanner), so unlike the
+    # mcfx_graph plug-in it builds on Linux too.
+    "mcfx_graph_test",
     "mcfx_convolver_VST3",
     "mcfx_delay_VST3",
     "mcfx_filter_VST3",

@@ -65,6 +65,10 @@ namespace
                 "                          the originals if cursor is off-canvas).\n"
                 "                          Right-click empty canvas → Paste also\n"
                 "                          works in hosts that intercept Cmd+V.\n"
+                "  Cmd / Ctrl + G          Convert the selected nodes to a\n"
+                "                          subgraph, keeping their connections\n"
+                "                          (also right-click → Convert to\n"
+                "                          subgraph).\n"
                 "  Backspace / Delete      Delete selected nodes / wires\n"
                 "  Esc                     Clear selection\n"
                 "\n"
@@ -282,6 +286,12 @@ bool Mcfx_graphAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
     {
         GraphClipboard::copySelection (canvas_.getActiveController(),
                                        canvas_.getSelection());
+        return true;
+    }
+
+    if (key == juce::KeyPress ('g', cmd, 0))
+    {
+        canvas_.convertToSubgraph (canvas_.getSelection());
         return true;
     }
 

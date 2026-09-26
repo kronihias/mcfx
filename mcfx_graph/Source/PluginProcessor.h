@@ -111,6 +111,9 @@ public:
         about to be removed or its processor swapped. */
     void unbindAllForNode (juce::Uuid nodeUuid);
 
+    /** Number of slots bound to any of these nodes. */
+    int  countExposedSlotsFor (const std::vector<juce::Uuid>& nodeUuids) const;
+
     //==============================================================================
     // Editor UI preferences (persisted in JSON so they survive reload).
     int  getPropertyPanelWidth() const noexcept     { return propertyPanelWidth_; }

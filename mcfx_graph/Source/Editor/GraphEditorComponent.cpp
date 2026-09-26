@@ -6,6 +6,7 @@
 #include "../NativeNodes/MatrixMixerNode.h"
 #include "../NativeNodes/DelayNode.h"
 #include "../Graph/SubgraphNode.h"
+#include "../Graph/SubgraphConversion.h"
 #include "../Hosting/PluginInstanceFactory.h"
 #include "../Graph/GraphClipboard.h"
 #include "PluginSearchPopup.h"
@@ -891,6 +892,85 @@ GraphNode* GraphEditorComponent::getSelectedNode() const
     const auto u = getSelectedNodeUuid();
     if (u.isNull() || activeController_ == nullptr) return nullptr;
     return activeController_->getNode (u);
+}
+
+void GraphEditorComponent::convertToSubgraph (std::vector<juce::Uuid> nodeUuids)
+{
+    if (activeController_ == nullptr) return;
+
+    const auto refusal = SubgraphConversion::describeRefusal (*activeController_, nodeUuids);
+    if (refusal.isNotEmpty())
+    {
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (juce::MessageBoxIconType::InfoIcon)
+                                          .withTitle ("Convert to subgraph")
+                                          .withMessage (refusal)
+                                          .withButton ("OK"),
+                                      nullptr);
+        return;
+    }
+
+    // Automation slots only resolve against the root graph, so a node moved
+    // into a subgraph loses its slots. Say so before doing it.
+    const int lostSlots = processor_.countExposedSlotsFor (nodeUuids);
+    if (lostSlots == 0)
+    {
+        performSubgraphConversion (nodeUuids);
+        return;
+    }
+
+    juce::Component::SafePointer<GraphEditorComponent> safe (this);
+    auto* controller = activeController_;
+    juce::AlertWindow::showAsync (
+        juce::MessageBoxOptions()
+            .withIconType (juce::MessageBoxIconType::WarningIcon)
+            .withTitle ("Convert to subgraph")
+            .withMessage (juce::String (lostSlots)
+                          + (lostSlots == 1 ? " automation parameter is" : " automation parameters are")
+                          + " mapped to these nodes. Nodes inside a subgraph can't be automated, "
+                            "so the mapping will be removed.")
+            .withButton ("Convert")
+            .withButton ("Cancel"),
+        [safe, controller, nodeUuids] (int result)
+        {
+            auto* self = safe.getComponent();
+            // result: 1 = Convert, 0 = Cancel. Skip if the user navigated to
+            // another level while the dialog was up.
+            if (result != 1 || self == nullptr || self->activeController_ != controller)
+                return;
+            self->performSubgraphConversion (nodeUuids);
+        });
+}
+
+void GraphEditorComponent::performSubgraphConversion (const std::vector<juce::Uuid>& nodeUuids)
+{
+    // Drop the selection first so the properties panel lets go of the nodes
+    // before they are removed.
+    clearSelection();
+
+    SubgraphConversion::Result result;
+    {
+        GraphController::ScopedSuspend suspend (processor_);
+        result = SubgraphConversion::convert (*activeController_, nodeUuids,
+                                              processor_.getPluginList().getFormatManager(),
+                                              &processor_.getPluginList().getKnownPluginList());
+    }
+
+    if (! result.succeeded())
+    {
+        juce::AlertWindow::showAsync (juce::MessageBoxOptions()
+                                          .withIconType (juce::MessageBoxIconType::WarningIcon)
+                                          .withTitle ("Convert to subgraph")
+                                          .withMessage (result.error)
+                                          .withButton ("OK"),
+                                      nullptr);
+        return;
+    }
+
+    // The canvas rebuilds asynchronously from the topology notifications;
+    // select the new node now so it comes up selected.
+    setSelectedNode (result.subgraphUuid);
+    processor_.commitHistorySnapshot();
 }
 
 void GraphEditorComponent::chainConnectSelection()

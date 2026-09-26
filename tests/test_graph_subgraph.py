@@ -1,0 +1,33 @@
+"""
+mcfx_graph "Convert to subgraph", via the mcfx_graph_test harness.
+
+Each scenario builds a graph twice, converts a selection to a subgraph in one
+copy, and requires sample-identical output: fan-out and summing on both sides
+of the boundary, a feedback pair moving whole, nesting a second level, and
+refusals (split feedback pair, terminals, empty) that change nothing.
+
+Requires mcfx_graph_test (cmake -DBUILD_GRAPH_TESTS=ON; run_tests.py does).
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+
+import pytest
+
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_EXE = ".exe" if os.name == "nt" else ""
+GRAPH_TEST_BIN = os.path.join(REPO_ROOT, "_build", "testhost", f"mcfx_graph_test{_EXE}")
+
+pytestmark = pytest.mark.skipif(
+    not os.path.exists(GRAPH_TEST_BIN),
+    reason=f"mcfx_graph_test not built: {GRAPH_TEST_BIN}",
+)
+
+
+@pytest.mark.parametrize("scenario", ["mixed", "isolated", "feedback", "refusals", "nested"])
+def test_convert_to_subgraph(scenario):
+    proc = subprocess.run([GRAPH_TEST_BIN, "--scenario", scenario],
+                          capture_output=True, text=True, timeout=120)
+    assert proc.returncode == 0, proc.stdout + proc.stderr

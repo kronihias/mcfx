@@ -408,3 +408,13 @@ IF(BUILD_NET_TESTS)
     message("-- Building mcfx_net_loopback_test")
     ADD_SUBDIRECTORY( mcfx_net_test )
 ENDIF(BUILD_NET_TESTS)
+
+################################################
+# Optional: mcfx_graph's graph logic without the plug-in wrapper or editor
+# (e.g. "Convert to subgraph"). Driven by tests/test_graph_subgraph.py.
+# Build with:  cmake -B _build -DBUILD_GRAPH_TESTS=ON
+OPTION(BUILD_GRAPH_TESTS "Build mcfx_graph_test (graph logic tests)" OFF)
+IF(BUILD_GRAPH_TESTS)
+    message("-- Building mcfx_graph_test")
+    ADD_SUBDIRECTORY( mcfx_graph_test )
+ENDIF(BUILD_GRAPH_TESTS)

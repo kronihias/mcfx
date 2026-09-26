@@ -298,6 +298,10 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### Unreleased
+
+- `mcfx_graph`: **convert to subgraph** — select nodes, then right-click → Convert to subgraph (or Cmd/Ctrl+G). The nodes move into a new subgraph and every connection stays intact: wires crossing the boundary go through new subgraph inputs/outputs, one per distinct source. One undo step.
+
 ### 0.8.11 (2026-09-24)
 
 - installers: the VST3 installers (macOS, Windows) now include **`mcfx_send`, `mcfx_receive` and `mcfx_graph` as standalone apps**, with app icons.

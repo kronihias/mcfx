@@ -549,6 +549,15 @@ void NodeComponent::showContextMenu()
                    editor_.getProcessor().commitHistorySnapshot();
                });
 
+    // Like Copy: the whole selection if this node is in it. Deferred through
+    // the canvas, which may ask for confirmation, and the move destroys this
+    // component, so nothing here may run after it.
+    m.addItem ("Convert to subgraph", ! isTerminal, false,
+               [&editor = editor_, targetSel]
+               {
+                   editor.convertToSubgraph (targetSel);
+               });
+
     m.addSeparator();
 
     m.addItem ("Rename...", ! isTerminal, false,

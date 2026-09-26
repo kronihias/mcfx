@@ -113,6 +113,12 @@ public:
         world-x ascending. Bound to the 'C' key. */
     void chainConnectSelection();
 
+    /** Move these nodes into a new subgraph node, keeping their connections
+        (see SubgraphConversion). Explains a refusal, and asks first if the
+        move would drop automation slots bound to the nodes. Bound to Cmd/Ctrl+G
+        and the node context menu. */
+    void convertToSubgraph (std::vector<juce::Uuid> nodeUuids);
+
     //==============================================================================
     // Subgraph navigation. The canvas always edits whatever GraphController is
     // "active". The root is the outer-plugin controller; descending pushes a
@@ -167,6 +173,9 @@ private:
     void setHighlightedTargetPin (PinComponent* p);
 
     void hookTopologyListener();
+
+    /** The conversion itself, once any confirmation is through. */
+    void performSubgraphConversion (const std::vector<juce::Uuid>& nodeUuids);
     void layoutNodeComponents();
 
     Mcfx_graphAudioProcessor& processor_;
