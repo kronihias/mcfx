@@ -668,7 +668,8 @@ namespace
 {
     /** Modal popup that lets the user pick new In and Out channel counts in
         one shot. Two combo boxes (Inputs / Outputs) plus Apply / Cancel. */
-    class ChannelCountPopup : public juce::Component
+    class ChannelCountPopup : public juce::Component,
+                              private juce::FocusChangeListener
     {
     public:
         ChannelCountPopup (int currentIn, int currentOut,
@@ -715,19 +716,20 @@ namespace
             }
 
             applyButton_.setButtonText ("Apply");
-            applyButton_.onClick = [this]
-            {
-                const int n  = resolveCount (inCombo_,  allowedIn_);
-                const int m  = linked_ ? n : resolveCount (outCombo_, allowedOut_);
-                if (n > 0 && m > 0)
-                {
-                    auto cb = onApply_;
-                    if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
-                        box->dismiss();
-                    if (cb) cb (n, m);
-                }
-            };
+            applyButton_.onClick = [this] { apply(); };
             addAndMakeVisible (applyButton_);
+
+            // Return applies. It has to be caught before the combo, which
+            // opens its dropdown on Return, and before the text field of a
+            // combo being typed into, which takes Return to finish the edit.
+            // Key listeners run before a component's own keyPressed, so one
+            // sits on each combo and on whichever text field gets focus
+            // inside this popup (the combo creates that field on demand, and
+            // recreates its label on a look-and-feel change, so it is picked
+            // up via focus rather than hooked once).
+            inCombo_ .addKeyListener (&returnApplies_);
+            outCombo_.addKeyListener (&returnApplies_);
+            juce::Desktop::getInstance().addFocusChangeListener (this);
 
             cancelButton_.setButtonText ("Cancel");
             cancelButton_.onClick = [this]
@@ -738,6 +740,11 @@ namespace
             addAndMakeVisible (cancelButton_);
 
             setSize (260, linked_ ? 110 : 150);
+        }
+
+        ~ChannelCountPopup() override
+        {
+            juce::Desktop::getInstance().removeFocusChangeListener (this);
         }
 
         void paint (juce::Graphics& g) override
@@ -774,6 +781,55 @@ namespace
         }
 
     private:
+        void apply()
+        {
+            const int n  = resolveCount (inCombo_,  allowedIn_);
+            const int m  = linked_ ? n : resolveCount (outCombo_, allowedOut_);
+            if (n > 0 && m > 0)
+            {
+                auto cb = onApply_;
+                if (auto* box = findParentComponentOfClass<juce::CallOutBox>())
+                    box->dismiss();
+                if (cb) cb (n, m);
+            }
+        }
+
+        void globalFocusChanged (juce::Component* focused) override
+        {
+            if (auto* editor = dynamic_cast<juce::TextEditor*> (focused))
+                if (isParentOf (editor))
+                    editor->addKeyListener (&returnApplies_);   // no-op if already added
+        }
+
+        struct ReturnApplies : juce::KeyListener
+        {
+            explicit ReturnApplies (ChannelCountPopup& p) : popup (p) {}
+
+            bool keyPressed (const juce::KeyPress& key, juce::Component* origin) override
+            {
+                if (key != juce::KeyPress::returnKey)
+                    return false;
+
+                // Deferred: apply() dismisses the call-out, which deletes the
+                // component whose key event is still being dispatched. A typed
+                // value is committed first, so it reaches the combo.
+                juce::Component::SafePointer<ChannelCountPopup> safePopup (&popup);
+                juce::Component::SafePointer<juce::Label> typingInto (
+                    origin != nullptr ? dynamic_cast<juce::Label*> (origin->getParentComponent()) : nullptr);
+                juce::MessageManager::callAsync ([safePopup, typingInto]
+                {
+                    if (auto* label = typingInto.getComponent())
+                        label->hideEditor (false);   // keep the typed text
+                    if (auto* p = safePopup.getComponent())
+                        p->apply();
+                });
+                return true;
+            }
+
+            ChannelCountPopup& popup;
+        };
+        ReturnApplies returnApplies_ { *this };
+
         static void populateCombo (juce::ComboBox& cb, const std::vector<int>& values, int current)
         {
             // ComboBox itemId == n + 1 (item 0 means "no selection"). We store
