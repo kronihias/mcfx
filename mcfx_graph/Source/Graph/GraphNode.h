@@ -81,6 +81,12 @@ struct GraphNode
     bool bypassed = false;
     bool muted    = false;
 
+    // Leave this node's latency out of delay compensation: the graph doesn't
+    // delay parallel paths to match it, and it isn't counted in the latency
+    // reported to the host. For live use, where a lookahead plug-in in one
+    // branch shouldn't delay every other branch.
+    bool ignoreLatency = false;
+
     // Plugin-specific. Held only for nodes of kind Plugin so we can serialize
     // the PluginDescription back into the JSON.
     std::unique_ptr<juce::PluginDescription> pluginDescription;

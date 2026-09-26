@@ -162,9 +162,28 @@ void NodeComponent::paint (juce::Graphics& g)
 
     auto detail = juce::String (node_.channelCountIn) + " in / "
                 + juce::String (node_.channelCountOut) + " out";
-    g.drawText (detail,
-                area.withTrimmedTop ((float) kHeaderH - 6.0f).withHeight (16.0f).reduced (8.0f, 2.0f),
-                juce::Justification::centredLeft, true);
+
+    // Latency, when there is any: it's what delay compensation works with,
+    // and what "Ignore latency" leaves out (then shown in amber).
+    const int latency = node_.processor != nullptr ? node_.processor->getLatencySamples() : 0;
+    const bool isTerminalNode = node_.kind == NodeKind::InputTerminal
+                             || node_.kind == NodeKind::OutputTerminal;
+    juce::String latencyText;
+    if (! isTerminalNode && (latency > 0 || node_.ignoreLatency))
+        latencyText = juce::String::fromUTF8 (" \u00b7 ") + juce::String (latency) + " smp"
+                    + (node_.ignoreLatency ? " ignored" : "");
+
+    auto detailArea = area.withTrimmedTop ((float) kHeaderH - 6.0f).withHeight (16.0f).reduced (8.0f, 2.0f);
+    g.drawText (detail, detailArea, juce::Justification::centredLeft, true);
+
+    if (latencyText.isNotEmpty())
+    {
+        const auto detailW = (float) juce::GlyphArrangement::getStringWidthInt (g.getCurrentFont(), detail);
+        g.setColour (node_.ignoreLatency ? juce::Colour (0xffe0a040) : juce::Colours::white.withAlpha (0.6f));
+        g.drawText (latencyText, detailArea.withTrimmedLeft (detailW),
+                    juce::Justification::centredLeft, true);
+        g.setColour (juce::Colours::white.withAlpha (0.6f));
+    }
 
     // Channel labels next to pins
     g.setFont (juce::Font (juce::FontOptions (9.0f)));
@@ -621,6 +640,17 @@ void NodeComponent::showContextMenu()
                    [this]
                    {
                        editor_.getController().setNodeMuted (node_.uuid, ! node_.muted);
+                       repaint();
+                   });
+
+        // Only meaningful for a node with latency (or already ignored).
+        const int latency = editor_.getController().getNodeLatency (node_.uuid);
+        m.addItem ("Ignore latency" + (latency > 0 ? " (" + juce::String (latency) + " samples)"
+                                                   : juce::String()),
+                   latency > 0 || node_.ignoreLatency, node_.ignoreLatency,
+                   [this]
+                   {
+                       editor_.getController().setNodeIgnoreLatency (node_.uuid, ! node_.ignoreLatency);
                        repaint();
                    });
 

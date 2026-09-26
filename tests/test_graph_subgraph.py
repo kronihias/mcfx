@@ -9,7 +9,8 @@ Also: changing a subgraph's channel count keeps its inner graph, and
 Option/Alt-drag insertion (dropping a node on a wire) sounds like wiring it in by
 hand, takes only as many wires as the node has channels, and refuses nodes
 that are already wired. And delay compensation: a dry path lines up with a
-latent one, also through a subgraph and after a latency change at runtime.
+latent one, also through a subgraph and after a latency change at runtime,
+and a node set to ignore its latency is left out (and that is saved).
 
 Requires mcfx_graph_test (cmake -DBUILD_GRAPH_TESTS=ON; run_tests.py does).
 """
@@ -34,7 +35,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("scenario", ["mixed", "isolated", "feedback", "refusals", "nested",
                                       "resize", "insert", "insert-partial", "insert-refusals",
                                       "removal-notices", "latency-parallel", "latency-subgraph",
-                                      "latency-runtime"])
+                                      "latency-runtime", "latency-ignored"])
 def test_graph_editing(scenario):
     proc = subprocess.run([GRAPH_TEST_BIN, "--scenario", scenario],
                           capture_output=True, text=True, timeout=120)

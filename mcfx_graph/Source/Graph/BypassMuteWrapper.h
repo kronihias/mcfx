@@ -30,6 +30,10 @@ public:
     bool isBypassedFlag() const noexcept   { return bypassed_.load (std::memory_order_relaxed); }
     bool isMutedFlag()    const noexcept   { return muted_   .load (std::memory_order_relaxed); }
 
+    /** Report 0 latency to the graph instead of the inner's, so delay
+        compensation leaves this node out (GraphNode::ignoreLatency). */
+    void setIgnoreLatency (bool ignore);
+
     //==============================================================================
     // AudioProcessor overrides — almost everything just forwards to inner.
 
@@ -72,7 +76,11 @@ private:
     void audioProcessorParameterChanged (juce::AudioProcessor*, int, float) override {}
     void audioProcessorChanged (juce::AudioProcessor*, const juce::AudioProcessorListener::ChangeDetails&) override;
 
+    /** The latency the graph sees: the inner's, or 0 when ignored. */
+    void reportLatency();
+
     std::unique_ptr<juce::AudioProcessor> inner_;
     std::atomic<bool> bypassed_ { false };
     std::atomic<bool> muted_    { false };
+    std::atomic<bool> ignoreLatency_ { false };
 };

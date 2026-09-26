@@ -86,6 +86,8 @@ void GraphController::audioProcessorChanged (juce::AudioProcessor* proc,
 void GraphController::handleAsyncUpdate()
 {
     graph_->rebuild();
+    // Node tiles show each node's latency; let the canvas refresh.
+    notifyTopologyChanged();
 }
 
 void GraphController::setNodeAboutToBeRemovedListener (NodeAboutToBeRemovedListener cb)
@@ -419,6 +421,7 @@ bool GraphController::replaceNodeProcessor (const juce::Uuid& uuid,
     {
         w->setBypassedFlag (gn->bypassed);
         w->setMutedFlag    (gn->muted);
+        w->setIgnoreLatency (gn->ignoreLatency);
     }
 
     // Update metadata in place. UUID stays the same; NodeID is new.
@@ -519,6 +522,25 @@ void GraphController::setNodeBypassed (const juce::Uuid& uuid, bool on)
             w->setBypassedFlag (on);
 
     notifyTopologyChanged();
+}
+
+void GraphController::setNodeIgnoreLatency (const juce::Uuid& uuid, bool on)
+{
+    auto* gn = getNode (uuid);
+    if (gn == nullptr || gn == &inputTerminalMeta_ || gn == &outputTerminalMeta_) return;
+
+    gn->ignoreLatency = on;
+    if (auto* node = graph_->getNodeForId (gn->nodeId))
+        if (auto* w = dynamic_cast<BypassMuteWrapper*> (node->getProcessor()))
+            w->setIgnoreLatency (on);
+
+    notifyTopologyChanged();
+}
+
+int GraphController::getNodeLatency (const juce::Uuid& uuid) const
+{
+    auto* gn = getNode (uuid);
+    return gn != nullptr && gn->processor != nullptr ? gn->processor->getLatencySamples() : 0;
 }
 
 void GraphController::setNodeMuted (const juce::Uuid& uuid, bool on)

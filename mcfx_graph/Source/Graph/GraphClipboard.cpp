@@ -208,6 +208,8 @@ std::vector<juce::Uuid> GraphClipboard::pasteFromClipboard (
 
         if ((bool) nObj->getProperty ("bypassed"))
             controller.setNodeBypassed (newUuid, true);
+        if ((bool) nObj->getProperty ("ignoreLatency"))
+            controller.setNodeIgnoreLatency (newUuid, true);
         if ((bool) nObj->getProperty ("muted"))
             mutedAfter.push_back (newUuid);
 

@@ -22,7 +22,18 @@ BypassMuteWrapper::BypassMuteWrapper (std::unique_ptr<juce::AudioProcessor> inne
     // Subscribe to the inner so latency changes (e.g. an FFT lookahead
     // re-configured at runtime) propagate up to the graph.
     inner_->addListener (this);
-    setLatencySamples (inner_->getLatencySamples());
+    reportLatency();
+}
+
+void BypassMuteWrapper::reportLatency()
+{
+    setLatencySamples (ignoreLatency_.load() ? 0 : inner_->getLatencySamples());
+}
+
+void BypassMuteWrapper::setIgnoreLatency (bool ignore)
+{
+    ignoreLatency_.store (ignore);
+    reportLatency();   // a change reaches GraphController, which re-plans
 }
 
 BypassMuteWrapper::~BypassMuteWrapper()
@@ -45,14 +56,14 @@ void BypassMuteWrapper::prepareToPlay (double sampleRate, int blockSize)
     // Mirror the inner's reported latency so juce::AudioProcessorGraph (which
     // queries us, not the inner) can pad parallel paths to align them. Many
     // plug-ins only set their final latency during prepareToPlay.
-    setLatencySamples (inner_->getLatencySamples());
+    reportLatency();
 }
 
 void BypassMuteWrapper::audioProcessorChanged (juce::AudioProcessor*,
                                                 const juce::AudioProcessorListener::ChangeDetails& details)
 {
     if (details.latencyChanged)
-        setLatencySamples (inner_->getLatencySamples());
+        reportLatency();
 }
 
 void BypassMuteWrapper::releaseResources()

@@ -303,6 +303,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 - `mcfx_graph`: **convert to subgraph** — select nodes, then right-click → Convert to subgraph (or Cmd/Ctrl+G). The nodes move into a new subgraph and every connection stays intact: wires crossing the boundary go through new subgraph inputs/outputs, one per distinct source. One undo step.
 - `mcfx_graph`: **trackpad pinch zooms** the canvas around the cursor; two-finger swipes keep panning.
 - `mcfx_graph`: **delay compensation through subgraphs and at runtime** — a subgraph now reports the latency of what's inside it, so parallel paths around it line up; a plug-in changing its latency while running re-plans the compensation right away; and the host is told the new total whenever it changes, not only on transport start or project load.
+- `mcfx_graph`: **per-node "Ignore latency"** (right-click a node) leaves that node out of delay compensation, e.g. a lookahead plug-in in one branch that shouldn't delay every other branch in live use. Node tiles now show their latency, in amber when ignored.
 - `mcfx_graph`: the add-plug-in dialog remembers its format filter (AudioUnit / VST / VST3).
 - `mcfx_graph`: **Cmd/Ctrl+A** selects every node on the current level.
 - `mcfx_graph`: **cut** selected nodes (Cmd/Ctrl+X, or right-click → Cut), next to copy/paste.

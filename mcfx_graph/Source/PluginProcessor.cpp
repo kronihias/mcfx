@@ -723,8 +723,9 @@ bool Mcfx_graphAudioProcessor::tryFastUpdate (const juce::var& v)
 
             // Bypass / mute via the controller so the wrapper's atomic flags
             // are kept in sync.
-            graph_->setNodeBypassed (uid, (bool) nObj->getProperty ("bypassed"));
-            graph_->setNodeMuted    (uid, (bool) nObj->getProperty ("muted"));
+            graph_->setNodeBypassed      (uid, (bool) nObj->getProperty ("bypassed"));
+            graph_->setNodeMuted         (uid, (bool) nObj->getProperty ("muted"));
+            graph_->setNodeIgnoreLatency (uid, (bool) nObj->getProperty ("ignoreLatency"));
 
             const auto data = nObj->getProperty ("data");
 

@@ -72,6 +72,7 @@ juce::var GraphSerializer::nodeVarFromGraphNode (const GraphNode& gn)
     nodeObj->setProperty ("channelCountIn",  gn.channelCountIn);
     nodeObj->setProperty ("channelCountOut", gn.channelCountOut);
     if (gn.bypassed) nodeObj->setProperty ("bypassed", true);
+    if (gn.ignoreLatency) nodeObj->setProperty ("ignoreLatency", true);
     if (gn.muted)    nodeObj->setProperty ("muted",    true);
 
     switch (gn.kind)
@@ -473,6 +474,8 @@ bool GraphSerializer::graphFromVar (const juce::var& v,
             {
                 if ((bool) nObj->getProperty ("bypassed"))
                     controller.setNodeBypassed (newUuid, true);
+                if ((bool) nObj->getProperty ("ignoreLatency"))
+                    controller.setNodeIgnoreLatency (newUuid, true);
                 gn->muted = (bool) nObj->getProperty ("muted"); // will apply below
             }
         }

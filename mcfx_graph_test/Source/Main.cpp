@@ -15,6 +15,7 @@
 
 #include <JuceHeader.h>
 #include "Graph/GraphController.h"
+#include "Graph/GraphSerializer.h"
 #include "Graph/NodeInsertion.h"
 #include "Graph/SubgraphConversion.h"
 #include "Graph/SubgraphNode.h"
@@ -645,6 +646,51 @@ namespace
     }
 }
 
+namespace
+{
+    void scenarioLatencyIgnored()
+    {
+        // "Ignore latency" on the latent node: no compensation for it, so the
+        // dry path stays undelayed and the total drops to 0. Undo it and the
+        // compensation is back.
+        Fixture f;
+        buildLatentAndDry (f, 64, false);
+        render (f.graph);
+
+        f.graph.setNodeIgnoreLatency (f["P"], true);
+        pumpMessages();
+        check (f.graph.getLatencySamples() == 0,
+               "ignored latency isn't counted, got " + juce::String (f.graph.getLatencySamples()));
+        check (f.graph.getNodeLatency (f["P"]) == 64, "the node still knows its own latency");
+
+        // Dry path undelayed: out1 is the input itself. Render the same noise
+        // straight through for comparison.
+        const auto out = render (f.graph);
+        Fixture straight;
+        for (int c = 0; c < kChannels; ++c) straight.wire (straight.in(), c, straight.out(), c);
+        const auto input = render (straight.graph);
+        float dryDiff = 0.0f;
+        for (int i = 0; i < out.getNumSamples(); ++i)
+            dryDiff = juce::jmax (dryDiff, std::abs (out.getSample (1, i) - input.getSample (0, i)));
+        check (dryDiff == 0.0f, "dry path is no longer delayed");
+
+        f.graph.setNodeIgnoreLatency (f["P"], false);
+        pumpMessages();
+        check (f.graph.getLatencySamples() == 64, "switching it back restores the total");
+        check (pathDifference (render (f.graph), 1024) == 0.0f, "and the compensation");
+
+        // The flag is saved and restored with the graph.
+        Fixture g;
+        g.nodes["G"] = addGain (g.graph, 2, 0.0f, { 300, 100 });
+        g.graph.setNodeIgnoreLatency (g["G"], true);
+        const auto saved = GraphSerializer::graphToVar (g.graph);
+        Fixture h;
+        GraphSerializer::graphFromVar (saved, h.graph, formats(), nullptr);
+        auto* restored = h.graph.getNode (g["G"]);
+        check (restored != nullptr && restored->ignoreLatency, "ignoreLatency survives save / load");
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -663,6 +709,7 @@ int main (int argc, char** argv)
         { "latency-parallel", scenarioLatencyParallel },
         { "latency-subgraph", scenarioLatencySubgraph },
         { "latency-runtime",  scenarioLatencyRuntime },
+        { "latency-ignored",  scenarioLatencyIgnored },
     };
 
     juce::String only;

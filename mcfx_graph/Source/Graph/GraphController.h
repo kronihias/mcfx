@@ -104,6 +104,13 @@ public:
         For asymmetric channel layouts the JUCE engine maps as best it can. */
     void setNodeBypassed (const juce::Uuid& uuid, bool on);
 
+    /** Leave the node's latency out of delay compensation (and out of the
+        latency reported upwards). See GraphNode::ignoreLatency. */
+    void setNodeIgnoreLatency (const juce::Uuid& uuid, bool on);
+
+    /** The node's own latency in samples, whether or not it is ignored. */
+    int getNodeLatency (const juce::Uuid& uuid) const;
+
     /** Mute: temporarily disconnects incoming connections so no audio
         reaches the node. Combined with bypass, output is silence.
         Disconnected wires are stashed and restored on unmute. */
