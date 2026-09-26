@@ -885,7 +885,7 @@ bool GraphEditorComponent::isConnectionSelected (const ConnectionInfo& c) const
            != selectedConnections_.end();
 }
 
-void GraphEditorComponent::cutNodes (const std::vector<juce::Uuid>& nodeUuids)
+void GraphEditorComponent::cutNodes (std::vector<juce::Uuid> nodeUuids)
 {
     // Nothing is removed unless the copy worked, so a cut never loses nodes.
     if (! GraphClipboard::copySelection (*activeController_, nodeUuids))
