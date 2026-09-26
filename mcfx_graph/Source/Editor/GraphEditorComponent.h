@@ -73,6 +73,10 @@ public:
     void mouseWheelMove (const juce::MouseEvent& e,
                          const juce::MouseWheelDetails& wheel) override;
 
+    /** Trackpad pinch: zoom around the cursor. (Two-finger swipes arrive as
+        wheel events and keep panning via the Viewport.) */
+    void mouseMagnify (const juce::MouseEvent& e, float scaleFactor) override;
+
     //==============================================================================
     // Selection. Multi-select supported: shift/cmd-click toggles, drag on
     // empty canvas marquee-selects, plain click selects single. The properties

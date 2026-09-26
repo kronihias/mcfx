@@ -1230,6 +1230,13 @@ void GraphEditorComponent::resetZoom()
     repaint();
 }
 
+void GraphEditorComponent::mouseMagnify (const juce::MouseEvent& e, float scaleFactor)
+{
+    // A pinch over a node lands here too: Component passes unhandled
+    // magnify events up to the parent, like wheel events.
+    setZoom (zoom_ * scaleFactor, e.getPosition());
+}
+
 void GraphEditorComponent::mouseWheelMove (const juce::MouseEvent& e,
                                            const juce::MouseWheelDetails& wheel)
 {

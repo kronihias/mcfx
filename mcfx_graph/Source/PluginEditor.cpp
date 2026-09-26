@@ -104,6 +104,9 @@ namespace
                 "  Double-click subgraph   Descend into subgraph\n"
                 "  Double-click native     Open native-node properties window\n"
                 "  Cmd + scroll on canvas  Zoom around cursor\n"
+                "  Trackpad pinch          Zoom around cursor\n"
+                "  Scroll / two-finger     Pan the canvas\n"
+                "    swipe\n"
                 "\n"
                 "Toolbar\n"
                 "  Presets                 Save / load named presets, or import\n"
@@ -153,9 +156,9 @@ Mcfx_graphAudioProcessorEditor::Mcfx_graphAudioProcessorEditor (Mcfx_graphAudioP
     scanButton_      .setTooltip ("Scan the system for VST3 / VST / AU plug-ins, or clear the blacklist of plug-ins that previously failed to scan. Click during a running scan to cancel it.");
     undoButton_      .setTooltip ("Undo the last graph change (Cmd+Z).");
     redoButton_      .setTooltip ("Redo (Cmd+Shift+Z).");
-    zoomOutButton_   .setTooltip ("Zoom out the canvas. Cmd+scroll on the canvas zooms around the cursor.");
+    zoomOutButton_   .setTooltip ("Zoom out the canvas. Cmd+scroll or a trackpad pinch on the canvas zooms around the cursor.");
     resetZoomButton_ .setTooltip ("Reset zoom to 1:1 (canvas at native size, scroll position reset).");
-    zoomInButton_    .setTooltip ("Zoom in the canvas. Cmd+scroll on the canvas zooms around the cursor.");
+    zoomInButton_    .setTooltip ("Zoom in the canvas. Cmd+scroll or a trackpad pinch on the canvas zooms around the cursor.");
     helpButton_      .setTooltip ("Show keyboard shortcuts and mouse interactions.");
 
     titleLabel_.setText ("mcfx_graph", juce::dontSendNotification);
