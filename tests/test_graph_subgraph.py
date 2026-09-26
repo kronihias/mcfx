@@ -5,7 +5,10 @@ Each scenario builds a graph twice, converts a selection to a subgraph in one
 copy, and requires sample-identical output: fan-out and summing on both sides
 of the boundary, a feedback pair moving whole, nesting a second level, and
 refusals (split feedback pair, terminals, empty) that change nothing.
-Also: changing a subgraph's channel count keeps its inner graph.
+Also: changing a subgraph's channel count keeps its inner graph, and
+Option/Alt-drag insertion (dropping a node on a wire) sounds like wiring it in by
+hand, takes only as many wires as the node has channels, and refuses nodes
+that are already wired.
 
 Requires mcfx_graph_test (cmake -DBUILD_GRAPH_TESTS=ON; run_tests.py does).
 """
@@ -27,8 +30,9 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-@pytest.mark.parametrize("scenario", ["mixed", "isolated", "feedback", "refusals", "nested", "resize"])
-def test_convert_to_subgraph(scenario):
+@pytest.mark.parametrize("scenario", ["mixed", "isolated", "feedback", "refusals", "nested",
+                                      "resize", "insert", "insert-partial", "insert-refusals"])
+def test_graph_editing(scenario):
     proc = subprocess.run([GRAPH_TEST_BIN, "--scenario", scenario],
                           capture_output=True, text=True, timeout=120)
     assert proc.returncode == 0, proc.stdout + proc.stderr

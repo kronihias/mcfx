@@ -107,6 +107,9 @@ public:
                            const juce::Uuid& toUuid,   int toCh);
     bool isConnected      (const juce::Uuid& fromUuid, int fromCh,
                            const juce::Uuid& toUuid,   int toCh) const;
+    /** Whether addConnection would accept this wire, without adding it. */
+    bool canConnect       (const juce::Uuid& fromUuid, int fromCh,
+                           const juce::Uuid& toUuid,   int toCh) const;
 
     struct ConnectionInfo
     {

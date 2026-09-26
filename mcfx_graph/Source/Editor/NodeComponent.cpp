@@ -245,6 +245,7 @@ void NodeComponent::mouseDown (const juce::MouseEvent& e)
 
     dragStartPosition_ = node_.editorPosition;
     didDrag_ = false;
+    dragging_ = true;
     dragger_.startDraggingComponent (this, e);
 }
 
@@ -283,10 +284,36 @@ void NodeComponent::mouseDrag (const juce::MouseEvent& e)
         didDrag_ = true;
 
     editor_.onNodeMoved (*this);
+    updateInsertTarget (e.getScreenPosition(), e.mods);
 }
 
-void NodeComponent::mouseUp (const juce::MouseEvent&)
+void NodeComponent::updateInsertTarget (juce::Point<int> screenPos, juce::ModifierKeys mods)
 {
+    const auto& sel = editor_.getSelection();
+    const bool groupDrag = sel.size() > 1 && editor_.isSelected (node_.uuid);
+    editor_.updateInsertTarget (node_.uuid, editor_.getLocalPoint (nullptr, screenPos),
+                                dragging_ && didDrag_ && mods.isAltDown() && ! groupDrag);
+}
+
+void NodeComponent::modifierKeysChanged (const juce::ModifierKeys& mods)
+{
+    // Pressing or releasing Option / Alt mid-drag shows / hides the insert
+    // target without having to move the mouse.
+    if (dragging_)
+        updateInsertTarget (juce::Desktop::getMousePosition(), mods);
+}
+
+void NodeComponent::mouseUp (const juce::MouseEvent& e)
+{
+    dragging_ = false;
+
+    // Insert first, so the snapshot below records the move and the rewiring
+    // as one undo step.
+    if (e.mods.isAltDown())
+        editor_.commitInsert (node_.uuid);
+    else
+        editor_.clearInsertTarget();
+
     // Drags don't fire notifyTopologyChanged (move is metadata-only), so we
     // explicitly commit a snapshot at drag-end. Without this, node moves
     // weren't undoable. Skip the commit if the click didn't actually move

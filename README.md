@@ -301,6 +301,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ### Unreleased
 
 - `mcfx_graph`: **convert to subgraph** — select nodes, then right-click → Convert to subgraph (or Cmd/Ctrl+G). The nodes move into a new subgraph and every connection stays intact: wires crossing the boundary go through new subgraph inputs/outputs, one per distinct source. One undo step.
+- `mcfx_graph`: **drop a node onto a wire to insert it** — Option/Alt-drag an unwired node over a wire; the wires between those two nodes are highlighted and on release run through the node, channel by channel.
 - `mcfx_graph`: changing a subgraph's channel count no longer empties it; only wires to removed input/output channels are dropped.
 
 ### 0.8.11 (2026-09-24)

@@ -31,6 +31,7 @@ public:
     void mouseDrag (const juce::MouseEvent& e) override;
     void mouseUp   (const juce::MouseEvent& e) override;
     void mouseDoubleClick (const juce::MouseEvent& e) override;
+    void modifierKeysChanged (const juce::ModifierKeys& mods) override;
 
     GraphNode&       getNode()       noexcept { return node_; }
     const GraphNode& getNode() const noexcept { return node_; }
@@ -60,4 +61,9 @@ private:
     // pollute the undo history.
     juce::Point<int> dragStartPosition_;
     bool             didDrag_ = false;
+    bool             dragging_ = false;   // between mouseDown and mouseUp of a drag
+
+    /** Option / Alt + drag onto a wire inserts this node there (NodeInsertion).
+        Only for a single-node drag, not a group. */
+    void updateInsertTarget (juce::Point<int> screenPos, juce::ModifierKeys mods);
 };

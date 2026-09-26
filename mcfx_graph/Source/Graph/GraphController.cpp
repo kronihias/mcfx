@@ -459,6 +459,15 @@ bool GraphController::resolveEndpoint (const juce::Uuid& uuid,
     return false;
 }
 
+bool GraphController::canConnect (const juce::Uuid& fromUuid, int fromCh,
+                                  const juce::Uuid& toUuid,   int toCh) const
+{
+    AGProc::NodeID fromId, toId;
+    if (! resolveEndpoint (fromUuid, fromId)) return false;
+    if (! resolveEndpoint (toUuid,   toId))   return false;
+    return graph_->canConnect ({{ fromId, fromCh }, { toId, toCh }});
+}
+
 bool GraphController::addConnection (const juce::Uuid& fromUuid, int fromCh,
                                      const juce::Uuid& toUuid,   int toCh)
 {

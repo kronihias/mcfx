@@ -9,11 +9,13 @@
   Scenarios cover "Convert to subgraph" (SubgraphConversion): the converted
   graph has to sound exactly like the original, with fan-out and summing on
   both sides of the boundary, feedback pairs moving whole, and refusals that
-  change nothing.
+  change nothing. And Option/Alt-drag insertion (NodeInsertion): dropping a node
+  on a wire has to sound like wiring it in by hand.
 */
 
 #include <JuceHeader.h>
 #include "Graph/GraphController.h"
+#include "Graph/NodeInsertion.h"
 #include "Graph/SubgraphConversion.h"
 #include "Graph/SubgraphNode.h"
 #include "NativeNodes/DelayNode.h"
@@ -356,6 +358,88 @@ namespace
     }
 }
 
+namespace
+{
+    // G1 -> G2 over two wires, both driven from in0/in1 and ending at out0/1.
+    void buildChain (Fixture& f, bool delayWiredIn)
+    {
+        f.nodes["G1"] = addGain  (f.graph, 2, -6.0f, { 200, 100 });
+        f.nodes["G2"] = addGain  (f.graph, 2,  3.0f, { 600, 100 });
+        f.nodes["D"]  = addDelay (f.graph, 2,  5.0f, { 400, 300 });
+        f.wire (f.in(), 0, f["G1"], 0);
+        f.wire (f.in(), 1, f["G1"], 1);
+        f.wire (f["G2"], 0, f.out(), 0);
+        f.wire (f["G2"], 1, f.out(), 1);
+        if (delayWiredIn)
+        {
+            f.wire (f["G1"], 0, f["D"], 0);
+            f.wire (f["G1"], 1, f["D"], 1);
+            f.wire (f["D"],  0, f["G2"], 0);
+            f.wire (f["D"],  1, f["G2"], 1);
+        }
+        else
+        {
+            f.wire (f["G1"], 0, f["G2"], 0);
+            f.wire (f["G1"], 1, f["G2"], 1);
+        }
+    }
+
+    void scenarioInsert()
+    {
+        Fixture reference;
+        buildChain (reference, true);
+
+        Fixture f;
+        buildChain (f, false);
+        check (NodeInsertion::describeRefusal (f.graph, f["D"], f["G1"], f["G2"]).isEmpty(),
+               "unwired node can go into the wire");
+        check (NodeInsertion::insert (f.graph, f["D"], f["G1"], f["G2"]) == 2,
+               "both parallel wires go through the node");
+        check (! f.graph.isConnected (f["G1"], 0, f["G2"], 0)
+               && ! f.graph.isConnected (f["G1"], 1, f["G2"], 1), "direct wires are gone");
+        check (maxDifference (render (reference.graph), render (f.graph)) == 0.0f,
+               "inserted node sounds like wiring it by hand");
+    }
+
+    void scenarioInsertPartial()
+    {
+        // A 1-channel node on a 2-wire link takes the first wire only (by
+        // destination channel); the other stays direct.
+        Fixture f;
+        buildChain (f, false);
+        const auto mono = addDelay (f.graph, 1, 5.0f, { 400, 500 });
+        check (NodeInsertion::insert (f.graph, mono, f["G1"], f["G2"]) == 1, "one wire rerouted");
+        check (f.graph.isConnected (f["G1"], 0, mono, 0) && f.graph.isConnected (mono, 0, f["G2"], 0),
+               "wire 0 runs through the mono node");
+        check (f.graph.isConnected (f["G1"], 1, f["G2"], 1), "wire 1 stays direct");
+    }
+
+    void scenarioInsertRefusals()
+    {
+        Fixture f;
+        buildChain (f, false);
+        const auto before = f.graph.getAllConnections().size();
+
+        auto refused = [&] (const juce::Uuid& node, const juce::Uuid& from, const juce::Uuid& to,
+                            const juce::String& what)
+        {
+            check (NodeInsertion::describeRefusal (f.graph, node, from, to).isNotEmpty(), what + " is refused");
+            check (NodeInsertion::insert (f.graph, node, from, to) == 0, what + " changes nothing");
+        };
+
+        refused (f["G1"], f.in(), f["G2"], "an already-wired node");
+        refused (f["D"],  f["G2"], f["G1"], "a node pair with no wire");
+        refused (f.in(),  f["G1"], f["G2"], "a terminal");
+        refused (f["G1"], f["G1"], f["G2"], "a node into its own wire");
+
+        const auto send = f.graph.addNode (std::make_unique<FeedbackSendNode> (2),
+                                           NodeKind::FeedbackSend, "Send", 2, 0, { 400, 600 });
+        refused (send, f["G1"], f["G2"], "a node without outputs");
+
+        check (f.graph.getAllConnections().size() == before, "refusals leave every wire");
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -367,6 +451,9 @@ int main (int argc, char** argv)
         { "refusals",  scenarioRefusals },
         { "nested",    scenarioNested },
         { "resize",    scenarioResize },
+        { "insert",           scenarioInsert },
+        { "insert-partial",   scenarioInsertPartial },
+        { "insert-refusals",  scenarioInsertRefusals },
     };
 
     juce::String only;

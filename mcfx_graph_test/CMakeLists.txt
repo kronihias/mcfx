@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13)
 
-# mcfx_graph_test — checks mcfx_graph's graph logic (currently "Convert to
-# subgraph") without the plug-in wrapper or the editor. Used by
+# mcfx_graph_test — checks mcfx_graph's graph logic ("Convert to subgraph",
+# Option/Alt-drag node insertion) without the plug-in wrapper or the editor. Used by
 # tests/test_graph_subgraph.py. Built only when -DBUILD_GRAPH_TESTS=ON.
 #
 # Usage (from repo root):
@@ -26,6 +26,7 @@ target_sources(mcfx_graph_test PRIVATE
     ${_GRAPH_SRC}/Graph/BypassMuteWrapper.cpp
     ${_GRAPH_SRC}/Graph/GraphController.cpp
     ${_GRAPH_SRC}/Graph/GraphSerializer.cpp
+    ${_GRAPH_SRC}/Graph/NodeInsertion.cpp
     ${_GRAPH_SRC}/Graph/SubgraphConversion.cpp
     ${_GRAPH_SRC}/Graph/SubgraphNode.cpp
     ${_GRAPH_SRC}/NativeNodes/DelayNode.cpp

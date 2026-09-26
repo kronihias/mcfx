@@ -119,6 +119,14 @@ public:
         and the node context menu. */
     void convertToSubgraph (std::vector<juce::Uuid> nodeUuids);
 
+    /** Option / Alt + drag insertion (NodeInsertion). While a node is dragged, the
+        node component reports the cursor (canvas coords) and whether
+        insertion is `active`; the wires under it that the node could go into
+        are highlighted. commitInsert() does it on drop; true if it did. */
+    void updateInsertTarget (const juce::Uuid& draggedNode, juce::Point<int> canvasPos, bool active);
+    bool commitInsert (const juce::Uuid& draggedNode);
+    void clearInsertTarget();
+
     //==============================================================================
     // Subgraph navigation. The canvas always edits whatever GraphController is
     // "active". The root is the outer-plugin controller; descending pushes a
@@ -204,6 +212,11 @@ private:
     std::vector<ConnectionInfo>    selectedConnections_;  // selected wires
     SelectionListener  selectionListener_;
     BreadcrumbListener breadcrumbListener_;
+
+    // Option / Alt-drag insertion target: the (from, to) node pair whose wires the
+    // dragged node would go into.
+    struct InsertTarget { juce::Uuid from, to; };
+    std::optional<InsertTarget> insertTarget_;
 
     // Marquee-select state (drag on empty canvas)
     bool             marqueeActive_ = false;

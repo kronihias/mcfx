@@ -7,6 +7,7 @@
 #include "../NativeNodes/DelayNode.h"
 #include "../Graph/SubgraphNode.h"
 #include "../Graph/SubgraphConversion.h"
+#include "../Graph/NodeInsertion.h"
 #include "../Hosting/PluginInstanceFactory.h"
 #include "../Graph/GraphClipboard.h"
 #include "PluginSearchPopup.h"
@@ -547,9 +548,18 @@ void GraphEditorComponent::paint (juce::Graphics& g)
         auto* toPin   = toNc  ->findPin (PinComponent::Direction::Input,  c.toCh);
         if (fromPin == nullptr || toPin == nullptr) continue;
 
-        drawConnection (g, fromPin->getCenterInGraphCoords().toFloat(),
-                           toPin  ->getCenterInGraphCoords().toFloat(),
-                           isConnectionSelected (c));
+        const auto from = fromPin->getCenterInGraphCoords().toFloat();
+        const auto to   = toPin  ->getCenterInGraphCoords().toFloat();
+
+        if (insertTarget_ && c.fromUuid == insertTarget_->from && c.toUuid == insertTarget_->to)
+        {
+            // Wires the dragged node will go into on drop.
+            g.setColour (juce::Colour (0xff4fc3f7));
+            g.strokePath (makeConnectionPath (from, to), juce::PathStrokeType (3.5f));
+            continue;
+        }
+
+        drawConnection (g, from, to, isConnectionSelected (c));
     }
 
     // Feedback links. Drawn like a connection but dashed and in the feedback
@@ -940,6 +950,72 @@ void GraphEditorComponent::convertToSubgraph (std::vector<juce::Uuid> nodeUuids)
                 return;
             self->performSubgraphConversion (nodeUuids);
         });
+}
+
+void GraphEditorComponent::updateInsertTarget (const juce::Uuid& draggedNode,
+                                               juce::Point<int> canvasPos, bool active)
+{
+    std::optional<InsertTarget> target;
+
+    if (active)
+    {
+        // The wire under the cursor, ignoring the dragged node's own (it has
+        // none if it can be inserted, but the refusal check says so anyway).
+        constexpr float tolerance = 10.0f;
+        for (const auto& c : activeController_->getAllConnections())
+        {
+            if (c.fromUuid == draggedNode || c.toUuid == draggedNode) continue;
+
+            auto* fromNc = findNodeComponent (c.fromUuid);
+            auto* toNc   = findNodeComponent (c.toUuid);
+            if (fromNc == nullptr || toNc == nullptr) continue;
+            auto* fromPin = fromNc->findPin (PinComponent::Direction::Output, c.fromCh);
+            auto* toPin   = toNc  ->findPin (PinComponent::Direction::Input,  c.toCh);
+            if (fromPin == nullptr || toPin == nullptr) continue;
+
+            juce::Path stroked;
+            juce::PathStrokeType (tolerance * 2.0f).createStrokedPath (
+                stroked, makeConnectionPath (fromPin->getCenterInGraphCoords().toFloat(),
+                                             toPin  ->getCenterInGraphCoords().toFloat()));
+            if (! stroked.contains (canvasPos.toFloat())) continue;
+
+            if (NodeInsertion::describeRefusal (*activeController_, draggedNode,
+                                                c.fromUuid, c.toUuid).isEmpty())
+                target = InsertTarget { c.fromUuid, c.toUuid };
+            break;
+        }
+    }
+
+    const bool changed = target.has_value() != insertTarget_.has_value()
+                      || (target && (target->from != insertTarget_->from || target->to != insertTarget_->to));
+    insertTarget_ = target;
+    if (changed)
+        repaint();
+}
+
+bool GraphEditorComponent::commitInsert (const juce::Uuid& draggedNode)
+{
+    if (! insertTarget_)
+        return false;
+
+    const auto target = *insertTarget_;
+    clearInsertTarget();
+
+    int rerouted = 0;
+    {
+        GraphController::ScopedSuspend suspend (processor_);
+        rerouted = NodeInsertion::insert (*activeController_, draggedNode, target.from, target.to);
+    }
+    return rerouted > 0;
+}
+
+void GraphEditorComponent::clearInsertTarget()
+{
+    if (insertTarget_)
+    {
+        insertTarget_.reset();
+        repaint();
+    }
 }
 
 void GraphEditorComponent::performSubgraphConversion (const std::vector<juce::Uuid>& nodeUuids)
