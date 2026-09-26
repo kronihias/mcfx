@@ -1236,13 +1236,12 @@ def test_crossover_lp_plus_hp_sums_to_flat():
 
 def test_symmetric_fir_group_delay_matches_centre_tap():
     """A symmetric (Type-I) FIR loaded as raw coefficients should produce an
-    impulse-response output peaked at sample = (N-1)/2 (+ partitioned-convolver
-    overhead for long FIRs). This exercises both:
+    impulse-response output peaked at sample = (N-1)/2. This exercises both:
       • the convolution path (short direct-form vs long MtxConv)
       • the rebuildConvolver fix that adds group-delay to convolverLatency_.
 
-    For lengths above the 128-tap convolver threshold the partitioned engine
-    adds one block of latency, so the expected peak shifts by maxBlockSize."""
+    The partitioned engine runs in minimum-latency mode and adds no delay of
+    its own (see test_long_fir_reported_latency_matches_actual)."""
     for N in (63, 1023):     # short (direct) + long (partitioned)
         # Symmetric FIR: windowed sinc lowpass at fc = SR/8.
         n  = np.arange(N) - (N - 1) // 2
@@ -1278,6 +1277,31 @@ def test_symmetric_fir_group_delay_matches_centre_tap():
         np.testing.assert_allclose(ir[peak_idx], h[(N - 1) // 2], atol=5e-3,
             err_msg=f"Symmetric FIR N={N}: peak amplitude {ir[peak_idx]:.4f} "
                     f"vs centre-tap {h[(N-1)//2]:.4f}")
+
+
+def test_long_fir_reported_latency_matches_actual():
+    """A long symmetric FIR (partitioned convolver) must report exactly its
+    group delay: the convolver runs in minimum-latency mode and adds nothing.
+    With the testhost stripping the reported latency, an impulse has to come
+    out where it went in. It used to report one host block too many, which
+    left the impulse a block early after compensation."""
+    for N in (2047, 4095):
+        n  = np.arange(N) - (N - 1) // 2
+        h  = np.sinc(n / 4.0) * np.hanning(N)
+        h /= h.sum()
+        config = {
+            "sample_rate": SR,
+            "sos": [{"diagonal": True, "parameters": {
+                "type": "fir", "coefficients": h.astype(np.float32).tolist(),
+            }}],
+        }
+        at = 3000
+        audio = np.zeros((2, 4 * BLOCK + N), dtype=np.float32)
+        audio[:, at] = 1.0
+        out = run_mimoeq_json(config, audio)        # latency compensation on
+        peak = int(np.argmax(np.abs(out[0])))
+        assert peak == at, (f"FIR N={N}: impulse at {at} came out at {peak} "
+                            f"(reported latency off by {at - peak} samples)")
 
 
 def test_disabled_fir_band_reports_no_latency():

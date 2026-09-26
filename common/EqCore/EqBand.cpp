@@ -1441,7 +1441,13 @@ void EqBand::rebuildConvolver()
     convolverIn_.clear();
     convolverOut_.clear();
     useConvolver_ = true;
-    convolverLatency_ = maxBlockSize_ + groupDelay;
+    // The convolver is configured with minpart == blocksize and no safe mode,
+    // i.e. MtxConvMaster's minimum-latency mode (outoffset = blocksize -
+    // minpart = 0): it adds no delay of its own, so the band's latency is
+    // just the FIR's group delay. Adding a block here, as safe mode would
+    // need, over-reported by one host block (1535 instead of 1023 for a
+    // 2047-tap FIR at 512).
+    convolverLatency_ = groupDelay;
 }
 
 void EqBand::applyFIR(float* data, int numSamples)
