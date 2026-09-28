@@ -545,14 +545,14 @@ void EqBandEditor::populateOrderCombo(OrderComboKind kind, bool isAP)
     cbOrder_.clear(dontSendNotification);
     if (kind == OrderComboKind::Crossover)
     {
-        if (!isAP)
-            cbOrder_.addItem("12 dB/oct (LR2)", 2);
+        // The allpass is B(-s)/B(s) of the Butterworth half (see EqBand), which is
+        // valid for odd Butterworth orders too (LR2, LR6: LP - HP sums to it).
+        cbOrder_.addItem("12 dB/oct (LR2)", 2);
         cbOrder_.addItem("24 dB/oct (LR4)", 4);
-        if (!isAP)
-            cbOrder_.addItem("36 dB/oct (LR6)", 6);
+        cbOrder_.addItem("36 dB/oct (LR6)", 6);
         cbOrder_.addItem("48 dB/oct (LR8)", 8);
         cbOrder_.addItem("96 dB/oct (LR16)", 16);
-        cbOrder_.setTooltip(isAP ? "Linkwitz-Riley allpass compensation order (LR4, LR8, LR16)."
+        cbOrder_.setTooltip(isAP ? "Linkwitz-Riley allpass compensation order (phase of the LR crossover's LP+HP sum)."
                                  : "Linkwitz-Riley crossover order. LP+HP at same freq/order will sum flat.");
     }
     else if (kind == OrderComboKind::AnalogPrototype)
@@ -1204,9 +1204,6 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
         {
             bool isAP = st == IIRSubType::CrossoverAP;
             populateOrderCombo(OrderComboKind::Crossover, isAP);
-            int curOrder = band_->getCrossoverOrder();
-            if (isAP && (curOrder == 2 || curOrder == 6))
-                band_->setCrossoverOrder(4);
             cbOrder_.setSelectedId(band_->getCrossoverOrder(), dontSendNotification);
         }
         else if (isBW)
