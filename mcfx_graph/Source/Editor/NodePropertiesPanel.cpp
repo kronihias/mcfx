@@ -974,14 +974,14 @@ namespace
         PluginPropertiesPanel (Mcfx_graphAudioProcessor& outerProc, GraphNode& gn)
             : outerProc_ (outerProc), node_ (gn)
         {
-            juce::String infoText = "In: " + juce::String (gn.channelCountIn)
-                                  + "    Out: " + juce::String (gn.channelCountOut);
-            if (gn.pluginDescription != nullptr
-                && gn.pluginDescription->pluginFormatName.isNotEmpty())
+            // Name and channel counts are in the panel's subtitle already.
+            juce::String infoText;
+            if (gn.pluginDescription != nullptr)
             {
-                infoText += "    Format: " + gn.pluginDescription->pluginFormatName;
+                infoText = gn.pluginDescription->pluginFormatName;
                 if (gn.pluginDescription->manufacturerName.isNotEmpty())
-                    infoText += "    by " + gn.pluginDescription->manufacturerName;
+                    infoText += (infoText.isNotEmpty() ? "    by " : "by ")
+                              + gn.pluginDescription->manufacturerName;
             }
             info_.setText (infoText, juce::dontSendNotification);
             info_.setColour (juce::Label::textColourId, juce::Colours::white.withAlpha (0.8f));
@@ -1219,7 +1219,16 @@ void NodePropertiesPanel::rebuildContent()
                             ? selectedNode_->displayName
                             : juce::String (nodeKindToString (selectedNode_->kind)),
                          juce::dontSendNotification);
-    subtitleLabel_.setText (juce::String (nodeKindToString (selectedNode_->kind))
+    // A plug-in node is named by its plug-in, a native node by its type.
+    auto kindText = juce::String (nodeKindToString (selectedNode_->kind));
+    if (selectedNode_->kind == NodeKind::Plugin)
+    {
+        if (selectedNode_->pluginDescription != nullptr && selectedNode_->pluginDescription->name.isNotEmpty())
+            kindText = selectedNode_->pluginDescription->name;
+        else if (selectedNode_->processor != nullptr)
+            kindText = selectedNode_->processor->getName();
+    }
+    subtitleLabel_.setText (kindText
                                 + "  •  in " + juce::String (selectedNode_->channelCountIn)
                                 + " / out " + juce::String (selectedNode_->channelCountOut),
                             juce::dontSendNotification);

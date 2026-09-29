@@ -39,6 +39,7 @@ public:
     PinComponent* findPin (PinComponent::Direction dir, int channelIndex) const;
 
 private:
+    int  headerHeight() const;
     void showContextMenu();
     void openPluginEditor();
     void openNativePropertiesWindow();

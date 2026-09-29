@@ -17,6 +17,7 @@ namespace
     constexpr int kPinSize    = 12;
     constexpr int kPinSpacing = 16;
     constexpr int kHeaderH    = 24;
+    constexpr int kSubtitleH  = 12;   // plug-in name row under the title
     constexpr int kPaddingX   = 16;
     constexpr int kMinWidth   = 140;
 }
@@ -25,7 +26,7 @@ NodeComponent::NodeComponent (GraphEditorComponent& editor, GraphNode& node)
     : editor_ (editor), node_ (node)
 {
     rebuildPins();
-    setSize (kMinWidth, kHeaderH + 16 + juce::jmax (1,
+    setSize (kMinWidth, headerHeight() + 16 + juce::jmax (1,
                        juce::jmax (node.channelCountIn, node.channelCountOut)) * kPinSpacing);
     setTopLeftPosition (node.editorPosition);
     setInterceptsMouseClicks (true, true);
@@ -59,14 +60,23 @@ void NodeComponent::rebuildPins()
                               PinComponent::kLinkChannel)));
 
     const int rows = juce::jmax (1, juce::jmax (node_.channelCountIn, node_.channelCountOut));
-    setSize (kMinWidth, kHeaderH + 16 + rows * kPinSpacing);
+    setSize (kMinWidth, headerHeight() + 16 + rows * kPinSpacing);
     resized();
+}
+
+int NodeComponent::headerHeight() const
+{
+    // Every node but the graph terminals reserves the subtitle row, so
+    // renaming a node never shifts its pins.
+    const bool isTerminal = node_.kind == NodeKind::InputTerminal
+                         || node_.kind == NodeKind::OutputTerminal;
+    return kHeaderH + (isTerminal ? 0 : kSubtitleH);
 }
 
 void NodeComponent::resized()
 {
     const int w = getWidth();
-    const int firstY = kHeaderH + 8;
+    const int firstY = headerHeight() + 8;
 
     for (int i = 0; i < inputPins_.size(); ++i)
         inputPins_[i]->setBounds (2, firstY + i * kPinSpacing, kPinSize, kPinSize);
@@ -160,6 +170,34 @@ void NodeComponent::paint (juce::Graphics& g)
     g.setFont (juce::Font (juce::FontOptions (10.0f)));
     g.setColour (juce::Colours::white.withAlpha (0.6f));
 
+    // What this node is: the title is usually a user-given name, so show the
+    // plug-in's own name (or its maker, when not renamed) or the native
+    // node type under it.
+    int detailTop = kHeaderH - 6;
+    if (headerHeight() > kHeaderH)
+    {
+        juce::String subtitle;
+        if (node_.kind != NodeKind::Plugin)
+        {
+            subtitle = nodeKindToString (node_.kind);
+        }
+        else if (node_.pluginDescription != nullptr)
+        {
+            subtitle = node_.pluginDescription->name != title ? node_.pluginDescription->name
+                                                               : node_.pluginDescription->manufacturerName;
+        }
+        else if (node_.processor != nullptr && node_.processor->getName() != title)
+        {
+            subtitle = node_.processor->getName();
+        }
+
+        auto subtitleArea = area.withTrimmedTop ((float) detailTop).withHeight (16.0f).reduced (8.0f, 2.0f);
+        g.setColour (juce::Colours::white.withAlpha (0.85f));
+        g.drawText (subtitle, subtitleArea, juce::Justification::centredLeft, true);
+        g.setColour (juce::Colours::white.withAlpha (0.6f));
+        detailTop += kSubtitleH;
+    }
+
     auto detail = juce::String (node_.channelCountIn) + " in / "
                 + juce::String (node_.channelCountOut) + " out";
 
@@ -173,7 +211,7 @@ void NodeComponent::paint (juce::Graphics& g)
         latencyText = juce::String::fromUTF8 (" \u00b7 ") + juce::String (latency) + " smp"
                     + (node_.ignoreLatency ? " ignored" : "");
 
-    auto detailArea = area.withTrimmedTop ((float) kHeaderH - 6.0f).withHeight (16.0f).reduced (8.0f, 2.0f);
+    auto detailArea = area.withTrimmedTop ((float) detailTop).withHeight (16.0f).reduced (8.0f, 2.0f);
     g.drawText (detail, detailArea, juce::Justification::centredLeft, true);
 
     if (latencyText.isNotEmpty())
@@ -188,7 +226,7 @@ void NodeComponent::paint (juce::Graphics& g)
     // Channel labels next to pins
     g.setFont (juce::Font (juce::FontOptions (9.0f)));
     g.setColour (juce::Colours::white.withAlpha (0.7f));
-    const int firstY = kHeaderH + 8;
+    const int firstY = headerHeight() + 8;
 
     for (int i = 0; i < node_.channelCountIn; ++i)
         g.drawText (juce::String (i + 1),
