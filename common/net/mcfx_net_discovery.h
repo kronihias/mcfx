@@ -256,9 +256,11 @@ private:
 
     void rebuildAdvertiser()
     {
-        advertiser.reset();
-        if (currentPort <= 0) return;
-        if (juce::Time::getCurrentTime() < firstBroadcastAt) return;
+        if (currentPort <= 0 || juce::Time::getCurrentTime() < firstBroadcastAt)
+        {
+            advertiser.reset();
+            return;
+        }
 
         juce::StringPairArray fields;
         fields.set ("uid",      lastInfo.uid);
@@ -273,9 +275,19 @@ private:
         // same way and reconstruct the uint32.
         if (lastInfo.wireUid != 0)        fields.set ("wuid",  juce::String ((juce::int64) lastInfo.wireUid));
 
-        advertiser = std::make_unique<juce::NetworkServiceDiscovery::Advertiser> (
-            serviceUid, buildDescription (fields),
-            broadcastPortFor (serviceUid), currentPort);
+        // Update in place (JUCE_patches/juce_network_advertiser.patch) rather
+        // than starting a new broadcast thread per change.
+        if (advertiser != nullptr)
+        {
+            advertiser->setServiceDescription (buildDescription (fields));
+            advertiser->setConnectionPort (currentPort);
+        }
+        else
+        {
+            advertiser = std::make_unique<juce::NetworkServiceDiscovery::Advertiser> (
+                serviceUid, buildDescription (fields),
+                broadcastPortFor (serviceUid), currentPort);
+        }
     }
 
     void rebuildList()
