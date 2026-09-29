@@ -298,8 +298,9 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
-### Unreleased
+### 0.9.0 (2026-09-29)
 
+- `mcfx_graph`: node tiles name what they are under the title — the plug-in's own name (or its maker, if the node isn't renamed) or the native node type — and the properties panel's subtitle names the plug-in instead of "plugin".
 - `mcfx_graph`: **convert to subgraph** — select nodes, then right-click → Convert to subgraph (or Cmd/Ctrl+G). The nodes move into a new subgraph and every connection stays intact: wires crossing the boundary go through new subgraph inputs/outputs, one per distinct source. One undo step.
 - `mcfx_graph`: **trackpad pinch zooms** the canvas around the cursor; two-finger swipes keep panning.
 - `mcfx_graph`: **delay compensation through subgraphs and at runtime** — a subgraph now reports the latency of what's inside it, so parallel paths around it line up; a plug-in changing its latency while running re-plans the compensation right away; and the host is told the new total whenever it changes, not only on transport start or project load.
@@ -313,6 +314,11 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 - `mcfx_graph`: **drop a node onto a wire to insert it** — Option/Alt-drag an unwired node over a wire; the wires between those two nodes are highlighted and on release run through the node, channel by channel.
 - `mcfx_graph`: a node's open window (a native node's editor, or a plug-in GUI inside a subgraph) now closes when the node is deleted, cut or moved, instead of staying open on a node that no longer exists.
 - `mcfx_graph`: changing a subgraph's channel count no longer empties it; only wires to removed input/output channels are dropped.
+- `mcfx_graph`: zooming the canvas no longer crowds nodes together (zoomed out) or spreads them apart (zoomed in); nodes added from the canvas menu and marquee selection are right at any zoom.
+- `mcfx_graph`: Return applies the channel-count popup.
+- `mcfx_mimoeq`: crossover bands allow Linkwitz-Riley LR2 and LR6 allpass orders.
+- `mcfx_send`/`mcfx_receive`: changing a sender's name or port updates the discovery broadcast in place instead of restarting it, which could force-kill a broadcast thread stuck in a system call.
+- Windows installer: Start menu shortcuts are their own option under "Standalone apps".
 
 ### 0.8.11 (2026-09-24)
 
