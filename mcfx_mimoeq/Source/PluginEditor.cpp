@@ -509,8 +509,13 @@ void Mcfx_mimoeqAudioProcessorEditor::changeListenerCallback(ChangeBroadcaster*)
     auto* chain = getActiveChain();
     graph_.setChain(chain); phaseGraph_.setChain(chain);
     refreshTabs();
+    // A structural restore (setStateInformation: undo, preset, host recall)
+    // rebuilds the chain's EqBand objects, so the band editor's pointer may be
+    // dangling — rebind it rather than just re-reading it.
     if (selectedBand_ >= 0 && chain != nullptr && selectedBand_ < chain->getNumBands())
-        bandEditor_.updateFromBand();
+        bandEditor_.setBand(chain->getBand(selectedBand_), selectedBand_);
+    else if (selectedBand_ >= 0)
+        selectBand(chain != nullptr ? chain->getNumBands() - 1 : -1);
     graph_.repaint();
     updateUndoRedoButtons();
     updateDiagChannelButton();

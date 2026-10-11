@@ -665,7 +665,13 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
     // Build and publish new processing state (lock-free)
     rebuildProcessingChains();
     syncModelToAPVTS();
-    sendChangeMessage();
+    // The EqBand objects were just replaced. Tell the editor synchronously when
+    // possible, so no queued UI callback (e.g. an async ComboBox change) can
+    // reach the band editor while it still points at a freed band.
+    if (MessageManager::existsAndIsCurrentThread())
+        sendSynchronousChangeMessage();
+    else
+        sendChangeMessage();
 }
 
 bool Mcfx_mimoeqAudioProcessor::loadConfigFromFile(const File& file)
