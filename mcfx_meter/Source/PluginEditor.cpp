@@ -306,24 +306,26 @@ void Ambix_meterAudioProcessorEditor::resized()
     // Strip order: title, which view, which channel, then the level controls.
     // The two selectors belong together — both answer "what am I looking at" —
     // and the level controls are the ones that can go when space runs out.
+    // Wide enough for "spectrogram", the longest view name.
     const int kViewComboX = 108;
-    const int kChanComboX = 204;
+    const int kViewComboW = 112;
+    const int kChanComboX = kViewComboX + kViewComboW + 4;
 
     // Only the bars have no channel selection, so only they get that space
     // back. The level controls shift by whatever precedes them.
     const bool hasChanCombo = ! bars && ! scope;   // the scope has its own range
-    const int  kCtlShift    = hasChanCombo ? 192 : 96;
+    const int  kCtlShift    = hasChanCombo ? 212 : 116;
 
     // Below the width its own controls need, the strip keeps the selectors and
     // drops the level controls — which is what lets the ring shrink to a
     // corner-of-the-screen glance. They mean nothing to the waterfall or the
     // dots in any case.
-    const int  needed        = hasChanCombo ? 673 : kMinEditorWidth;
+    const int  needed        = hasChanCombo ? 693 : kMinEditorWidth;
     const bool showLevelCtls = ! wf && ! scope && mode != Ambix_meterAudioProcessor::ViewMode::Dots
                                    && getWidth() >= needed;
 
     label.setBounds (0, 0, 104, 16);
-    cb_view.setBounds (kViewComboX, 1, 92, 22);
+    cb_view.setBounds (kViewComboX, 1, kViewComboW, 22);
     cb_channel.setBounds (kChanComboX, 1, 88, 22);
 
     // Goes too once the window is narrower than it is wide — at the ring's
@@ -725,7 +727,7 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
             const int h = ourProcessor->_size_dots_h;
             // The compact one: it only needs the strip's compacted width and
             // enough height for a row of dots.
-            setResizeLimits (210, 90, 2000, 2000);
+            setResizeLimits (230, 90, 2000, 2000);
             _width  = w;
             _height = h;
             setSize (w, h);

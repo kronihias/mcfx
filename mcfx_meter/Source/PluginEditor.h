@@ -138,13 +138,11 @@ private:
     // stomp a size the user chose in one of the resizable views.
     void applyModeSizing();
 
-    // The control strip is laid out at absolute pixel positions: the peak-hold
-    // toggle ends at x=473 and the view selector runs 481..573, so anything
-    // narrower than this hides the selector entirely — with no other way to get
-    // back to the bar view. The bar view alone is narrower than this below ~32
-    // channels, which is why the strip already clipped before the selector
-    // existed.
-    static constexpr int kMinEditorWidth = 581;
+    // The control strip is laid out at absolute pixel positions: in the bar
+    // view the peak-hold toggle ends at x=589, past the view selector
+    // (108..220), so anything narrower than this clips the level controls.
+    // The bar view alone is narrower than this below ~32 channels.
+    static constexpr int kMinEditorWidth = 601;
 
     // Counts ticks so the waterfall repaints once per analyser sweep.
     int _wf_tick = 0;
