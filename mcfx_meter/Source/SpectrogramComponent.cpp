@@ -50,13 +50,56 @@ namespace
     constexpr int   kCqResolution = 24;
     constexpr int   kCqDensity    = 48;
 
-    // Inferno-like: dark, through purple and red, to pale yellow. Monotonic in
-    // lightness, so the level reads correctly in greyscale and on a projector
-    // that washes colours out.
-    const uint8 kLutAnchors[][3] = {
-        {   0,   0,   4 }, {  31,  12,  72 }, {  85,  15, 109 }, { 136,  34, 106 },
-        { 186,  54,  85 }, { 227,  89,  51 }, { 249, 140,  10 }, { 249, 201,  50 },
-        { 252, 255, 164 } };
+    // Colour maps, quiet to loud, as anchors interpolated into a 256-entry
+    // table. The first four are the perceptually uniform matplotlib maps —
+    // monotonic in lightness, so level reads right in greyscale and on a
+    // projector that washes colours out. The rest follow Sonic Visualiser's
+    // set in spirit (its exact colours are not copied): green, sunset, ice, a
+    // rainbow, plain grey either way round — black on white is the one for a
+    // bright room or for printing — and a banded map whose steps make levels
+    // easy to compare across the picture.
+    struct ColourMap { const char* name; std::vector<std::array<uint8, 3>> anchors; int bands; };
+    const std::vector<ColourMap>& colourMaps()
+    {
+        static const std::vector<ColourMap> maps {
+            { "inferno", { {0,0,4}, {31,12,72}, {85,15,109}, {136,34,106}, {186,54,85},
+                           {227,89,51}, {249,140,10}, {249,201,50}, {252,255,164} }, 0 },
+            { "magma",   { {0,0,4}, {28,16,68}, {79,18,123}, {129,37,129}, {181,54,122},
+                           {229,80,100}, {251,135,97}, {254,194,135}, {252,253,191} }, 0 },
+            { "viridis", { {68,1,84}, {72,40,120}, {62,73,137}, {49,104,142}, {38,130,142},
+                           {31,158,137}, {53,183,121}, {110,206,88}, {181,222,43}, {253,231,37} }, 0 },
+            { "cividis", { {0,32,77}, {0,52,110}, {57,72,108}, {87,92,109}, {112,113,115},
+                           {138,134,120}, {166,157,117}, {196,181,108}, {227,206,92}, {255,234,70} }, 0 },
+            { "green",   { {0,0,0}, {0,48,0}, {0,120,30}, {40,190,20}, {160,230,0},
+                           {255,255,90}, {255,255,255} }, 0 },
+            { "sunset",  { {0,0,0}, {52,0,84}, {150,0,90}, {220,40,40}, {250,120,0},
+                           {255,200,40}, {255,255,210} }, 0 },
+            { "ice",     { {0,0,0}, {0,18,64}, {0,70,150}, {30,140,220}, {120,210,250},
+                           {200,245,255}, {255,255,255} }, 0 },
+            { "rainbow", { {48,18,59}, {70,107,227}, {40,187,236}, {50,241,151}, {164,252,60},
+                           {237,208,58}, {251,128,34}, {205,51,10}, {122,4,3} }, 0 },
+            { "white on black", { {0,0,0}, {255,255,255} }, 0 },
+            { "black on white", { {255,255,255}, {0,0,0} }, 0 },
+            { "banded",  { {48,18,59}, {70,107,227}, {40,187,236}, {50,241,151}, {164,252,60},
+                           {237,208,58}, {251,128,34}, {205,51,10}, {122,4,3} }, 12 },
+        };
+        return maps;
+    }
+
+    // IEC 60268-18 meter law, as the bars use: 0 at -70 dB, 1 at 0 dB.
+    float iecFraction (float dB)
+    {
+        if (dB < -70.f) return 0.f;
+        if (dB < -60.f) return (dB + 70.f) * 0.0025f;
+        if (dB < -50.f) return (dB + 60.f) * 0.005f + 0.025f;
+        if (dB < -40.f) return (dB + 50.f) * 0.0075f + 0.075f;
+        if (dB < -30.f) return (dB + 40.f) * 0.015f + 0.15f;
+        if (dB < -20.f) return (dB + 30.f) * 0.02f + 0.3f;
+        if (dB <   0.f) return (dB + 20.f) * 0.025f + 0.5f;
+        return 1.f;
+    }
+
+    constexpr int kNumColourScales = 3, kNumNormalise = 4, kNumFreqScales = 3, kNumWindows = 4;
 
     const Colour kAccent (0xffff9a3d);
 }
@@ -67,17 +110,7 @@ SpectrogramComponent::SpectrogramComponent()
     setOpaque (false);
     settings_ = &ownSettings_;
 
-    // 256-entry colour table from the anchors above.
-    lut_.resize (256);
-    const int nA = (int) (sizeof (kLutAnchors) / sizeof (kLutAnchors[0]));
-    for (int i = 0; i < 256; ++i)
-    {
-        const float t = (float) i / 255.f * (float) (nA - 1);
-        const int a = jmin (nA - 2, (int) t);
-        const float f = t - (float) a;
-        auto mix = [&] (int k) { return (uint8) roundToInt ((1.f - f) * kLutAnchors[a][k] + f * kLutAnchors[a + 1][k]); };
-        lut_[(size_t) i] = Colour (mix (0), mix (1), mix (2));
-    }
+    buildLut();
 
     auto setupCombo = [this] (ComboBox& cb, const String& tip)
     {
@@ -120,7 +153,56 @@ SpectrogramComponent::SpectrogramComponent()
     btnPause_.setTooltip ("Stop scrolling to read the picture. Hover for frequency, note, level and time.");
     btnPause_.addListener (this);
 
+    {
+        // A gear: eight teeth around a hole.
+        Path gear;
+        gear.addStar ({ 8.f, 8.f }, 8, 5.2f, 8.f);
+        gear.addEllipse (5.2f, 5.2f, 5.6f, 5.6f);
+        gear.setUsingNonZeroWinding (false);
+        btnSettings_.setShape (gear, false, true, false);
+        btnSettings_.setBorderSize (BorderSize<int> (3));
+        btnSettings_.setTooltip ("Display settings: colours, colour scale, normalisation, "
+                                 "frequency axis, note names, window size...");
+        btnSettings_.onClick = [this] { showSettings(); };
+        addAndMakeVisible (btnSettings_);
+    }
+
     syncControlsFromSettings();
+}
+
+SpectrogramComponent::~SpectrogramComponent()
+{
+    // The settings callout lives on the desktop and edits our settings; it
+    // must not outlive us.
+    if (auto* c = callout_.getComponent())
+        delete c;
+}
+
+StringArray SpectrogramComponent::colourMapNames()
+{
+    StringArray names;
+    for (auto& m : colourMaps())
+        names.add (m.name);
+    return names;
+}
+
+void SpectrogramComponent::buildLut()
+{
+    const auto& map = colourMaps()[(size_t) jlimit (0, (int) colourMaps().size() - 1, settings_->colourMap)];
+    const int nA = (int) map.anchors.size();
+    lut_.resize (256);
+    for (int i = 0; i < 256; ++i)
+    {
+        float t = (float) i / 255.f;
+        if (map.bands > 0)        // stepped: hold each band's colour flat
+            t = jmin (1.f, std::floor (t * (float) map.bands) / (float) (map.bands - 1));
+        const float x = t * (float) (nA - 1);
+        const int a = jmin (nA - 2, (int) x);
+        const float f = x - (float) a;
+        auto mix = [&] (int k) { return (uint8) roundToInt ((1.f - f) * map.anchors[(size_t) a][(size_t) k]
+                                                             + f * map.anchors[(size_t) a + 1][(size_t) k]); };
+        lut_[(size_t) i] = Colour (mix (0), mix (1), mix (2));
+    }
 }
 
 void SpectrogramComponent::setSettings (SpectroSettings* settings)
@@ -128,6 +210,10 @@ void SpectrogramComponent::setSettings (SpectroSettings* settings)
     settings_ = settings != nullptr ? settings : &ownSettings_;
     clampSettings();
     syncControlsFromSettings();
+    buildLut();
+    if (sr_ > 0.0)
+        prepareAnalysis (sr_);      // window size and frequency axis may differ
+    applied_ = *settings_;
     updateWantedResolution();
     resetHistory();
 }
@@ -162,6 +248,11 @@ void SpectrogramComponent::clampSettings()
     s.rangeIdx = jlimit (0, countOf (kRangeDb) - 1, s.rangeIdx);
     if (! (s.zoomHi > s.zoomLo && s.zoomLo > 0.f))
         s.zoomLo = s.zoomHi = 0.f;
+    s.colourMap   = jlimit (0, (int) colourMaps().size() - 1, s.colourMap);
+    s.colourScale = jlimit (0, kNumColourScales - 1, s.colourScale);
+    s.normalise   = jlimit (0, kNumNormalise - 1, s.normalise);
+    s.freqScale   = jlimit (0, kNumFreqScales - 1, s.freqScale);
+    s.windowIdx   = jlimit (0, kNumWindows - 1, s.windowIdx);
 }
 
 void SpectrogramComponent::syncControlsFromSettings()
@@ -173,23 +264,72 @@ void SpectrogramComponent::syncControlsFromSettings()
     cbTop_.setSelectedId (settings_->topIdx + 1, dontSendNotification);
     cbRange_.setSelectedId (settings_->rangeIdx + 1, dontSendNotification);
     cbRes_.setSelectedId (settings_->fineBass ? 2 : 1, dontSendNotification);
+    // Auto top sets the top itself.
+    cbTop_.setEnabled (settings_->normalise != 3);
 }
 
 int SpectrogramComponent::numShown() const { return settings_->lastCh - settings_->firstCh + 1; }
 int SpectrogramComponent::numLanes() const { return settings_->stacked ? numShown() : 1; }
 
-float SpectrogramComponent::topDb() const   { return kTopDb[settings_->topIdx]; }
+float SpectrogramComponent::topDb() const
+{
+    return settings_->normalise == 3 ? colouredAutoTop_ : kTopDb[settings_->topIdx];
+}
+
 float SpectrogramComponent::rangeDb() const { return kRangeDb[settings_->rangeIdx]; }
 
-Colour SpectrogramComponent::colourFor (float db) const
+Colour SpectrogramComponent::colourFor (float db, float offset) const
 {
-    const float t = (db - (topDb() - rangeDb())) / rangeDb();
+    const float top = topDb();
+    const float x = db + offset;
+    float t;
+    switch (settings_->colourScale)
+    {
+        case 1:  t = iecFraction (x - top); break;                        // meter: fixed 70 dB law
+        case 2:  t = Decibels::decibelsToGain (x - top, -400.f); break;   // linear amplitude
+        default: t = (x - (top - rangeDb())) / rangeDb(); break;          // dB
+    }
     return lut_[(size_t) jlimit (0, 255, roundToInt (t * 255.f))];
+}
+
+float SpectrogramComponent::colourOffset (int lane, int col) const
+{
+    // Column normalisation lifts each column so its loudest row reaches the
+    // top: quiet passages and steady tones in a loud mix become visible. Half
+    // (Sonic Visualiser's "hybrid", roughly) keeps half of the level
+    // difference between columns. Silence is never lifted past 120 dB.
+    const int mode = settings_->normalise;
+    if (mode != 1 && mode != 2)
+        return 0.f;
+    const float m = jmax (-120.f, lanes_[(size_t) lane].colMax[(size_t) col]);
+    const float lift = topDb() - m;
+    return mode == 1 ? lift : 0.5f * lift;
+}
+
+void SpectrogramComponent::updateAutoTop()
+{
+    // Auto top (Sonic Visualiser's "view" normalisation): the loudest level in
+    // the visible history becomes the top. Re-colouring everything is not
+    // free, so only when it has moved by more than a dB.
+    if (settings_->normalise != 3)
+        return;
+    float m = -120.f;
+    const int filled = (int) jmin ((int64) cols_, colCount_);
+    for (auto& lane : lanes_)
+        for (int c = 0; c < filled; ++c)
+            m = jmax (m, lane.colMax[(size_t) c]);
+    autoTop_ = m;
+    if (std::abs (autoTop_ - colouredAutoTop_) > 1.f)
+    {
+        colouredAutoTop_ = autoTop_;
+        recolourAll();
+    }
 }
 
 float SpectrogramComponent::rowHz (int row) const
 {
-    return fMin_ * std::pow (fMax_ / fMin_, ((float) row + 0.5f) / (float) rows_);
+    const float a = warp (fMin_), b = warp (fMax_);
+    return unwarp (a + (b - a) * ((float) row + 0.5f) / (float) rows_);
 }
 
 //==============================================================================
@@ -198,7 +338,8 @@ void SpectrogramComponent::prepareAnalysis (double sr)
     sr_ = sr;
 
     // ~6 Hz bins whatever the rate: 8192 points at 48 kHz.
-    const int order = jlimit (12, 15, 13 + roundToInt (std::log2 (sr / 48000.0)));
+    // Same time span whatever the rate: 2048..16384 points at 48 kHz.
+    const int order = jlimit (11, 16, 11 + settings_->windowIdx + roundToInt (std::log2 (sr / 48000.0)));
     fft_.prepare (order);
     const int N = fft_.getSize();
 
@@ -351,8 +492,10 @@ void SpectrogramComponent::buildRowBins()
     rowBins_.assign ((size_t) rows_, RowBins{});
     for (int r = 0; r < rows_; ++r)
     {
-        const double lo = fMin_ * std::pow ((double) fMax_ / fMin_, (double) r / rows_) / binHz;
-        const double hi = fMin_ * std::pow ((double) fMax_ / fMin_, (double) (r + 1) / rows_) / binHz;
+        // Row edges on the chosen axis, in FFT bins.
+        const float w0 = warp (fMin_), w1 = warp (fMax_);
+        const double lo = (double) unwarp (w0 + (w1 - w0) * (float) r / (float) rows_) / binHz;
+        const double hi = (double) unwarp (w0 + (w1 - w0) * (float) (r + 1) / (float) rows_) / binHz;
         auto& rb = rowBins_[(size_t) r];
         // Only rows well under a bin wide interpolate. A row about one bin
         // wide may contain no bin centre at all, and interpolating there
@@ -396,6 +539,7 @@ void SpectrogramComponent::resetHistory()
         l.avgPow.assign ((size_t) rows_, 0.f);
         l.peak.assign ((size_t) rows_, kFloorDb);
         l.peakAge.assign ((size_t) rows_, 0.f);
+        l.colMax.assign ((size_t) cols_, kFloorDb);
     }
     colCount_ = 0;
     nextColAbs_ = -1.0;
@@ -419,7 +563,7 @@ void SpectrogramComponent::updateWantedResolution()
 
     // Rows cover the whole range, so zoomed in they need more of them for the
     // shown part to stay as fine as the screen.
-    const float shownFraction = std::log (zoomHi() / zoomLo()) / std::log (fMax_ / fMin_);
+    const float shownFraction = (warp (zoomHi()) - warp (zoomLo())) / (warp (fMax_) - warp (fMin_));
     const int rows = jlimit (96, 1024, roundToInt (h.getHeight() / jmax (0.05f, shownFraction)));
 
     // Ignore small changes: each one costs a resample of the whole history,
@@ -483,6 +627,11 @@ void SpectrogramComponent::resampleHistory (int newCols, int newRows)
         resampleRows (lane.peakAge, false);
 
         lane.image = Image (Image::RGB, newCols, newRows, false);
+
+        lane.colMax.assign ((size_t) newCols, kFloorDb);
+        for (int c = 0; c < newCols; ++c)
+            for (int r = 0; r < newRows; ++r)
+                lane.colMax[(size_t) c] = jmax (lane.colMax[(size_t) c], lane.db[(size_t) c * newRows + (size_t) r]);
     }
 
     cols_ = newCols;
@@ -536,7 +685,10 @@ void SpectrogramComponent::tick()
     }
 
     if (produced > 0)
+    {
+        updateAutoTop();
         repaint();
+    }
 }
 
 void SpectrogramComponent::produceColumn (int64 centreAbs, int64 written)
@@ -601,7 +753,7 @@ void SpectrogramComponent::produceColumn (int64 centreAbs, int64 written)
         }
         const int lastCq = (int) bassPow_.size() - 1;
 
-        Image::BitmapData bd (lane.image, col, 0, 1, rows_, Image::BitmapData::writeOnly);
+        float colMax = kFloorDb;
 
         for (int r = 0; r < rows_; ++r)
         {
@@ -636,7 +788,7 @@ void SpectrogramComponent::produceColumn (int64 centreAbs, int64 written)
 
             const float db = 10.f * std::log10 (jmax (p, 1.0e-20f));
             lane.db[(size_t) col * rows_ + (size_t) r] = db;
-            bd.setPixelColour (0, rows_ - 1 - r, colourFor (db));
+            colMax = jmax (colMax, db);
 
             // The strip alongside: instantaneous, average (in power), held peak.
             lane.inst[(size_t) r] = db;
@@ -652,6 +804,14 @@ void SpectrogramComponent::produceColumn (int64 centreAbs, int64 written)
                     pk = jmax (db, pk - kPeakFallDbS * hopSec);
             }
         }
+
+        // Coloured once the column's maximum is known, for normalising.
+        lane.colMax[(size_t) col] = colMax;
+        const float offset = colourOffset (li, col);
+        Image::BitmapData bd (lane.image, col, 0, 1, rows_, Image::BitmapData::writeOnly);
+        const float* dbCol = lane.db.data() + (size_t) col * rows_;
+        for (int r = 0; r < rows_; ++r)
+            bd.setPixelColour (0, rows_ - 1 - r, colourFor (dbCol[r], offset));
     }
 
     ++colCount_;
@@ -659,14 +819,16 @@ void SpectrogramComponent::produceColumn (int64 centreAbs, int64 written)
 
 void SpectrogramComponent::recolourAll()
 {
-    for (auto& lane : lanes_)
+    for (int li = 0; li < (int) lanes_.size(); ++li)
     {
+        auto& lane = lanes_[(size_t) li];
         Image::BitmapData bd (lane.image, Image::BitmapData::writeOnly);
         for (int c = 0; c < cols_; ++c)
+        {
+            const float offset = colourOffset (li, c);
             for (int r = 0; r < rows_; ++r)
-            {
-                bd.setPixelColour (c, rows_ - 1 - r, colourFor (lane.db[(size_t) c * rows_ + (size_t) r]));
-            }
+                bd.setPixelColour (c, rows_ - 1 - r, colourFor (lane.db[(size_t) c * rows_ + (size_t) r], offset));
+        }
     }
     repaint();
 }
@@ -738,6 +900,164 @@ void SpectrogramComponent::buttonClicked (Button* b)
 }
 
 //==============================================================================
+namespace
+{
+    /** The display options, in a callout from the gear button. Edits the
+        settings in place and reports each change. */
+    class SpectroSettingsPanel : public Component
+    {
+    public:
+        SpectroSettingsPanel (SpectroSettings& s, std::function<void()> onChange)
+            : settings (s), changed (std::move (onChange))
+        {
+            addRow ("colours",        SpectrogramComponent::colourMapNames(), s.colourMap,
+                    "Colour map. The first four read correctly in greyscale; black on white "
+                    "is for a bright room or for printing; banded makes equal levels easy to spot.",
+                    [] (SpectroSettings& x, int v) { x.colourMap = v; });
+            addRow ("colour scale",   { "dB", "meter (IEC)", "linear" }, s.colourScale,
+                    "How level maps to colour. dB: evenly over the range. meter: the bars' "
+                    "IEC law, fixed 70 dB, more room near the top. linear: amplitude, so only "
+                    "the strongest components show.",
+                    [] (SpectroSettings& x, int v) { x.colourScale = v; });
+            addRow ("normalise",      { "off", "each column", "half", "auto top" }, s.normalise,
+                    "each column: every moment's loudest component reaches the top, so quiet "
+                    "passages and steady tones in a loud mix show. half: keeps half of the "
+                    "level difference between moments. auto top: the loudest level in view "
+                    "sets the top.",
+                    [] (SpectroSettings& x, int v) { x.normalise = v; });
+            addRow ("frequency axis", { "log", "mel", "linear" }, s.freqScale,
+                    "log: equal space per octave (musical). mel: roughly how pitch is heard; "
+                    "more room for the mids. linear: equal space per Hz, so harmonics are "
+                    "evenly spaced.",
+                    [] (SpectroSettings& x, int v) { x.freqScale = v; });
+            addRow ("axis labels",    { "Hz", "notes + keyboard" }, s.noteLabels ? 1 : 0,
+                    "Label the frequency axis in Hz, or with note names and a keyboard.",
+                    [] (SpectroSettings& x, int v) { x.noteLabels = v == 1; });
+            addRow ("treble window",  { "2048 (sharpest in time)", "4096", "8192", "16384 (finest in pitch)" },
+                    s.windowIdx,
+                    "FFT length at 48 kHz (scaled with the rate). Shorter: transients sharper, "
+                    "pitch coarser, less latency. Longer: the reverse. The fine-bass analysis "
+                    "below ~450 Hz is not affected.",
+                    [] (SpectroSettings& x, int v) { x.windowIdx = v; });
+
+            addToggle ("smooth picture", s.smooth, "Interpolate between analysis cells, or show them as pixels.",
+                       [] (SpectroSettings& x, bool v) { x.smooth = v; });
+            addToggle ("spectrum strip", s.showStrip, "The live spectrum beside the history.",
+                       [] (SpectroSettings& x, bool v) { x.showStrip = v; });
+            addToggle ("harmonic cursor", s.harmonics,
+                       "While hovering, mark 2x to 20x the frequency under the pointer: "
+                       "tells a fundamental and its harmonics from unrelated tones.",
+                       [] (SpectroSettings& x, bool v) { x.harmonics = v; });
+
+            setSize (330, 8 + (int) combos.size() * 28 + (int) toggles.size() * 24 + 6);
+        }
+
+        void resized() override
+        {
+            int y = 8;
+            for (size_t i = 0; i < combos.size(); ++i, y += 28)
+            {
+                labels[i]->setBounds (8, y, 104, 22);
+                combos[i]->setBounds (114, y, getWidth() - 122, 22);
+            }
+            for (auto* t : toggles)
+            {
+                t->setBounds (110, y, getWidth() - 118, 22);
+                y += 24;
+            }
+        }
+
+    private:
+        void addRow (const String& name, const StringArray& items, int selected, const String& tip,
+                     std::function<void (SpectroSettings&, int)> set)
+        {
+            auto* l = labels.add (new Label ({}, name));
+            l->setColour (Label::textColourId, Colours::white);
+            l->setJustificationType (Justification::centredRight);
+            addAndMakeVisible (l);
+
+            auto* cb = combos.add (new ComboBox());
+            cb->addItemList (items, 1);
+            cb->setSelectedItemIndex (selected, dontSendNotification);
+            cb->setTooltip (tip);
+            cb->onChange = [this, cb, set] { set (settings, cb->getSelectedItemIndex()); changed(); };
+            addAndMakeVisible (cb);
+        }
+
+        void addToggle (const String& name, bool on, const String& tip,
+                        std::function<void (SpectroSettings&, bool)> set)
+        {
+            auto* t = toggles.add (new ToggleButton (name));
+            t->setToggleState (on, dontSendNotification);
+            t->setTooltip (tip);
+            t->setColour (ToggleButton::textColourId, Colours::white);
+            t->onClick = [this, t, set] { set (settings, t->getToggleState()); changed(); };
+            addAndMakeVisible (t);
+        }
+
+        SpectroSettings& settings;
+        std::function<void()> changed;
+        OwnedArray<Label> labels;
+        OwnedArray<ComboBox> combos;
+        OwnedArray<ToggleButton> toggles;
+    };
+}
+
+void SpectrogramComponent::showSettings()
+{
+    if (callout_ != nullptr)
+        return;
+
+    auto panel = std::make_unique<SpectroSettingsPanel> (*settings_,
+        [safe = Component::SafePointer<SpectrogramComponent> (this)]
+        {
+            if (safe != nullptr)
+                safe->settingsChanged();
+        });
+    callout_ = &CallOutBox::launchAsynchronously (std::move (panel), btnSettings_.getScreenBounds(), nullptr);
+}
+
+void SpectrogramComponent::settingsChanged()
+{
+    clampSettings();
+    const auto& s = *settings_;
+    const auto  a = applied_;
+
+    if (s.colourMap != a.colourMap)
+        buildLut();
+
+    if (s.windowIdx != a.windowIdx || s.freqScale != a.freqScale)
+    {
+        // The analysis rows mean something else now: rebuild and start over.
+        if (sr_ > 0.0)
+            prepareAnalysis (sr_);
+        updateWantedResolution();
+        resetHistory();
+    }
+    else
+    {
+        if (s.showStrip != a.showStrip)
+            updateWantedResolution();          // the history got wider or narrower
+
+        if (s.normalise == 3 && a.normalise != 3)
+            colouredAutoTop_ = autoTop_ = jmax (-120.f, autoTop_);
+
+        if (s.colourMap != a.colourMap || s.colourScale != a.colourScale || s.normalise != a.normalise)
+        {
+            if (s.normalise == 3)
+            {
+                colouredAutoTop_ = -1000.f;    // force updateAutoTop() to recolour
+                updateAutoTop();
+            }
+            recolourAll();
+        }
+    }
+
+    applied_ = s;
+    syncControlsFromSettings();
+    repaint();
+}
+
 void SpectrogramComponent::resized()
 {
     s_ = displayScaleFor (getWidth(), getHeight());
@@ -755,7 +1075,8 @@ void SpectrogramComponent::resized()
     place (cbTop_, 92);
     place (cbRange_, 112);
     place (cbRes_, 92, 8);
-    place (btnPause_, 58);
+    place (btnPause_, 58, 6);
+    place (btnSettings_, 22);
 
     updateWantedResolution();
 }
@@ -778,6 +1099,8 @@ Rectangle<float> SpectrogramComponent::laneArea (int lane) const
 Rectangle<float> SpectrogramComponent::stripArea (int lane) const
 {
     const auto l = laneArea (lane);
+    if (! settings_->showStrip)
+        return l.withLeft (l.getRight());       // none: the history takes the width
     const float w = jlimit (60.f * s_, 160.f * s_, l.getWidth() * 0.15f);
     return l.withLeft (l.getRight() - w);
 }
@@ -785,7 +1108,7 @@ Rectangle<float> SpectrogramComponent::stripArea (int lane) const
 Rectangle<float> SpectrogramComponent::historyArea (int lane) const
 {
     const auto l = laneArea (lane);
-    return l.withRight (stripArea (lane).getX() - 6.f * s_);
+    return settings_->showStrip ? l.withRight (stripArea (lane).getX() - 6.f * s_) : l;
 }
 
 int SpectrogramComponent::laneAt (Point<float> p) const
@@ -806,15 +1129,40 @@ float SpectrogramComponent::zoomHi() const
     return settings_->zoomHi > 0.f ? jlimit (zoomLo() * 1.01f, fMax_, settings_->zoomHi) : fMax_;
 }
 
+// The frequency axis. Everything that places a frequency — analysis rows,
+// zoom, drawing, hover — goes through warp(), so log, mel and linear axes are
+// one code path. warp() is monotonic; only differences of it matter.
+float SpectrogramComponent::warp (float hz) const
+{
+    switch (settings_->freqScale)
+    {
+        case 1:  return 2595.f * std::log10 (1.f + hz / 700.f);    // mel
+        case 2:  return hz;                                         // linear
+        default: return std::log (jmax (1.0e-3f, hz));              // log
+    }
+}
+
+float SpectrogramComponent::unwarp (float w) const
+{
+    switch (settings_->freqScale)
+    {
+        case 1:  return 700.f * (std::pow (10.f, w / 2595.f) - 1.f);
+        case 2:  return w;
+        default: return std::exp (w);
+    }
+}
+
 float SpectrogramComponent::rowPos (float hz) const
 {
-    return std::log (hz / fMin_) / std::log (fMax_ / fMin_) * (float) rows_;
+    return (warp (hz) - warp (fMin_)) / (warp (fMax_) - warp (fMin_)) * (float) rows_;
 }
 
 void SpectrogramComponent::setZoom (float lo, float hi)
 {
-    const float full = std::log (fMax_ / fMin_);
-    const float minSpan = std::log (2.f) * 0.5f;          // half an octave
+    const float w0 = warp (fMin_);
+    const float full = warp (fMax_) - w0;
+    // Half an octave on the log axis; a hundredth of the range on the others.
+    const float minSpan = settings_->freqScale == 0 ? std::log (2.f) * 0.5f : full * 0.01f;
 
     if (hi <= 0.f || lo <= 0.f)
     {
@@ -822,7 +1170,7 @@ void SpectrogramComponent::setZoom (float lo, float hi)
     }
     else
     {
-        float a = std::log (lo / fMin_), b = std::log (hi / fMin_);
+        float a = warp (lo) - w0, b = warp (hi) - w0;
         float span = jlimit (minSpan, full, b - a);
         const float mid = 0.5f * (a + b);
         a = jlimit (0.f, full - span, mid - 0.5f * span);
@@ -832,8 +1180,8 @@ void SpectrogramComponent::setZoom (float lo, float hi)
             settings_->zoomLo = settings_->zoomHi = 0.f;    // all of it: say so
         else
         {
-            settings_->zoomLo = fMin_ * std::exp (a);
-            settings_->zoomHi = fMin_ * std::exp (b);
+            settings_->zoomLo = unwarp (w0 + a);
+            settings_->zoomHi = unwarp (w0 + b);
         }
     }
 
@@ -843,14 +1191,16 @@ void SpectrogramComponent::setZoom (float lo, float hi)
 
 float SpectrogramComponent::hzToY (float hz, Rectangle<float> r) const
 {
-    const float t = std::log (hz / zoomLo()) / std::log (zoomHi() / zoomLo());
+    const float a = warp (zoomLo()), b = warp (zoomHi());
+    const float t = (warp (hz) - a) / (b - a);
     return r.getBottom() - t * r.getHeight();
 }
 
 float SpectrogramComponent::yToHz (float y, Rectangle<float> r) const
 {
+    const float a = warp (zoomLo()), b = warp (zoomHi());
     const float t = (r.getBottom() - y) / r.getHeight();
-    return zoomLo() * std::pow (zoomHi() / zoomLo(), t);
+    return unwarp (a + t * (b - a));
 }
 
 String SpectrogramComponent::formatHz (float hz)
@@ -894,7 +1244,14 @@ void SpectrogramComponent::paint (Graphics& g)
     const float imgTop = (float) rows_ - rowPos (zHi);
     const float imgBot = (float) rows_ - rowPos (zLo);
 
-    g.setImageResamplingQuality (Graphics::mediumResamplingQuality);
+    g.setImageResamplingQuality (settings_->smooth ? Graphics::mediumResamplingQuality
+                                                   : Graphics::lowResamplingQuality);
+
+    // Notes, for the note labels and the keyboard.
+    auto midiOf  = [] (float hz) { return 69.f + 12.f * std::log2 (jmax (1.0e-3f, hz) / 440.f); };
+    auto hzOfMidi = [] (float m) { return 440.f * std::pow (2.f, (m - 69.f) / 12.f); };
+    static const char* noteNames[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    auto isBlackKey = [] (int n) { const int k = ((n % 12) + 12) % 12; return k == 1 || k == 3 || k == 6 || k == 8 || k == 10; };
 
     for (int li = 0; li < (int) lanes_.size(); ++li)
     {
@@ -929,6 +1286,9 @@ void SpectrogramComponent::paint (Graphics& g)
         }
 
         // Strip: the current spectrum against the same frequency axis.
+        const bool hasStrip = s.getWidth() >= 1.f;
+        if (hasStrip)
+        {
         g.setColour (Colour (0xe0101010));
         g.fillRect (s);
 
@@ -973,27 +1333,98 @@ void SpectrogramComponent::paint (Graphics& g)
             g.strokePath (peak, PathStrokeType (jmax (1.f, s_)));
         }
 
-        // Shared frequency grid, across history and strip alike.
+        // Colour legend along the strip's bottom edge: the strip's level axis
+        // is the colour scale's, so this is exactly how a level is coloured.
+        {
+            const float lh = 5.f * s_;
+            for (int px = 0; px < (int) s.getWidth(); ++px)
+            {
+                const float db = floorDb + rangeDb() * ((float) px + 0.5f) / s.getWidth();
+                g.setColour (colourFor (db));
+                g.fillRect (s.getX() + (float) px, s.getBottom() - lh, 1.f, lh);
+            }
+        }
+        }
+
+        // Shared frequency grid, across history and strip alike: Hz, or notes
+        // with a keyboard down the axis (as Sonic Visualiser draws it).
+        struct Mark { float hz; String text; bool major; };
+        std::vector<Mark> marks;
+        const bool notes = settings_->noteLabels;
+        const float kbW = notes && h.getHeight() >= 60.f * s_ ? 10.f * s_ : 0.f;
+
+        if (notes)
+        {
+            const int n0 = (int) std::ceil (midiOf (zLo)), n1 = (int) std::floor (midiOf (zHi));
+            for (int n = n0; n <= n1; ++n)
+            {
+                const float f = hzOfMidi ((float) n);
+                const float sp = std::abs (hzToY (f, h) - hzToY (hzOfMidi ((float) n + 1.f), h));
+                const bool isC = ((n % 12) + 12) % 12 == 0;
+                // Every C; every note once there is room for each.
+                if (isC || sp >= 13.f * s_)
+                    marks.push_back ({ f, String (noteNames[((n % 12) + 12) % 12]) + String (n / 12 - 1), isC });
+            }
+        }
+        else if (settings_->freqScale == 2)
+        {
+            // Linear axis: an even step from 1-2-5, as many as fit.
+            const float want = jmax (2.f, h.getHeight() / (32.f * s_));
+            const float raw = (zHi - zLo) / want;
+            const float p10 = std::pow (10.f, std::floor (std::log10 (raw)));
+            const float m = raw / p10;
+            const float step = p10 * (m <= 1.f ? 1.f : m <= 2.f ? 2.f : m <= 5.f ? 5.f : 10.f);
+            for (float f = std::ceil (zLo / step) * step; f <= zHi; f += step)
+                marks.push_back ({ f, f >= 1000.f ? String (f / 1000.f) + "k" : String (roundToInt (f)), true });
+        }
+        else
+        {
+            for (float f : gridHz)
+                if (f >= zLo && f <= zHi)
+                    marks.push_back ({ f, f >= 1000.f ? String (f / 1000.f) + "k" : String ((int) f), true });
+        }
+
+        if (kbW > 0.f)
+        {
+            // The keyboard, in the margin against the history's left edge.
+            const float x0 = h.getX() - kbW - 1.f;
+            const int n0 = (int) std::floor (midiOf (zLo)), n1 = (int) std::ceil (midiOf (zHi));
+            for (int n = n0; n <= n1; ++n)
+            {
+                const float yTop = jmax (h.getY(), hzToY (hzOfMidi ((float) n + 0.5f), h));
+                const float yBot = jmin (h.getBottom(), hzToY (hzOfMidi ((float) n - 0.5f), h));
+                if (yBot <= yTop) continue;
+                const bool isC = ((n % 12) + 12) % 12 == 0;
+                g.setColour (isBlackKey (n) ? Colour (0xff1c1c1c) : isC ? Colour (0xff9c9c9c) : Colour (0xffd4d4d4));
+                g.fillRect (x0, yTop, kbW, yBot - yTop);
+                if (! isBlackKey (n) && yBot - yTop > 3.f)
+                {
+                    g.setColour (Colours::black.withAlpha (0.35f));
+                    g.drawHorizontalLine ((int) yBot, x0, x0 + kbW);
+                }
+            }
+        }
+
         g.setFont (Font (FontOptions (10.f * s_)));
         float lastY = 1.0e9f;
-        for (float f : gridHz)
+        for (auto& mk : marks)
         {
-            if (f < zLo || f > zHi) continue;
-            const float y = hzToY (f, h);
-            if (lastY - y < 16.f * s_) continue;                // would crowd the one below
+            const float y = hzToY (mk.hz, h);
+            if (lastY - y < (notes ? 12.f : 16.f) * s_) continue;   // would crowd the one below
             lastY = y;
 
-            g.setColour (Colours::white.withAlpha (0.12f));
+            g.setColour (Colours::white.withAlpha (mk.major ? 0.14f : 0.07f));
             g.drawHorizontalLine ((int) y, h.getX(), h.getRight());
-            g.drawHorizontalLine ((int) y, s.getX(), s.getRight());
+            if (hasStrip)
+                g.drawHorizontalLine ((int) y, s.getX(), s.getRight());
             if (h.getHeight() >= 60.f * s_)
             {
-                g.setColour (Colours::white.withAlpha (0.7f));
+                g.setColour (Colours::white.withAlpha (mk.major ? 0.8f : 0.55f));
                 // Kept inside the lane, so the top label of one stacked lane
                 // cannot land on the bottom label of the lane above.
                 const int ly = jlimit ((int) h.getY(), (int) h.getBottom() - S (12), (int) y - S (6));
-                g.drawText (f >= 1000.f ? String (f / 1000.f) + "k" : String ((int) f),
-                            0, ly, S (kMarginL) - 4, S (12), Justification::centredRight);
+                g.drawText (mk.text, 0, ly, S (kMarginL) - 4 - roundToInt (kbW + (kbW > 0.f ? 2.f : 0.f)),
+                            S (12), Justification::centredRight);
             }
         }
 
@@ -1010,7 +1441,8 @@ void SpectrogramComponent::paint (Graphics& g)
 
         g.setColour (Colours::white.withAlpha (0.25f));
         g.drawRect (h, 1.f);
-        g.drawRect (s, 1.f);
+        if (hasStrip)
+            g.drawRect (s, 1.f);
     }
 
     // Bottom axes: time under the history, the strip's dB scale under it.
@@ -1031,8 +1463,12 @@ void SpectrogramComponent::paint (Graphics& g)
             const auto j = i == 0 ? Justification::centredLeft : (i == 4 ? Justification::centredRight : Justification::centred);
             g.drawText (txt, i == 0 ? (int) x : (i == 4 ? (int) x - S (60) : (int) x - S (30)), y, S (60), S (12), j);
         }
-        g.drawText (String ((int) floorDb), (int) s.getX(), y, S (40), S (12), Justification::centredLeft);
-        g.drawText (String ((int) topDb()) + " dB", (int) s.getRight() - S (50), y, S (50), S (12), Justification::centredRight);
+        if (s.getWidth() >= 1.f)
+        {
+            g.drawText (String ((int) floorDb), (int) s.getX(), y, S (40), S (12), Justification::centredLeft);
+            g.drawText (String (roundToInt (topDb())) + " dB", (int) s.getRight() - S (50), y, S (50), S (12),
+                        Justification::centredRight);
+        }
     }
 
     // Status, top right of the first history: pause, and the zoom with how to undo it.
@@ -1079,6 +1515,37 @@ void SpectrogramComponent::paint (Graphics& g)
 
     StringArray lines;
     lines.add (formatHz (hz) + "   " + noteName (hz));
+
+    if (inH || inS)
+    {
+        // Harmonic cursor: 2x..20x the pointer's frequency, longer ticks on the
+        // even and the fourfold ones (as Sonic Visualiser marks them). Lines a
+        // fundamental's partials up at a glance, in the history and against
+        // the strip's spectrum alike.
+        if (settings_->harmonics)
+        {
+            g.setFont (Font (FontOptions (9.f * s_)));
+            float lastLabelY = 1.0e9f;
+            for (int k = 2; k <= 20; ++k)
+            {
+                const float fk = hz * (float) k;
+                if (fk > zoomHi()) break;
+                const float y = hzToY (fk, h);
+                const float len = (k % 4 == 0 ? 22.f : k % 2 == 0 ? 15.f : 9.f) * s_;
+                g.setColour (Colours::white.withAlpha (0.85f));
+                const float cx = inH ? hover_.x : h.getRight() - 14.f * s_;
+                g.drawLine (cx - 0.5f * len, y, cx + 0.5f * len, y, jmax (1.f, s_));
+                if (s.getWidth() >= 1.f)
+                    g.drawLine (s.getX(), y, s.getX() + 0.4f * len, y, jmax (1.f, s_));
+                if (lastLabelY - y >= 11.f * s_)
+                {
+                    g.drawText (String (k), roundToInt (cx + 0.5f * len) + 2, (int) y - S (5), S (20), S (10),
+                                Justification::centredLeft);
+                    lastLabelY = y;
+                }
+            }
+        }
+    }
 
     if (inH)
     {
@@ -1147,9 +1614,9 @@ void SpectrogramComponent::mouseDrag (const MouseEvent& e)
 
     // Grab-and-move: dragging the picture down brings higher frequencies in.
     const auto h = historyArea (dragLane_);
-    const float shift = (float) e.getDistanceFromDragStartY() / h.getHeight()
-                      * std::log (dragZoomHi_ / dragZoomLo_);
-    setZoom (dragZoomLo_ * std::exp (shift), dragZoomHi_ * std::exp (shift));
+    const float a = warp (dragZoomLo_), b = warp (dragZoomHi_);
+    const float shift = (float) e.getDistanceFromDragStartY() / h.getHeight() * (b - a);
+    setZoom (unwarp (a + shift), unwarp (b + shift));
 }
 
 void SpectrogramComponent::mouseDoubleClick (const MouseEvent&)
@@ -1167,8 +1634,8 @@ void SpectrogramComponent::mouseWheelMove (const MouseEvent& e, const MouseWheel
     const auto h = historyArea (li);
     const float d = w.deltaY != 0.f ? w.deltaY : w.deltaX;
     const float hz = yToHz (jlimit (h.getY(), h.getBottom(), e.position.y), h);
-    const float a = std::log (zoomLo()), b = std::log (zoomHi()), x = std::log (hz);
+    const float a = warp (zoomLo()), b = warp (zoomHi()), x = warp (hz);
     const float t = (x - a) / (b - a);
     const float span = (b - a) * std::exp (-d * 1.5f);    // wheel up = zoom in
-    setZoom (std::exp (x - t * span), std::exp (x + (1.f - t) * span));
+    setZoom (unwarp (x - t * span), unwarp (x + (1.f - t) * span));
 }

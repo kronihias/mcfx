@@ -36,6 +36,17 @@ struct SpectroSettings
     int  rangeIdx = 2;              // index into the dB range steps
     float zoomLo = 0.f, zoomHi = 0.f;   // shown frequency range in Hz; 0 = all of it
     bool fineBass = true;           // constant-Q bass (sharper, 0.34 s later) vs FFT only
+
+    // Display options, set from the settings panel.
+    int  colourMap   = 0;           // index into the colour maps
+    int  colourScale = 0;           // 0 dB, 1 meter (IEC), 2 linear amplitude
+    int  normalise   = 0;           // 0 off, 1 each column, 2 auto top
+    int  freqScale   = 0;           // 0 log, 1 mel, 2 linear
+    bool noteLabels  = false;       // label the frequency axis with notes, not Hz
+    int  windowIdx   = 2;           // treble FFT: 2048 / 4096 / 8192 / 16384 at 48 kHz
+    bool smooth      = true;        // interpolate the picture, or show its pixels
+    bool showStrip   = true;        // the live spectrum beside the history
+    bool harmonics   = true;        // hover marks 2x..20x the frequency under the pointer
 };
 
 /** Scrolling spectrogram with a live spectrum alongside it.
@@ -88,7 +99,7 @@ public:
     static constexpr int kMaxChannels = 16;
 
     SpectrogramComponent();
-    ~SpectrogramComponent() override = default;
+    ~SpectrogramComponent() override;
 
     void setCapture (ScopeCapture* capture) { capture_ = capture; }
     void setSettings (SpectroSettings* settings);
@@ -141,15 +152,27 @@ private:
     int  leadSamples() const;
     void recolourAll();
 
-    float topDb() const;
+    float topDb() const;            // the effective top: auto top when normalising to it
     float rangeDb() const;
-    Colour colourFor (float db) const;
+    /** Colour for a level, after adding a column's normalisation offset. */
+    Colour colourFor (float db, float offset = 0.f) const;
+    float  colourOffset (int lane, int col) const;
+    void   buildLut();
+    void   showSettings();
+    /** Apply a change made in the settings panel. */
+    void   settingsChanged();
+    void   updateAutoTop();
+public:
+    static StringArray colourMapNames();
+private:
 
     // Shown frequency range (the zoom), and the analysis row a frequency
     // falls in — fractional, 0 at the bottom of the lowest row.
     float zoomLo() const;
     float zoomHi() const;
     float rowPos (float hz) const;
+    float warp (float hz) const;       // frequency -> axis units (log / mel / linear)
+    float unwarp (float w) const;
     void  setZoom (float lo, float hi);
 
     Rectangle<float> plotArea() const;
@@ -204,12 +227,16 @@ private:
         Image image;                    // cols_ x rows_, column ring
         std::vector<float> db;          // cols_ * rows_, for re-colouring and readout
         std::vector<float> inst, avgPow, peak, peakAge;   // rows_ each, the strip
+        std::vector<float> colMax;      // cols_, each column's loudest row, for normalising
     };
     std::vector<Lane> lanes_;
     int64  colCount_  = 0;              // columns written since reset
     double nextColAbs_ = -1.0;          // absolute sample index of the next column's end
 
     std::vector<Colour> lut_;
+    float autoTop_ = 0.f;               // loudest level in the history, for "auto top"
+    float colouredAutoTop_ = 0.f;       // the auto top the picture was last coloured with
+    SpectroSettings applied_;           // what the analysis/history were built for
 
     bool paused_ = false;
     Point<float> hover_;
@@ -219,6 +246,9 @@ private:
 
     ComboBox cbFirst_, cbLast_, cbLayout_, cbSpan_, cbTop_, cbRange_, cbRes_;
     TextButton btnPause_;
+    Component::SafePointer<CallOutBox> callout_;
+    ShapeButton btnSettings_ { "settings", Colours::white.withAlpha (0.7f),
+                               Colours::white, Colours::aquamarine };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrogramComponent)
 };

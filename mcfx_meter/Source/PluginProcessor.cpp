@@ -342,6 +342,14 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("spec_zlo",      _spectro_settings.zoomLo);
     xml.setAttribute ("spec_zhi",      _spectro_settings.zoomHi);
     xml.setAttribute ("spec_fine",     _spectro_settings.fineBass);
+    xml.setAttribute ("spec_cmap",     _spectro_settings.colourMap);
+    xml.setAttribute ("spec_cscale",   _spectro_settings.colourScale);
+    xml.setAttribute ("spec_norm",     _spectro_settings.normalise);
+    xml.setAttribute ("spec_fscale",   _spectro_settings.freqScale);
+    xml.setAttribute ("spec_notes",    _spectro_settings.noteLabels);
+    xml.setAttribute ("spec_window",   _spectro_settings.windowIdx);
+    xml.setAttribute ("spec_smooth",   _spectro_settings.smooth);
+    xml.setAttribute ("spec_strip",    _spectro_settings.showStrip);
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -395,6 +403,17 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
             _spectro_settings.zoomLo   = (float) xmlState->getDoubleAttribute ("spec_zlo", _spectro_settings.zoomLo);
             _spectro_settings.zoomHi   = (float) xmlState->getDoubleAttribute ("spec_zhi", _spectro_settings.zoomHi);
             _spectro_settings.fineBass = xmlState->getBoolAttribute ("spec_fine", _spectro_settings.fineBass);
+            {
+                auto& s = _spectro_settings;     // range-checked by the view
+                s.colourMap   = xmlState->getIntAttribute  ("spec_cmap",   s.colourMap);
+                s.colourScale = xmlState->getIntAttribute  ("spec_cscale", s.colourScale);
+                s.normalise   = xmlState->getIntAttribute  ("spec_norm",   s.normalise);
+                s.freqScale   = xmlState->getIntAttribute  ("spec_fscale", s.freqScale);
+                s.noteLabels  = xmlState->getBoolAttribute ("spec_notes",  s.noteLabels);
+                s.windowIdx   = xmlState->getIntAttribute  ("spec_window", s.windowIdx);
+                s.smooth      = xmlState->getBoolAttribute ("spec_smooth", s.smooth);
+                s.showStrip   = xmlState->getBoolAttribute ("spec_strip",  s.showStrip);
+            }
         }
 
     }
