@@ -26,6 +26,15 @@
 /** View settings the scope keeps in the processor, so they survive closing the
     editor and are saved with the session. Not parameters, like the rest of the
     meter's view state. */
+/** How much to enlarge text, margins and line widths for a view of this size:
+    1 at the editor's usual size, growing with the window up to 2.5 — so a
+    view popped out fullscreen, or onto a projector, is readable from a
+    distance. Shared by the scope and the spectrogram. */
+inline float displayScaleFor (int width, int height)
+{
+    return jlimit (1.f, 2.5f, jmin ((float) width / 1000.f, (float) height / 560.f));
+}
+
 struct ScopeSettings
 {
     int  firstCh = 0, lastCh = 1;   // inclusive range, 0-based
@@ -105,6 +114,8 @@ private:
     static Colour channelColour (int ch);
     static String formatTime (double seconds);
     static String formatLevel (float v);
+
+    float s_ = 1.f;                 // display scale, see displayScaleFor()
 
     ScopeCapture*  capture_  = nullptr;
     ScopeSettings* settings_ = nullptr;
