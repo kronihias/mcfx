@@ -18,6 +18,10 @@ IF(NOT APPLE)
     SET(WITH_FFTW3 TRUE)
 ENDIF()
 
+# The spectrogram's bass analysis (shared with mimoeq's).
+SET(MCFX_EXTRA_SOURCES ${SRC_DIR}/common/Dsp/ConstantQ.cpp
+                       ${SRC_DIR}/common/Dsp/ConstantQ.h)
+
 INCLUDE(${SRC_DIR}/Subproject.cmake)
 
 # The band analyser's transform goes straight to Accelerate (common/Dsp/RealFFT).
