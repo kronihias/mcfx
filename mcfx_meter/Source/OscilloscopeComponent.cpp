@@ -465,6 +465,8 @@ void OscilloscopeComponent::buttonClicked (Button* b)
 //==============================================================================
 void OscilloscopeComponent::resized()
 {
+    s_ = displayScaleFor (getWidth(), getHeight());
+
     int x = 0;
     auto place = [&] (Component& c, int w, int gap = 4)
     {
@@ -483,9 +485,9 @@ void OscilloscopeComponent::resized()
 
 Rectangle<float> OscilloscopeComponent::plotArea() const
 {
-    return Rectangle<float> (kMarginL, (float) kPlotTop,
-                             jmax (10.f, (float) getWidth() - kMarginL - kMarginR),
-                             jmax (10.f, (float) getHeight() - (float) kPlotTop - kMarginB));
+    return Rectangle<float> (kMarginL * s_, (float) kPlotTop,
+                             jmax (10.f, (float) getWidth() - kMarginL * s_ - kMarginR),
+                             jmax (10.f, (float) getHeight() - (float) kPlotTop - kMarginB * s_));
 }
 
 Rectangle<float> OscilloscopeComponent::laneArea (int lane) const
@@ -607,11 +609,11 @@ void OscilloscopeComponent::drawTrace (Graphics& g, int ch, Rectangle<float> lan
             if (i == i0) p.startNewSubPath (pt);
             else         p.lineTo (pt);
         }
-        g.strokePath (p, PathStrokeType (1.3f));
+        g.strokePath (p, PathStrokeType (1.3f * s_));
 
-        if (spp < 1.0 / 6.0)
+        if (spp < 1.0 / (6.0 * s_))
             for (int i = i0; i <= i1; ++i)
-                g.fillEllipse (idxToX (i) - 2.f, cy - x[i] * sy - 2.f, 4.f, 4.f);
+                g.fillEllipse (idxToX (i) - 2.f * s_, cy - x[i] * sy - 2.f * s_, 4.f * s_, 4.f * s_);
     }
 }
 
@@ -682,8 +684,13 @@ void OscilloscopeComponent::paint (Graphics& g)
         }
     }
 
+    // Everything inside the plot scales with the window (s_), so a fullscreen
+    // or projected scope stays readable from across a room.
+    auto S = [this] (float v) { return roundToInt (v * s_); };
+    const int marginL = S (kMarginL);
+
     // Amplitude labels.
-    g.setFont (Font (FontOptions (10.f)));
+    g.setFont (Font (FontOptions (10.f * s_)));
     g.setColour (Colours::white.withAlpha (0.75f));
     if (! stacked)
     {
@@ -692,7 +699,8 @@ void OscilloscopeComponent::paint (Graphics& g)
             const float v = amp * (1.f - 2.f * (float) i / (float) kAmpDivs);
             const float gy = plot.getY() + plot.getHeight() * (float) i / (float) kAmpDivs;
             g.drawText ((v > 0.f ? "+" : "") + String (v, v != 0.f && std::abs (v) < 0.01f ? 4 : (std::abs (v) < 0.1f ? 3 : 2)),
-                        0, (int) gy - 6, (int) kMarginL - 4, 12, Justification::centredRight);
+                        0, jlimit ((int) plot.getY(), (int) plot.getBottom() - S (12), (int) gy - S (6)),
+                        marginL - 4, S (12), Justification::centredRight);
         }
     }
     else
@@ -700,10 +708,10 @@ void OscilloscopeComponent::paint (Graphics& g)
         for (int c = 0; c < shown; ++c)
         {
             const auto lane = laneArea (c);
-            if (lane.getHeight() < 9.f) break;
+            if (lane.getHeight() < 9.f * s_) break;
             g.setColour (channelColour (settings_->firstCh + c));
-            g.drawText ("ch " + String (settings_->firstCh + c + 1), 0, (int) lane.getCentreY() - 6,
-                        (int) kMarginL - 4, 12, Justification::centredRight);
+            g.drawText ("ch " + String (settings_->firstCh + c + 1), 0, (int) lane.getCentreY() - S (6),
+                        marginL - 4, S (12), Justification::centredRight);
         }
     }
 
@@ -714,8 +722,8 @@ void OscilloscopeComponent::paint (Graphics& g)
         const float gx = plot.getX() + plot.getWidth() * (float) i / (float) kTimeDivs;
         const Justification j = i == 0 ? Justification::centredLeft
                               : (i == kTimeDivs ? Justification::centredRight : Justification::centred);
-        const int lx = i == 0 ? (int) gx : (i == kTimeDivs ? (int) gx - 80 : (int) gx - 40);
-        g.drawText (formatTime (idxToTime (xToIdx (gx))), lx, (int) plot.getBottom() + 2, 80, 12, j);
+        const int lx = i == 0 ? (int) gx : (i == kTimeDivs ? (int) gx - S (80) : (int) gx - S (40));
+        g.drawText (formatTime (idxToTime (xToIdx (gx))), lx, (int) plot.getBottom() + 2, S (80), S (12), j);
     }
 
     // Status line, top left inside the plot.
@@ -729,14 +737,14 @@ void OscilloscopeComponent::paint (Graphics& g)
         if (settings_->trigger)
             s << "   " << (triggered_ ? "trig'd" : "free-run");
 
-        g.setFont (Font (FontOptions (11.f)));
+        g.setFont (Font (FontOptions (11.f * s_)));
         g.setColour (Colours::white.withAlpha (0.6f));
-        g.drawText (s, (int) plot.getX() + 6, (int) plot.getY() + 3, 360, 14, Justification::centredLeft);
+        g.drawText (s, (int) plot.getX() + 6, (int) plot.getY() + 3, S (360), S (14), Justification::centredLeft);
 
         if (paused_)
         {
             g.setColour (Colour (0xffff6060));
-            g.drawText ("PAUSED  -  drag to scroll", (int) plot.getX() + 6, (int) plot.getY() + 17, 240, 14,
+            g.drawText ("PAUSED  -  drag to scroll", (int) plot.getX() + 6, (int) plot.getY() + 3 + S (14), S (240), S (14),
                         Justification::centredLeft);
         }
     }
@@ -744,7 +752,7 @@ void OscilloscopeComponent::paint (Graphics& g)
     // Overlay legend, top right.
     if (! stacked && shown > 1 && shown <= 16)
     {
-        g.setFont (Font (FontOptions (11.f)));
+        g.setFont (Font (FontOptions (11.f * s_)));
         float lx = plot.getRight() - 6.f;
         for (int c = shown - 1; c >= 0; --c)
         {
@@ -752,7 +760,7 @@ void OscilloscopeComponent::paint (Graphics& g)
             const float tw = (float) GlyphArrangement::getStringWidthInt (g.getCurrentFont(), t) + 8.f;
             lx -= tw;
             g.setColour (channelColour (settings_->firstCh + c));
-            g.drawText (t, (int) lx, (int) plot.getY() + 3, (int) tw, 14, Justification::centred);
+            g.drawText (t, (int) lx, (int) plot.getY() + 3, (int) tw, S (14), Justification::centred);
         }
     }
 
@@ -764,9 +772,9 @@ void OscilloscopeComponent::paint (Graphics& g)
             return;
         g.setColour (c.withAlpha (0.85f));
         const float dashes[] = { 4.f, 3.f };
-        g.drawDashedLine ({ cx, plot.getY(), cx, plot.getBottom() }, dashes, 2, 1.f);
-        g.setFont (Font (FontOptions (11.f, Font::bold)));
-        g.drawText (name, (int) cx + 3, (int) plot.getBottom() - 15, 14, 13, Justification::centredLeft);
+        g.drawDashedLine ({ cx, plot.getY(), cx, plot.getBottom() }, dashes, 2, jmax (1.f, s_));
+        g.setFont (Font (FontOptions (11.f * s_, Font::bold)));
+        g.drawText (name, (int) cx + 3, (int) plot.getBottom() - S (15), S (14), S (13), Justification::centredLeft);
     };
     if (hasA_) drawCursor (cursorA_, kCursorA, "A");
     if (hasB_) drawCursor (cursorB_, kCursorB, "B");
@@ -787,9 +795,9 @@ void OscilloscopeComponent::paint (Graphics& g)
             s << "    (click again for B)";
         }
 
-        g.setFont (Font (FontOptions (11.f)));
-        const int tw = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), s) + 12;
-        Rectangle<int> box ((int) plot.getRight() - tw - 4, (int) plot.getBottom() - 20, tw, 16);
+        g.setFont (Font (FontOptions (11.f * s_)));
+        const int tw = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), s) + S (12);
+        Rectangle<int> box ((int) plot.getRight() - tw - 4, (int) plot.getBottom() - S (20), tw, S (16));
         g.setColour (Colours::black.withAlpha (0.7f));
         g.fillRect (box);
         g.setColour (kCursorA);
@@ -821,13 +829,13 @@ void OscilloscopeComponent::paint (Graphics& g)
         if (lane < 0 && shown > 8)
             lines.add (String (shown - 8) + " more...");
 
-        g.setFont (Font (FontOptions (11.f)));
+        g.setFont (Font (FontOptions (11.f * s_)));
         int bw = 0;
         for (auto& l : lines)
             bw = jmax (bw, GlyphArrangement::getStringWidthInt (g.getCurrentFont(), l));
-        bw += 12;
-        const int lh = 14;
-        const int bh = lh * lines.size() + 6;
+        bw += S (12);
+        const int lh = S (14);
+        const int bh = lh * lines.size() + S (6);
 
         int bx = (int) hover_.x + 12;
         int by = (int) hover_.y + 12;

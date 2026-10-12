@@ -33,6 +33,7 @@ struct SpectroSettings
     int  spanIdx  = 1;              // index into the span steps
     int  topIdx   = 0;              // index into the top-of-scale steps
     int  rangeIdx = 2;              // index into the dB range steps
+    float zoomLo = 0.f, zoomHi = 0.f;   // shown frequency range in Hz; 0 = all of it
 };
 
 /** Scrolling spectrogram with a live spectrum alongside it.
@@ -49,9 +50,19 @@ struct SpectroSettings
     absolute sample time, not once per timer tick, so the time axis is exact
     whatever the timer's jitter.
 
+    The history's resolution follows the size it is shown at — a projector
+    gets a picture as fine as its pixels, a corner window a cheap one — within
+    a budget of transforms per second, so a short span over many channels
+    cannot swamp the GUI thread. Resizing resamples the history rather than
+    clearing it.
+
+    The mouse wheel zooms the frequency axis about the pointer and dragging
+    pans it; double click shows everything again. Zoom only changes what is
+    drawn: the analysis always covers the whole range, so zooming never loses
+    history.
+
     A channel range is either averaged (in power) into one lane, or stacked as
-    one lane per channel. At most kMaxChannels are analysed — that bounds the
-    GUI thread's FFT load. */
+    one lane per channel. At most kMaxChannels are analysed at once. */
 class SpectrogramComponent : public Component,
                              private ComboBox::Listener,
                              private Button::Listener
@@ -78,12 +89,15 @@ public:
 
     void mouseMove (const MouseEvent&) override;
     void mouseExit (const MouseEvent&) override;
+    void mouseDown (const MouseEvent&) override;
+    void mouseDrag (const MouseEvent&) override;
+    void mouseDoubleClick (const MouseEvent&) override;
+    void mouseWheelMove (const MouseEvent&, const MouseWheelDetails&) override;
 
-    /** Frequency of a display row's centre (0 = bottom). Public for the tests. */
+    /** Frequency of an analysis row's centre (0 = lowest). */
     float rowHz (int row) const;
-
-    static constexpr int kCols = 480;     // time resolution of the history
-    static constexpr int kRows = 384;     // frequency resolution of the history
+    int   getNumCols() const { return cols_; }
+    int   getNumRows() const { return rows_; }
 
 private:
     void comboBoxChanged (ComboBox*) override;
@@ -95,7 +109,10 @@ private:
     int  numLanes() const;
 
     void prepareAnalysis (double sr);
+    void buildRowBins();
     void resetHistory();
+    void updateWantedResolution();
+    void resampleHistory (int newCols, int newRows);
     void produceColumn (int64 endAbs, int64 written);
     void recolourAll();
 
@@ -103,12 +120,20 @@ private:
     float rangeDb() const;
     Colour colourFor (float db) const;
 
+    // Shown frequency range (the zoom), and the analysis row a frequency
+    // falls in — fractional, 0 at the bottom of the lowest row.
+    float zoomLo() const;
+    float zoomHi() const;
+    float rowPos (float hz) const;
+    void  setZoom (float lo, float hi);
+
     Rectangle<float> plotArea() const;
     Rectangle<float> laneArea (int lane) const;          // history + strip
     Rectangle<float> historyArea (int lane) const;
     Rectangle<float> stripArea (int lane) const;
     float hzToY (float hz, Rectangle<float> r) const;
     float yToHz (float y, Rectangle<float> r) const;
+    int   laneAt (Point<float> p) const;
 
     static String formatHz (float hz);
     static String noteName (float hz);
@@ -117,6 +142,7 @@ private:
     SpectroSettings* settings_ = nullptr;
     SpectroSettings  ownSettings_;
     int numCh_ = 1;
+    float s_ = 1.f;                     // display scale, see displayScaleFor()
 
     // Analysis.
     double sr_ = 0.0;
@@ -126,17 +152,21 @@ private:
     std::vector<float> magSq_, accum_;
     AudioSampleBuffer frame_;
 
-    // Per display row: the FFT bins it covers, or a fractional bin to
+    // Per analysis row: the FFT bins it covers, or a fractional bin to
     // interpolate at when the row is narrower than a bin.
     struct RowBins { int lo = 0, hi = 0; float centre = 0.f; bool interp = false; };
     std::vector<RowBins> rowBins_;
     float fMin_ = 20.f, fMax_ = 20000.f;
 
+    // History resolution: what it is, and what the current size asks for.
+    int cols_ = 480, rows_ = 384;
+    int wantCols_ = 480, wantRows_ = 384;
+
     struct Lane
     {
-        Image image;                    // kCols x kRows, column ring
-        std::vector<float> db;          // kCols * kRows, for re-colouring and readout
-        std::vector<float> inst, avgPow, peak, peakAge;   // kRows each, the strip
+        Image image;                    // cols_ x rows_, column ring
+        std::vector<float> db;          // cols_ * rows_, for re-colouring and readout
+        std::vector<float> inst, avgPow, peak, peakAge;   // rows_ each, the strip
     };
     std::vector<Lane> lanes_;
     int64  colCount_  = 0;              // columns written since reset
@@ -147,6 +177,8 @@ private:
     bool paused_ = false;
     Point<float> hover_;
     bool hovering_ = false;
+    float dragZoomLo_ = 0.f, dragZoomHi_ = 0.f;
+    int   dragLane_ = -1;
 
     ComboBox cbFirst_, cbLast_, cbLayout_, cbSpan_, cbTop_, cbRange_;
     TextButton btnPause_;

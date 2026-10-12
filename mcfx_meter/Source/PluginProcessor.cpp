@@ -339,6 +339,8 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("spec_span",     _spectro_settings.spanIdx);
     xml.setAttribute ("spec_top",      _spectro_settings.topIdx);
     xml.setAttribute ("spec_range",    _spectro_settings.rangeIdx);
+    xml.setAttribute ("spec_zlo",      _spectro_settings.zoomLo);
+    xml.setAttribute ("spec_zhi",      _spectro_settings.zoomHi);
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -389,6 +391,8 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
             _spectro_settings.spanIdx  = xmlState->getIntAttribute ("spec_span",  _spectro_settings.spanIdx);
             _spectro_settings.topIdx   = xmlState->getIntAttribute ("spec_top",   _spectro_settings.topIdx);
             _spectro_settings.rangeIdx = xmlState->getIntAttribute ("spec_range", _spectro_settings.rangeIdx);
+            _spectro_settings.zoomLo   = (float) xmlState->getDoubleAttribute ("spec_zlo", _spectro_settings.zoomLo);
+            _spectro_settings.zoomHi   = (float) xmlState->getDoubleAttribute ("spec_zhi", _spectro_settings.zoomHi);
         }
 
     }

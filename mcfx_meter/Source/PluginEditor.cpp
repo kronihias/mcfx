@@ -227,6 +227,11 @@ Ambix_meterAudioProcessorEditor::~Ambix_meterAudioProcessorEditor()
     ourProcessor->_scope_capture.setActive (false);
     ourProcessor->_scope_capture.setFrozen (false);
 
+    // Same for the waterfall's analyser, which used to keep copying every
+    // block on the audio thread after the editor closed in that view.
+    // applyModeVisibility() turns it back on when an editor reopens there.
+    ourProcessor->_band_analyser.setActive (false);
+
     //[Destructor]. You can add your own custom destruction code here..
     //[/Destructor]
 }
