@@ -37,6 +37,19 @@ namespace
     constexpr float kPeakFallDbS = 20.f;    // ...at this rate
     constexpr float kFloorDb     = -200.f;
 
+    // Fine bass: constant-Q below kSplitLo, FFT above kSplitHi, crossfaded in
+    // power between them. At kSplitLo the 8192-point FFT's bins are already
+    // about a quarter tone wide; below it they quickly get coarser than that.
+    constexpr float kSplitLo    = 350.f;
+    constexpr float kSplitHi    = 550.f;
+    constexpr float kBassTopHz  = 700.f;      // constant-Q bins stop here
+    constexpr float kDecRateHz  = 3000.f;     // decimated rate, roughly
+    constexpr int   kBassOrder  = 11;         // 2048 decimated samples: ~0.68 s
+    // Quarter-tone sharp, placed at eighth tones — see
+    // ConstantQ::Config::resolutionBinsPerOctave.
+    constexpr int   kCqResolution = 24;
+    constexpr int   kCqDensity    = 48;
+
     // Inferno-like: dark, through purple and red, to pale yellow. Monotonic in
     // lightness, so the level reads correctly in greyscale and on a projector
     // that washes colours out.
@@ -92,6 +105,13 @@ SpectrogramComponent::SpectrogramComponent()
     setupCombo (cbRange_, "Levels this far below the top fade to black.");
     for (int i = 0; i < countOf (kRangeDb); ++i)
         cbRange_.addItem ("range " + String ((int) kRangeDb[i]) + " dB", i + 1);
+
+    setupCombo (cbRes_, "fine bass: constant-Q below ~450 Hz, so close bass notes and their "
+                        "harmonics come apart; shows the picture 0.34 s late.\n"
+                        "fast: FFT only; blurrier bass, 85 ms late.\n"
+                        "Either way a click is drawn as one vertical line.");
+    cbRes_.addItem ("fast", 1);
+    cbRes_.addItem ("fine bass", 2);
 
     addAndMakeVisible (btnPause_);
     btnPause_.setButtonText ("pause");
@@ -152,6 +172,7 @@ void SpectrogramComponent::syncControlsFromSettings()
     cbSpan_.setSelectedId (settings_->spanIdx + 1, dontSendNotification);
     cbTop_.setSelectedId (settings_->topIdx + 1, dontSendNotification);
     cbRange_.setSelectedId (settings_->rangeIdx + 1, dontSendNotification);
+    cbRes_.setSelectedId (settings_->fineBass ? 2 : 1, dontSendNotification);
 }
 
 int SpectrogramComponent::numShown() const { return settings_->lastCh - settings_->firstCh + 1; }
@@ -202,8 +223,120 @@ void SpectrogramComponent::prepareAnalysis (double sr)
 
     fMin_ = 20.f;
     fMax_ = (float) jmin (20000.0, 0.45 * sr);
+    prepareBass (sr);
     buildRowBins();
 }
+
+void SpectrogramComponent::prepareBass (double sr)
+{
+    // A power of two near sr / 3 kHz: 16 at 44.1/48 kHz, 32 at 88.2/96 kHz.
+    decim_ = 1 << jlimit (0, 8, roundToInt (std::log2 (sr / (double) kDecRateHz)));
+    const double srD = sr / (double) decim_;
+
+    // Anti-alias lowpass, linear phase so its delay is one exact number to
+    // take out. Only what folds onto the analysed band (< kBassTopHz) matters,
+    // so the transition can run from kBassTopHz up to srD - kBassTopHz: wide,
+    // hence short. Blackman-windowed sinc, ~75 dB down past the transition.
+    const double transition = jmax (200.0, srD - 2.0 * kBassTopHz);
+    const int L = jlimit (31, 1023, ((int) std::ceil (5.5 * sr / transition)) | 1);
+    const double fc = 0.5 * srD / sr;                  // cycles per raw sample
+    fir_.assign ((size_t) L, 0.f);
+    double sum = 0.0;
+    const int M = (L - 1) / 2;
+    for (int n = 0; n < L; ++n)
+    {
+        const double x = (double) (n - M);
+        const double sinc = x == 0.0 ? 2.0 * fc : std::sin (MathConstants<double>::twoPi * fc * x) / (MathConstants<double>::pi * x);
+        const double t = MathConstants<double>::twoPi * n / (double) (L - 1);
+        const double w = 0.42 - 0.5 * std::cos (t) + 0.08 * std::cos (2.0 * t);
+        fir_[(size_t) n] = (float) (sinc * w);
+        sum += sinc * w;
+    }
+    for (auto& h : fir_) h = (float) (h / sum);
+    firDelay_ = M;
+
+    mcfx::ConstantQ::Config cfg;
+    cfg.sampleRate    = srD;
+    cfg.fftOrder      = kBassOrder;
+    cfg.fMin          = 20.0;
+    cfg.fMax          = kBassTopHz;
+    cfg.binsPerOctave = kCqDensity;
+    cfg.resolutionBinsPerOctave = kCqResolution;
+    cfg.alignment     = mcfx::ConstantQ::Alignment::Centred;
+    cq_.prepare (cfg);
+
+    cqMag_.assign ((size_t) jmax (1, cq_.getNumBins()), 0.f);
+    bassPow_ = bassMag_ = cqMag_;
+    resetBass();
+}
+
+void SpectrogramComponent::resetBass()
+{
+    decRing_.assign ((size_t) numShown(), std::vector<float> ((size_t) kDecRing, 0.f));
+    nextDec_ = -1;
+}
+
+int SpectrogramComponent::leadSamples() const
+{
+    const int fftLead = fft_.getSize() / 2;
+    if (! bassActive())
+        return fftLead;
+    // The bass frame's newest decimated sample, back in raw samples, plus the
+    // decimator's own delay and a sample of slack for rounding to the grid.
+    return jmax (fftLead, (cq_.getFrameSize() / 2) * decim_ + firDelay_ + 2 * decim_);
+}
+
+void SpectrogramComponent::updateDecimation (int64 written)
+{
+    if (! bassActive() || fir_.empty())
+        return;
+
+    const int L = (int) fir_.size();
+    const int64 D = decim_;
+    const int valid = capture_->getNumValid();
+
+    // Start, or start over after falling behind: fill the decimated ring from
+    // as much history as the capture still has, so the bass is complete at
+    // once rather than building up over the first 0.7 s.
+    if (nextDec_ < 0 || written - nextDec_ * D > (int64) valid - L)
+    {
+        const int64 startAbs = written - jmin ((int64) valid, (int64) kDecRing * D) + L;
+        nextDec_ = (startAbs + D - 1) / D;
+        for (auto& r : decRing_) std::fill (r.begin(), r.end(), 0.f);
+    }
+
+    const int64 lastDec = (written - 1) / D;
+    if (lastDec < nextDec_)
+        return;
+    if (lastDec - nextDec_ + 1 > kDecRing)
+        nextDec_ = lastDec - kDecRing + 1;
+
+    const int count = (int) (lastDec - nextDec_ + 1);
+    const int len   = (count - 1) * (int) D + L;
+    const int shown = jmin (numShown(), (int) decRing_.size());
+
+    // rawBuf_[0] is raw sample nextDec_*D - (L-1): exactly the history the
+    // first output's filter needs.
+    capture_->read (rawBuf_, settings_->firstCh, shown, len, (int) (written - 1 - lastDec * D));
+
+    for (int c = 0; c < shown; ++c)
+    {
+        const float* x = rawBuf_.getReadPointer (c);
+        auto& ring = decRing_[(size_t) c];
+        for (int i = 0; i < count; ++i)
+        {
+            // Symmetric taps, so no reversal needed.
+            const float* xi = x + (size_t) i * (size_t) D;
+            float y = 0.f;
+            for (int k = 0; k < L; ++k)
+                y += fir_[(size_t) k] * xi[k];
+            ring[(size_t) ((nextDec_ + i) & (kDecRing - 1))] = y;
+        }
+    }
+
+    nextDec_ = lastDec + 1;
+}
+
 
 void SpectrogramComponent::buildRowBins()
 {
@@ -229,6 +362,19 @@ void SpectrogramComponent::buildRowBins()
         rb.hi = jlimit (rb.lo, maxBin, (int) std::lround (hi));
         rb.centre = (float) jlimit (0.0, (double) maxBin - 1.0, std::sqrt (lo * hi));
     }
+
+    // Where each row sits among the constant-Q bins, and how much of it the
+    // bass analysis supplies: all below kSplitLo, none above kSplitHi.
+    rowCqPos_.assign ((size_t) rows_, 0.f);
+    rowBassW_.assign ((size_t) rows_, 0.f);
+    for (int r = 0; r < rows_; ++r)
+    {
+        const float f = rowHz (r);
+        rowCqPos_[(size_t) r] = (float) kCqDensity * std::log2 (f / 20.f);
+        rowBassW_[(size_t) r] = f <= kSplitLo ? 1.f
+                              : f >= kSplitHi ? 0.f
+                              : 1.f - std::log (f / kSplitLo) / std::log (kSplitHi / kSplitLo);
+    }
 }
 
 void SpectrogramComponent::resetHistory()
@@ -253,6 +399,7 @@ void SpectrogramComponent::resetHistory()
     }
     colCount_ = 0;
     nextColAbs_ = -1.0;
+    resetBass();
     repaint();
 }
 
@@ -265,7 +412,9 @@ void SpectrogramComponent::updateWantedResolution()
     // so a short span over many channels gets fewer columns than its width.
     const int N = fft_.isReady() ? fft_.getSize() : 8192;
     const double budget = 3000.0 * 8192.0 / (double) N;
-    const int byBudget = (int) (budget * kSpanSec[settings_->spanIdx] / (double) jmax (1, numShown()));
+    // The bass transform adds roughly a third of an FFT per channel.
+    const double perChannel = settings_->fineBass ? 1.3 : 1.0;
+    const int byBudget = (int) (budget * kSpanSec[settings_->spanIdx] / ((double) jmax (1, numShown()) * perChannel));
     const int cols = jlimit (120, 2048, jmin (roundToInt (h.getWidth()), byBudget));
 
     // Rows cover the whole range, so zoomed in they need more of them for the
@@ -369,13 +518,17 @@ void SpectrogramComponent::tick()
     const int64  written = capture_->getNumWritten();
     const double hop     = kSpanSec[settings_->spanIdx] * sr / (double) cols_;
 
-    // Start from now, and start over from now if we fell so far behind that
-    // the frames we owe have already left the ring.
+    updateDecimation (written);
+
+    // Columns are placed by their centre instant, which lags the newest
+    // sample by the lead. Start there, and start over there if we fell so far
+    // behind that the frames we owe have already left the ring.
+    const int lead = leadSamples();
     if (nextColAbs_ < 0.0 || (double) written - nextColAbs_ > (double) (capture_->getCapacity() - N))
-        nextColAbs_ = (double) written;
+        nextColAbs_ = (double) (written - lead);
 
     int produced = 0;
-    while (nextColAbs_ <= (double) written && produced < 64)
+    while (nextColAbs_ + lead <= (double) written && produced < 64)
     {
         produceColumn ((int64) nextColAbs_, written);
         nextColAbs_ += hop;
@@ -386,11 +539,26 @@ void SpectrogramComponent::tick()
         repaint();
 }
 
-void SpectrogramComponent::produceColumn (int64 endAbs, int64 written)
+void SpectrogramComponent::produceColumn (int64 centreAbs, int64 written)
 {
     const int N = fft_.getSize();
     const int shown = numShown();
-    capture_->read (frame_, settings_->firstCh, shown, N, (int) jmax ((int64) 0, written - endAbs));
+
+    // FFT frame centred on the column's instant.
+    capture_->read (frame_, settings_->firstCh, shown, N, (int) jmax ((int64) 0, written - (centreAbs + N / 2)));
+
+    // Bass frame centred on the same instant: the decimated sample whose
+    // (delayed) raw time is closest to it sits in the middle of the frame,
+    // where every constant-Q window is centred.
+    const int Nd = cq_.getFrameSize();
+    int64 bassStart = 0;
+    bool haveBass = false;
+    if (bassActive())
+    {
+        const int64 jc = (int64) std::llround ((double) (centreAbs + firDelay_) / (double) decim_);
+        bassStart = jc - Nd / 2;
+        haveBass = bassStart + Nd - 1 < nextDec_ && bassStart >= nextDec_ - kDecRing;
+    }
 
     const float hopSec    = kSpanSec[settings_->spanIdx] / (float) cols_;
     const float avgAlpha  = std::exp (-hopSec / kAvgTauSec);
@@ -413,6 +581,26 @@ void SpectrogramComponent::produceColumn (int64 endAbs, int64 written)
         }
         const float scale = ampNorm_ / (float) jmax (1, c1 - c0);
 
+        // Bass for this lane: constant-Q per channel, averaged in power.
+        if (haveBass)
+        {
+            std::fill (bassPow_.begin(), bassPow_.end(), 0.f);
+            for (int c = c0; c < c1 && c < (int) decRing_.size(); ++c)
+            {
+                const auto& ring = decRing_[(size_t) c];
+                float* t = cq_.getTimeBuffer();
+                for (int i = 0; i < Nd; ++i)
+                    t[i] = ring[(size_t) ((bassStart + i) & (kDecRing - 1))];
+                cq_.transform (cqMag_.data());
+                for (size_t k = 0; k < cqMag_.size(); ++k)
+                    bassPow_[k] += cqMag_[k] * cqMag_[k];
+            }
+            const float inv = 1.f / (float) jmax (1, c1 - c0);
+            for (size_t k = 0; k < bassPow_.size(); ++k)
+                bassPow_[k] *= inv;
+        }
+        const int lastCq = (int) bassPow_.size() - 1;
+
         Image::BitmapData bd (lane.image, col, 0, 1, rows_, Image::BitmapData::writeOnly);
 
         for (int r = 0; r < rows_; ++r)
@@ -434,6 +622,17 @@ void SpectrogramComponent::produceColumn (int64 endAbs, int64 written)
                     p = jmax (p, accum_[(size_t) b]);
             }
             p *= scale;
+
+            if (haveBass && rowBassW_[(size_t) r] > 0.f)
+            {
+                // Interpolated in power between constant-Q bins.
+                const float pos = jlimit (0.f, (float) lastCq, rowCqPos_[(size_t) r]);
+                const int   k   = jmin ((int) pos, jmax (0, lastCq - 1));
+                const float fr  = pos - (float) k;
+                const float pb  = bassPow_[(size_t) k] + fr * (bassPow_[(size_t) jmin (k + 1, lastCq)] - bassPow_[(size_t) k]);
+                const float w   = rowBassW_[(size_t) r];
+                p = w * pb + (1.f - w) * p;
+            }
 
             const float db = 10.f * std::log10 (jmax (p, 1.0e-20f));
             lane.db[(size_t) col * rows_ + (size_t) r] = db;
@@ -508,6 +707,7 @@ void SpectrogramComponent::comboBoxChanged (ComboBox* cb)
     else if (cb == &cbSpan_)   settings_->spanIdx  = cbSpan_.getSelectedId() - 1;
     else if (cb == &cbTop_)    settings_->topIdx   = cbTop_.getSelectedId() - 1;
     else if (cb == &cbRange_)  settings_->rangeIdx = cbRange_.getSelectedId() - 1;
+    else if (cb == &cbRes_)    settings_->fineBass = cbRes_.getSelectedId() == 2;
 
     // Keep the range within the analysis budget by moving the other end.
     if (settings_->lastCh - settings_->firstCh + 1 > kMaxChannels)
@@ -521,7 +721,8 @@ void SpectrogramComponent::comboBoxChanged (ComboBox* cb)
 
     const auto& s = *settings_;
     if (s.firstCh != before.firstCh || s.lastCh != before.lastCh
-        || s.stacked != before.stacked || s.spanIdx != before.spanIdx)
+        || s.stacked != before.stacked || s.spanIdx != before.spanIdx
+        || s.fineBass != before.fineBass)
     {
         updateWantedResolution();
         resetHistory();             // the old picture means something else now
@@ -552,7 +753,8 @@ void SpectrogramComponent::resized()
     place (cbLayout_, 82, 10);
     place (cbSpan_, 62);
     place (cbTop_, 92);
-    place (cbRange_, 112, 8);
+    place (cbRange_, 112);
+    place (cbRes_, 92, 8);
     place (btnPause_, 58);
 
     updateWantedResolution();
@@ -672,6 +874,7 @@ String SpectrogramComponent::noteName (float hz)
 void SpectrogramComponent::paint (Graphics& g)
 {
     const float span    = kSpanSec[settings_->spanIdx];
+    const float leadSec = sr_ > 0.0 ? (float) ((double) leadSamples() / sr_) : 0.f;
     const float floorDb = topDb() - rangeDb();
     const int   filled  = (int) jmin ((int64) cols_, colCount_);
     const int   newest  = colCount_ > 0 ? (int) ((colCount_ - 1) % cols_) : -1;
@@ -821,9 +1024,10 @@ void SpectrogramComponent::paint (Graphics& g)
         for (int i = 0; i <= 4; ++i)
         {
             const float x = h.getX() + h.getWidth() * (float) i / 4.f;
-            const float t = -span * (1.f - (float) i / 4.f);
-            const String txt = i == 4 ? String ("now")
-                                     : (std::abs (t) < 10.f ? String (t, 1) : String (roundToInt (t))) + " s";
+            // Relative to the real "now": the newest column is lead old.
+            const float t = -leadSec - span * (1.f - (float) i / 4.f);
+            const String txt = (std::abs (t) < 1.f ? String (t, 2)
+                                 : std::abs (t) < 10.f ? String (t, 1) : String (roundToInt (t))) + " s";
             const auto j = i == 0 ? Justification::centredLeft : (i == 4 ? Justification::centredRight : Justification::centred);
             g.drawText (txt, i == 0 ? (int) x : (i == 4 ? (int) x - S (60) : (int) x - S (30)), y, S (60), S (12), j);
         }
@@ -885,7 +1089,7 @@ void SpectrogramComponent::paint (Graphics& g)
         {
             const int col = ((newest - back) % cols_ + cols_) % cols_;
             lines.add (String (lane.db[(size_t) col * rows_ + (size_t) row], 1) + " dB");
-            lines.add (String (-(float) back * span / (float) cols_, 2) + " s");
+            lines.add (String (-leadSec - (float) back * span / (float) cols_, 2) + " s");
         }
     }
     else

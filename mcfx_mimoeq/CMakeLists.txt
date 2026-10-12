@@ -44,7 +44,9 @@ ENDIF()
 # MCFX_EXTRA_* hooks. PresetManager is shared with mcfx_graph.
 SET(MCFX_EXTRA_SOURCES  ${EQCORE_SOURCE} ${EQCORE_HEADER} ${MTXCONV_SOURCES}
                         ${SRC_DIR}/common/Presets/PresetManager.cpp
-                        ${SRC_DIR}/common/Presets/PresetManager.h)
+                        ${SRC_DIR}/common/Presets/PresetManager.h
+                        ${SRC_DIR}/common/Dsp/ConstantQ.cpp
+                        ${SRC_DIR}/common/Dsp/ConstantQ.h)
 SET(MCFX_EXTRA_INCLUDES ${SRC_DIR}/common/EqCore ${SRC_DIR}/mcfx_convolver/Source
                         ${SRC_DIR}/common/Presets)
 

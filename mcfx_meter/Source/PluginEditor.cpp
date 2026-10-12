@@ -736,7 +736,7 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
         {
             const int w = ourProcessor->_size_spec_w;
             const int h = ourProcessor->_size_spec_h;
-            setResizeLimits (620, 300, 3000, 2000);
+            setResizeLimits (690, 300, 3000, 2000);   // its toolbar is ~680 px
             _width  = w;
             _height = h;
             setSize (w, h);

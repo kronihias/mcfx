@@ -23,6 +23,7 @@
 #include "JuceHeader.h"
 #include "ScopeCapture.h"
 #include "Dsp/RealFFT.h"
+#include "Dsp/ConstantQ.h"
 #include <vector>
 
 /** View settings for the spectrogram, kept in the processor like the scope's. */
@@ -34,6 +35,7 @@ struct SpectroSettings
     int  topIdx   = 0;              // index into the top-of-scale steps
     int  rangeIdx = 2;              // index into the dB range steps
     float zoomLo = 0.f, zoomHi = 0.f;   // shown frequency range in Hz; 0 = all of it
+    bool fineBass = true;           // constant-Q bass (sharper, 0.34 s later) vs FFT only
 };
 
 /** Scrolling spectrogram with a live spectrum alongside it.
@@ -60,6 +62,21 @@ struct SpectroSettings
     pans it; double click shows everything again. Zoom only changes what is
     drawn: the analysis always covers the whole range, so zooming never loses
     history.
+
+    Bass: an FFT long enough to resolve 50 Hz from 55 Hz would smear the
+    treble over a third of a second, so with "fine bass" the rows below
+    ~450 Hz come from a constant-Q transform instead — 24 bins per octave,
+    window lengthening into the bass — run on a copy of each channel
+    decimated to ~3 kHz, which makes it about as cheap as the FFT. Above
+    ~450 Hz the FFT is already finer than a quarter tone and stays in charge.
+
+    Time alignment: a column describes one instant, its centre. The FFT frame
+    is centred on it, and every constant-Q window too (ConstantQ::Centred,
+    with the decimator's delay taken out), so a click is one vertical line
+    from 20 Hz to 20 kHz rather than bending later into the bass — the fix
+    from SpaceLevelMeter. The price is that the newest column is half the
+    longest window old: 0.34 s with fine bass, 85 ms without. The time axis
+    says so rather than calling the right edge "now".
 
     A channel range is either averaged (in power) into one lane, or stacked as
     one lane per channel. At most kMaxChannels are analysed at once. */
@@ -113,7 +130,15 @@ private:
     void resetHistory();
     void updateWantedResolution();
     void resampleHistory (int newCols, int newRows);
-    void produceColumn (int64 endAbs, int64 written);
+    void produceColumn (int64 centreAbs, int64 written);
+
+    // Fine bass: decimator + constant-Q, see the class comment.
+    void prepareBass (double sr);
+    void resetBass();
+    void updateDecimation (int64 written);
+    bool bassActive() const { return settings_->fineBass && cq_.isReady(); }
+    /** Samples between a column's centre and the newest sample it needs. */
+    int  leadSamples() const;
     void recolourAll();
 
     float topDb() const;
@@ -158,6 +183,18 @@ private:
     std::vector<RowBins> rowBins_;
     float fMin_ = 20.f, fMax_ = 20000.f;
 
+    // Fine bass.
+    static constexpr int kDecRing = 4096;            // decimated samples kept per channel
+    mcfx::ConstantQ cq_;
+    int   decim_ = 16;                                // decimation factor
+    int   firDelay_ = 0;                              // decimator delay, raw samples
+    std::vector<float> fir_;                          // linear-phase anti-alias lowpass
+    std::vector<std::vector<float>> decRing_;         // per shown channel, kDecRing
+    int64 nextDec_ = -1;                              // next decimated index to compute
+    AudioSampleBuffer rawBuf_;
+    std::vector<float> cqMag_, bassPow_, bassMag_;
+    std::vector<float> rowCqPos_, rowBassW_;          // per row: constant-Q bin position, bass weight
+
     // History resolution: what it is, and what the current size asks for.
     int cols_ = 480, rows_ = 384;
     int wantCols_ = 480, wantRows_ = 384;
@@ -180,7 +217,7 @@ private:
     float dragZoomLo_ = 0.f, dragZoomHi_ = 0.f;
     int   dragLane_ = -1;
 
-    ComboBox cbFirst_, cbLast_, cbLayout_, cbSpan_, cbTop_, cbRange_;
+    ComboBox cbFirst_, cbLast_, cbLayout_, cbSpan_, cbTop_, cbRange_, cbRes_;
     TextButton btnPause_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (SpectrogramComponent)
