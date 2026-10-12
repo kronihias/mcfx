@@ -1360,16 +1360,21 @@ void EqBandEditor::buttonClicked(Button* b)
         // Pre-populate from the band's stored designer state (if any).
         var initialState = band_->getDesignerState();
 
+        // The dialog is non-modal: by the time Apply is pressed the editor may be
+        // gone (plugin window closed) or showing another band, so only apply to
+        // the band it was opened for.
         FIRDesignDialog::launch (sr, initialState,
-            [this] (const std::vector<float>& coeffs, double sampleRate, const var& state)
+            [safe = SafePointer<EqBandEditor> (this), launchIndex = bandIndex_]
+            (const std::vector<float>& coeffs, double sampleRate, const var& state)
             {
-                if (band_ == nullptr) return;
-                notifyAboutToChange();
-                band_->setFIRCoefficientsWithSampleRate (coeffs, sampleRate);
-                band_->setDesignerState (state);
-                updateFromBand();
-                if (listener_ != nullptr)
-                    listener_->bandStructureChanged (bandIndex_);
+                if (safe == nullptr || safe->band_ == nullptr || safe->bandIndex_ != launchIndex)
+                    return;
+                safe->notifyAboutToChange();
+                safe->band_->setFIRCoefficientsWithSampleRate (coeffs, sampleRate);
+                safe->band_->setDesignerState (state);
+                safe->updateFromBand();
+                if (safe->listener_ != nullptr)
+                    safe->listener_->bandStructureChanged (safe->bandIndex_);
             });
     }
 }
@@ -1468,12 +1473,12 @@ void EqBandEditor::timerCallback()
     // enterModalState with deleteWhenDismissed=true handles cleanup.
     // The callback fires before deletion, so we can read the combo value.
     alert->enterModalState(true, ModalCallbackFunction::create(
-        [this, file, alert](int result)
+        [safe = SafePointer<EqBandEditor>(this), launchIndex = bandIndex_, file, alert](int result)
         {
-            if (result == 1)
+            if (result == 1 && safe != nullptr && safe->bandIndex_ == launchIndex)
             {
                 int ch = alert->getComboBoxComponent("channel")->getSelectedItemIndex();
-                loadFIRAudioFile(file, ch);
+                safe->loadFIRAudioFile(file, ch);
             }
         }), true);
 }
