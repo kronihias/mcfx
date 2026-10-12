@@ -28,6 +28,8 @@
 #include "CircularMeter.h"
 #include "WaterfallComponent.h"
 #include "DotMatrixComponent.h"
+#include "OscilloscopeComponent.h"
+#include "DetachedViewWindow.h"
 
 
 #define METER_WIDTH 16
@@ -97,6 +99,23 @@ private:
     // Alternate view: one colour-mapped dot per channel — the compact one.
     DotMatrixComponent _dots;
 
+    // Alternate view: waveforms of one channel or a range of them.
+    OscilloscopeComponent _scope;
+
+    // Alternate view: spectral history with a live spectrum alongside.
+    SpectrogramComponent _spectro;
+
+    // The view the current mode shows, or nullptr for the bars (which are
+    // many fixed-size strips, not one component that could move elsewhere).
+    Component* activeView();
+
+    // Pop-out / fullscreen. The view moves into its own window and comes back
+    // when that closes; displayIndex < 0 opens a plain window instead.
+    void showDetachMenu();
+    void detachView (int displayIndex, bool fullscreen);
+    void reattachView();
+    bool isDetached (const Component& c) const { return _detachedView == &c; }
+
     // Refill the waterfall's channel selector for the current channel count and
     // show the processor's remembered choice.
     void rebuildChannelSelector();
@@ -161,6 +180,12 @@ private:
     ComboBox cb_view;
     ComboBox cb_channel;
     Slider sld_offset;
+    ShapeButton btn_detach { "detach", Colours::white.withAlpha (0.6f),
+                             Colours::white, Colours::aquamarine };
+
+    // Declared after the views it borrows, so it is destroyed before them.
+    std::unique_ptr<DetachedViewWindow> _detached;
+    Component* _detachedView = nullptr;
 
 
     //==============================================================================

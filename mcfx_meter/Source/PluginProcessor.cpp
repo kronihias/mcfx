@@ -284,6 +284,7 @@ void Ambix_meterAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
     // on the GUI thread. This is the first audio-thread copying this plug-in has
     // ever done, so it stays a memcpy behind a gate.
     _band_analyser.push (buffer, NumSamples);
+    _scope_capture.push (buffer, NumSamples);
 }
 
 //==============================================================================
@@ -322,6 +323,22 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("wf_sel",   _selected_ch);
     xml.setAttribute ("dots_w",   _size_dots_w);
     xml.setAttribute ("dots_h",   _size_dots_h);
+    xml.setAttribute ("scope_w",  _size_scope_w);
+    xml.setAttribute ("scope_h",  _size_scope_h);
+    xml.setAttribute ("scope_first",   _scope_settings.firstCh);
+    xml.setAttribute ("scope_last",    _scope_settings.lastCh);
+    xml.setAttribute ("scope_stacked", _scope_settings.stacked);
+    xml.setAttribute ("scope_time",    _scope_settings.timeIdx);
+    xml.setAttribute ("scope_amp",     _scope_settings.ampIdx);
+    xml.setAttribute ("scope_trig",    _scope_settings.trigger);
+    xml.setAttribute ("spec_w",        _size_spec_w);
+    xml.setAttribute ("spec_h",        _size_spec_h);
+    xml.setAttribute ("spec_first",    _spectro_settings.firstCh);
+    xml.setAttribute ("spec_last",     _spectro_settings.lastCh);
+    xml.setAttribute ("spec_stacked",  _spectro_settings.stacked);
+    xml.setAttribute ("spec_span",     _spectro_settings.spanIdx);
+    xml.setAttribute ("spec_top",      _spectro_settings.topIdx);
+    xml.setAttribute ("spec_range",    _spectro_settings.rangeIdx);
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -345,7 +362,7 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
 
             // Absent in sessions saved before these existed, which is exactly
             // the default: the classic bar view at its usual size.
-            _view_mode = (ViewMode) jlimit (0, 3, xmlState->getIntAttribute ("view_mode", 0));
+            _view_mode = (ViewMode) jlimit (0, 5, xmlState->getIntAttribute ("view_mode", 0));
             _size_circle_w = xmlState->getIntAttribute ("circle_w", _size_circle_w);
             _size_circle_h = xmlState->getIntAttribute ("circle_h", _size_circle_h);
             _size_wf_w     = xmlState->getIntAttribute ("wf_w",     _size_wf_w);
@@ -353,6 +370,25 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
             _selected_ch = xmlState->getIntAttribute ("wf_sel", -1);
             _size_dots_w   = xmlState->getIntAttribute ("dots_w",   _size_dots_w);
             _size_dots_h   = xmlState->getIntAttribute ("dots_h",   _size_dots_h);
+            _size_scope_w  = xmlState->getIntAttribute ("scope_w",  _size_scope_w);
+            _size_scope_h  = xmlState->getIntAttribute ("scope_h",  _size_scope_h);
+
+            // Range-checked by the view against the live channel count.
+            _scope_settings.firstCh = xmlState->getIntAttribute ("scope_first", _scope_settings.firstCh);
+            _scope_settings.lastCh  = xmlState->getIntAttribute ("scope_last",  _scope_settings.lastCh);
+            _scope_settings.stacked = xmlState->getBoolAttribute ("scope_stacked", _scope_settings.stacked);
+            _scope_settings.timeIdx = xmlState->getIntAttribute ("scope_time",  _scope_settings.timeIdx);
+            _scope_settings.ampIdx  = xmlState->getIntAttribute ("scope_amp",   _scope_settings.ampIdx);
+            _scope_settings.trigger = xmlState->getBoolAttribute ("scope_trig", _scope_settings.trigger);
+
+            _size_spec_w = xmlState->getIntAttribute ("spec_w", _size_spec_w);
+            _size_spec_h = xmlState->getIntAttribute ("spec_h", _size_spec_h);
+            _spectro_settings.firstCh  = xmlState->getIntAttribute ("spec_first", _spectro_settings.firstCh);
+            _spectro_settings.lastCh   = xmlState->getIntAttribute ("spec_last",  _spectro_settings.lastCh);
+            _spectro_settings.stacked  = xmlState->getBoolAttribute ("spec_stacked", _spectro_settings.stacked);
+            _spectro_settings.spanIdx  = xmlState->getIntAttribute ("spec_span",  _spectro_settings.spanIdx);
+            _spectro_settings.topIdx   = xmlState->getIntAttribute ("spec_top",   _spectro_settings.topIdx);
+            _spectro_settings.rangeIdx = xmlState->getIntAttribute ("spec_range", _spectro_settings.rangeIdx);
         }
 
     }
