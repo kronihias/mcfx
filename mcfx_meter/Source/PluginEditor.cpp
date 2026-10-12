@@ -123,6 +123,8 @@ AudioProcessorEditor (ownerFilter)
     cb_view.addItem ("circle", 2);
     cb_view.addItem ("waterfall", 3);
     cb_view.addItem ("dots", 4);
+    cb_view.addItem ("scope", 5);
+    cb_view.addItem ("spectrogram", 6);
     cb_view.addListener (this);
     cb_view.setTooltip ("How the channels are laid out. The ring keeps a square "
                         "footprint whatever the channel count, and an odd channel "
@@ -143,6 +145,12 @@ AudioProcessorEditor (ownerFilter)
     addChildComponent (_circular);
     addChildComponent (_waterfall);
     addChildComponent (_dots);
+    addChildComponent (_scope);
+    _scope.setCapture (&getProcessor()->_scope_capture);
+    _scope.setSettings (&getProcessor()->_scope_settings);
+    addChildComponent (_spectro);
+    _spectro.setCapture (&getProcessor()->_scope_capture);
+    _spectro.setSettings (&getProcessor()->_spectro_settings);
     auto selectChannel = [this] (int ch)
     {
         getProcessor()->_selected_ch = ch;
@@ -172,6 +180,26 @@ AudioProcessorEditor (ownerFilter)
             p->_my_meter_dsp.getUnchecked (ch)->reset();
     };
 
+    {
+        // Four corner brackets: the usual "fullscreen" glyph, drawn rather than
+        // taken from a font that may not have U+2922.
+        Path corners;
+        const float a = 0.f, b = 10.f, l = 3.5f;
+        corners.startNewSubPath (a, a + l); corners.lineTo (a, a); corners.lineTo (a + l, a);
+        corners.startNewSubPath (b - l, a); corners.lineTo (b, a); corners.lineTo (b, a + l);
+        corners.startNewSubPath (b, b - l); corners.lineTo (b, b); corners.lineTo (b - l, b);
+        corners.startNewSubPath (a + l, b); corners.lineTo (a, b); corners.lineTo (a, b - l);
+        Path stroked;
+        PathStrokeType (1.6f).createStrokedPath (stroked, corners);
+        btn_detach.setShape (stroked, false, true, false);
+        btn_detach.setBorderSize (BorderSize<int> (4));
+        btn_detach.setTooltip ("Open this view in its own window, or fullscreen on any "
+                               "display (for a second screen or a projector). "
+                               "In that window: F toggles fullscreen, Esc leaves it.");
+        btn_detach.onClick = [this] { showDetachMenu(); };
+        addChildComponent (btn_detach);
+    }
+
     // Everything the mode governs is a child by now, so settle visibility once
     // more rather than relying on the order of the two constructor blocks.
     applyModeVisibility();
@@ -186,11 +214,18 @@ AudioProcessorEditor (ownerFilter)
 Ambix_meterAudioProcessorEditor::~Ambix_meterAudioProcessorEditor()
 {
     //[Destructor_pre]. You can add your own custom destruction code here..
+    // Take a popped-out view back before anything it points at goes away.
+    reattachView();
     //[/Destructor_pre]
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
 
     // remove me as listener for changes
     ourProcessor->removeChangeListener(this);
+
+    // Nothing shows the scope's capture once the editor is gone. (The
+    // component's own destructor has not run yet, so unfreeze here too.)
+    ourProcessor->_scope_capture.setActive (false);
+    ourProcessor->_scope_capture.setFrozen (false);
 
     //[Destructor]. You can add your own custom destruction code here..
     //[/Destructor]
@@ -226,6 +261,15 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
     }
     g.drawImageAt (_background, 0, 0);
 
+    if (_detachedView != nullptr)
+    {
+        g.setColour (Colours::white.withAlpha (0.6f));
+        g.setFont (Font (FontOptions (14.f)));
+        g.drawFittedText ("This view is open in its own window.\n"
+                          "Close that window (or press Esc in it) to bring it back here.",
+                          getLocalBounds().reduced (20).withTrimmedTop (30), Justification::centred, 3);
+    }
+
     /* Version text */
     g.setColour (Colours::white);
     g.setFont (Font (FontOptions (10.00f, Font::plain)));
@@ -250,6 +294,9 @@ void Ambix_meterAudioProcessorEditor::resized()
     const auto mode = getProcessor()->_view_mode;
     const bool bars = mode == Ambix_meterAudioProcessor::ViewMode::Bars;
     const bool wf   = mode == Ambix_meterAudioProcessor::ViewMode::Waterfall;
+    // Both carry their own toolbar and channel range.
+    const bool scope = mode == Ambix_meterAudioProcessor::ViewMode::Scope
+                    || mode == Ambix_meterAudioProcessor::ViewMode::Spectrogram;
 
     // Strip order: title, which view, which channel, then the level controls.
     // The two selectors belong together — both answer "what am I looking at" —
@@ -259,7 +306,7 @@ void Ambix_meterAudioProcessorEditor::resized()
 
     // Only the bars have no channel selection, so only they get that space
     // back. The level controls shift by whatever precedes them.
-    const bool hasChanCombo = ! bars;
+    const bool hasChanCombo = ! bars && ! scope;   // the scope has its own range
     const int  kCtlShift    = hasChanCombo ? 192 : 96;
 
     // Below the width its own controls need, the strip keeps the selectors and
@@ -267,7 +314,7 @@ void Ambix_meterAudioProcessorEditor::resized()
     // corner-of-the-screen glance. They mean nothing to the waterfall or the
     // dots in any case.
     const int  needed        = hasChanCombo ? 673 : kMinEditorWidth;
-    const bool showLevelCtls = ! wf && mode != Ambix_meterAudioProcessor::ViewMode::Dots
+    const bool showLevelCtls = ! wf && ! scope && mode != Ambix_meterAudioProcessor::ViewMode::Dots
                                    && getWidth() >= needed;
 
     label.setBounds (0, 0, 104, 16);
@@ -293,14 +340,25 @@ void Ambix_meterAudioProcessorEditor::resized()
 
     // Bars keep the original fixed slider; the resizable views stretch it.
     sld_offset.setBounds (4, 23, 18, bars ? 167 : jmax (60, getHeight() - 31));
+    // A level-meter offset means nothing to a waveform.
+    sld_offset.setVisible (! scope);
 
     // Inset past the offset slider. These used to start at x=0 and, being added
     // after it, sat on top of it and swallowed every click — the slider was
     // unreachable in both of these views even though its value worked.
     const int viewX = 26;
-    _circular.setBounds  (viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28));
-    _waterfall.setBounds (viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28));
-    _dots.setBounds      (viewX, 30, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 34));
+    // A popped-out view is sized by its window, not by us.
+    auto place = [this] (Component& c, Rectangle<int> r) { if (! isDetached (c)) c.setBounds (r); };
+    place (_circular,  { viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28) });
+    place (_waterfall, { viewX, 28, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 28) });
+    place (_dots,      { viewX, 30, jmax (0, getWidth() - viewX), jmax (0, getHeight() - 34) });
+    // No offset slider to step around, so the scope takes the full width.
+    place (_scope,     { 4, 28, jmax (0, getWidth() - 8), jmax (0, getHeight() - 40) });
+    place (_spectro,   { 4, 28, jmax (0, getWidth() - 8), jmax (0, getHeight() - 40) });
+
+    // Top-right corner of the strip, clear of every control left of it.
+    btn_detach.setBounds (getWidth() - 26, 1, 22, 22);
+    btn_detach.setVisible (activeView() != nullptr && getWidth() >= 300);
 
     const int row_y_offset = 215;
 
@@ -343,6 +401,14 @@ void Ambix_meterAudioProcessorEditor::resized()
         case Ambix_meterAudioProcessor::ViewMode::Dots:
             ourProcessor->_size_dots_w = getWidth();
             ourProcessor->_size_dots_h = getHeight();
+            break;
+        case Ambix_meterAudioProcessor::ViewMode::Scope:
+            ourProcessor->_size_scope_w = getWidth();
+            ourProcessor->_size_scope_h = getHeight();
+            break;
+        case Ambix_meterAudioProcessor::ViewMode::Spectrogram:
+            ourProcessor->_size_spec_w = getWidth();
+            ourProcessor->_size_spec_h = getHeight();
             break;
         default: break;
     }
@@ -423,6 +489,20 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
         // hover/selection handlers issue their own repaints.
         if (ring) { _circular.setOffset ((int) ourProcessor->_offset); if (_circular.takeDirty()) _circular.repaint(); }
         else      { _dots.setOffset     ((int) ourProcessor->_offset); if (_dots.takeDirty())     _dots.repaint(); }
+    }
+    else if (ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Scope
+             || ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Spectrogram)
+    {
+        // A sample-rate change does not come through applyModeVisibility(), so
+        // the scope's ring follows it here. prepare() is a no-op otherwise.
+        const double sr = ourProcessor->getSampleRate();
+        if (sr > 0.0 && sr != ourProcessor->_scope_capture.getSampleRate())
+            ourProcessor->_scope_capture.prepare (sr, jmax (1, _cachedNumCh));
+
+        if (ourProcessor->_view_mode == Ambix_meterAudioProcessor::ViewMode::Scope)
+            _scope.tick();
+        else
+            _spectro.tick();
     }
     else
     {
@@ -530,13 +610,21 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
 
     _dots.setNumChannels (_cachedNumCh);
     _dots.setVisible (mode == Ambix_meterAudioProcessor::ViewMode::Dots);
+
+    const bool scope = mode == Ambix_meterAudioProcessor::ViewMode::Scope;
+    _scope.setNumChannels (_cachedNumCh);
+    _scope.setVisible (scope);
+
+    const bool spectro = mode == Ambix_meterAudioProcessor::ViewMode::Spectrogram;
+    _spectro.setNumChannels (_cachedNumCh);
+    _spectro.setVisible (spectro);
     // cb_channel's visibility is resized()'s call: it depends on the width as
     // well as the mode.
 
     // Hold time, fall rate and the peak-hold toggle are laid out and shown or
     // hidden by resized(), which is the one place that knows the width as well
     // as the mode.
-    if (! bars)
+    if (! bars && ! scope && ! spectro)
         rebuildChannelSelector();
 
     // The analyser is the only expensive thing here, so it runs only while its
@@ -550,6 +638,13 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
         p->_band_analyser.setSmoothing (std::exp (-0.040f / 0.20f));
     }
     p->_band_analyser.setActive (wf);
+
+    // Same deal for the scope's ring: allocated on first use, filled only
+    // while the scope is on screen.
+    if (scope || spectro)
+        p->_scope_capture.prepare (p->getSampleRate() > 0.0 ? p->getSampleRate() : 48000.0,
+                                   jmax (1, _cachedNumCh));
+    p->_scope_capture.setActive (scope || spectro);
 }
 
 void Ambix_meterAudioProcessorEditor::rebuildChannelSelector()
@@ -632,6 +727,29 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
             break;
         }
 
+        case Ambix_meterAudioProcessor::ViewMode::Spectrogram:
+        {
+            const int w = ourProcessor->_size_spec_w;
+            const int h = ourProcessor->_size_spec_h;
+            setResizeLimits (620, 300, 3000, 2000);
+            _width  = w;
+            _height = h;
+            setSize (w, h);
+            break;
+        }
+
+        case Ambix_meterAudioProcessor::ViewMode::Scope:
+        {
+            const int w = ourProcessor->_size_scope_w;
+            const int h = ourProcessor->_size_scope_h;
+            // The scope's own toolbar needs ~600 px.
+            setResizeLimits (620, 300, 3000, 2000);
+            _width  = w;
+            _height = h;
+            setSize (w, h);
+            break;
+        }
+
         case Ambix_meterAudioProcessor::ViewMode::Waterfall:
         {
             const int w = ourProcessor->_size_wf_w;
@@ -698,13 +816,103 @@ void Ambix_meterAudioProcessorEditor::comboBoxChanged (ComboBox* comboBoxThatHas
     if (comboBoxThatHasChanged != &cb_view)
         return;
 
+    // The popped-out window shows one view; switching brings it home first.
+    reattachView();
+
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    const auto mode = (Ambix_meterAudioProcessor::ViewMode) jlimit (0, 3, cb_view.getSelectedId() - 1);
+    const auto mode = (Ambix_meterAudioProcessor::ViewMode) jlimit (0, 5, cb_view.getSelectedId() - 1);
     if (mode == ourProcessor->_view_mode)
         return;
 
     ourProcessor->_view_mode = mode;
     applyModeSizing();          // applies visibility too
+}
+
+Component* Ambix_meterAudioProcessorEditor::activeView()
+{
+    switch (getProcessor()->_view_mode)
+    {
+        case Ambix_meterAudioProcessor::ViewMode::Circle:    return &_circular;
+        case Ambix_meterAudioProcessor::ViewMode::Waterfall: return &_waterfall;
+        case Ambix_meterAudioProcessor::ViewMode::Dots:      return &_dots;
+        case Ambix_meterAudioProcessor::ViewMode::Scope:     return &_scope;
+        case Ambix_meterAudioProcessor::ViewMode::Spectrogram: return &_spectro;
+        default:                                             return nullptr;
+    }
+}
+
+void Ambix_meterAudioProcessorEditor::showDetachMenu()
+{
+    if (_detached != nullptr)
+    {
+        reattachView();
+        return;
+    }
+
+    PopupMenu m;
+    m.addItem (1, "Open in window");
+    m.addSeparator();
+
+    const auto& displays = Desktop::getInstance().getDisplays().displays;
+    for (int i = 0; i < displays.size(); ++i)
+    {
+        const auto r = displays.getReference (i).totalArea;
+        String name = "Fullscreen on display " + String (i + 1) + "  ("
+                    + String (r.getWidth()) + " x " + String (r.getHeight()) + ")";
+        if (displays.getReference (i).isMain)
+            name << "  main";
+        m.addItem (100 + i, name);
+    }
+
+    m.showMenuAsync (PopupMenu::Options().withTargetComponent (&btn_detach),
+                     [safe = Component::SafePointer<Ambix_meterAudioProcessorEditor> (this)] (int r)
+    {
+        if (safe == nullptr || r == 0) return;
+        if (r == 1) safe->detachView (-1, false);
+        else        safe->detachView (r - 100, true);
+    });
+}
+
+void Ambix_meterAudioProcessorEditor::detachView (int displayIndex, bool fullscreen)
+{
+    Component* view = activeView();
+    if (view == nullptr || _detached != nullptr)
+        return;
+
+    const auto& displays = Desktop::getInstance().getDisplays().displays;
+    const Displays::Display* display = isPositiveAndBelow (displayIndex, displays.size())
+                                         ? &displays.getReference (displayIndex)
+                                         : Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds());
+
+    _detachedView = view;
+    _detached = std::make_unique<DetachedViewWindow> ("mcfx_meter" + String (_cachedNumCh) + " - "
+                                                        + cb_view.getText(), *view);
+    _detached->onClose = [this] { reattachView(); };
+    _detached->showOn (display, fullscreen);
+    view->setVisible (true);
+
+    resized();
+    repaint();
+}
+
+void Ambix_meterAudioProcessorEditor::reattachView()
+{
+    if (_detached == nullptr)
+        return;
+
+    if (_detached->isFullScreen())
+        _detached->setFullScreen (false);
+
+    _detached->clearContentComponent();   // non-owned: only removes it
+    _detached.reset();
+
+    if (_detachedView != nullptr)
+        addChildComponent (_detachedView);
+    _detachedView = nullptr;
+
+    applyModeVisibility();
+    resized();
+    repaint();
 }
 
 void Ambix_meterAudioProcessorEditor::resetAllMeters()

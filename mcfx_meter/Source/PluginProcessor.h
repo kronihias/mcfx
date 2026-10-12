@@ -24,6 +24,9 @@
 #include "mcfx_buses.h"
 #include "MyMeterDsp.h"
 #include "MultiBandAnalyser.h"
+#include "ScopeCapture.h"
+#include "OscilloscopeComponent.h"
+#include "SpectrogramComponent.h"
 
 //==============================================================================
 /**
@@ -95,7 +98,7 @@ public:
         parameter: it is a view setting, so it has no business being automatable,
         and adding a fifth parameter would change getNumParameters() — which is
         the bound of the state loop below and of the host's parameter list. */
-    enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2, Dots = 3 };
+    enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2, Dots = 3, Scope = 4, Spectrogram = 5 };
     ViewMode _view_mode = ViewMode::Bars;
 
     // Editor size remembered per view, so switching back and forth does not
@@ -104,6 +107,8 @@ public:
     int _size_circle_w = 700, _size_circle_h = 700;
     int _size_wf_w     = 900, _size_wf_h     = 560;
     int _size_dots_w   = 420, _size_dots_h   = 260;
+    int _size_scope_w  = 900, _size_scope_h  = 520;
+    int _size_spec_w   = 1000, _size_spec_h  = 560;
 
     /** Highlighted channel, -1 for none. Shared by the ring, the waterfall and
         the dots: it is one idea — which channel you are looking at — so it
@@ -115,6 +120,14 @@ public:
     /** Per-channel band levels for the waterfall view. Idle — and unallocated —
         until the editor switches that view on. */
     MultiBandAnalyser _band_analyser;
+
+    /** Raw sample history for the oscilloscope view. Idle and unallocated
+        until that view is shown, like the analyser. */
+    ScopeCapture _scope_capture;
+    ScopeSettings _scope_settings;
+
+    /** The spectrogram reads the same sample history as the scope. */
+    SpectroSettings _spectro_settings;
 
     float _hold; // peak hold time, seconds
     float _fall; // peak fallback rate, dB/s
