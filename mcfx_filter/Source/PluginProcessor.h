@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
+#include "JuceCompat.h"
 
 #include "FilterInfo.h"
 #include "SmoothIIRFilter.hpp"
@@ -183,13 +184,10 @@ public:
     void getStateInformation (MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
-  // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
-  // This shim calls setParameter() directly, which updates internal state,
-  // recalculates filter coefficients, and sends change messages to the editor.
-  // Note: host automation recording requires migrating to managed parameters.
+  // JUCE 8 removed AudioProcessor::setParameterNotifyingHost, see common/JuceCompat.h.
   void setParameterNotifyingHost(int parameterIndex, float newValue)
   {
-      setParameter(parameterIndex, newValue);
+      ::setParameterNotifyingHost(this, parameterIndex, newValue);
   }
 
   enum Parameters
