@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
+#include "JuceCompat.h"
 
 #include "MySignalGenerator.h"
 #include "ChannelStepper.h"
@@ -75,10 +76,10 @@ public:
 
     void setSiggenForAllChannels(bool active); // activate/deactivate the signal generator for all channels
 
-    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
+    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost, see common/JuceCompat.h.
     void setParameterNotifyingHost(int parameterIndex, float newValue)
     {
-        setParameter(parameterIndex, newValue);
+        ::setParameterNotifyingHost(this, parameterIndex, newValue);
     }
 
     const String getParameterName (int index) override;

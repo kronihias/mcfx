@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
+#include "JuceCompat.h"
 #include "MyMeterDsp.h"
 #include "MultiBandAnalyser.h"
 #include "ScopeCapture.h"
@@ -135,10 +136,10 @@ public:
     bool _pk_hold;
     float _offset;
 
-    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
+    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost, see common/JuceCompat.h.
     void setParameterNotifyingHost(int parameterIndex, float newValue)
     {
-        setParameter(parameterIndex, newValue);
+        ::setParameterNotifyingHost(this, parameterIndex, newValue);
     }
 
     enum Parameters

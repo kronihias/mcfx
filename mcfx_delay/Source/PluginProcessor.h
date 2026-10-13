@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
+#include "JuceCompat.h"
 
 #ifndef MAX_DELAYTIME_S
     #define MAX_DELAYTIME_S 0.5
@@ -89,10 +90,10 @@ public:
     int getDelayInSmpls();
     float getDelayInMs();
 
-    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost.
+    // JUCE 8 removed AudioProcessor::setParameterNotifyingHost, see common/JuceCompat.h.
     void setParameterNotifyingHost(int parameterIndex, float newValue)
     {
-        setParameter(parameterIndex, newValue);
+        ::setParameterNotifyingHost(this, parameterIndex, newValue);
     }
 
     enum Parameters
