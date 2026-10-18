@@ -190,6 +190,7 @@ public:
         uint64_t     recvPackets;
         uint64_t     recvBytes;
         uint64_t     droppedReorder;
+        uint64_t     streamRestarts;  // re-aligned after the sender's frame count jumped back
         uint64_t     gapFrames;       // frames zero-filled across gaps
         uint64_t     underruns;       // audio-thread reads with empty buffer
         bool         primed;

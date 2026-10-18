@@ -23,6 +23,11 @@
     burst          60 s    2× sender push for 5 s, recovery
     channel_change 30 s    mid-stream channel-count change
     reconnect      60 s    10× connect/disconnect cycles
+    reprepare      18 s    sender prepareToPlay re-run mid-stream
+    stall          18 s    sender stops pushing for 50 ms mid-stream
+    split_fast_mode 12 s   pre-render burst, then periods split into sub-calls
+    counter_rewind 18 s    sender frame counter jumps back to 0 mid-stream
+    counter_wrap   18 s    sender frame counter wraps 2^32 mid-stream
     soak          14400 s  hours-long matched-rate run
 
   Pacing: every audio block is scheduled by `std::chrono::steady_clock`
@@ -94,6 +99,16 @@ struct Options
     // bumps it up to cover the full duration. Capped per-scenario to
     // avoid 11 GB allocations on the 4-hour soak run.
     double       captureSeconds = 10.0;
+    // Host-behaviour events (scenario-specific, off by default).
+    int          splitCalls     = 1;      // push each sender period as this many back-to-back calls
+    double       reprepareAtSec = -1.0;   // re-run SendStream::prepareToPlay at this time
+    double       stallAtSec     = -1.0;   // stop pushing for stallMs at this time
+    double       stallMs        = 50.0;   // length of the --stall-at / --reprepare-at gap
+    double       rewindAtSec    = -1.0;   // set the sender frame counter to 0 at this time
+    double       counterStart   = -1.0;   // seed the sender frame counter before the run
+    // Report tail_* metrics: is the end of the run still carrying audio?
+    // Needs captureSeconds >= durationSec.
+    bool         tailCheck      = false;
     juce::String metricsOut    = {};
     bool         verbose       = false;
 
@@ -127,6 +142,12 @@ bool parseArgs (int argc, char** argv, Options& o)
         else if (a == "--channels")        { if (! need (++i)) return false; o.channels = std::atoi (argv[i]); }
         else if (a == "--burst-multiplier"){ if (! need (++i)) return false; o.burstMultiplier = std::atof (argv[i]); }
         else if (a == "--burst-duration")  { if (! need (++i)) return false; o.burstDurationSec = std::atof (argv[i]); }
+        else if (a == "--split-calls")     { if (! need (++i)) return false; o.splitCalls = std::atoi (argv[i]); }
+        else if (a == "--reprepare-at")    { if (! need (++i)) return false; o.reprepareAtSec = std::atof (argv[i]); }
+        else if (a == "--stall-at")        { if (! need (++i)) return false; o.stallAtSec = std::atof (argv[i]); }
+        else if (a == "--stall-ms")        { if (! need (++i)) return false; o.stallMs = std::atof (argv[i]); }
+        else if (a == "--rewind-at")       { if (! need (++i)) return false; o.rewindAtSec = std::atof (argv[i]); }
+        else if (a == "--counter-start")   { if (! need (++i)) return false; o.counterStart = std::atof (argv[i]); }
         else if (a == "--metrics-out")     { if (! need (++i)) return false; o.metricsOut = argv[i]; }
         else if (a == "-v" || a == "--verbose") { o.verbose = true; }
         else if (a == "-h" || a == "--help")
@@ -215,6 +236,10 @@ struct Driver
     uint64_t finalSentPackets     = 0;
     uint64_t finalAudioOverruns   = 0;   // sender-side push failures
     uint64_t finalGapFrames       = 0;
+    uint64_t finalDroppedReorder  = 0;
+    uint64_t finalStreamRestarts  = 0;
+    uint32_t finalFastModeEntries = 0;
+    bool     finalFastModeActive  = false;
     int      finalFillFrames      = 0;
     double   finalRcorr           = 1.0;
     double   finalRcZ3            = 0.0;
@@ -242,6 +267,9 @@ struct Driver
         // Pass the receiver's wireUid up front so the rate-loop has a
         // chance to pair correctly from the start.
         send.addTarget ("127.0.0.1", recvPort, recv.getReceiverUid());
+
+        if (opts.counterStart >= 0.0)
+            send.setFrameCounterForTesting ((uint32_t) opts.counterStart);
 
         // Pre-size the capture buffer for the passthrough fidelity test
         // (10 s max). Larger scenarios will just stop appending past
@@ -279,19 +307,64 @@ struct Driver
         // DESC packet advertises.
         const double basePeriodSec = (double) opts.senderPeriod / opts.effectiveSenderPace();
 
+        // Sub-call layout for --split-calls: the period is pushed as
+        // `splitCalls` back-to-back calls, the way a host that splits its
+        // device period (automation breakpoints, sub-block scheduling)
+        // calls processBlock.
+        const int splits = juce::jlimit (1, opts.senderPeriod, opts.splitCalls);
+        std::vector<float*> subPtrs ((size_t) opts.channels);
+
+        bool reprepared = false;
+        bool stalled    = false;
+        bool rewound    = false;
+
         while (! stopFlag.load (std::memory_order_acquire))
         {
             std::this_thread::sleep_until (next);
 
             const double elapsedSec = std::chrono::duration<double>
                 (std::chrono::steady_clock::now() - start).count();
+
+            // Host re-activates the plug-in: audio stops briefly, then
+            // prepareToPlay runs again with the same settings.
+            if (! reprepared && opts.reprepareAtSec >= 0.0 && elapsedSec >= opts.reprepareAtSec)
+            {
+                reprepared = true;
+                std::this_thread::sleep_for (std::chrono::duration<double, std::milli> (opts.stallMs));
+                send.prepareToPlay (opts.senderSampleRate, opts.senderPeriod,
+                                    opts.channels, SF_FLOAT32);
+                next = std::chrono::steady_clock::now();   // no catch-up burst
+            }
+            // Host stops calling processBlock for a moment (CPU spike,
+            // device hiccup) without re-preparing.
+            if (! stalled && opts.stallAtSec >= 0.0 && elapsedSec >= opts.stallAtSec)
+            {
+                stalled = true;
+                std::this_thread::sleep_for (std::chrono::duration<double, std::milli> (opts.stallMs));
+                next = std::chrono::steady_clock::now();
+            }
+            if (! rewound && opts.rewindAtSec >= 0.0 && elapsedSec >= opts.rewindAtSec)
+            {
+                rewound = true;
+                send.setFrameCounterForTesting (0);
+            }
+
             const double mult = (opts.burstDurationSec > 0.0
                                  && elapsedSec < opts.burstDurationSec)
                                   ? opts.burstMultiplier : 1.0;
             const double thisPeriodSec = basePeriodSec / mult;
 
             gen.fill (chanPtrs.data(), opts.senderPeriod);
-            send.pushAudioBlock (chanPtrs.data(), opts.channels, opts.senderPeriod);
+            int offset = 0;
+            for (int k = 0; k < splits; ++k)
+            {
+                const int n = (k == splits - 1) ? opts.senderPeriod - offset
+                                                : opts.senderPeriod / splits;
+                for (int c = 0; c < opts.channels; ++c)
+                    subPtrs[(size_t) c] = chanPtrs[(size_t) c] + offset;
+                send.pushAudioBlock (subPtrs.data(), opts.channels, n);
+                offset += n;
+            }
 
             next += std::chrono::duration_cast<std::chrono::steady_clock::duration> (
                 std::chrono::duration<double> (thisPeriodSec));
@@ -436,9 +509,13 @@ struct Driver
             finalRcZ3        = p.rcZ3;
             finalRcNominal   = p.rcNominalRatio;
             finalGapFrames   = p.gapFrames;
+            finalDroppedReorder = p.droppedReorder;
+            finalStreamRestarts = p.streamRestarts;
         }
         finalSentPackets   = send.getSentPackets();
         finalAudioOverruns = send.getOverruns();
+        finalFastModeEntries = send.getFastModeEntries();
+        finalFastModeActive  = send.isInFastMode();
     }
 
     // Capture analysis: fundamental-frequency check on channel 0. Used
@@ -524,6 +601,20 @@ struct Driver
         const double delta = (std::abs (denom) > 1e-30)
                                 ? 0.5 * (y0 - y2) / denom : 0.0;
         return ((double) peakBin + delta) * sr / (double) N;
+    }
+
+    // RMS of the last `seconds` of captured output on one channel. The
+    // host-event scenarios use it to tell "audio came back" from "silent
+    // after the event". A 0.5-amplitude sine reads ~0.354.
+    double tailRms (int channel, double seconds) const
+    {
+        if (channel < 0 || channel >= (int) capture.size()) return -1.0;
+        const int n = juce::jmin (captureFramesNow, (int) (opts.recvSampleRate * seconds));
+        if (n <= 0) return -1.0;
+        const float* x = capture[(size_t) channel].data() + (captureFramesNow - n);
+        double acc = 0.0;
+        for (int i = 0; i < n; ++i) acc += (double) x[i] * (double) x[i];
+        return std::sqrt (acc / (double) n);
     }
 
     // Measure fundamental frequency in `numWindows` evenly-spaced
@@ -642,6 +733,53 @@ void scn_reconnect (Options& o)
 {
     if (o.durationSec <= 0.0) o.durationSec = 60.0;
 }
+void scn_tail (Options& o, double defaultDuration)
+{
+    if (o.durationSec <= 0.0) o.durationSec = defaultDuration;
+    if (o.captureSeconds < o.durationSec) o.captureSeconds = o.durationSec;
+    o.tailCheck = true;
+}
+void scn_reprepare (Options& o)
+{
+    // Host re-activates the sender (setActive off/on) with unchanged
+    // settings. The stream must carry on: the frame count may not rewind
+    // under the same sender UID.
+    scn_tail (o, 18.0);
+    if (o.reprepareAtSec < 0.0) o.reprepareAtSec = 6.0;
+}
+void scn_stall (Options& o)
+{
+    // Host stops calling processBlock for 50 ms (overloaded machine), then
+    // carries on. Same gap as `reprepare` without the re-prepare.
+    scn_tail (o, 18.0);
+    if (o.stallAtSec < 0.0) o.stallAtSec = 6.0;
+}
+void scn_split_fast_mode (Options& o)
+{
+    // 0.5 s of 8x pre-render trips the sender's anticipative-render
+    // detector; afterwards the host runs at realtime but pushes every
+    // period as 4 back-to-back calls. The detector has to notice the
+    // realtime pacing and resume sending.
+    scn_tail (o, 12.0);
+    if (o.senderPeriod == 64)     o.senderPeriod = 256;
+    if (o.splitCalls <= 1)        o.splitCalls = 4;
+    if (o.burstMultiplier == 1.0) o.burstMultiplier = 8.0;
+    if (o.burstDurationSec <= 0.0) o.burstDurationSec = 0.5;
+}
+void scn_counter_rewind (Options& o)
+{
+    // Sender frame count jumps back to 0 under the same UID (what older
+    // senders did on every prepareToPlay). Receiver must re-align.
+    scn_tail (o, 18.0);
+    if (o.rewindAtSec < 0.0) o.rewindAtSec = 6.0;
+}
+void scn_counter_wrap (Options& o)
+{
+    // 32-bit wire frame count wraps ~6 s into the run.
+    scn_tail (o, 18.0);
+    if (o.counterStart < 0.0)
+        o.counterStart = 4294967296.0 - 6.0 * o.senderSampleRate;
+}
 void scn_soak (Options& o)
 {
     if (o.durationSec <= 0.0) o.durationSec = 14400.0;  // 4 hours
@@ -658,6 +796,11 @@ const Scenario kScenarios[] = {
     { "burst",          scn_burst,          "60 s with 5 s @ 2× burst" },
     { "channel_change", scn_channel_change, "30 s with mid-stream chan change" },
     { "reconnect",      scn_reconnect,      "60 s of connect/disconnect cycles" },
+    { "reprepare",      scn_reprepare,      "18 s with sender re-prepare at 6 s" },
+    { "stall",          scn_stall,          "18 s with a 50 ms sender stall at 6 s" },
+    { "split_fast_mode",scn_split_fast_mode,"12 s pre-render burst then split periods" },
+    { "counter_rewind", scn_counter_rewind, "18 s with frame counter reset at 6 s" },
+    { "counter_wrap",   scn_counter_wrap,   "18 s with 32-bit frame counter wrap at ~6 s" },
     { "soak",           scn_soak,           "4 h matched-rate soak" },
 };
 
@@ -673,7 +816,8 @@ const Scenario* findScenario (const juce::String& name)
 // rely on it across versions.
 // ---------------------------------------------------------------------------
 void writeMetricsJson (const Driver& d, double measuredFreqCh0Hz,
-                       const std::vector<double>& fundHzWindows)
+                       const std::vector<double>& fundHzWindows,
+                       double tailRmsCh0 = -1.0, double tailHzCh0 = -1.0)
 {
     if (d.opts.metricsOut.isEmpty()) return;
 
@@ -707,6 +851,14 @@ void writeMetricsJson (const Driver& d, double measuredFreqCh0Hz,
     root->setProperty ("final_rcNominalRatio", d.finalRcNominal);
 
     root->setProperty ("measured_fundamental_hz", measuredFreqCh0Hz);
+
+    root->setProperty ("dropped_reorder",      (juce::int64) d.finalDroppedReorder);
+    root->setProperty ("stream_restarts",      (juce::int64) d.finalStreamRestarts);
+    root->setProperty ("fast_mode_entries",    (juce::int64) d.finalFastModeEntries);
+    root->setProperty ("fast_mode_active_end", d.finalFastModeActive);
+    // -1 when the scenario doesn't request a tail check.
+    root->setProperty ("tail_rms_ch0",         tailRmsCh0);
+    root->setProperty ("tail_fundamental_hz",  tailHzCh0);
 
     // Per-window fundamental frequency (channel 0) for the long-term
     // pitch-stability test. Empty for scenarios that don't request it.
@@ -791,6 +943,16 @@ int main (int argc, char** argv)
     if (opts.scenario == "pitch_stability")
         fundHzWindows = d.measurePreciseHzWindowed (0, 131072, 8, 5.0);
 
+    // Tail check: last 3 s RMS and a ~2.7 s FFT ending at the last frame.
+    double tailRmsCh0 = -1.0, tailHzCh0 = -1.0;
+    if (opts.tailCheck)
+    {
+        tailRmsCh0 = d.tailRms (0, 3.0);
+        constexpr int kTailN = 131072;
+        if (d.captureFramesNow >= kTailN)
+            tailHzCh0 = d.measurePreciseHzAt (0, d.captureFramesNow - kTailN, kTailN);
+    }
+
     d.teardown();
 
     std::cerr << "DONE underruns=" << d.finalUnderruns
@@ -800,8 +962,13 @@ int main (int argc, char** argv)
               << " finalRcZ3=" << d.finalRcZ3
               << " sentPkts=" << d.finalSentPackets
               << " recvPkts=" << d.finalRecvPackets
+              << " reorderDrop=" << d.finalDroppedReorder
+              << " restarts=" << d.finalStreamRestarts
+              << " fastModeEntries=" << d.finalFastModeEntries
+              << " tailRms=" << tailRmsCh0
+              << " tailHz=" << tailHzCh0
               << "\n";
 
-    writeMetricsJson (d, measuredHz, fundHzWindows);
+    writeMetricsJson (d, measuredHz, fundHzWindows, tailRmsCh0, tailHzCh0);
     return 0;
 }

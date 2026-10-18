@@ -583,6 +583,7 @@ void McfxReceiveAudioProcessorEditor::timerCallback()
             if (p.gapFrames)      netText += "  gap "       + juce::String (p.gapFrames);
             if (p.underruns)      netText += "  underrun "  + juce::String (p.underruns);
             if (p.droppedReorder) netText += "  reorderDrop " + juce::String (p.droppedReorder);
+            if (p.streamRestarts) netText += "  restart "    + juce::String (p.streamRestarts);
         }
         peersLabel.setText (peersText, juce::dontSendNotification);
         networkLabel.setText (netText,  juce::dontSendNotification);

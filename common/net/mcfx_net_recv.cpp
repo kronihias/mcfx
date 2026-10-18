@@ -114,6 +114,7 @@ struct RecvStream::PeerStream
     std::atomic<uint64_t> recvPackets    { 0 };
     std::atomic<uint64_t> recvBytes      { 0 };
     std::atomic<uint64_t> droppedReorder { 0 };
+    std::atomic<uint64_t> streamRestarts { 0 };
     std::atomic<uint64_t> gapFrames      { 0 };
     std::atomic<uint64_t> underruns      { 0 };
 
@@ -706,6 +707,7 @@ std::vector<RecvStream::PeerSnapshot> RecvStream::snapshotPeers() const
         s.recvPackets    = p->recvPackets.load    (std::memory_order_relaxed);
         s.recvBytes      = p->recvBytes.load      (std::memory_order_relaxed);
         s.droppedReorder = p->droppedReorder.load (std::memory_order_relaxed);
+        s.streamRestarts = p->streamRestarts.load (std::memory_order_relaxed);
         s.gapFrames      = p->gapFrames.load      (std::memory_order_relaxed);
         s.underruns      = p->underruns.load      (std::memory_order_relaxed);
         s.primed         = p->primed.load         (std::memory_order_relaxed);
@@ -1642,6 +1644,36 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
         peer->haveSeenData = true;
         peer->readFramePos.store  (startFrame, std::memory_order_release);
         peer->writeFramePos.store (startFrame, std::memory_order_release);
+    }
+
+    // Sender restarted its frame count under the same UID. Older senders
+    // rewound it on every prepareToPlay, and the 32-bit wire count wraps
+    // after ~24 h at 48 kHz. Either way every following packet lands far
+    // behind writeFramePos, the reorder check below drops all of them,
+    // and because DATA keeps refreshing lastDataTimeSec the peer is never
+    // evicted either — permanent silence. Anything more than a whole ring
+    // in the past cannot be a late packet, so treat it as a new stream and
+    // re-align like the first packet does. The second test catches the
+    // audio thread committing a read position computed before a previous
+    // re-align, which would otherwise leave the reader parked ahead of
+    // every write. Write is moved before read so the audio thread sees an
+    // empty ring, never a huge bogus fill, in between.
+    {
+        const auto ringCap  = static_cast<uint64_t> (peer->ringFrames);
+        const auto curWrite = peer->writeFramePos.load (std::memory_order_acquire);
+        const auto curRead  = peer->readFramePos.load  (std::memory_order_acquire);
+        if (endFrame + ringCap < curWrite || startFrame + ringCap < curRead)
+        {
+            peer->primed.store (false, std::memory_order_release);
+            peer->writeFramePos.store (startFrame, std::memory_order_release);
+            peer->readFramePos.store  (startFrame, std::memory_order_release);
+            peer->resetRateLoop();
+            peer->resetDll();
+            peer->streamRestarts.fetch_add (1, std::memory_order_relaxed);
+            std::cerr << "mcfx_recv: sender uid=" << std::hex << hdr.sender << std::dec
+                      << " frame count jumped back (" << curWrite << " -> " << startFrame
+                      << ") — re-aligning stream" << std::endl;
+        }
     }
 
     auto curWrite = peer->writeFramePos.load (std::memory_order_acquire);

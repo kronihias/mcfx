@@ -611,6 +611,12 @@ void McfxSendAudioProcessorEditor::timerCallback()
         }
     }
     if (net.isEmpty()) net = "(idle)";
+    // Faster-than-realtime host: audio is being discarded on purpose, which
+    // otherwise looks exactly like a dead connection (0 pkt/s).
+    if (processor.isInFastMode())
+        net += "  PRE-RENDER: not sending";
+    if (const auto n = processor.getFastModeEntries())
+        net += "  fastMode " + juce::String ((int) n);
     networkLabel.setText (net, juce::dontSendNotification);
 
     lastPackets = pkts;

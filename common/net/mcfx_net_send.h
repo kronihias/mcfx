@@ -145,7 +145,22 @@ public:
     uint64_t getSentBytes()   const noexcept { return sentBytes.load   (std::memory_order_relaxed); }
     uint64_t getOverruns()    const noexcept { return audioOverruns.load (std::memory_order_relaxed); }
 
+    // True while pushAudioBlock is discarding audio because the host is
+    // rendering faster than realtime (see the anticipative-render
+    // detector). fastModeEntries counts how often that has kicked in
+    // since the instance was created.
+    bool     isInFastMode()      const noexcept { return fastModeActive.load (std::memory_order_relaxed); }
+    uint32_t getFastModeEntries() const noexcept { return fastModeEntries.load (std::memory_order_relaxed); }
+
     uint32_t getSenderUid() const noexcept { return senderUid; }
+
+    // Test hook for mcfx_net_loopback_test: overwrite the outbound frame
+    // counter to emulate a sender that rewinds it (older builds did on
+    // every prepareToPlay) or one about to wrap the 32-bit wire count.
+    void setFrameCounterForTesting (uint32_t frame) noexcept
+    {
+        absoluteFrame.store (frame, std::memory_order_relaxed);
+    }
 
     // The UDP port we're listening on for inbound control packets. Lets
     // Bonjour advertise the right address so receivers can invite us.
@@ -221,11 +236,14 @@ private:
     // just return like everything's fine. The audio thread carries on at
     // its accelerated pace (it's REAPER's pre-render, after all) without
     // wasting CPU or filling the FIFO with stale data.
-    double pushLastSec       = 0.0;
+    double pushLastSec       = 0.0;   // start of the current judging chunk
+    int    pushPendingFrames = 0;     // frames pushed since pushLastSec
     int    pushFastRunCount  = 0;
     int    pushSlowRunCount  = 0;
     bool   pushInFastMode    = false;
     int    pushFastSilenceLogged = 0;
+    std::atomic<bool>     fastModeActive  { false };   // UI mirror of pushInFastMode
+    std::atomic<uint32_t> fastModeEntries { 0 };
 
     std::atomic<bool> running { false };
     juce::WaitableEvent wake;

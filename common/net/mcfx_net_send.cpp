@@ -240,8 +240,14 @@ void SendStream::prepareToPlay (double sampleRate, int blockSize,
         applyAudioQos (rawHandle, "mcfx_send");
     }
 
-    nextSeq.store (0, std::memory_order_relaxed);
-    absoluteFrame.store (0, std::memory_order_relaxed);
+    // nextSeq and absoluteFrame deliberately survive a re-prepare. The
+    // receiver keys this stream by senderUid, which is fixed for the
+    // lifetime of the plug-in instance, and drops every DATA packet whose
+    // frame range lies behind what it has already written. Rewinding the
+    // count to 0 here therefore silenced the stream for good on any host
+    // that re-activates the plug-in mid-session (Ableton Live does this
+    // routinely), while the steady DATA traffic kept the peer from ever
+    // being evicted and rebuilt.
     sentPackets.store (0, std::memory_order_relaxed);
     sentBytes.store (0, std::memory_order_relaxed);
     audioOverruns.store (0, std::memory_order_relaxed);
@@ -251,10 +257,12 @@ void SendStream::prepareToPlay (double sampleRate, int blockSize,
     // is what makes channel-change on the sender clear out any sticky
     // fast-mode flag from a previous configuration.
     pushLastSec       = 0.0;
+    pushPendingFrames = 0;
     pushFastRunCount  = 0;
     pushSlowRunCount  = 0;
     pushInFastMode    = false;
     pushFastSilenceLogged = 0;
+    fastModeActive.store (false, std::memory_order_relaxed);
 
     running.store (true, std::memory_order_release);
     sendThread = std::make_unique<SendThread> (*this);
@@ -315,15 +323,34 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
     // and short-circuit pushAudioBlock cleanly: no FIFO write, no wake,
     // just return success. Pairs with the receive-side detector so the
     // whole pipeline ignores anticipative-FX rather than fighting it.
-    if (ringSampleRate > 0)
+    //
+    // Calls are judged in chunks of at least one full period, not one by
+    // one. Hosts that split a device period into several back-to-back
+    // calls (automation breakpoints, sub-block scheduling — seen in Live)
+    // make every call after the first look "fast" on its own. Judged per
+    // call, those calls reset pushSlowRunCount on every single period, so
+    // once anything had tripped fast mode the 16-in-a-row exit could never
+    // be reached and the sender stayed silent for the rest of the session.
+    if (ringSampleRate > 0 && ringBlockSize > 0)
     {
         const double nowSec = std::chrono::duration<double> (
             std::chrono::steady_clock::now().time_since_epoch()).count();
-        const double expectedSec = static_cast<double> (numSamples)
-                                 / static_cast<double> (ringSampleRate);
-        if (pushLastSec > 0.0)
+        if (pushLastSec <= 0.0)
         {
-            const double interval = nowSec - pushLastSec;
+            pushLastSec       = nowSec;
+            pushPendingFrames = 0;
+        }
+        else if (pushPendingFrames >= ringBlockSize)
+        {
+            // pushPendingFrames covers the calls since the last
+            // checkpoint, i.e. exactly the audio the host had to produce
+            // in the interval that just elapsed.
+            const double interval    = nowSec - pushLastSec;
+            const double expectedSec = static_cast<double> (pushPendingFrames)
+                                     / static_cast<double> (ringSampleRate);
+            pushLastSec       = nowSec;
+            pushPendingFrames = 0;
+
             if (interval < expectedSec * 0.5)
             {
                 pushFastRunCount++;
@@ -331,9 +358,11 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
                 if (pushFastRunCount >= 64 && ! pushInFastMode)
                 {
                     pushInFastMode = true;
+                    fastModeActive.store (true, std::memory_order_relaxed);
+                    fastModeEntries.fetch_add (1, std::memory_order_relaxed);
                     pushFastSilenceLogged++;
                     std::cerr << "mcfx_send: host calling pushAudioBlock at "
-                              << static_cast<int> (expectedSec * 1000.0
+                              << static_cast<int> (expectedSec
                                                    / juce::jmax (1e-9, interval))
                               << "x realtime — likely anticipative-FX "
                                  "pre-render. Skipping the FIFO push; "
@@ -351,6 +380,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
                 if (pushSlowRunCount >= 16 && pushInFastMode)
                 {
                     pushInFastMode = false;
+                    fastModeActive.store (false, std::memory_order_relaxed);
                     pushFastSilenceLogged = 0;
                     std::cerr << "mcfx_send: host returned to realtime "
                                  "pacing — resuming network send."
@@ -358,7 +388,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
                 }
             }
         }
-        pushLastSec = nowSec;
+        pushPendingFrames += numSamples;
     }
     if (pushInFastMode)
         return true;   // Pretend success; nothing to do at multi-realtime.

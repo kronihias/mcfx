@@ -287,6 +287,75 @@ def test_burst_recovers(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# Host behaviour — events real DAWs produce mid-stream. Each scenario
+# reports tail_rms_ch0 / tail_fundamental_hz over the end of the run (a
+# 0.5-amplitude sine has RMS ~0.354).
+#
+# The fix tests assert on stream counters rather than tail audio: any
+# receiver underrun — including one from a scheduling hiccup on a busy
+# machine — can currently leave the rate loop pinned at its clamp (see
+# test_sender_stall_recovers), which would make a tail-audio check flaky
+# for reasons unrelated to the bug under test.
+# ---------------------------------------------------------------------------
+
+def _assert_tail_audio(m):
+    assert m["tail_rms_ch0"] > 0.3, \
+        f"output silent/attenuated at end of run: tail RMS {m['tail_rms_ch0']}"
+    assert m["tail_fundamental_hz"] == pytest.approx(1000.0, abs=2.0), \
+        f"tail pitch wrong: {m['tail_fundamental_hz']} Hz"
+
+
+def test_reprepare_keeps_frame_count(tmp_path):
+    """Host re-runs prepareToPlay mid-stream (Live re-activates plug-ins
+    routinely). The sender must keep its frame count running: rewinding
+    it under the same UID made the receiver drop every later packet as
+    out-of-order, i.e. permanent silence."""
+    m = run_loopback("reprepare", 18, tmp_path / "m.json")
+    assert m["peer_ever_primed"]
+    assert m["dropped_reorder"] == 0, \
+        f"receiver dropped {m['dropped_reorder']} packets as reordered after re-prepare"
+    assert m["stream_restarts"] == 0, "sender frame count jumped back on re-prepare"
+
+
+def test_split_blocks_leave_fast_mode(tmp_path):
+    """0.5 s of 8x pre-render trips the sender's anticipative-render
+    detector; afterwards the host runs at realtime but splits every
+    period into 4 back-to-back calls. Judged per call, the split calls
+    kept the detector in fast mode forever and nothing was sent."""
+    m = run_loopback("split_fast_mode", 12, tmp_path / "m.json")
+    assert m["fast_mode_entries"] >= 1, "burst didn't trip fast mode — scenario not exercised"
+    assert not m["fast_mode_active_end"], "sender still discarding audio at end of run"
+    # At least one DATA packet per sender period once realtime resumes.
+    periods = (m["duration_sec"] - 1.0) * m["sender_sample_rate"] / m["sender_period"]
+    assert m["sent_packets"] >= 0.8 * periods, \
+        f"sender only sent {m['sent_packets']} packets for ~{int(periods)} periods"
+
+
+@pytest.mark.parametrize("scenario", ["counter_rewind", "counter_wrap"])
+def test_counter_jump_back_realigns(scenario, tmp_path):
+    """Sender frame count jumps back under the same UID — an older sender
+    re-preparing, or the 32-bit wire count wrapping (~24 h at 48 kHz).
+    The receiver must re-align instead of dropping the rest of the stream."""
+    m = run_loopback(scenario, 18, tmp_path / "m.json")
+    assert m["stream_restarts"] >= 1, "receiver never re-aligned"
+    # Without the re-align every packet after the jump (~9000 here) is
+    # dropped as reordered; a handful of genuine late packets is fine.
+    assert m["dropped_reorder"] <= 10, \
+        f"receiver dropped {m['dropped_reorder']} packets after the jump"
+
+
+@pytest.mark.xfail(reason="known: a 50 ms sender stall pins the receiver rate "
+                          "loop at its clamp (anti-windup reset loop, output "
+                          "muted/~5% sharp); not fixed yet", strict=False)
+def test_sender_stall_recovers(tmp_path):
+    """Host stops calling processBlock for 50 ms (overloaded machine), then
+    carries on at realtime. The receiver should underrun briefly and then
+    settle back to clean audio."""
+    m = run_loopback("stall", 18, tmp_path / "m.json")
+    _assert_tail_audio(m)
+
+
+# ---------------------------------------------------------------------------
 # Soak — env-gated; only runs when explicitly requested.
 # ---------------------------------------------------------------------------
 

@@ -126,6 +126,8 @@ public:
     uint64_t getSentPackets() const noexcept { return stream.getSentPackets(); }
     uint64_t getSentBytes()   const noexcept { return stream.getSentBytes();   }
     uint64_t getOverruns()    const noexcept { return stream.getOverruns();    }
+    bool     isInFastMode()   const noexcept { return stream.isInFastMode();   }
+    uint32_t getFastModeEntries() const noexcept { return stream.getFastModeEntries(); }
     uint32_t getSenderUid()   const noexcept { return stream.getSenderUid();   }
     bool     hasActiveTarget() const noexcept { return stream.getActiveTargetCount() > 0; }
 
