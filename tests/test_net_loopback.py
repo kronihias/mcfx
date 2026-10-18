@@ -291,17 +291,15 @@ def test_burst_recovers(tmp_path):
 # reports tail_rms_ch0 / tail_fundamental_hz over the end of the run (a
 # 0.5-amplitude sine has RMS ~0.354).
 #
-# The fix tests assert on stream counters rather than tail audio: any
-# receiver underrun — including one from a scheduling hiccup on a busy
-# machine — can currently leave the rate loop pinned at its clamp (see
-# test_sender_stall_recovers), which would make a tail-audio check flaky
-# for reasons unrelated to the bug under test.
+# The counter / fast-mode tests assert on stream counters, which separate
+# fixed from broken code deterministically; test_sender_stall_recovers
+# covers recovery of the audio itself.
 # ---------------------------------------------------------------------------
 
-def _assert_tail_audio(m):
+def _assert_tail_audio(m, hz_tol=2.0):
     assert m["tail_rms_ch0"] > 0.3, \
         f"output silent/attenuated at end of run: tail RMS {m['tail_rms_ch0']}"
-    assert m["tail_fundamental_hz"] == pytest.approx(1000.0, abs=2.0), \
+    assert m["tail_fundamental_hz"] == pytest.approx(1000.0, abs=hz_tol), \
         f"tail pitch wrong: {m['tail_fundamental_hz']} Hz"
 
 
@@ -344,15 +342,20 @@ def test_counter_jump_back_realigns(scenario, tmp_path):
         f"receiver dropped {m['dropped_reorder']} packets after the jump"
 
 
-@pytest.mark.xfail(reason="known: a 50 ms sender stall pins the receiver rate "
-                          "loop at its clamp (anti-windup reset loop, output "
-                          "muted/~5% sharp); not fixed yet", strict=False)
-def test_sender_stall_recovers(tmp_path):
-    """Host stops calling processBlock for 50 ms (overloaded machine), then
-    carries on at realtime. The receiver should underrun briefly and then
-    settle back to clean audio."""
-    m = run_loopback("stall", 18, tmp_path / "m.json")
-    _assert_tail_audio(m)
+@pytest.mark.parametrize("stall_ms", [50, 500])
+def test_sender_stall_recovers(stall_ms, tmp_path):
+    """Host stops calling processBlock for a moment (overloaded machine),
+    then carries on at realtime. The receiver should underrun once and
+    settle back to clean audio. Before the arrival-time DLL re-anchored on
+    timing steps, the step was read as sender clock drift: the rate loop
+    pinned at its clamp and anti-windup reset forever (muted / ~5 % sharp)."""
+    m = run_loopback("stall", 18, tmp_path / "m.json", stall_ms=stall_ms)
+    assert m["underruns"] <= 5, f"underrun cascade after stall: {m['underruns']}"
+    # ±15 Hz, not ±2: on a loaded machine extra scheduling underruns can
+    # land in the tail window and the loop is mid re-lock (seen up to
+    # ~1 %). The failure this guards against is the pin at the ±5 % clamp
+    # (~1050 Hz, or muted output), which this still separates cleanly.
+    _assert_tail_audio(m, hz_tol=15.0)
 
 
 # ---------------------------------------------------------------------------

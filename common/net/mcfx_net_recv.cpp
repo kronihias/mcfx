@@ -353,6 +353,12 @@ struct RecvStream::PeerStream
     double   dllW1          = 0.0;   // PI proportional gain
     double   dllW2          = 0.0;   // PI integral gain
     bool     dllInited      = false; // first-period bootstrap done
+    uint64_t dllLastK       = 0;     // endFrame of the last update
+    // Timing-step detection: consecutive updates whose error hit the
+    // clamp with the same sign (+ late / - early), and dllDt as it was
+    // before that run started.
+    int      dllClampRun    = 0;
+    double   dllDtBeforeRun = 0.0;
 
     // SPSC seqlock pair. NetThread writes the inactive slot and bumps
     // `dllSeq` by 2 with release ordering; audio thread acquire-loads,
@@ -387,6 +393,7 @@ struct RecvStream::PeerStream
     void resetDll() noexcept
     {
         dllInited            = false;
+        dllClampRun          = 0;
         dllAudioPrimed       = false;
         dllAudioSnapsSeen    = 0;
         smoothedNetSpreadSec = 0.0;
@@ -441,17 +448,62 @@ struct RecvStream::PeerStream
             // next packet to arrive at arrivalSec + dllDt.
             publishDllSnap (endFrame, arrivalSec, dllDt);
             dllT0     = arrivalSec + dllDt;
+            dllLastK  = endFrame;
             dllInited = true;
             // Telemetry seed.
             smoothedNetSpreadSec = arrivalSec - (double) txUs * 1e-6;
             return;
         }
 
-        // PI step. Anti-jump clamp to ±dllDt absorbs single-period misses
-        // (e.g. a lost HF_LAST_OF_PERIOD packet) without a wild jump.
+        // Stale / duplicate period boundary — nothing to learn from it.
+        if (endFrame <= dllLastK) return;
+
+        // dllT0 predicts the boundary one period after dllLastK. If the
+        // packet closing one or more periods was lost, this packet closes
+        // a later one: move the prediction there instead of reading the
+        // skipped periods as lateness.
+        const uint64_t expectedK = dllLastK + (uint64_t) period;
+        if (endFrame > expectedK)
+            dllT0 += dllDt * (double) (endFrame - expectedK) / (double) period;
+        dllLastK = endFrame;
+
+        // PI step. Anti-jump clamp to ±dllDt keeps one jittery arrival
+        // from yanking the estimate.
         double err = arrivalSec - dllT0;
-        if (err >  dllDt) err =  dllDt;
-        if (err < -dllDt) err = -dllDt;
+        const int clampSign = (err > dllDt) ? 1 : (err < -dllDt) ? -1 : 0;
+        if (clampSign > 0) err =  dllDt;
+        if (clampSign < 0) err = -dllDt;
+
+        // A clamp that persists is not jitter but a timing step: the
+        // sender's host stalled (every later packet is late by the stall)
+        // or caught up in a burst. Feeding it through the clamp, the PI
+        // would take minutes to absorb a 50 ms step while its integral
+        // term reads the step as a slower sender clock — the rate loop
+        // then pins at its clamp and, since this state outlives every
+        // re-prime, anti-windup resets forever. Once the same-sign clamp
+        // has lasted ~20 ms of sender time, re-anchor the phase at the
+        // actual arrival and drop whatever the run did to dllDt.
+        if (clampSign != 0 && (dllClampRun == 0 || (dllClampRun > 0) == (clampSign > 0)))
+        {
+            if (dllClampRun == 0) dllDtBeforeRun = dllDt;
+            dllClampRun += clampSign;
+        }
+        else
+        {
+            dllClampRun = 0;
+        }
+        const int stepRunNeed = juce::jmax (4, (int) std::ceil (0.020 / juce::jmax (1e-6, dllDt)));
+        if (std::abs (dllClampRun) >= stepRunNeed)
+        {
+            dllDt       = dllDtBeforeRun;
+            dllT0       = arrivalSec;
+            dllClampRun = 0;
+            setDllBw (0.05);
+            publishDllSnap (endFrame, dllT0, dllDt);
+            dllT0 += dllDt;
+            return;
+        }
+
         dllT0 += dllW1 * err;
         dllDt += dllW2 * err;
 
