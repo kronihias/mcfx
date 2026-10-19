@@ -40,7 +40,7 @@ struct SpectroSettings
     // Display options, set from the settings panel.
     int  colourMap   = 0;           // index into the colour maps
     int  colourScale = 0;           // 0 dB, 1 meter (IEC), 2 linear amplitude
-    int  normalise   = 0;           // 0 off, 1 each column, 2 auto top
+    int  normalise   = 0;           // 0 off, 1 each column, 2 half (hybrid), 3 auto top
     int  freqScale   = 0;           // 0 log, 1 mel, 2 linear
     bool noteLabels  = false;       // label the frequency axis with notes, not Hz
     int  windowIdx   = 2;           // treble FFT: 2048 / 4096 / 8192 / 16384 at 48 kHz
@@ -141,7 +141,7 @@ private:
     void resetHistory();
     void updateWantedResolution();
     void resampleHistory (int newCols, int newRows);
-    void produceColumn (int64 centreAbs, int64 written);
+    void produceColumn (int64 centreAbs);
 
     // Fine bass: decimator + constant-Q, see the class comment.
     void prepareBass (double sr);

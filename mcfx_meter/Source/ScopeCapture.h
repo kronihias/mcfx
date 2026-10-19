@@ -59,6 +59,13 @@ public:
         in between the read and the freeze. */
     int64 read (AudioSampleBuffer& dest, int firstCh, int numCh, int numSamples, int endBack);
 
+    /** Same, but the last sample copied is the one with absolute index
+        `lastAbs` (0 = the first sample written since prepare()), resolved
+        under the ring lock. Use this when the position was worked out from an
+        earlier getNumWritten(): blocks pushed since then don't shift what is
+        read. Samples not written yet read as silence. */
+    int64 readEndingAt (AudioSampleBuffer& dest, int firstCh, int numCh, int numSamples, int64 lastAbs);
+
     /** Total samples written since prepare(). */
     int64 getNumWritten() const { return written_.load (std::memory_order_relaxed); }
 
@@ -71,6 +78,9 @@ public:
     bool   isReady() const       { return ready_.load (std::memory_order_acquire); }
 
 private:
+    int64 readImpl (AudioSampleBuffer& dest, int firstCh, int numCh, int numSamples,
+                    int64 end, bool endIsAbsolute);
+
     double sampleRate_  = 0.0;
     int    numChannels_ = 0;
     int    capacity_    = 0;

@@ -89,6 +89,17 @@ int ScopeCapture::getNumValid() const
 
 int64 ScopeCapture::read (AudioSampleBuffer& dest, int firstCh, int numCh, int numSamples, int endBack)
 {
+    return readImpl (dest, firstCh, numCh, numSamples, endBack, false);
+}
+
+int64 ScopeCapture::readEndingAt (AudioSampleBuffer& dest, int firstCh, int numCh, int numSamples, int64 lastAbs)
+{
+    return readImpl (dest, firstCh, numCh, numSamples, lastAbs, true);
+}
+
+int64 ScopeCapture::readImpl (AudioSampleBuffer& dest, int firstCh, int numCh, int numSamples,
+                              int64 end, bool endIsAbsolute)
+{
     numCh      = jmax (1, numCh);
     numSamples = jmax (1, numSamples);
     dest.setSize (numCh, numSamples, false, false, true);
@@ -107,22 +118,29 @@ int64 ScopeCapture::read (AudioSampleBuffer& dest, int firstCh, int numCh, int n
     const int valid = (int) jmin ((int64) size, written);
     const int wp    = writePos_.load (std::memory_order_acquire);
 
+    // Taken under the lock, so an absolute end stays pinned to the samples it
+    // names however much the audio thread wrote since the caller looked.
+    const int64 endBack = endIsAbsolute ? written - 1 - end : end;
+
     // Sample k of dest (0 = oldest) is (numSamples - 1 - k + endBack) samples
     // older than the newest. Only the part inside the valid history is copied;
-    // the rest stays zero.
+    // the rest (too old, or not written yet) stays zero.
     for (int k = 0; k < numSamples; )
     {
-        const int back = numSamples - 1 - k + endBack;
+        const int64 back = (int64) (numSamples - 1 - k) + endBack;
+        if (back < 0)
+            break;          // newer than the newest sample, and so is the rest
         if (back >= valid)
         {
             // Too old: jump to the first k that is young enough.
-            k = jmax (k + 1, numSamples - valid + endBack);
+            k = (int) jmax ((int64) k + 1, (int64) numSamples - valid + endBack);
             continue;
         }
 
-        const int idx = ((wp - 1 - back) % size + size) % size;
-        // Contiguous run up to the end of dest or the end of the ring.
-        const int run = jmin (numSamples - k, size - idx);
+        const int idx = (int) (((wp - 1 - back) % size + size) % size);
+        // Contiguous run up to the end of dest, the end of the ring or the
+        // newest sample.
+        const int run = (int) jmin ((int64) (numSamples - k), (int64) (size - idx), back + 1);
 
         for (int c = 0; c < numCh; ++c)
         {

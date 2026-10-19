@@ -458,7 +458,7 @@ void SpectrogramComponent::updateDecimation (int64 written)
 
     // rawBuf_[0] is raw sample nextDec_*D - (L-1): exactly the history the
     // first output's filter needs.
-    capture_->read (rawBuf_, settings_->firstCh, shown, len, (int) (written - 1 - lastDec * D));
+    capture_->readEndingAt (rawBuf_, settings_->firstCh, shown, len, lastDec * D);
 
     for (int c = 0; c < shown; ++c)
     {
@@ -679,7 +679,7 @@ void SpectrogramComponent::tick()
     int produced = 0;
     while (nextColAbs_ + lead <= (double) written && produced < 64)
     {
-        produceColumn ((int64) nextColAbs_, written);
+        produceColumn ((int64) nextColAbs_);
         nextColAbs_ += hop;
         ++produced;
     }
@@ -691,13 +691,13 @@ void SpectrogramComponent::tick()
     }
 }
 
-void SpectrogramComponent::produceColumn (int64 centreAbs, int64 written)
+void SpectrogramComponent::produceColumn (int64 centreAbs)
 {
     const int N = fft_.getSize();
     const int shown = numShown();
 
     // FFT frame centred on the column's instant.
-    capture_->read (frame_, settings_->firstCh, shown, N, (int) jmax ((int64) 0, written - (centreAbs + N / 2)));
+    capture_->readEndingAt (frame_, settings_->firstCh, shown, N, centreAbs + N / 2 - 1);
 
     // Bass frame centred on the same instant: the decimated sample whose
     // (delayed) raw time is closest to it sits in the middle of the frame,

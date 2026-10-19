@@ -21,6 +21,7 @@
 #define __PLUGINPROCESSOR_H_421B8C00__
 
 #include "JuceHeader.h"
+#include <atomic>
 #include "mcfx_buses.h"
 #include "JuceCompat.h"
 #include "MyMeterDsp.h"
@@ -101,6 +102,12 @@ public:
         the bound of the state loop below and of the host's parameter list. */
     enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2, Dots = 3, Scope = 4, Spectrogram = 5 };
     ViewMode _view_mode = ViewMode::Bars;
+
+    /** Bumped by every setStateInformation() that restored the view settings
+        (preset recall, undo, A/B compare in the host). An open editor compares
+        it with the last one it applied, and re-applies the view, its size and
+        the scope / spectrogram settings when it moved. */
+    std::atomic<int> _state_generation { 0 };
 
     // Editor size remembered per view, so switching back and forth does not
     // forget how the user sized each one. Bars derives its size from the

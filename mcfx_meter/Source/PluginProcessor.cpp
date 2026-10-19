@@ -350,6 +350,7 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("spec_window",   _spectro_settings.windowIdx);
     xml.setAttribute ("spec_smooth",   _spectro_settings.smooth);
     xml.setAttribute ("spec_strip",    _spectro_settings.showStrip);
+    xml.setAttribute ("spec_harm",     _spectro_settings.harmonics);
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -413,7 +414,11 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
                 s.windowIdx   = xmlState->getIntAttribute  ("spec_window", s.windowIdx);
                 s.smooth      = xmlState->getBoolAttribute ("spec_smooth", s.smooth);
                 s.showStrip   = xmlState->getBoolAttribute ("spec_strip",  s.showStrip);
+                s.harmonics   = xmlState->getBoolAttribute ("spec_harm",   s.harmonics);
             }
+
+            _state_generation.fetch_add (1, std::memory_order_release);
+            sendChangeMessage();
         }
 
     }

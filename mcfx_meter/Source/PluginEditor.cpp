@@ -36,6 +36,10 @@ extern float iec_scale(float dB);
 Ambix_meterAudioProcessorEditor::Ambix_meterAudioProcessorEditor (Ambix_meterAudioProcessor* ownerFilter) :
 AudioProcessorEditor (ownerFilter)
 {
+    // Everything below reads the state as it is now; a later restore is
+    // picked up by syncToRestoredState().
+    _appliedStateGen = ownerFilter->_state_generation.load (std::memory_order_acquire);
+
     LookAndFeel::setDefaultLookAndFeel(&MyLookAndFeel);
 
     tooltipWindow.setMillisecondsBeforeTipAppears (500); // tooltip delay
@@ -395,7 +399,9 @@ void Ambix_meterAudioProcessorEditor::resized()
     // Remember the size per view. The bar view is pinned min == max so this
     // just records the size it was given; the resizable views record the user's.
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
-    switch (ourProcessor->_view_mode)
+    const bool restorePending = ourProcessor->_state_generation.load (std::memory_order_acquire)
+                                  != _appliedStateGen;
+    switch (restorePending ? Ambix_meterAudioProcessor::ViewMode::Bars : ourProcessor->_view_mode)
     {
         case Ambix_meterAudioProcessor::ViewMode::Circle:
             ourProcessor->_size_circle_w = getWidth();
@@ -466,6 +472,10 @@ void Ambix_meterAudioProcessorEditor::buttonClicked (Button* buttonThatWasClicke
 void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+
+    // Before anything below goes by _view_mode: the change message for a
+    // restore may still be queued.
+    syncToRestoredState();
 
 
     // Feed only the view on screen — MeterComponent::setValue repaints
@@ -774,9 +784,40 @@ void Ambix_meterAudioProcessorEditor::applyModeSizing()
     repaint();
 }
 
+void Ambix_meterAudioProcessorEditor::syncToRestoredState()
+{
+    Ambix_meterAudioProcessor* p = getProcessor();
+    const int gen = p->_state_generation.load (std::memory_order_acquire);
+    if (gen == _appliedStateGen)
+        return;
+
+    // Until _appliedStateGen catches up, resized() leaves the remembered
+    // sizes alone: the window still has the old view's size, and recording it
+    // under the restored view would overwrite the size just restored.
+
+    // The popped-out window shows the old view; bring it home first, as a
+    // switch from the selector does.
+    reattachView();
+
+    cb_view.setSelectedId ((int) p->_view_mode + 1, dontSendNotification);
+
+    // Both clamp against the live channel count and rebuild what depends on
+    // the settings (the spectrogram's window, axis and history).
+    _scope.setSettings (&p->_scope_settings);
+    _spectro.setSettings (&p->_spectro_settings);
+
+    // Size, visibility (and with it which analyser / capture runs) and the
+    // channel highlight, for the restored view.
+    applyModeSizing();
+
+    _appliedStateGen = gen;
+}
+
 void Ambix_meterAudioProcessorEditor::changeListenerCallback (ChangeBroadcaster *source)
 {
     Ambix_meterAudioProcessor* ourProcessor = getProcessor();
+
+    syncToRestoredState();
 
     // Rebuild the per-channel strips when the host has re-negotiated the
     // layout (e.g. track channel count changed in Reaper).

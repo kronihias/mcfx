@@ -137,6 +137,9 @@ private:
     // rebuildChannelStrips() so a host re-negotiating the channel count cannot
     // stomp a size the user chose in one of the resizable views.
     void applyModeSizing();
+    /** Picks up a state the host restored while the editor is open: the view,
+        its size and the scope / spectrogram settings. */
+    void syncToRestoredState();
 
     // The control strip is laid out at absolute pixel positions: in the bar
     // view the peak-hold toggle ends at x=589, past the view selector
@@ -154,6 +157,7 @@ private:
     Image _background;
 
     int _cachedNumCh = 0;
+    int _appliedStateGen = 0;   // the processor's _state_generation last applied
 
     int _width;
     int _height;
