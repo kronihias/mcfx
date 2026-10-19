@@ -465,6 +465,9 @@ public:
     ~EqBandEditor();
 
     void setBand(EqBand* band, int bandIndex);
+
+    /** True while this editor shows the band with that EqBand::getSerial(). */
+    bool isShowingBand (uint32 serial) const { return band_ != nullptr && band_->getSerial() == serial; }
     void setListener(Listener* l) { listener_ = l; }
     void updateFromBand();
 

@@ -153,6 +153,12 @@ public:
     EqBand();
     ~EqBand();
 
+    /** Unique per EqBand object for the life of the process, unlike its
+        address (reused after a delete) or its index in the chain (shifts when
+        a band is removed or the chain is rebuilt). Lets an async callback check
+        it is still talking to the band it was started for. */
+    uint32 getSerial() const { return serial_; }
+
     // --- Type ---
     EqBandType getType() const { return type_; }
     void setType(EqBandType t);
@@ -498,6 +504,9 @@ private:
     bool useConvolver_ = false;
     int convolverLatency_ = 0;
     static inline std::atomic<bool> convolverSafeMode_ { false };
+
+    static inline std::atomic<uint32> nextSerial_ { 1 };
+    const uint32 serial_ = nextSerial_.fetch_add (1, std::memory_order_relaxed);
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(EqBand)
 };

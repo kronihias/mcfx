@@ -1362,12 +1362,14 @@ void EqBandEditor::buttonClicked(Button* b)
 
         // The dialog is non-modal: by the time Apply is pressed the editor may be
         // gone (plugin window closed) or showing another band, so only apply to
-        // the band it was opened for.
+        // the band it was opened for. That is the band object, not its index:
+        // undo, a preset load or deleting an earlier band puts a different
+        // band at the same index.
         FIRDesignDialog::launch (sr, initialState,
-            [safe = SafePointer<EqBandEditor> (this), launchIndex = bandIndex_]
+            [safe = SafePointer<EqBandEditor> (this), launchSerial = band_->getSerial()]
             (const std::vector<float>& coeffs, double sampleRate, const var& state)
             {
-                if (safe == nullptr || safe->band_ == nullptr || safe->bandIndex_ != launchIndex)
+                if (safe == nullptr || ! safe->isShowingBand (launchSerial))
                     return;
                 safe->notifyAboutToChange();
                 safe->band_->setFIRCoefficientsWithSampleRate (coeffs, sampleRate);
@@ -1473,9 +1475,10 @@ void EqBandEditor::timerCallback()
     // enterModalState with deleteWhenDismissed=true handles cleanup.
     // The callback fires before deletion, so we can read the combo value.
     alert->enterModalState(true, ModalCallbackFunction::create(
-        [safe = SafePointer<EqBandEditor>(this), launchIndex = bandIndex_, file, alert](int result)
+        [safe = SafePointer<EqBandEditor>(this), launchSerial = band_ != nullptr ? band_->getSerial() : 0u,
+         file, alert](int result)
         {
-            if (result == 1 && safe != nullptr && safe->bandIndex_ == launchIndex)
+            if (result == 1 && safe != nullptr && safe->isShowingBand (launchSerial))
             {
                 int ch = alert->getComboBoxComponent("channel")->getSelectedItemIndex();
                 safe->loadFIRAudioFile(file, ch);
