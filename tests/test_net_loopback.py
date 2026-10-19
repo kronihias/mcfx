@@ -315,12 +315,15 @@ def test_reprepare_keeps_frame_count(tmp_path):
     assert m["stream_restarts"] == 0, "sender frame count jumped back on re-prepare"
 
 
-def test_split_blocks_leave_fast_mode(tmp_path):
-    """0.5 s of 8x pre-render trips the sender's anticipative-render
-    detector; afterwards the host runs at realtime but splits every
-    period into 4 back-to-back calls. Judged per call, the split calls
+@pytest.mark.parametrize("scenario", ["split_fast_mode", "bunch_fast_mode"])
+def test_irregular_calls_leave_fast_mode(scenario, tmp_path):
+    """A short pre-render trips the sender's anticipative-render detector;
+    afterwards the host runs at realtime but not one call per period:
+    split_fast_mode splits every period into 4 back-to-back calls,
+    bunch_fast_mode processes 4 full blocks back-to-back per device period.
+    Judged call by call (split) or block by block (bunch), the fast calls
     kept the detector in fast mode forever and nothing was sent."""
-    m = run_loopback("split_fast_mode", 12, tmp_path / "m.json")
+    m = run_loopback(scenario, 12, tmp_path / "m.json")
     assert m["fast_mode_entries"] >= 1, "burst didn't trip fast mode — scenario not exercised"
     assert not m["fast_mode_active_end"], "sender still discarding audio at end of run"
     # At least one DATA packet per sender period once realtime resumes.
@@ -329,17 +332,34 @@ def test_split_blocks_leave_fast_mode(tmp_path):
         f"sender only sent {m['sent_packets']} packets for ~{int(periods)} periods"
 
 
-@pytest.mark.parametrize("scenario", ["counter_rewind", "counter_wrap"])
-def test_counter_jump_back_realigns(scenario, tmp_path):
-    """Sender frame count jumps back under the same UID — an older sender
-    re-preparing, or the 32-bit wire count wrapping (~24 h at 48 kHz).
-    The receiver must re-align instead of dropping the rest of the stream."""
-    m = run_loopback(scenario, 18, tmp_path / "m.json")
+@pytest.mark.parametrize("counter_start", [0, 3_000_000_000])
+def test_counter_jump_back_realigns(counter_start, tmp_path):
+    """Sender frame count jumps back to 0 under the same UID — an older
+    sender re-preparing. The receiver must re-align instead of dropping the
+    rest of the stream. From 3e9 the jump back is more than half the 32-bit
+    wire range, so it must not be mistaken for a wrap."""
+    m = run_loopback("counter_rewind", 18, tmp_path / "m.json",
+                     counter_start=counter_start)
     assert m["stream_restarts"] >= 1, "receiver never re-aligned"
     # Without the re-align every packet after the jump (~9000 here) is
     # dropped as reordered; a handful of genuine late packets is fine.
     assert m["dropped_reorder"] <= 10, \
         f"receiver dropped {m['dropped_reorder']} packets after the jump"
+
+
+# 2^32 - 6 s: the wrap lands ~6 s into the run, on a period boundary or
+# (minus 37 frames) in the middle of a packet.
+@pytest.mark.parametrize("counter_start", [4294967296 - 288000, 4294967296 - 288000 - 37])
+def test_counter_wrap_is_seamless(counter_start, tmp_path):
+    """The 32-bit wire frame count wraps (~24.8 h at 48 kHz). The receiver
+    extends it to 64 bits, so the stream carries on: no re-align, no
+    re-prime, no dropout."""
+    m = run_loopback("counter_wrap", 18, tmp_path / "m.json",
+                     counter_start=counter_start)
+    assert m["stream_restarts"] == 0, "wrap treated as a stream restart"
+    assert m["dropped_reorder"] <= 10, \
+        f"receiver dropped {m['dropped_reorder']} packets around the wrap"
+    assert m["underruns"] <= 2, f"underruns around the wrap: {m['underruns']}"
 
 
 @pytest.mark.parametrize("stall_ms", [50, 500])

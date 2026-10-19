@@ -261,6 +261,9 @@ void SendStream::prepareToPlay (double sampleRate, int blockSize,
     pushFastRunCount  = 0;
     pushSlowRunCount  = 0;
     pushInFastMode    = false;
+    pushExitStartSec    = 0.0;
+    pushExitFrames      = 0;
+    pushExitSlowWindows = 0;
     pushFastSilenceLogged = 0;
     fastModeActive.store (false, std::memory_order_relaxed);
 
@@ -331,10 +334,66 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
     // call, those calls reset pushSlowRunCount on every single period, so
     // once anything had tripped fast mode the 16-in-a-row exit could never
     // be reached and the sender stayed silent for the rest of the session.
+    //
+    // Leaving fast mode is also judged over wall-clock windows of
+    // kExitWindowSec. Chunks of one period still fail when a device period
+    // spans several full-size host blocks (WASAPI shared mode with small
+    // blocks, aggregate / Bluetooth devices): the calls come fast, fast,
+    // fast, slow, every fast chunk resets pushSlowRunCount, and the chunk
+    // exit is never reached. Over a quarter second that bunching evens out
+    // to within a device period of realtime, while a pre-render stays far
+    // above it.
     if (ringSampleRate > 0 && ringBlockSize > 0)
     {
         const double nowSec = std::chrono::duration<double> (
             std::chrono::steady_clock::now().time_since_epoch()).count();
+
+        auto leaveFastMode = [this]
+        {
+            pushInFastMode = false;
+            pushFastRunCount    = 0;
+            pushSlowRunCount    = 0;
+            pushExitStartSec    = 0.0;
+            pushExitSlowWindows = 0;
+            fastModeActive.store (false, std::memory_order_relaxed);
+            pushFastSilenceLogged = 0;
+            std::cerr << "mcfx_send: host returned to realtime "
+                         "pacing — resuming network send."
+                      << std::endl;
+        };
+
+        if (pushInFastMode)
+        {
+            constexpr double kExitWindowSec   = 0.25;
+            constexpr int    kExitSlowWindows = 2;
+
+            if (pushExitStartSec <= 0.0)
+            {
+                pushExitStartSec = nowSec;
+                pushExitFrames   = 0;
+            }
+            else if (nowSec - pushExitStartSec >= kExitWindowSec)
+            {
+                // Frames pushed since the window opened against the time
+                // it took; the same 0.8 margin as the chunk test below.
+                const double elapsed     = nowSec - pushExitStartSec;
+                const double expectedSec = static_cast<double> (pushExitFrames)
+                                         / static_cast<double> (ringSampleRate);
+                pushExitStartSec = nowSec;
+                pushExitFrames   = 0;
+
+                if (elapsed > expectedSec * 0.8)
+                {
+                    if (++pushExitSlowWindows >= kExitSlowWindows)
+                        leaveFastMode();
+                }
+                else
+                {
+                    pushExitSlowWindows = 0;
+                }
+            }
+            pushExitFrames += numSamples;
+        }
         if (pushLastSec <= 0.0)
         {
             pushLastSec       = nowSec;
@@ -358,6 +417,8 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
                 if (pushFastRunCount >= 64 && ! pushInFastMode)
                 {
                     pushInFastMode = true;
+                    pushExitStartSec    = 0.0;
+                    pushExitSlowWindows = 0;
                     fastModeActive.store (true, std::memory_order_relaxed);
                     fastModeEntries.fetch_add (1, std::memory_order_relaxed);
                     pushFastSilenceLogged++;
@@ -378,14 +439,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
                 pushSlowRunCount++;
                 pushFastRunCount = 0;
                 if (pushSlowRunCount >= 16 && pushInFastMode)
-                {
-                    pushInFastMode = false;
-                    fastModeActive.store (false, std::memory_order_relaxed);
-                    pushFastSilenceLogged = 0;
-                    std::cerr << "mcfx_send: host returned to realtime "
-                                 "pacing — resuming network send."
-                              << std::endl;
-                }
+                    leaveFastMode();
             }
         }
         pushPendingFrames += numSamples;

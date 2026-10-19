@@ -241,6 +241,11 @@ private:
     int    pushFastRunCount  = 0;
     int    pushSlowRunCount  = 0;
     bool   pushInFastMode    = false;
+    // Exit check while in fast mode, over wall-clock windows rather than
+    // chunks: see pushAudioBlock().
+    double pushExitStartSec   = 0.0;
+    int64_t pushExitFrames    = 0;
+    int    pushExitSlowWindows = 0;
     int    pushFastSilenceLogged = 0;
     std::atomic<bool>     fastModeActive  { false };   // UI mirror of pushInFastMode
     std::atomic<uint32_t> fastModeEntries { 0 };

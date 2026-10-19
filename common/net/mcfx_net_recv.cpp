@@ -1680,7 +1680,25 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
     // that's already in the past. We accept "future" packets and let the
     // ring write them at their absolute offset; gaps before that future
     // position get zero-filled.
-    const uint64_t startFrame = data.count;
+    //
+    // The wire count is 32 bits and wraps every 2^32 frames (~24.8 h at
+    // 48 kHz); positions here are 64-bit. Extend it relative to the write
+    // position: a count within 2^30 frames of it, either way, is that
+    // close in the stream, so a wrap carries straight on. Anything further
+    // is a restart, not a wrap; take it in the write position's 2^32 epoch
+    // so a rewind still reads as a jump back (re-aligned below) even when
+    // it went back by more than half the wire range.
+    uint64_t startFrame = data.count;
+    if (peer->haveSeenData)
+    {
+        const uint64_t ref = peer->writeFramePos.load (std::memory_order_acquire);
+        const auto delta = static_cast<int32_t> (data.count - static_cast<uint32_t> (ref));
+        const int64_t near = static_cast<int64_t> (ref) + delta;
+        if (std::abs (static_cast<int64_t> (delta)) <= (int64_t (1) << 30) && near >= 0)
+            startFrame = static_cast<uint64_t> (near);
+        else
+            startFrame = (ref & ~uint64_t (0xffffffffu)) | data.count;
+    }
     const uint64_t endFrame   = startFrame + static_cast<uint64_t> (frames);
 
     // First DATA packet for this peer: align positions to the sender's
@@ -1698,9 +1716,8 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
         peer->writeFramePos.store (startFrame, std::memory_order_release);
     }
 
-    // Sender restarted its frame count under the same UID. Older senders
-    // rewound it on every prepareToPlay, and the 32-bit wire count wraps
-    // after ~24 h at 48 kHz. Either way every following packet lands far
+    // Sender restarted its frame count under the same UID, as older
+    // senders did on every prepareToPlay. Every following packet lands far
     // behind writeFramePos, the reorder check below drops all of them,
     // and because DATA keeps refreshing lastDataTimeSec the peer is never
     // evicted either — permanent silence. Anything more than a whole ring

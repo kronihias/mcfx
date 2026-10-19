@@ -26,6 +26,7 @@
     reprepare      18 s    sender prepareToPlay re-run mid-stream
     stall          18 s    sender stops pushing for 50 ms mid-stream
     split_fast_mode 12 s   pre-render burst, then periods split into sub-calls
+    bunch_fast_mode 12 s   pre-render burst, then full blocks bunched per device period
     counter_rewind 18 s    sender frame counter jumps back to 0 mid-stream
     counter_wrap   18 s    sender frame counter wraps 2^32 mid-stream
     soak          14400 s  hours-long matched-rate run
@@ -101,6 +102,7 @@ struct Options
     double       captureSeconds = 10.0;
     // Host-behaviour events (scenario-specific, off by default).
     int          splitCalls     = 1;      // push each sender period as this many back-to-back calls
+    int          bunchCalls     = 1;      // push this many whole periods back-to-back, then wait for all of them
     double       reprepareAtSec = -1.0;   // re-run SendStream::prepareToPlay at this time
     double       stallAtSec     = -1.0;   // stop pushing for stallMs at this time
     double       stallMs        = 50.0;   // length of the --stall-at / --reprepare-at gap
@@ -143,6 +145,7 @@ bool parseArgs (int argc, char** argv, Options& o)
         else if (a == "--burst-multiplier"){ if (! need (++i)) return false; o.burstMultiplier = std::atof (argv[i]); }
         else if (a == "--burst-duration")  { if (! need (++i)) return false; o.burstDurationSec = std::atof (argv[i]); }
         else if (a == "--split-calls")     { if (! need (++i)) return false; o.splitCalls = std::atoi (argv[i]); }
+        else if (a == "--bunch-calls")     { if (! need (++i)) return false; o.bunchCalls = std::atoi (argv[i]); }
         else if (a == "--reprepare-at")    { if (! need (++i)) return false; o.reprepareAtSec = std::atof (argv[i]); }
         else if (a == "--stall-at")        { if (! need (++i)) return false; o.stallAtSec = std::atof (argv[i]); }
         else if (a == "--stall-ms")        { if (! need (++i)) return false; o.stallMs = std::atof (argv[i]); }
@@ -312,6 +315,10 @@ struct Driver
         // device period (automation breakpoints, sub-block scheduling)
         // calls processBlock.
         const int splits = juce::jlimit (1, opts.senderPeriod, opts.splitCalls);
+        // --bunch-calls: a device period of several full host blocks, all
+        // processed back-to-back when the device asks (WASAPI shared mode
+        // with small blocks, aggregate / Bluetooth devices).
+        const int bunch = juce::jmax (1, opts.bunchCalls);
         std::vector<float*> subPtrs ((size_t) opts.channels);
 
         bool reprepared = false;
@@ -354,20 +361,23 @@ struct Driver
                                   ? opts.burstMultiplier : 1.0;
             const double thisPeriodSec = basePeriodSec / mult;
 
-            gen.fill (chanPtrs.data(), opts.senderPeriod);
-            int offset = 0;
-            for (int k = 0; k < splits; ++k)
+            for (int b = 0; b < bunch; ++b)
             {
-                const int n = (k == splits - 1) ? opts.senderPeriod - offset
-                                                : opts.senderPeriod / splits;
-                for (int c = 0; c < opts.channels; ++c)
-                    subPtrs[(size_t) c] = chanPtrs[(size_t) c] + offset;
-                send.pushAudioBlock (subPtrs.data(), opts.channels, n);
-                offset += n;
+                gen.fill (chanPtrs.data(), opts.senderPeriod);
+                int offset = 0;
+                for (int k = 0; k < splits; ++k)
+                {
+                    const int n = (k == splits - 1) ? opts.senderPeriod - offset
+                                                    : opts.senderPeriod / splits;
+                    for (int c = 0; c < opts.channels; ++c)
+                        subPtrs[(size_t) c] = chanPtrs[(size_t) c] + offset;
+                    send.pushAudioBlock (subPtrs.data(), opts.channels, n);
+                    offset += n;
+                }
             }
 
             next += std::chrono::duration_cast<std::chrono::steady_clock::duration> (
-                std::chrono::duration<double> (thisPeriodSec));
+                std::chrono::duration<double> (thisPeriodSec * bunch));
         }
     }
 
@@ -766,6 +776,17 @@ void scn_split_fast_mode (Options& o)
     if (o.burstMultiplier == 1.0) o.burstMultiplier = 8.0;
     if (o.burstDurationSec <= 0.0) o.burstDurationSec = 0.5;
 }
+void scn_bunch_fast_mode (Options& o)
+{
+    // Same burst, then a device period of 4 full-size blocks processed
+    // back-to-back: fast, fast, fast, slow. Judged per block, the fast ones
+    // reset the exit count every period and the sender never resumed.
+    scn_tail (o, 12.0);
+    if (o.senderPeriod == 64)      o.senderPeriod = 128;
+    if (o.bunchCalls <= 1)         o.bunchCalls = 4;
+    if (o.burstMultiplier == 1.0)  o.burstMultiplier = 16.0;
+    if (o.burstDurationSec <= 0.0) o.burstDurationSec = 0.5;
+}
 void scn_counter_rewind (Options& o)
 {
     // Sender frame count jumps back to 0 under the same UID (what older
@@ -799,6 +820,7 @@ const Scenario kScenarios[] = {
     { "reprepare",      scn_reprepare,      "18 s with sender re-prepare at 6 s" },
     { "stall",          scn_stall,          "18 s with a 50 ms sender stall at 6 s" },
     { "split_fast_mode",scn_split_fast_mode,"12 s pre-render burst then split periods" },
+    { "bunch_fast_mode",scn_bunch_fast_mode,"12 s pre-render burst then bunched blocks" },
     { "counter_rewind", scn_counter_rewind, "18 s with frame counter reset at 6 s" },
     { "counter_wrap",   scn_counter_wrap,   "18 s with 32-bit frame counter wrap at ~6 s" },
     { "soak",           scn_soak,           "4 h matched-rate soak" },
