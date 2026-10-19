@@ -158,7 +158,7 @@ Per-channel gain and delay calibration tool, useful for multi-speaker setups.
 
 ### mcfx_meter
 
-Multichannel level meter with RMS, peak, and peak hold. Four views: the classic bars, a ring that stays compact at any channel count, a dot grid small enough to leave open in a corner, and a 3D waterfall showing every channel's spectrum at once.
+Multichannel level meter with RMS, peak, and peak hold. Six views: the classic bars, a ring that stays compact at any channel count, a dot grid small enough to leave open in a corner, a 3D waterfall showing every channel's spectrum at once, an oscilloscope and a spectrogram.
 
 <img src="screenshots/mcfx_meter_bars.png" width="700" alt="mcfx_meter bar view">
 
@@ -168,6 +168,14 @@ Multichannel level meter with RMS, peak, and peak hold. Four views: the classic 
 </p>
 
 <img src="screenshots/mcfx_meter_waterfall.png" width="700" alt="mcfx_meter waterfall view">
+
+- **Scope**: a range of channels, overlaid or stacked; auto or fixed time and amplitude range; rising zero-crossing trigger; pause and scroll back through the last second; hover readout and A/B cursors for time difference and frequency.
+- **Spectrogram**: scrolling history on a log, mel or linear frequency axis, with a live spectrum strip (instant, average, held peak) on the same axis and dB scale. A channel range averaged or stacked (up to 16), span, top and range of the scale, wheel zoom and drag pan, pause, hover readout with note names. "Fine bass" (the default) takes the rows below ~450 Hz from a constant-Q transform, which separates 50 Hz from 55 Hz; clicks line up from 20 Hz to 20 kHz, and the time axis shows the resulting delay (0.34 s fine, 85 ms fast). The gear button opens display settings: 11 colour maps, dB / meter / linear colour scale, normalisation, note-name axis, treble window size, harmonic cursor.
+- Every view but the bars can be **popped out** into its own window or made **fullscreen** on any display, e.g. for a projector; text and lines grow with the window.
+
+<img src="screenshots/mcfx_meter_scope.png" width="700" alt="mcfx_meter scope view">
+
+<img src="screenshots/mcfx_meter_spectrogram.png" width="700" alt="mcfx_meter spectrogram view">
 
 
 ---
@@ -298,6 +306,23 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### Unreleased
+
+- `mcfx_meter`: **oscilloscope view** — a channel range overlaid or stacked, auto or fixed time and amplitude, zero-crossing trigger, pause with scroll-back through the last second, hover readout and A/B cursors (time difference and frequency).
+- `mcfx_meter`: **spectrogram view** — scrolling history with a live spectrum strip on the same axis and dB scale (instant, average, held peak), a channel range averaged or stacked (up to 16), frequency zoom (wheel) and pan (drag), pause and hover readout with note names. "Fine bass" takes the rows below ~450 Hz from a constant-Q transform (separates 50 Hz from 55 Hz) and lines clicks up across all frequencies; the time axis shows the delay this takes. A settings panel (gear button) picks the colour map (11), colour scale, normalisation, log / mel / linear axis, note-name axis with a keyboard, treble window size, smooth or pixel picture, the spectrum strip and a harmonic cursor.
+- `mcfx_meter`: every view but the bars **pops out** into its own window or goes **fullscreen** on any display, for a second screen or a projector; the scope and spectrogram scale their text and lines with the window.
+- `mcfx_meter`: the waterfall's analyser stops when the editor closes; it kept copying audio on the audio thread until an editor was reopened.
+- `mcfx_meter`: a preset recall, undo or A/B compare in the host while the editor is open now updates the editor (view, size, scope and spectrogram settings).
+- `mcfx_delay`, `mcfx_filter`, `mcfx_gain_delay`, `mcfx_meter`: the host is told about parameter changes made in the plug-in's GUI again; since the move to JUCE 8 they changed the sound but hosts never saw them, so they couldn't be recorded as automation.
+- `mcfx_mimoeq`: fix a crash after undo, preset load or host recall with the editor open — the band editor kept editing a band that no longer existed.
+- `mcfx_mimoeq`: the FIR designer and the FIR file's channel picker apply to the band they were opened for, also if the window was closed or another band selected meanwhile; before, Apply could write the FIR into another band.
+- `mcfx_mimoeq`: the spectrogram's constant-Q analysis puts every band's window on the same instant, so an impulse is drawn as a vertical line instead of arriving 0.34 s later at 31 Hz than at 16 kHz; bands are placed twice as densely, so a tone between bands reads within ~0.4 dB. The spectrogram now shows the moment 0.34 s ago.
+- `mcfx_send`: the stream survives the host re-preparing the plug-in (Ableton Live does this mid-session); before, the receiver dropped every later packet and stayed silent.
+- `mcfx_send`: after a pre-render burst (e.g. REAPER's anticipative FX) the sender resumes when the host goes back to realtime, also in hosts that split a period into several calls or run several blocks back-to-back per device period; before, it could stay silent until re-prepared. The status line shows "PRE-RENDER: not sending" while it skips.
+- `mcfx_receive`: a sender whose frame count jumps back (an older sender re-preparing) is re-aligned instead of going silent; shown as "restart" in the status.
+- `mcfx_receive`: recovers cleanly after a sender stall (overloaded machine); before, one underrun could leave the output muted or ~5 % sharp until the peer was rebuilt.
+- `mcfx_receive`: the 32-bit frame counter wrapping (every ~24.8 h at 48 kHz) no longer causes a dropout.
+
 ### 0.9.0 (2026-09-29)
 
 - `mcfx_graph`: node tiles name what they are under the title — the plug-in's own name (or its maker, if the node isn't renamed) or the native node type — and the properties panel's subtitle names the plug-in instead of "plugin".
