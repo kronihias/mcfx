@@ -1693,9 +1693,9 @@ void RecvStream::parsePacket (const uint8_t* buf, int nbytes,
     {
         const uint64_t ref = peer->writeFramePos.load (std::memory_order_acquire);
         const auto delta = static_cast<int32_t> (data.count - static_cast<uint32_t> (ref));
-        const int64_t near = static_cast<int64_t> (ref) + delta;
-        if (std::abs (static_cast<int64_t> (delta)) <= (int64_t (1) << 30) && near >= 0)
-            startFrame = static_cast<uint64_t> (near);
+        const int64_t unwrapped = static_cast<int64_t> (ref) + delta;
+        if (std::abs (static_cast<int64_t> (delta)) <= (int64_t (1) << 30) && unwrapped >= 0)
+            startFrame = static_cast<uint64_t> (unwrapped);
         else
             startFrame = (ref & ~uint64_t (0xffffffffu)) | data.count;
     }
