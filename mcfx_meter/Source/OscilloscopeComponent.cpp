@@ -716,14 +716,22 @@ void OscilloscopeComponent::paint (Graphics& g)
     }
 
     // Time labels, relative to the trigger point (or to "now" when free-running).
+    // One number format for the whole axis, from the spacing between labels,
+    // so "2.0 ms" and "14.0 ms" don't come out as "2.000 ms" and "14.00 ms".
     g.setColour (Colours::white.withAlpha (0.75f));
+    const double labelStepMs = 1000.0 * std::abs (idxToTime (xToIdx (plot.getX() + plot.getWidth() * 2.f / (float) kTimeDivs))
+                                                  - idxToTime (xToIdx (plot.getX())));
+    const int axisDecimals = labelStepMs > 0.0
+                               ? jlimit (0, 3, (int) std::ceil (-std::log10 (labelStepMs)) + 1)
+                               : 3;
     for (int i = 0; i <= kTimeDivs; i += 2)
     {
         const float gx = plot.getX() + plot.getWidth() * (float) i / (float) kTimeDivs;
         const Justification j = i == 0 ? Justification::centredLeft
                               : (i == kTimeDivs ? Justification::centredRight : Justification::centred);
         const int lx = i == 0 ? (int) gx : (i == kTimeDivs ? (int) gx - S (80) : (int) gx - S (40));
-        g.drawText (formatTime (idxToTime (xToIdx (gx))), lx, (int) plot.getBottom() + 2, S (80), S (12), j);
+        g.drawText (String (1000.0 * idxToTime (xToIdx (gx)), axisDecimals) + " ms",
+                    lx, (int) plot.getBottom() + 2, S (80), S (12), j);
     }
 
     // Status line, top left inside the plot.

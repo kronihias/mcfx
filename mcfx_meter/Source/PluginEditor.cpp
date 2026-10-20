@@ -284,8 +284,10 @@ void Ambix_meterAudioProcessorEditor::paint (Graphics& g)
     g.setFont (Font (FontOptions (10.00f, Font::plain)));
     String version_string;
     version_string << "v" << QUOTE(VERSION);
+    // Left of the resize corner (18 px, setResizable() puts it in every view),
+    // which otherwise draws over the last characters.
     g.drawText (version_string,
-                getWidth()-51, getHeight()-11, 50, 10,
+                getWidth()-51-18, getHeight()-11, 50, 10,
                 Justification::bottomRight, true);
 
     //[UserPaint] Add your own custom painting code here..
