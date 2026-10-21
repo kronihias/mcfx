@@ -236,7 +236,10 @@ private:
     std::atomic<bool> autoPending_ { false };
     void applyAutomationToModel(int bandIdx, int param, float value);  // caller holds modelLock_
     void applyPendingAutomation();
+    void applyPendingAutomationWithoutMessageLoop();   // audio thread
     void timerCallback() override;
+    // Counts timer callbacks; zero means no message loop has run yet.
+    std::atomic<uint32_t> timerTicks_ { 0 };
 
     // ---- Model data (GUI thread writes, audio thread reads floats for sync) ----
     EqChain diagonalChain_;

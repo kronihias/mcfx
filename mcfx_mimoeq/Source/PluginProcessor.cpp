@@ -427,6 +427,11 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
         needsParamSync_.store(true, std::memory_order_relaxed);
     }
 
+    // Headless hosts without a message loop (e.g. pedalboard on Linux) never
+    // run the timer, so parked automation would never reach the model.
+    if (timerTicks_.load(std::memory_order_relaxed) == 0)
+        applyPendingAutomationWithoutMessageLoop();
+
     doParamSyncIfNeeded();
 
     if (activeState_ == nullptr)
@@ -1169,8 +1174,30 @@ void Mcfx_mimoeqAudioProcessor::applyPendingAutomation()
     sendChangeMessage();
 }
 
+void Mcfx_mimoeqAudioProcessor::applyPendingAutomationWithoutMessageLoop()
+{
+    // Only until the first timer tick proves a message loop runs. Without
+    // one there is no editor either, so nothing else is using the model;
+    // the try-lock still never waits if something is. Sets the sync flag
+    // directly: requestParameterSync() may post an async update.
+    if (! autoPending_.load(std::memory_order_acquire))
+        return;
+
+    const SpinLock::ScopedTryLockType sl (modelLock_);
+    if (! sl.isLocked() || ! autoPending_.exchange(false, std::memory_order_acquire))
+        return;
+
+    for (int slot = 0; slot < kNumAutoSlots; ++slot)
+        if (autoDirty_[(size_t) slot].exchange(false, std::memory_order_acquire))
+            applyAutomationToModel(slot / kNumAutoParams, slot % kNumAutoParams,
+                                   autoValue_[(size_t) slot].load(std::memory_order_relaxed));
+
+    needsParamSync_.store(true, std::memory_order_release);
+}
+
 void Mcfx_mimoeqAudioProcessor::timerCallback()
 {
+    timerTicks_.fetch_add(1, std::memory_order_relaxed);
     applyPendingAutomation();
 
     // A pending processing state waits while the garbage slot is full (see
