@@ -227,8 +227,9 @@ private:
     std::atomic<bool> updatingFromModel_ { false };  // feedback guard for syncModelToAPVTS
 
     // Host automation that arrives off the message thread (usually the audio
-    // thread) must not touch the model, so it parks here, one slot per
-    // (band, parameter), and timerCallback() applies it on the message thread.
+    // thread) parks here, one slot per (band, parameter). processBlock()
+    // applies it at the start of the next block, timerCallback() when no
+    // audio is running.
     enum AutoParam { kAutoFreq, kAutoQ, kAutoGain, kAutoEnable, kNumAutoParams };
     static constexpr int kNumAutoSlots = kMaxAutomatedBands * kNumAutoParams;
     std::array<std::atomic<float>, kNumAutoSlots> autoValue_ {};
@@ -236,10 +237,11 @@ private:
     std::atomic<bool> autoPending_ { false };
     void applyAutomationToModel(int bandIdx, int param, float value);  // caller holds modelLock_
     void applyPendingAutomation();
-    void applyPendingAutomationWithoutMessageLoop();   // audio thread
+    void applyPendingAutomationOnAudioThread();
     void timerCallback() override;
-    // Counts timer callbacks; zero means no message loop has run yet.
-    std::atomic<uint32_t> timerTicks_ { 0 };
+    // Set when the audio thread applied automation; the timer then does
+    // what the audio thread must not (editor refresh, latency check).
+    std::atomic<bool> automationAppliedOnAudio_ { false };
 
     // ---- Model data (GUI thread writes, audio thread reads floats for sync) ----
     EqChain diagonalChain_;

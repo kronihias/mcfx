@@ -427,10 +427,9 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
         needsParamSync_.store(true, std::memory_order_relaxed);
     }
 
-    // Headless hosts without a message loop (e.g. pedalboard on Linux) never
-    // run the timer, so parked automation would never reach the model.
-    if (timerTicks_.load(std::memory_order_relaxed) == 0)
-        applyPendingAutomationWithoutMessageLoop();
+    // Automation parked by parameterChanged() lands with this block, not at
+    // timer rate: offline renders run far faster than the timer.
+    applyPendingAutomationOnAudioThread();
 
     doParamSyncIfNeeded();
 
@@ -1174,12 +1173,12 @@ void Mcfx_mimoeqAudioProcessor::applyPendingAutomation()
     sendChangeMessage();
 }
 
-void Mcfx_mimoeqAudioProcessor::applyPendingAutomationWithoutMessageLoop()
+void Mcfx_mimoeqAudioProcessor::applyPendingAutomationOnAudioThread()
 {
-    // Only until the first timer tick proves a message loop runs. Without
-    // one there is no editor either, so nothing else is using the model;
-    // the try-lock still never waits if something is. Sets the sync flag
-    // directly: requestParameterSync() may post an async update.
+    // The setters only recompute biquad coefficients, which is fine here.
+    // Never waits: if the editor holds the lock, the values stay parked for
+    // the next block. Sets the sync flag directly: requestParameterSync()
+    // may post an async update, so the timer calls it afterwards.
     if (! autoPending_.load(std::memory_order_acquire))
         return;
 
@@ -1193,12 +1192,18 @@ void Mcfx_mimoeqAudioProcessor::applyPendingAutomationWithoutMessageLoop()
                                    autoValue_[(size_t) slot].load(std::memory_order_relaxed));
 
     needsParamSync_.store(true, std::memory_order_release);
+    automationAppliedOnAudio_.store(true, std::memory_order_release);
 }
 
 void Mcfx_mimoeqAudioProcessor::timerCallback()
 {
-    timerTicks_.fetch_add(1, std::memory_order_relaxed);
     applyPendingAutomation();
+
+    if (automationAppliedOnAudio_.exchange(false, std::memory_order_acquire))
+    {
+        requestParameterSync();   // latency check
+        sendChangeMessage();      // editor refresh
+    }
 
     // A pending processing state waits while the garbage slot is full (see
     // processBlock), so empty it here too, not only on the next rebuild.
