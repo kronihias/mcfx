@@ -365,14 +365,14 @@ bool Mcfx_graphAudioProcessor::importFromVar (const juce::var& v, juce::String* 
     // during the rebuild — same MessageManager queue, FIFO order, so this runs
     // last and we resume committing future user actions normally.
     //
-    // Also bump the parameter-debounce epoch: state restore typically
-    // emits parameterValueChanged events on every restored parameter; the
-    // 450 ms debounced commits scheduled for those events would otherwise
+    // Also mark the parameter-debounce epoch as handled: state restore
+    // typically emits parameterValueChanged events on every restored
+    // parameter; the 450 ms debounced commit pending for those would otherwise
     // fire AFTER the import completes (depth back to 0) and commit a
     // post-undo snapshot that wipes the redo history.
     juce::MessageManager::callAsync ([this]
     {
-        ++paramDirtyEpoch_;
+        debouncedEpoch_ = paramDirtyEpoch_.load();
         --suppressHistoryDepth_;
     });
 
@@ -581,25 +581,41 @@ void Mcfx_graphAudioProcessor::audioProcessorParameterChangeGestureEnd
     (juce::AudioProcessor*, int)
 {
     if (suppressHistoryDepth_.load (std::memory_order_relaxed) > 0) return;
-    juce::MessageManager::callAsync ([this] { commitHistorySnapshot(); });
+    // May be the audio thread: just flag it, timerCallback commits.
+    gestureEndPending_.store (true, std::memory_order_release);
 }
 
 void Mcfx_graphAudioProcessor::scheduleDebouncedHistoryCommit()
 {
-    // Bump the epoch and schedule a commit that only fires if no further
-    // change arrives within the debounce window. Listener callbacks may
-    // come from the audio thread, so the commit is deferred to the message
-    // thread via callAfterDelay.
-    const int epoch = ++paramDirtyEpoch_;
-    juce::Timer::callAfterDelay (450, [this, epoch]
-    {
-        if (paramDirtyEpoch_.load() == epoch)
-            commitHistorySnapshot();
-    });
+    // Bump the epoch and stamp the time; timerCallback commits once no
+    // further change has arrived within the debounce window. Listener
+    // callbacks may come from the audio thread — hosted VST3s report output
+    // parameters (meters) every block — so only atomics are touched here: no
+    // Timer::callAfterDelay or callAsync, which allocate and lock.
+    lastParamChangeMs_.store (juce::Time::getMillisecondCounter(), std::memory_order_relaxed);
+    paramDirtyEpoch_.fetch_add (1, std::memory_order_release);
+}
+
+void Mcfx_graphAudioProcessor::flushPendingHistoryCommits()
+{
+    if (gestureEndPending_.exchange (false, std::memory_order_acquire))
+        commitHistorySnapshot();
+
+    const int epoch = paramDirtyEpoch_.load (std::memory_order_acquire);
+    if (epoch == debouncedEpoch_) return;
+
+    const auto sinceLast = juce::Time::getMillisecondCounter()
+                         - lastParamChangeMs_.load (std::memory_order_relaxed);
+    if (sinceLast < (juce::uint32) kHistoryDebounceMs) return;
+
+    debouncedEpoch_ = epoch;
+    commitHistorySnapshot();
 }
 
 void Mcfx_graphAudioProcessor::timerCallback()
 {
+    flushPendingHistoryCommits();
+
     // Mirror inner-parameter values back to the host for any slot whose inner
     // value drifted away from the cached host-side value (typically because
     // the user moved a knob on the plugin's GUI). This lets the DAW record

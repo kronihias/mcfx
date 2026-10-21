@@ -41,15 +41,21 @@
 
 #include "JuceHeader.h"
 
+#include <atomic>
+
 #if defined(__APPLE__)
+  #include <dispatch/dispatch.h>
   #include <mach/mach.h>
   #include <mach/mach_time.h>
   #include <mach/thread_act.h>
   #include <mach/thread_policy.h>
   #include <pthread.h>
 #elif defined(__linux__)
+  #include <cerrno>
+  #include <ctime>
   #include <pthread.h>
   #include <sched.h>
+  #include <semaphore.h>
 #elif defined(_WIN32)
   #include <windows.h>
 #endif
@@ -109,5 +115,100 @@ inline void setCurrentThreadRealtime (double periodMs,
     juce::ignoreUnused (periodMs, computeMs, constraintMs);
    #endif
 }
+
+// Wakes one waiting thread; signal() is safe on the audio thread.
+// juce::WaitableEvent::signal() takes a mutex, which the waiter may hold.
+// Here signal() is an atomic exchange plus, at most once per wait, an OS
+// semaphore post (dispatch / futex / kernel semaphore), none of which
+// take a user-space lock. Signals between waits coalesce into one wake.
+class RtWake
+{
+public:
+    RtWake()
+    {
+       #if defined(__APPLE__)
+        sem_ = dispatch_semaphore_create (0);
+       #elif defined(__linux__)
+        sem_init (&sem_, 0, 0);
+       #elif defined(_WIN32)
+        sem_ = CreateSemaphoreW (nullptr, 0, 0x7fffffff, nullptr);
+       #endif
+    }
+
+    ~RtWake()
+    {
+       #if defined(__APPLE__)
+        // libdispatch traps on releasing a semaphore whose count is below
+        // its initial value, never above it, so leftover posts are fine.
+        dispatch_release (sem_);
+       #elif defined(__linux__)
+        sem_destroy (&sem_);
+       #elif defined(_WIN32)
+        CloseHandle (sem_);
+       #endif
+    }
+
+    void signal() noexcept
+    {
+        // acq_rel: the waiter's exchange in wait() acquires whatever was
+        // written before this call (the FIFO write).
+        if (! pending_.exchange (true, std::memory_order_acq_rel))
+            post();
+    }
+
+    // Returns after a signal() or timeoutMs, whichever comes first.
+    void wait (int timeoutMs) noexcept
+    {
+        if (! pending_.load (std::memory_order_acquire))
+            timedWait (timeoutMs);
+        // Re-arm. A signal() that raced in between is not lost: either it
+        // posted (the next wait returns at once) or it found the flag set
+        // and this exchange acquires its writes.
+        pending_.exchange (false, std::memory_order_acq_rel);
+    }
+
+private:
+    void post() noexcept
+    {
+       #if defined(__APPLE__)
+        dispatch_semaphore_signal (sem_);
+       #elif defined(__linux__)
+        sem_post (&sem_);
+       #elif defined(_WIN32)
+        ReleaseSemaphore (sem_, 1, nullptr);
+       #endif
+    }
+
+    void timedWait (int timeoutMs) noexcept
+    {
+       #if defined(__APPLE__)
+        dispatch_semaphore_wait (sem_, dispatch_time (DISPATCH_TIME_NOW,
+                                                      (int64_t) timeoutMs * NSEC_PER_MSEC));
+       #elif defined(__linux__)
+        timespec ts {};
+        clock_gettime (CLOCK_REALTIME, &ts);
+        ts.tv_sec  += timeoutMs / 1000;
+        ts.tv_nsec += (long) (timeoutMs % 1000) * 1000000L;
+        if (ts.tv_nsec >= 1000000000L) { ++ts.tv_sec; ts.tv_nsec -= 1000000000L; }
+        while (sem_timedwait (&sem_, &ts) == -1 && errno == EINTR) {}
+       #elif defined(_WIN32)
+        WaitForSingleObject (sem_, (DWORD) timeoutMs);
+       #else
+        juce::Thread::sleep (timeoutMs);
+       #endif
+    }
+
+    std::atomic<bool> pending_ { false };
+
+   #if defined(__APPLE__)
+    dispatch_semaphore_t sem_;
+   #elif defined(__linux__)
+    sem_t sem_;
+   #elif defined(_WIN32)
+    HANDLE sem_;
+   #endif
+
+    JUCE_DECLARE_NON_COPYABLE (RtWake)
+};
 
 }} // namespace mcfx::net

@@ -471,6 +471,11 @@ public:
     void setListener(Listener* l) { listener_ = l; }
     void updateFromBand();
 
+    /** The lock the band's owner holds while it reads the model from the audio
+        thread (try-lock there). The editor holds it around every edit of the
+        band, so that read never sees a band mid-change. Optional. */
+    void setModelLock(SpinLock* lock) { modelLock_ = lock; }
+
     /** Tell the editor whether the current band lives on the diagonal chain.
         Linked detection only applies to diagonal bands, so the Link control is
         disabled for MIMO path bands. */
@@ -503,6 +508,12 @@ private:
     EqBand* band_ = nullptr;
     int bandIndex_ = -1;
     Listener* listener_ = nullptr;
+
+    // Not re-entrant: hold it around EqBand setters only, never around a
+    // listener callback or a UI refresh (either may lead back here).
+    SpinLock* modelLock_ = nullptr;
+    SpinLock  noModelLock_;   // stands in when the owner has none
+    SpinLock& modelLock() { return modelLock_ != nullptr ? *modelLock_ : noModelLock_; }
 
     /** ComboBox variant that groups the higher-order analog-prototype filter types
         (Chebyshev I/II, Elliptic, Bessel) into a "High-Order" submenu so the everyday

@@ -74,7 +74,8 @@ struct ProcessingState
 class Mcfx_mimoeqAudioProcessor : public AudioProcessor,
                                    public ChangeBroadcaster,
                                    private AudioProcessorValueTreeState::Listener,
-                                   private AsyncUpdater
+                                   private AsyncUpdater,
+                                   private Timer
 {
 public:
     Mcfx_mimoeqAudioProcessor();
@@ -114,6 +115,15 @@ public:
     const std::map<PathKey, EqChain*>& getAllPaths() const { return pathChains_; }
     bool removePathChain(int inCh, int outCh);
     std::vector<PathKey> getPathKeys() const;
+
+    /** Guards the model against the audio thread's parameter sync, which reads
+        it under a try-lock (and retries next block if it misses). Hold it on
+        the message thread around every model edit: band parameters, adding or
+        removing bands, anything that frees or reallocates. Not re-entrant —
+        never hold it across a call that may take it again (the processor's
+        path add/remove, setStateInformation, requestParameterSync, the
+        editor's listener callbacks). */
+    SpinLock& getModelLock() { return modelLock_; }
 
     // --- VST3 Parameter Automation (diagonal chain) ---
     AudioProcessorValueTreeState apvts;
@@ -165,8 +175,8 @@ public:
     int editorAnalyzerChannel = 0;       // 0 = sum, 1..N = specific channel
     bool analyzerAutoNormalize = true;    // normalize to 0dB peak
     float analyzerOffset = 0.f;          // dB offset (when auto-normalize is off)
-    bool editorSpectrogramOn = false;     // persisted: spectrogram vs spectrum view
-    bool editorSpectroPost = false;       // persisted: false = pre-EQ, true = post-EQ source
+    std::atomic<bool> editorSpectrogramOn { false };  // persisted: spectrogram vs spectrum view (read by audio thread)
+    std::atomic<bool> editorSpectroPost { false };    // persisted: false = pre-EQ, true = post-EQ source (read by audio thread)
     float editorSpectroSpanSec = 10.f;    // persisted: seconds of history the spectrogram shows
     bool editorPhaseOn = false;          // persisted phase-graph toggle state
 
@@ -196,7 +206,9 @@ public:
         If the change moves any chain's latency (a band with an FIR or lookahead
         switched on or off, a lookahead time changed), a full rebuild is queued
         as well, since latency accounting and compensation are only worked out
-        there. Safe from the audio thread (host automation of "Enable"). */
+        there. Message thread only: it reads the model's path map. (Host
+        automation from the audio thread is deferred there, see
+        parameterChanged.) */
     void requestParameterSync();
 
     // --- Undo / Redo ---
@@ -212,13 +224,31 @@ private:
     // ---- APVTS ----
     AudioProcessorValueTreeState::ParameterLayout createParameters();
     void parameterChanged(const String& parameterID, float newValue) override;
-    bool updatingFromModel_ = false;  // feedback guard for syncModelToAPVTS
+    std::atomic<bool> updatingFromModel_ { false };  // feedback guard for syncModelToAPVTS
+
+    // Host automation that arrives off the message thread (usually the audio
+    // thread) parks here, one slot per (band, parameter). processBlock()
+    // applies it at the start of the next block, timerCallback() when no
+    // audio is running.
+    enum AutoParam { kAutoFreq, kAutoQ, kAutoGain, kAutoEnable, kNumAutoParams };
+    static constexpr int kNumAutoSlots = kMaxAutomatedBands * kNumAutoParams;
+    std::array<std::atomic<float>, kNumAutoSlots> autoValue_ {};
+    std::array<std::atomic<bool>,  kNumAutoSlots> autoDirty_ {};
+    std::atomic<bool> autoPending_ { false };
+    void applyAutomationToModel(int bandIdx, int param, float value);  // caller holds modelLock_
+    void applyPendingAutomation();
+    void applyPendingAutomationOnAudioThread();
+    void timerCallback() override;
+    // Set when the audio thread applied automation; the timer then does
+    // what the audio thread must not (editor refresh, latency check).
+    std::atomic<bool> automationAppliedOnAudio_ { false };
 
     // ---- Model data (GUI thread writes, audio thread reads floats for sync) ----
     EqChain diagonalChain_;
     std::set<int> diagChannelMask_;   // empty = all channels; otherwise 1-based channel set
     std::map<PathKey, EqChain*> pathChains_;
     OwnedArray<EqChain> ownedPathChains_;
+    SpinLock modelLock_;   // see getModelLock()
 
     // ---- Lock-free processing state ----
     // GUI builds a new ProcessingState*, publishes via pendingState_.
@@ -234,6 +264,13 @@ private:
     AudioSampleBuffer inputSnapshot_; // saved input for cross-path reads
     AudioSampleBuffer tempBuffer_;    // single-channel scratch buffer for MIMO paths
     std::vector<bool> mimoOutputMask_; // pre-allocated per-channel MIMO output mask
+
+    // The buffers above (and every band's scratch) hold currentBlockSize_
+    // samples, so a bigger host block is processed in sub-blocks of that size,
+    // through this view onto the host buffer (no copy, no allocation).
+    AudioSampleBuffer chunkView_;
+    int chunkViewChannels_ = 0;
+    void processChunk(AudioSampleBuffer& buffer);
 
     std::atomic<bool> needsParamSync_ { false };
     void doParamSyncIfNeeded();

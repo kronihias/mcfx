@@ -1046,53 +1046,65 @@ void EqBandEditor::sliderValueChanged(Slider* s)
 
     notifyAboutToChange(sliderDragging_);
 
-    if (s == &sldFreq_)
-        band_->setFrequency((float)sldFreq_.getValue());
-    else if (s == &sldQ_)
-        band_->setQ((float)sldQ_.getValue());
-    else if (s == &sldRipplePass_)
-        band_->setRipplePassDB((float)sldRipplePass_.getValue());
-    else if (s == &sldRippleStop_)
-        band_->setRippleStopDB((float)sldRippleStop_.getValue());
-    else if (s == &sldGain_)
-        band_->setGainDB((float)sldGain_.getValue());
-    else if (s == &sldLinearGain_)
-        band_->setLinearGain((float)sldLinearGain_.getValue());
-    else if (s == &sldDelay_)
+    // Under the model lock: the owner's audio thread copies these parameters
+    // (try-lock), and a cascade redesign resizes the band's coefficients.
+    bool lookaheadChanged = false;
     {
-        if (delayInMs_)
+        const SpinLock::ScopedLockType sl (modelLock());
+
+        if (s == &sldFreq_)
+            band_->setFrequency((float)sldFreq_.getValue());
+        else if (s == &sldQ_)
+            band_->setQ((float)sldQ_.getValue());
+        else if (s == &sldRipplePass_)
+            band_->setRipplePassDB((float)sldRipplePass_.getValue());
+        else if (s == &sldRippleStop_)
+            band_->setRippleStopDB((float)sldRippleStop_.getValue());
+        else if (s == &sldGain_)
+            band_->setGainDB((float)sldGain_.getValue());
+        else if (s == &sldLinearGain_)
+            band_->setLinearGain((float)sldLinearGain_.getValue());
+        else if (s == &sldDelay_)
         {
-            double ms = sldDelay_.getValue();
-            int samples = (int)std::round(ms * band_->getSampleRate() / 1000.0);
-            band_->setDelaySamples(samples);
+            if (delayInMs_)
+            {
+                double ms = sldDelay_.getValue();
+                int samples = (int)std::round(ms * band_->getSampleRate() / 1000.0);
+                band_->setDelaySamples(samples);
+            }
+            else
+            {
+                band_->setDelaySamples((int)sldDelay_.getValue());
+            }
         }
-        else
+        else if (s == &sldDynThreshold_)
+            band_->setDynThresholdDB((float)sldDynThreshold_.getValue());
+        else if (s == &sldDynRange_)
+            band_->setDynRangeDB((float)sldDynRange_.getValue());
+        else if (s == &sldTiltLo_)
+            band_->setTiltLoHz((float)sldTiltLo_.getValue());
+        else if (s == &sldTiltHi_)
+            band_->setTiltHiHz((float)sldTiltHi_.getValue());
+        else if (s == &sldDynRatio_)
+            band_->setDynRatio((float)sldDynRatio_.getValue());
+        else if (s == &sldDynKnee_)
+            band_->setDynKneeDB((float)sldDynKnee_.getValue());
+        else if (s == &sldDynAttack_)
+            band_->setDynAttackMs((float)sldDynAttack_.getValue());
+        else if (s == &sldDynRelease_)
+            band_->setDynReleaseMs((float)sldDynRelease_.getValue());
+        else if (s == &sldDynLookahead_)
         {
-            band_->setDelaySamples((int)sldDelay_.getValue());
+            band_->setDynLookaheadMs((float)sldDynLookahead_.getValue());
+            lookaheadChanged = true;
         }
     }
-    else if (s == &sldDynThreshold_)
-        band_->setDynThresholdDB((float)sldDynThreshold_.getValue());
-    else if (s == &sldDynRange_)
-        band_->setDynRangeDB((float)sldDynRange_.getValue());
-    else if (s == &sldTiltLo_)
-        band_->setTiltLoHz((float)sldTiltLo_.getValue());
-    else if (s == &sldTiltHi_)
-        band_->setTiltHiHz((float)sldTiltHi_.getValue());
-    else if (s == &sldDynRatio_)
-        band_->setDynRatio((float)sldDynRatio_.getValue());
-    else if (s == &sldDynKnee_)
-        band_->setDynKneeDB((float)sldDynKnee_.getValue());
-    else if (s == &sldDynAttack_)
-        band_->setDynAttackMs((float)sldDynAttack_.getValue());
-    else if (s == &sldDynRelease_)
-        band_->setDynReleaseMs((float)sldDynRelease_.getValue());
-    else if (s == &sldDynLookahead_)
+
+    if (lookaheadChanged)
     {
-        // Lookahead is structural (changes latency/PDC). Update the model now, but
-        // defer the rebuild to drag-end (sliderDragEnded) to avoid PDC thrash; a
-        // non-drag change (text entry) rebuilds immediately.
-        band_->setDynLookaheadMs((float)sldDynLookahead_.getValue());
+        // Lookahead is structural (changes latency/PDC). The model is updated now,
+        // but the rebuild waits for drag-end (sliderDragEnded) to avoid PDC thrash;
+        // a non-drag change (text entry) rebuilds immediately.
         if (! dynLookaheadDragging_ && listener_ != nullptr)
             listener_->bandStructureChanged(bandIndex_);
         return;
@@ -1117,7 +1129,10 @@ void EqBandEditor::sliderDragEnded(Slider* s)
         dynLookaheadDragging_ = false;
         if (band_ != nullptr && ! updating_)
         {
-            band_->setDynLookaheadMs((float)sldDynLookahead_.getValue());
+            {
+                const SpinLock::ScopedLockType sl (modelLock());
+                band_->setDynLookaheadMs((float)sldDynLookahead_.getValue());
+            }
             if (listener_ != nullptr)
                 listener_->bandStructureChanged(bandIndex_);
         }
@@ -1136,16 +1151,19 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
     if (cb == &cbBandType_)
     {
         int sel = cbBandType_.getSelectedId();
-        switch (sel)
         {
-            case 1:
-                band_->setType(EqBandType::IIR);
-                if (band_->getIIRSubType() == IIRSubType::RawBiquad)
-                    band_->setIIRSubType(IIRSubType::Peak); // default back to Peak
-                break;
-            case 2: band_->setType(EqBandType::FIR); break;
-            case 3: band_->setType(EqBandType::Gain); break;
-            case 4: band_->setType(EqBandType::Delay); break;
+            const SpinLock::ScopedLockType sl (modelLock());
+            switch (sel)
+            {
+                case 1:
+                    band_->setType(EqBandType::IIR);
+                    if (band_->getIIRSubType() == IIRSubType::RawBiquad)
+                        band_->setIIRSubType(IIRSubType::Peak); // default back to Peak
+                    break;
+                case 2: band_->setType(EqBandType::FIR); break;
+                case 3: band_->setType(EqBandType::Gain); break;
+                case 4: band_->setType(EqBandType::Delay); break;
+            }
         }
         updateFromBand();
         isStructuralChange = true;
@@ -1153,42 +1171,48 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
     else if (cb == &cbIIRSubType_)
     {
         int sel = cbIIRSubType_.getSelectedId();
-        switch (sel)
         {
-            case 1: band_->setIIRSubType(IIRSubType::LowPass); break;
-            case 2: band_->setIIRSubType(IIRSubType::HighPass); break;
-            case 3: band_->setIIRSubType(IIRSubType::BandPass); break;
-            case 4: band_->setIIRSubType(IIRSubType::Notch); break;
-            case 5: band_->setIIRSubType(IIRSubType::AllPass); break;
-            case 6: band_->setIIRSubType(IIRSubType::LowShelf); break;
-            case 7: band_->setIIRSubType(IIRSubType::HighShelf); break;
-            case 8: band_->setIIRSubType(IIRSubType::Peak); break;
-            case 9: band_->setIIRSubType(IIRSubType::ButterworthLP); break;
-            case 10: band_->setIIRSubType(IIRSubType::ButterworthHP); break;
-            case 11: band_->setIIRSubType(IIRSubType::CrossoverLP); break;
-            case 12: band_->setIIRSubType(IIRSubType::CrossoverHP); break;
-            case 13: band_->setIIRSubType(IIRSubType::CrossoverAP); break;
-            case 14:
-                band_->setIIRSubType(IIRSubType::RawBiquad);
-                band_->setRawCoefficients(1.f, 0.f, 0.f, 1.f, 0.f, 0.f); // identity pass-through
-                break;
-            case 15: band_->setIIRSubType(IIRSubType::Chebyshev1LP); break;
-            case 16: band_->setIIRSubType(IIRSubType::Chebyshev1HP); break;
-            case 17: band_->setIIRSubType(IIRSubType::Chebyshev2LP); break;
-            case 18: band_->setIIRSubType(IIRSubType::Chebyshev2HP); break;
-            case 19: band_->setIIRSubType(IIRSubType::EllipticLP); break;
-            case 20: band_->setIIRSubType(IIRSubType::EllipticHP); break;
-            case 21: band_->setIIRSubType(IIRSubType::BesselLP); break;
-            case 22: band_->setIIRSubType(IIRSubType::BesselHP); break;
-            case 23:
-                band_->setIIRSubType(IIRSubType::Tilt);
-                // Pivot and slope don't mean what the previous type's centre and
-                // gain meant, so start a tilt neutral rather than inheriting them.
-                band_->setFrequency(EqBand::kTiltDefaultFreqHz);
-                band_->setGainDB(0.f);
-                sldFreq_.setValue(EqBand::kTiltDefaultFreqHz, dontSendNotification);
-                sldGain_.setValue(0.0, dontSendNotification);
-                break;
+            const SpinLock::ScopedLockType sl (modelLock());
+            switch (sel)
+            {
+                case 1: band_->setIIRSubType(IIRSubType::LowPass); break;
+                case 2: band_->setIIRSubType(IIRSubType::HighPass); break;
+                case 3: band_->setIIRSubType(IIRSubType::BandPass); break;
+                case 4: band_->setIIRSubType(IIRSubType::Notch); break;
+                case 5: band_->setIIRSubType(IIRSubType::AllPass); break;
+                case 6: band_->setIIRSubType(IIRSubType::LowShelf); break;
+                case 7: band_->setIIRSubType(IIRSubType::HighShelf); break;
+                case 8: band_->setIIRSubType(IIRSubType::Peak); break;
+                case 9: band_->setIIRSubType(IIRSubType::ButterworthLP); break;
+                case 10: band_->setIIRSubType(IIRSubType::ButterworthHP); break;
+                case 11: band_->setIIRSubType(IIRSubType::CrossoverLP); break;
+                case 12: band_->setIIRSubType(IIRSubType::CrossoverHP); break;
+                case 13: band_->setIIRSubType(IIRSubType::CrossoverAP); break;
+                case 14:
+                    band_->setIIRSubType(IIRSubType::RawBiquad);
+                    band_->setRawCoefficients(1.f, 0.f, 0.f, 1.f, 0.f, 0.f); // identity pass-through
+                    break;
+                case 15: band_->setIIRSubType(IIRSubType::Chebyshev1LP); break;
+                case 16: band_->setIIRSubType(IIRSubType::Chebyshev1HP); break;
+                case 17: band_->setIIRSubType(IIRSubType::Chebyshev2LP); break;
+                case 18: band_->setIIRSubType(IIRSubType::Chebyshev2HP); break;
+                case 19: band_->setIIRSubType(IIRSubType::EllipticLP); break;
+                case 20: band_->setIIRSubType(IIRSubType::EllipticHP); break;
+                case 21: band_->setIIRSubType(IIRSubType::BesselLP); break;
+                case 22: band_->setIIRSubType(IIRSubType::BesselHP); break;
+                case 23:
+                    band_->setIIRSubType(IIRSubType::Tilt);
+                    // Pivot and slope don't mean what the previous type's centre and
+                    // gain meant, so start a tilt neutral rather than inheriting them.
+                    band_->setFrequency(EqBand::kTiltDefaultFreqHz);
+                    band_->setGainDB(0.f);
+                    break;
+            }
+        }
+        if (sel == 23)
+        {
+            sldFreq_.setValue(EqBand::kTiltDefaultFreqHz, dontSendNotification);
+            sldGain_.setValue(0.0, dontSendNotification);
         }
 
         // Repopulate order combo for the selected family
@@ -1222,6 +1246,7 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
     }
     else if (cb == &cbOrder_)
     {
+        const SpinLock::ScopedLockType sl (modelLock());
         auto st = band_->getIIRSubType();
         if (st == IIRSubType::CrossoverLP || st == IIRSubType::CrossoverHP
             || st == IIRSubType::CrossoverAP)
@@ -1249,7 +1274,10 @@ void EqBandEditor::comboBoxChanged(ComboBox* cb)
             case 8: sr = 176400.0; break;
             case 9: sr = 192000.0; break;
         }
-        band_->setOriginalSampleRate(sr);
+        {
+            const SpinLock::ScopedLockType sl (modelLock());
+            band_->setOriginalSampleRate(sr);
+        }
 
         // Update FIR info label if FIR
         if (band_->getType() == EqBandType::FIR)
@@ -1285,14 +1313,20 @@ void EqBandEditor::buttonClicked(Button* b)
     if (b == &btnEnable_)
     {
         notifyAboutToChange();
-        band_->setEnabled(btnEnable_.getToggleState());
+        {
+            const SpinLock::ScopedLockType sl (modelLock());
+            band_->setEnabled(btnEnable_.getToggleState());
+        }
         if (listener_ != nullptr)
             listener_->bandEnableChanged(bandIndex_, band_->isEnabled());
     }
     else if (b == &btnGainLinear_)
     {
         notifyAboutToChange();
-        band_->setUseLinearGain(btnGainLinear_.getToggleState());
+        {
+            const SpinLock::ScopedLockType sl (modelLock());
+            band_->setUseLinearGain(btnGainLinear_.getToggleState());
+        }
         updateFromBand();
         if (listener_ != nullptr)
             listener_->bandParameterChanged(bandIndex_);
@@ -1300,7 +1334,10 @@ void EqBandEditor::buttonClicked(Button* b)
     else if (b == &btnInvertGain_)
     {
         notifyAboutToChange();
-        band_->setInvertGain(btnInvertGain_.getToggleState());
+        {
+            const SpinLock::ScopedLockType sl (modelLock());
+            band_->setInvertGain(btnInvertGain_.getToggleState());
+        }
         if (listener_ != nullptr)
             listener_->bandParameterChanged(bandIndex_);
     }
@@ -1313,7 +1350,10 @@ void EqBandEditor::buttonClicked(Button* b)
     {
         // Toggling dynamic changes the processing topology (detectors) → rebuild.
         notifyAboutToChange();
-        band_->setDynamicActive(btnDynActive_.getToggleState());
+        {
+            const SpinLock::ScopedLockType sl (modelLock());
+            band_->setDynamicActive(btnDynActive_.getToggleState());
+        }
         updateFromBand();   // reveal / hide the dynamic sub-controls
         if (listener_ != nullptr)
             listener_->bandStructureChanged(bandIndex_);
@@ -1322,14 +1362,20 @@ void EqBandEditor::buttonClicked(Button* b)
     {
         // Link mode changes the detector set (shared vs per-channel) → rebuild.
         notifyAboutToChange();
-        band_->setDynLinked(btnDynLink_.getToggleState());
+        {
+            const SpinLock::ScopedLockType sl (modelLock());
+            band_->setDynLinked(btnDynLink_.getToggleState());
+        }
         if (listener_ != nullptr)
             listener_->bandStructureChanged(bandIndex_);
     }
     else if (b == &btnDynAuto_)
     {
         notifyAboutToChange();
-        band_->setDynAuto(btnDynAuto_.getToggleState());
+        {
+            const SpinLock::ScopedLockType sl (modelLock());
+            band_->setDynAuto(btnDynAuto_.getToggleState());
+        }
         sldDynThreshold_.setEnabled(!band_->getDynAuto());
         if (listener_ != nullptr)
             listener_->bandParameterChanged(bandIndex_);
@@ -1552,7 +1598,10 @@ void EqBandEditor::applyBiquadCoeffsFromUI()
     float a1 = edA1_.getText().getFloatValue();
     float a2 = edA2_.getText().getFloatValue();
 
-    band_->setRawCoefficients(b0, b1, b2, a0, a1, a2);
+    {
+        const SpinLock::ScopedLockType sl (modelLock());
+        band_->setRawCoefficients(b0, b1, b2, a0, a1, a2);
+    }
     updateStabilityIndicator();
 }
 
@@ -1620,7 +1669,10 @@ void EqBandEditor::pasteBiquadCoeffsFromClipboard()
     float a2 = tokens[5].getFloatValue();
 
     notifyAboutToChange();
-    band_->setRawCoefficients(b0, b1, b2, a0, a1, a2);
+    {
+        const SpinLock::ScopedLockType sl (modelLock());
+        band_->setRawCoefficients(b0, b1, b2, a0, a1, a2);
+    }
 
     // Update UI fields from the (possibly normalized) stored coefficients
     updating_ = true;

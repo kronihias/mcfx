@@ -38,13 +38,26 @@ MutePhaseNode::~MutePhaseNode() = default;
 
 void MutePhaseNode::applyParamChange (int channel, bool isInvert, bool on) noexcept
 {
-    // Re-entrancy guard, and it keeps the not-realtime-safe write-back out of
-    // this path, which runs on the audio thread.
-    if (applyingParam_.exchange (true))
+    // setMute / setInvert's write-back below re-enters here on the thread doing it; skip
+    // that echo, the atomics already hold the value. A write from any other
+    // thread — host automation on the audio thread while the message thread
+    // mirrors — always lands. Atomics only: the write-back is not
+    // realtime-safe, and this runs on the audio thread.
+    if (mirroringThread_.load() == juce::Thread::getCurrentThreadId())
         return;
-    if (isInvert) setInvert (channel, on);
-    else          setMute   (channel, on);
-    applyingParam_.store (false);
+    storeSwitch (isInvert ? invert_ : mute_, channel, on);
+}
+
+void MutePhaseNode::storeSwitch (std::vector<std::atomic<uint8_t>>& dst, int channel, bool on) noexcept
+{
+    if (channel < 0 || channel >= numChannels_) return;
+    const uint8_t v = on ? 1 : 0;
+
+    if (linked_.load (std::memory_order_relaxed))
+        for (auto& a : dst)
+            a.store (v, std::memory_order_relaxed);
+    else
+        dst[(size_t) channel].store (v, std::memory_order_relaxed);
 }
 
 bool MutePhaseNode::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -80,24 +93,18 @@ void MutePhaseNode::setLinked (bool linked) noexcept
 void MutePhaseNode::setMute (int channel, bool m) noexcept
 {
     if (channel < 0 || channel >= numChannels_) return;
-    const uint8_t v = m ? 1 : 0;
 
     const bool linked = linked_.load (std::memory_order_relaxed);
+    storeSwitch (mute_, channel, m);
 
-    if (linked)
-        for (auto& a : mute_)
-            a.store (v, std::memory_order_relaxed);
-    else
-        mute_[channel].store (v, std::memory_order_relaxed);
-
-    if (! applyingParam_.load() && ! muteParams_.empty())
+    if (! muteParams_.empty())
     {
-        applyingParam_.store (true);
+        mirroringThread_.store (juce::Thread::getCurrentThreadId());
         if (linked)
             for (auto* p : muteParams_) p->setValueNotifyingHost (m ? 1.0f : 0.0f);
         else
             muteParams_[(size_t) channel]->setValueNotifyingHost (m ? 1.0f : 0.0f);
-        applyingParam_.store (false);
+        mirroringThread_.store (nullptr);
     }
 }
 
@@ -110,24 +117,18 @@ bool MutePhaseNode::getMute (int channel) const noexcept
 void MutePhaseNode::setInvert (int channel, bool i) noexcept
 {
     if (channel < 0 || channel >= numChannels_) return;
-    const uint8_t v = i ? 1 : 0;
 
     const bool linked = linked_.load (std::memory_order_relaxed);
+    storeSwitch (invert_, channel, i);
 
-    if (linked)
-        for (auto& a : invert_)
-            a.store (v, std::memory_order_relaxed);
-    else
-        invert_[channel].store (v, std::memory_order_relaxed);
-
-    if (! applyingParam_.load() && ! invertParams_.empty())
+    if (! invertParams_.empty())
     {
-        applyingParam_.store (true);
+        mirroringThread_.store (juce::Thread::getCurrentThreadId());
         if (linked)
             for (auto* p : invertParams_) p->setValueNotifyingHost (i ? 1.0f : 0.0f);
         else
             invertParams_[(size_t) channel]->setValueNotifyingHost (i ? 1.0f : 0.0f);
-        applyingParam_.store (false);
+        mirroringThread_.store (nullptr);
     }
 }
 

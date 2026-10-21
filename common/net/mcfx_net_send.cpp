@@ -65,9 +65,33 @@ public:
         // rendering: the network stream stays at realtime regardless of
         // how fast the host wants to render.
         uint64_t framesSentTotal = 0;
+        bool loggedFastMode = false;
+        constexpr int kBacklogBlocks = 3;   // the old FIFO held 4
 
         while (! threadShouldExit())
         {
+            // Fast-mode transitions are detected on the audio thread and
+            // reported from here.
+            if (const bool fast = owner.fastModeActive.load (std::memory_order_relaxed);
+                fast != loggedFastMode)
+            {
+                loggedFastMode = fast;
+                if (fast)
+                    std::cerr << "mcfx_send: host calling pushAudioBlock at "
+                              << owner.fastModeRatio.load (std::memory_order_relaxed)
+                              << "x realtime — likely anticipative-FX "
+                                 "pre-render. Skipping the FIFO push; "
+                                 "network audio can't represent future "
+                                 "samples. Disable anticipative FX in "
+                                 "the host. (occurrence #"
+                              << owner.fastModeEntries.load (std::memory_order_relaxed) << ")"
+                              << std::endl;
+                else
+                    std::cerr << "mcfx_send: host returned to realtime "
+                                 "pacing — resuming network send."
+                              << std::endl;
+            }
+
             const double now = juce::Time::getMillisecondCounterHiRes();
             const double elapsedMs = now - startWallMs;
 
@@ -78,9 +102,16 @@ public:
                                                   * (double) owner.ringSampleRate)
                                      + (uint64_t) owner.ringBlockSize;
 
+            // Send what the wall clock allows, plus anything queued beyond
+            // kBacklogBlocks: an audio clock running a few ppm faster than
+            // the wall clock would otherwise fill the FIFO, adding latency
+            // until it overran. The receiver's rate loop absorbs the
+            // occasional early block.
+            const int blockSamples = owner.ringBlockSize * owner.ringNumChannels;
             while (owner.fifo != nullptr
-                   && framesSentTotal + (uint64_t) owner.ringBlockSize <= framesDue
-                   && owner.fifo->getNumReady() >= owner.ringBlockSize * owner.ringNumChannels)
+                   && owner.fifo->getNumReady() >= blockSamples
+                   && (framesSentTotal + (uint64_t) owner.ringBlockSize <= framesDue
+                       || owner.fifo->getNumReady() > kBacklogBlocks * blockSamples))
             {
                 owner.sendPeriodFromFifoToAllActive();
                 framesSentTotal += (uint64_t) owner.ringBlockSize;
@@ -213,7 +244,12 @@ void SendStream::prepareToPlay (double sampleRate, int blockSize,
     ringFormat      = fmt;
     wireFormat.store (fmt, std::memory_order_release);
 
-    const int capacity = 4 * blockSize * numChannels;
+    // Headroom for a late SendThread or a host that bunches several
+    // blocks into one device period: at least 4 blocks and ~40 ms. Steady
+    // latency does not grow with it; SendThread drains anything above
+    // kBacklogBlocks without waiting for the wall clock.
+    const int headroomBlocks = (int) std::ceil (0.04 * sampleRate / blockSize) + 1;
+    const int capacity = juce::jmax (4, headroomBlocks) * blockSize * numChannels;
     ringBuffer.assign (static_cast<size_t> (capacity), 0.0f);
     fifo = std::make_unique<juce::AbstractFifo> (capacity);
 
@@ -357,9 +393,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
             pushExitSlowWindows = 0;
             fastModeActive.store (false, std::memory_order_relaxed);
             pushFastSilenceLogged = 0;
-            std::cerr << "mcfx_send: host returned to realtime "
-                         "pacing — resuming network send."
-                      << std::endl;
+            // logged by SendThread (no stderr on the audio thread)
         };
 
         if (pushInFastMode)
@@ -422,16 +456,10 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
                     fastModeActive.store (true, std::memory_order_relaxed);
                     fastModeEntries.fetch_add (1, std::memory_order_relaxed);
                     pushFastSilenceLogged++;
-                    std::cerr << "mcfx_send: host calling pushAudioBlock at "
-                              << static_cast<int> (expectedSec
-                                                   / juce::jmax (1e-9, interval))
-                              << "x realtime — likely anticipative-FX "
-                                 "pre-render. Skipping the FIFO push; "
-                                 "network audio can't represent future "
-                                 "samples. Disable anticipative FX in "
-                                 "the host. (occurrence #"
-                              << pushFastSilenceLogged << ")"
-                              << std::endl;
+                    fastModeRatio.store (static_cast<int> (expectedSec
+                                                           / juce::jmax (1e-9, interval)),
+                                         std::memory_order_relaxed);
+                    // logged by SendThread (no stderr on the audio thread)
                 }
             }
             else if (interval > expectedSec * 0.8)
@@ -489,7 +517,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
     }
 
     fifo->finishedWrite (needed);
-    wake.signal();
+    wake.signal();   // RtWake: no lock, see mcfx_net_rt.h
     return true;
 }
 

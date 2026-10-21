@@ -23,6 +23,7 @@
 #include "JuceHeader.h"
 #include <atomic>
 #include "mcfx_buses.h"
+#include "mcfx_rt_change_broadcaster.h"
 #include "JuceCompat.h"
 #include "MyMeterDsp.h"
 #include "MultiBandAnalyser.h"
@@ -34,7 +35,7 @@
 /**
 */
 class Ambix_meterAudioProcessor  : public AudioProcessor,
-                                   public ChangeBroadcaster
+                                   public mcfx::RtChangeBroadcaster
 {
 public:
     //==============================================================================

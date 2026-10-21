@@ -180,7 +180,7 @@ float Mcfx_gain_delayAudioProcessor::getParameter (int index)
         break;
 
       case 4: // stepchannels on/off
-        return (float)_stepper_on;
+        return (float)_stepper_wanted.load();
         break;
 
       case 5: // step speed
@@ -281,7 +281,7 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
       calcGainFact(ch);
     }
 
-    sendChangeMessage();
+    sendChangeMessageRtSafe(); // setParameter may run on the audio thread
   }
   else
   {
@@ -306,26 +306,16 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
         break;
 
       case 4: // stepchannels on/off
-        if (newValue > 0.5f)
-        {
-          if (!_stepper_on)
-            _channelstepper.start(jmap(_stepspeed, 50.f, 5000.f));
-
-          _stepper_on = true;
-        }
-        else if (newValue <= 0.5f)
-        {
-          if (_stepper_on)
-            _channelstepper.stop();
-
-          _stepper_on = false;
-        }
+        _stepper_wanted = newValue > 0.5f;
+        if (MessageManager::existsAndIsCurrentThread())
+          applyStepperState();
         break;
 
       case 5: // step speed
         _stepspeed = newValue;
-        if (_stepper_on)
-          _channelstepper.setInterval(jmap(_stepspeed, 50.f, 5000.f));
+        _stepspeed_changed = true;
+        if (MessageManager::existsAndIsCurrentThread())
+          applyStepperState();
         break;
 
       default:
@@ -335,6 +325,21 @@ void Mcfx_gain_delayAudioProcessor::setParameter (int index, float newValue)
 
 }
 
+
+void Mcfx_gain_delayAudioProcessor::applyStepperState()
+{
+  const bool retime = _stepspeed_changed.exchange(false);
+  const bool wanted = _stepper_wanted.load();
+
+  if (wanted && !_stepper_on)
+    _channelstepper.start(jmap(_stepspeed, 50.f, 5000.f));
+  else if (!wanted && _stepper_on)
+    _channelstepper.stop();
+  else if (wanted && retime)
+    _channelstepper.setInterval(jmap(_stepspeed, 50.f, 5000.f));
+
+  _stepper_on = wanted;
+}
 
 void Mcfx_gain_delayAudioProcessor::calcGainFact(int ch)
 {
@@ -526,7 +531,7 @@ const String Mcfx_gain_delayAudioProcessor::getParameterText (int index)
         break;
 
       case 4: // stepchannels on/off
-        if (_stepper_on)
+        if (_stepper_wanted)
           return "On";
         else
           return "Off";
@@ -636,6 +641,8 @@ void Mcfx_gain_delayAudioProcessor::prepareToPlay (double sampleRate, int sample
   _delay_buffer.clear();
   _buf_write_pos = 0;
 
+  _sig_buf.setSize(1, jmax(1, samplesPerBlock), false, false, true);
+
   for (int i = 0; i < NUM_CHANNELS; i++) {
     _delay_smpls.set(i, (int)floor(_delay_ms.getUnchecked(i)*MAX_DELAYTIME_S*sampleRate+0.5f));
   }
@@ -666,14 +673,25 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
 
   int numChannels = buffer.getNumChannels();
 
-  AudioSampleBuffer tempSigBuf(1,numSamples);
+  // never grow the delay ring here: channels beyond what prepareToPlay
+  // sized it for are passed through untouched
+  jassert (numChannels <= _delay_buffer.getNumChannels());
+  numChannels = jmin (numChannels, _delay_buffer.getNumChannels());
 
-  _siggen.fillBufferWithSignal(tempSigBuf);
+  // the signal generator runs every block (it keeps its own sequence state)
+  // into a buffer preallocated in prepareToPlay, in chunks if the host
+  // hands us a bigger block than announced
+  for (int pos = 0; pos < numSamples; pos += _sig_buf.getNumSamples())
+  {
+    const int n = jmin (numSamples - pos, _sig_buf.getNumSamples());
+    AudioSampleBuffer sigChunk (_sig_buf.getArrayOfWritePointers(), 1, n);
+    _siggen.fillBufferWithSignal(sigChunk);
 
-  // add signal in case we want to
-  for (int i=0; i < numChannels; i++) {
-    if (_siggen_flag.getUnchecked(i)) {
-      buffer.addFrom(i, 0, tempSigBuf, 0, 0, numSamples);
+    // add signal in case we want to
+    for (int i=0; i < numChannels; i++) {
+      if (_siggen_flag.getUnchecked(i)) {
+        buffer.addFrom(i, pos, sigChunk, 0, 0, n);
+      }
     }
   }
 
@@ -688,11 +706,6 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
 
 
   // std::cout << "size : " << _buf_size << " read pos: " << _buf_read_pos << std::endl;
-  // resize buffer if necessary
-  if (_delay_buffer.getNumChannels() < numChannels || _delay_buffer.getNumSamples() < _buf_size) {
-    // resize buffer
-    _delay_buffer.setSize(numChannels, _buf_size, true, true, false);
-  }
 
   // write to the buffer
 
@@ -753,20 +766,21 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
       _buf_read_pos.set(i, samples_to_read2);
     }
 
-    // apply gain!
+    // apply gain! (read the target once: the GUI may change it meanwhile)
+    const float oldGain = _gain_factor_.getUnchecked(i);
+    const float newGain = _gain_factor.getUnchecked(i);
 
-    if (_gain_factor_.getUnchecked(i) != _gain_factor.getUnchecked(i))
+    if (oldGain != newGain)
     {
-      buffer.applyGainRamp(i, 0, numSamples, _gain_factor_.getUnchecked(i), _gain_factor.getUnchecked(i));
+      buffer.applyGainRamp(i, 0, numSamples, oldGain, newGain);
     }
-    else if (_gain_factor.getUnchecked(i) != 1.f)
+    else if (newGain != 1.f)
     {
-      buffer.applyGain(i, 0, numSamples, _gain_factor.getUnchecked(i));
+      buffer.applyGain(i, 0, numSamples, newGain);
     }
 
+    _gain_factor_.setUnchecked(i, newGain); // store old value, in place (no Array copy)
   }
-
-  _gain_factor_ = _gain_factor; // store old values
 
 
 
