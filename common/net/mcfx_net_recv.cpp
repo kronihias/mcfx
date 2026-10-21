@@ -20,6 +20,7 @@
 #include "mcfx_net_recv.h"
 #include "mcfx_net_rt.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -117,6 +118,14 @@ struct RecvStream::PeerStream
     std::atomic<uint64_t> streamRestarts { 0 };
     std::atomic<uint64_t> gapFrames      { 0 };
     std::atomic<uint64_t> underruns      { 0 };
+
+    // Audio-thread events (underruns / anti-windup trips in pullAndMix),
+    // printed later by NetThread's housekeeping, which alone touches the
+    // logged* marks.
+    std::atomic<uint64_t> pullUnderruns  { 0 };
+    std::atomic<uint64_t> antiWindups    { 0 };
+    uint64_t              loggedPullUnderruns = 0;
+    uint64_t              loggedAntiWindups   = 0;
 
     int fillFramesNow() const noexcept
     {
@@ -683,6 +692,7 @@ void RecvStream::releaseResources()
     {
         const juce::ScopedLock sl (peersLock);
         peers = std::make_shared<PeerList>();
+        retiredPeers.clear(); // NetThread is stopped and so is processBlock
     }
     peersSnapshot = peers;
 }
@@ -1008,7 +1018,7 @@ void RecvStream::dropPeerByUid (uint32_t uid) noexcept
     }
     if (changed)
     {
-        peers = newList;
+        publishPeers (std::move (newList));
         DBG ("mcfx_recv: dropped peer uid="
              << juce::String::toHexString ((juce::int64) uid));
     }
@@ -1369,8 +1379,138 @@ void RecvStream::handleInviteAckPacket (const sockaddr_in& from,
 // NetThread / packet path
 // ---------------------------------------------------------------------------
 
+void RecvStream::publishPeers (std::shared_ptr<PeerList> newList)
+{
+    // peersSnapshot (audio thread) may still point at the current list:
+    // keep it alive here so the audio thread is never its last owner.
+    if (peers) retiredPeers.push_back (std::move (peers));
+    peers = std::move (newList);
+}
+
+void RecvStream::netHousekeeping()
+{
+    const double nowSec = juce::Time::getMillisecondCounterHiRes() / 1000.0;
+    std::vector<uint32_t> evictedUids;
+
+    {
+        const juce::ScopedLock sl (peersLock);
+
+        // Stale-peer sweep. A peer that hasn't sent a DATA packet in
+        // kStaleTimeoutSec is dropped from the list — sender process died,
+        // network unplugged, unrelated machine that wandered off the LAN.
+        constexpr double kStaleTimeoutSec = 15.0;
+        auto isStale = [&] (const std::shared_ptr<PeerStream>& p)
+        {
+            const double last = p->lastDataTimeSec.load (std::memory_order_relaxed);
+            return last > 0.0 && (nowSec - last) > kStaleTimeoutSec;
+        };
+        if (peers && std::any_of (peers->begin(), peers->end(),
+                                  [&] (const auto& p) { return p && isStale (p); }))
+        {
+            auto newList = std::make_shared<PeerList>();
+            newList->reserve (peers->size());
+            for (auto& p : *peers)
+            {
+                if (! p) continue;
+                if (isStale (p))
+                {
+                    DBG ("mcfx_recv: evicting stale peer uid="
+                         + juce::String::toHexString ((juce::int64) p->uid)
+                         + " (silent " + juce::String (nowSec - p->lastDataTimeSec.load(), 1) + " s)");
+                    if (p->uid != 0) evictedUids.push_back (p->uid);
+                    continue;
+                }
+                newList->push_back (p);
+            }
+            publishPeers (std::move (newList));
+        }
+
+        // Free retired lists the audio thread has let go of. use_count()
+        // == 1 is final: the audio thread only ever copies `peers` or its
+        // own snapshot, never a retired list.
+        retiredPeers.erase (std::remove_if (retiredPeers.begin(), retiredPeers.end(),
+                                            [] (const auto& l) { return l.use_count() == 1; }),
+                            retiredPeers.end());
+
+        // Print what the audio thread counted since the last tick.
+        if (peers)
+        {
+            for (auto& p : *peers)
+            {
+                if (! p) continue;
+                const auto un = p->pullUnderruns.load (std::memory_order_relaxed);
+                if (un != p->loggedPullUnderruns)
+                {
+                    // same throttle as before: the first few, then every 50th
+                    if (un < 5 || un / 50 != p->loggedPullUnderruns / 50)
+                        std::cerr << "mcfx_recv: underrun #" << un
+                                  << " uid=" << std::hex << p->uid << std::dec
+                                  << " period=" << p->period
+                                  << " prefill=" << p->prefillFrames.load()
+                                  << " fill=" << p->fillFramesNow()
+                                  << std::endl;
+                    p->loggedPullUnderruns = un;
+                }
+                const auto aw = p->antiWindups.load (std::memory_order_relaxed);
+                if (aw != p->loggedAntiWindups)
+                {
+                    std::cerr << "mcfx_recv: anti-windup reset uid="
+                              << std::hex << p->uid << std::dec
+                              << " (" << (aw - p->loggedAntiWindups) << "x, total " << aw << ")"
+                              << " period=" << p->period
+                              << std::endl;
+                    p->loggedAntiWindups = aw;
+                }
+            }
+        }
+    }
+
+    if (const int x = fastModeEnterLog.exchange (0, std::memory_order_relaxed); x > 0)
+        std::cerr << "mcfx_recv: host calling pullAndMix at " << x
+                  << "x realtime — likely anticipative-FX "
+                     "pre-render. Future network audio "
+                     "doesn't exist; outputting silence. "
+                     "Disable anticipative FX in the host."
+                  << std::endl;
+    if (fastModeExitLog.exchange (false, std::memory_order_relaxed))
+        std::cerr << "mcfx_recv: host returned to realtime "
+                     "pacing — resuming network audio."
+                  << std::endl;
+
+    // Defense-in-depth: also drop the matching accepted-senders
+    // entry. If the peer's audio path went silent, the user-visible
+    // "Active senders" entry should also disappear, regardless of
+    // whether an UNINVITE actually reached us. This keeps the two
+    // lists in sync even when the wire control path mis-fires.
+    if (! evictedUids.empty())
+    {
+        const juce::ScopedLock asl (acceptedLock);
+        for (auto uid : evictedUids)
+        {
+            for (auto it = accepted.begin(); it != accepted.end(); )
+            {
+                if (it->uid == uid && it->state == SenderState::Active)
+                {
+                    DBG ("mcfx_recv: silent-evicting accepted entry "
+                         << it->host << ":" << it->port
+                         << " (peer went silent)");
+                    it = accepted.erase (it);
+                }
+                else
+                {
+                    ++it;
+                }
+            }
+        }
+    }
+}
+
 void RecvStream::netRecvOnce()
 {
+    // Before the waitUntilReady below: stale peers are by definition the
+    // ones that send nothing, so this must also run when the socket is idle.
+    netHousekeeping();
+
     if (! socketBound || ! socket) { juce::Thread::sleep (5); return; }
     if (! socket->waitUntilReady (true, 20)) return;
 
@@ -1463,16 +1603,15 @@ RecvStream::PeerStream* RecvStream::findOrCreatePeer (uint32_t uid,
 
     if (needsRebuild)
     {
-        // Drop the old PeerStream from the list. The shared_ptr in the
-        // current audio-thread snapshot keeps the old object alive for
-        // one more block; new packets land in the freshly allocated
-        // entry below.
+        // Drop the old PeerStream from the list. The retired list keeps
+        // the old object alive until the audio thread lets go of it;
+        // new packets land in the freshly allocated entry below.
         const juce::ScopedLock sl (peersLock);
         auto newList = std::make_shared<PeerList>();
         newList->reserve (peers->size());
         for (auto& p : *peers)
             if (p && p->uid != uid) newList->push_back (p);
-        peers = newList;
+        publishPeers (std::move (newList));
     }
 
     if (uid == 0) return nullptr;          // 0 is the sentinel "no UID"
@@ -1545,7 +1684,7 @@ RecvStream::PeerStream* RecvStream::findOrCreatePeer (uint32_t uid,
         const juce::ScopedLock sl (peersLock);
         auto newList = std::make_shared<PeerList> (*peers);
         newList->push_back (entry);
-        peers = newList;
+        publishPeers (std::move (newList));
     }
     DBG ("mcfx_recv: new peer uid=" + juce::String::toHexString ((juce::int64) uid)
          + " ch=" + juce::String (entry->nchan));
@@ -1980,16 +2119,9 @@ void RecvStream::pullAndMix (float* const* out,
                 {
                     pullInFastMode = true;
                     pullFastSilenceLogged++;
-                    std::cerr << "mcfx_recv: host calling pullAndMix at "
-                              << static_cast<int> (expectedSec * 1000.0
-                                                   / juce::jmax (1e-9, interval))
-                              << "x realtime — likely anticipative-FX "
-                                 "pre-render. Future network audio "
-                                 "doesn't exist; outputting silence. "
-                                 "Disable anticipative FX in the host. "
-                                 "(occurrence #"
-                              << pullFastSilenceLogged << ")"
-                              << std::endl;
+                    fastModeEnterLog.store (juce::jmax (1, static_cast<int> (expectedSec
+                                                / juce::jmax (1e-9, interval))),
+                                            std::memory_order_relaxed);
                 }
             }
             else if (interval > expectedSec * 0.8)
@@ -2000,9 +2132,7 @@ void RecvStream::pullAndMix (float* const* out,
                 {
                     pullInFastMode = false;
                     pullFastSilenceLogged = 0;
-                    std::cerr << "mcfx_recv: host returned to realtime "
-                                 "pacing — resuming network audio."
-                              << std::endl;
+                    fastModeExitLog.store (true, std::memory_order_relaxed);
                     // Force a clean re-prime — DLL anchor pair and ring
                     // fill have drifted relative to the audio thread's
                     // tNow during the fast burst, so the rate loop's
@@ -2028,83 +2158,9 @@ void RecvStream::pullAndMix (float* const* out,
         return;
     }
 
-    // Stale-peer sweep. A peer that hasn't sent a DATA packet in
-    // kStaleTimeoutSec is dropped from the list — sender process died,
-    // network unplugged, unrelated machine that wandered off the LAN.
-    // Done on the audio thread because it already holds peersSnapshot;
-    // the actual removal happens under peersLock with a tryEnter so we
-    // never block. If we can't grab the lock this tick, we'll try next
-    // block — eviction is a slow path that doesn't need to be precise.
-    constexpr double kStaleTimeoutSec = 15.0;
-    bool needsCompact = false;
-    for (const auto& p : *snap)
-    {
-        if (! p) continue;
-        const double last = p->lastDataTimeSec.load (std::memory_order_relaxed);
-        if (last > 0.0 && (nowSec - last) > kStaleTimeoutSec)
-        {
-            needsCompact = true;
-            break;
-        }
-    }
-    if (needsCompact && peersLock.tryEnter())
-    {
-        std::vector<uint32_t> evictedUids;
-        if (peers)
-        {
-            auto newList = std::make_shared<PeerList>();
-            newList->reserve (peers->size());
-            for (auto& p : *peers)
-            {
-                if (! p) continue;
-                const double last = p->lastDataTimeSec.load (std::memory_order_relaxed);
-                if (last > 0.0 && (nowSec - last) > kStaleTimeoutSec)
-                {
-                    DBG ("mcfx_recv: evicting stale peer uid="
-                         + juce::String::toHexString ((juce::int64) p->uid)
-                         + " (silent " + juce::String (nowSec - last, 1) + " s)");
-                    if (p->uid != 0) evictedUids.push_back (p->uid);
-                    continue;
-                }
-                newList->push_back (p);
-            }
-            peers = newList;
-        }
-        peersLock.exit();
-        // Refresh the audio-thread snapshot immediately so we don't keep
-        // mixing from the just-evicted peer for one more block.
-        peersSnapshot = peers;
-        snap = peersSnapshot;
-
-        // Defense-in-depth: also drop the matching accepted-senders
-        // entry. If the peer's audio path went silent, the user-visible
-        // "Active senders" entry should also disappear, regardless of
-        // whether an UNINVITE actually reached us. This keeps the two
-        // lists in sync even when the wire control path mis-fires.
-        if (! evictedUids.empty())
-        {
-            const juce::ScopedLock asl (acceptedLock);
-            for (auto uid : evictedUids)
-            {
-                for (auto it = accepted.begin(); it != accepted.end(); )
-                {
-                    if (it->uid == uid && it->state == SenderState::Active)
-                    {
-                        DBG ("mcfx_recv: silent-evicting accepted entry "
-                             << it->host << ":" << it->port
-                             << " (peer went silent)");
-                        it = accepted.erase (it);
-                    }
-                    else
-                    {
-                        ++it;
-                    }
-                }
-            }
-        }
-
-        if (! snap) return;
-    }
+    // Stale peers (no DATA for kStaleTimeoutSec) are evicted by NetThread
+    // in netHousekeeping(); the list rebuild, the accepted-senders lock and
+    // the PeerStream destructors have no place on the audio thread.
 
     for (const auto& p : *snap)
     {
@@ -2374,13 +2430,7 @@ void RecvStream::pullAndMix (float* const* out,
         // the prefill mechanism re-prime.
         if (std::abs (p->rcZ3) > 0.05)
         {
-            std::cerr << "mcfx_recv: anti-windup reset uid="
-                      << std::hex << p->uid << std::dec
-                      << " z3=" << p->rcZ3
-                      << " rcorr=" << p->rcRcorr
-                      << " fill=" << fillNow << " target=" << loopTarget
-                      << " period=" << p->period
-                      << std::endl;
+            p->antiWindups.fetch_add (1, std::memory_order_relaxed); // logged by NetThread
             p->resetRateLoop();
             p->primed.store (false, std::memory_order_release);
             // Don't grow autoExtra for anti-windup events that fire
@@ -2404,6 +2454,12 @@ void RecvStream::pullAndMix (float* const* out,
 
         const double ratio = p->rcNominalRatio * p->rcRcorr;
 
+        // Output scratch was sized for the block size the peer was built
+        // with; a host block beyond that would overrun it. Skip the peer
+        // rather than write past the end (the gap is silence).
+        if ((size_t) blockSize * (size_t) chans > p->resOutScratch.size())
+            continue;
+
         // Ask the resampler how much input it needs for our output
         // block. This reads internal state, so it must be called on the
         // same thread that calls resampleProcess (== this audio thread).
@@ -2418,16 +2474,8 @@ void RecvStream::pullAndMix (float* const* out,
         const auto avail    = (curWrite > curRead) ? (curWrite - curRead) : 0;
         if (avail < (uint64_t) wantIn)
         {
-            const auto un = p->underruns.fetch_add (1, std::memory_order_relaxed) + 1;
-            if (un < 5 || un % 50 == 0)
-                std::cerr << "mcfx_recv: underrun #" << un
-                          << " uid=" << std::hex << p->uid << std::dec
-                          << " avail=" << avail << " wantIn=" << wantIn
-                          << " ratio=" << ratio
-                          << " period=" << p->period
-                          << " prefill=" << prefill
-                          << " target=" << loopTarget
-                          << std::endl;
+            p->underruns.fetch_add (1, std::memory_order_relaxed);
+            p->pullUnderruns.fetch_add (1, std::memory_order_relaxed); // logged by NetThread
             p->primed.store (false, std::memory_order_release);
             // Same grace logic as anti-windup: underruns within the
             // first second post-prime are convergence artifacts (mute

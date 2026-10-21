@@ -18,12 +18,11 @@ MatrixMixerNode::MatrixMixerNode (int numIn, int numOut)
 
 void MatrixMixerNode::resetToIdentity()
 {
-    for (auto& m : matrix_)
-        m.store (0.0f, std::memory_order_relaxed);
-
-    const int diag = juce::jmin (numIn_, numOut_);
-    for (int i = 0; i < diag; ++i)
-        matrix_[idx (i, i)].store (1.0f, std::memory_order_relaxed);
+    // One store per cell, with its final value: zeroing everything first
+    // would let a block render an all-silent matrix in between.
+    for (int o = 0; o < numOut_; ++o)
+        for (int i = 0; i < numIn_; ++i)
+            matrix_[idx (o, i)].store (o == i ? 1.0f : 0.0f, std::memory_order_relaxed);
 }
 
 bool MatrixMixerNode::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -59,22 +58,41 @@ void MatrixMixerNode::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     // The graph wraps a single in/out bus that's max(numIn, numOut) wide,
     // so the input data sits in channels [0, numIn_) and we'll write
     // outputs to channels [0, numOut_). Snapshot input first.
-    scratchIn_.setSize (numIn_, n, false, false, true);
-    for (int c = 0; c < numIn_ && c < bufferCh; ++c)
-        scratchIn_.copyFrom (c, 0, buffer, c, 0, n);
-
-    for (int outC = 0; outC < numOut_ && outC < bufferCh; ++outC)
+    //
+    // The scratch keeps the size prepareToPlay gave it; a host block larger
+    // than announced is mixed in chunks of that size rather than resizing
+    // (allocating) the scratch here on the audio thread.
+    const int chunk = scratchIn_.getNumSamples();
+    if (chunk <= 0 || scratchIn_.getNumChannels() < numIn_)
     {
-        auto* out = buffer.getWritePointer (outC);
-        juce::FloatVectorOperations::clear (out, n);
+        jassertfalse;   // processBlock before prepareToPlay
+        buffer.clear();
+        return;
+    }
 
-        for (int inC = 0; inC < numIn_; ++inC)
+    for (int start = 0; start < n; start += chunk)
+    {
+        const int len = juce::jmin (chunk, n - start);
+
+        for (int c = 0; c < numIn_; ++c)
         {
-            const float g = matrix_[idx (outC, inC)].load (std::memory_order_relaxed);
-            if (g == 0.0f) continue;
+            if (c < bufferCh) scratchIn_.copyFrom (c, 0, buffer, c, start, len);
+            else              scratchIn_.clear (c, 0, len);
+        }
 
-            juce::FloatVectorOperations::addWithMultiply (
-                out, scratchIn_.getReadPointer (inC), g, n);
+        for (int outC = 0; outC < numOut_ && outC < bufferCh; ++outC)
+        {
+            auto* out = buffer.getWritePointer (outC, start);
+            juce::FloatVectorOperations::clear (out, len);
+
+            for (int inC = 0; inC < numIn_; ++inC)
+            {
+                const float g = matrix_[idx (outC, inC)].load (std::memory_order_relaxed);
+                if (g == 0.0f) continue;
+
+                juce::FloatVectorOperations::addWithMultiply (
+                    out, scratchIn_.getReadPointer (inC), g, len);
+            }
         }
     }
 }

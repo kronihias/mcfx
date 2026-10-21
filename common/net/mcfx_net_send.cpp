@@ -65,9 +65,32 @@ public:
         // rendering: the network stream stays at realtime regardless of
         // how fast the host wants to render.
         uint64_t framesSentTotal = 0;
+        bool loggedFastMode = false;
 
         while (! threadShouldExit())
         {
+            // Fast-mode transitions are detected on the audio thread and
+            // reported from here.
+            if (const bool fast = owner.fastModeActive.load (std::memory_order_relaxed);
+                fast != loggedFastMode)
+            {
+                loggedFastMode = fast;
+                if (fast)
+                    std::cerr << "mcfx_send: host calling pushAudioBlock at "
+                              << owner.fastModeRatio.load (std::memory_order_relaxed)
+                              << "x realtime — likely anticipative-FX "
+                                 "pre-render. Skipping the FIFO push; "
+                                 "network audio can't represent future "
+                                 "samples. Disable anticipative FX in "
+                                 "the host. (occurrence #"
+                              << owner.fastModeEntries.load (std::memory_order_relaxed) << ")"
+                              << std::endl;
+                else
+                    std::cerr << "mcfx_send: host returned to realtime "
+                                 "pacing — resuming network send."
+                              << std::endl;
+            }
+
             const double now = juce::Time::getMillisecondCounterHiRes();
             const double elapsedMs = now - startWallMs;
 
@@ -357,9 +380,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
             pushExitSlowWindows = 0;
             fastModeActive.store (false, std::memory_order_relaxed);
             pushFastSilenceLogged = 0;
-            std::cerr << "mcfx_send: host returned to realtime "
-                         "pacing — resuming network send."
-                      << std::endl;
+            // logged by SendThread (no stderr on the audio thread)
         };
 
         if (pushInFastMode)
@@ -422,16 +443,10 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
                     fastModeActive.store (true, std::memory_order_relaxed);
                     fastModeEntries.fetch_add (1, std::memory_order_relaxed);
                     pushFastSilenceLogged++;
-                    std::cerr << "mcfx_send: host calling pushAudioBlock at "
-                              << static_cast<int> (expectedSec
-                                                   / juce::jmax (1e-9, interval))
-                              << "x realtime — likely anticipative-FX "
-                                 "pre-render. Skipping the FIFO push; "
-                                 "network audio can't represent future "
-                                 "samples. Disable anticipative FX in "
-                                 "the host. (occurrence #"
-                              << pushFastSilenceLogged << ")"
-                              << std::endl;
+                    fastModeRatio.store (static_cast<int> (expectedSec
+                                                           / juce::jmax (1e-9, interval)),
+                                         std::memory_order_relaxed);
+                    // logged by SendThread (no stderr on the audio thread)
                 }
             }
             else if (interval > expectedSec * 0.8)
@@ -456,7 +471,6 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
     {
         fifo->finishedWrite (0);
         audioOverruns.fetch_add (1, std::memory_order_relaxed);
-        wake.signal();
         return false;
     }
 
@@ -488,8 +502,10 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
         }
     }
 
+    // No wake.signal() here: WaitableEvent::signal() takes a mutex. SendThread
+    // paces itself off the wall clock and re-polls within 1 ms when it is
+    // waiting for data.
     fifo->finishedWrite (needed);
-    wake.signal();
     return true;
 }
 

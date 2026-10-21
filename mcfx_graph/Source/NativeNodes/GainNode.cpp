@@ -35,13 +35,14 @@ GainNode::~GainNode() = default;
 
 void GainNode::applyParamChange (int channel, float db) noexcept
 {
-    // Re-entrancy guard: setGainDb writes the parameters back, and when
-    // linked it writes every channel's. Also keeps the write-back — which is
-    // not realtime-safe — out of this path, which runs on the audio thread.
-    if (applyingParam_.exchange (true))
+    // setGainDb's write-back below re-enters here on the thread doing it; skip
+    // that echo, the atomics already hold the value. A write from any other
+    // thread — host automation on the audio thread while the message thread
+    // mirrors — always lands. Atomics only: the write-back is not
+    // realtime-safe, and this runs on the audio thread.
+    if (mirroringThread_.load() == juce::Thread::getCurrentThreadId())
         return;
-    setGainDb (channel, db);
-    applyingParam_.store (false);
+    storeGainDb (channel, db);
 }
 
 bool GainNode::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -70,23 +71,29 @@ void GainNode::setLinked (bool linked) noexcept
     }
 }
 
+void GainNode::storeGainDb (int channel, float db) noexcept
+{
+    if (channel < 0 || channel >= numChannels_) return;
+
+    if (linked_.load (std::memory_order_relaxed))
+        for (auto& g : gainsDb_)
+            g.store (db, std::memory_order_relaxed);
+    else
+        gainsDb_[channel].store (db, std::memory_order_relaxed);
+}
+
 void GainNode::setGainDb (int channel, float db) noexcept
 {
     if (channel < 0 || channel >= numChannels_) return;
 
     const bool linked = linked_.load (std::memory_order_relaxed);
+    storeGainDb (channel, db);
 
-    if (linked)
-        for (auto& g : gainsDb_)
-            g.store (db, std::memory_order_relaxed);
-    else
-        gainsDb_[channel].store (db, std::memory_order_relaxed);
-
-    // Mirror into the host-visible parameters, unless we are being called
-    // from one of them.
-    if (! applyingParam_.load() && ! gainParams_.empty())
+    // Mirror into the host-visible parameters; their echo back into
+    // applyParamChange is ignored on this thread only.
+    if (! gainParams_.empty())
     {
-        applyingParam_.store (true);
+        mirroringThread_.store (juce::Thread::getCurrentThreadId());
         // setValueNotifyingHost, not operator=: the subclass's implicit
         // copy-assignment hides the base's value assignment.
         if (linked)
@@ -97,7 +104,7 @@ void GainNode::setGainDb (int channel, float db) noexcept
             auto* p = gainParams_[(size_t) channel];
             p->setValueNotifyingHost (p->convertTo0to1 (db));
         }
-        applyingParam_.store (false);
+        mirroringThread_.store (nullptr);
     }
 }
 

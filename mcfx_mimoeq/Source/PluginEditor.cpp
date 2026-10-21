@@ -191,6 +191,7 @@ Mcfx_mimoeqAudioProcessorEditor::Mcfx_mimoeqAudioProcessorEditor(Mcfx_mimoeqAudi
     bandEditorViewport_.setViewedComponent(&bandEditor_, false);
     bandEditorViewport_.setScrollBarsShown(true, false);
     bandEditor_.setListener(this);
+    bandEditor_.setModelLock(&getProcessor()->getModelLock());
 
     addAndMakeVisible(tabs_);
     tabs_.setLookAndFeel(&tabLookAndFeel_);
@@ -668,14 +669,17 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDragged(int bandIndex, float newFreq
     if (band == nullptr)
         return;
 
-    if (band->getType() == EqBandType::IIR)
     {
-        band->setFrequency(newFreqHz);
-        band->setGainDB(newGainDB);
-    }
-    else if (band->getType() == EqBandType::Gain)
-    {
-        band->setGainDB(newGainDB);
+        const SpinLock::ScopedLockType sl (getProcessor()->getModelLock());
+        if (band->getType() == EqBandType::IIR)
+        {
+            band->setFrequency(newFreqHz);
+            band->setGainDB(newGainDB);
+        }
+        else if (band->getType() == EqBandType::Gain)
+        {
+            band->setGainDB(newGainDB);
+        }
     }
 
     bandEditor_.updateFromBand();
@@ -698,7 +702,10 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandQChanged(int bandIndex, float newQ)
     auto* band = chain->getBand(bandIndex);
     if (band != nullptr)
     {
-        band->setQ(newQ);
+        {
+            const SpinLock::ScopedLockType sl (getProcessor()->getModelLock());
+            band->setQ(newQ);
+        }
         bandEditor_.updateFromBand();
         notifyParameterChanged();
     }
@@ -721,7 +728,10 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandEnableToggled(int bandIndex)
     {
         getProcessor()->pushUndoState();
         updateUndoRedoButtons();
-        band->setEnabled(!band->isEnabled());
+        {
+            const SpinLock::ScopedLockType sl (getProcessor()->getModelLock());
+            band->setEnabled(!band->isEnabled());
+        }
         bandEditor_.updateFromBand();
         notifyParameterChanged();
     }
@@ -735,7 +745,10 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDeleteRequested(int bandIndex)
         dragUndoPushed_ = false;
         getProcessor()->pushUndoState();
         updateUndoRedoButtons();
-        chain->removeBand(bandIndex);
+        {
+            const SpinLock::ScopedLockType sl (getProcessor()->getModelLock());
+            chain->removeBand(bandIndex);
+        }
         int newSel = jmin(bandIndex, chain->getNumBands() - 1);
         refreshTabs();
         selectBand(newSel);
@@ -761,22 +774,27 @@ void Mcfx_mimoeqAudioProcessorEditor::eqBandDoubleClicked(float freqHz, float ga
         graph_.setChain(chain); phaseGraph_.setChain(chain);
     }
 
-    auto* band = chain->addBand();
-    band->setType(EqBandType::IIR);
-    band->setIIRSubType(IIRSubType::Peak);
-    band->setFrequency(freqHz);
-    band->setGainDB(gainDB);
-    band->setQ(1.5f);
-
-    if (diagonalMode_)
-        band->setDiagonal(true);
-    else
     {
-        band->setDiagonal(false);
-        band->setInputChannel(selectedPath_.first);
-        band->setOutputChannel(selectedPath_.second);
+        // Adding can reallocate the chain's band array, which the audio
+        // thread's parameter sync walks (under a try-lock).
+        const SpinLock::ScopedLockType sl (getProcessor()->getModelLock());
+        auto* band = chain->addBand();
+        band->setType(EqBandType::IIR);
+        band->setIIRSubType(IIRSubType::Peak);
+        band->setFrequency(freqHz);
+        band->setGainDB(gainDB);
+        band->setQ(1.5f);
+
+        if (diagonalMode_)
+            band->setDiagonal(true);
+        else
+        {
+            band->setDiagonal(false);
+            band->setInputChannel(selectedPath_.first);
+            band->setOutputChannel(selectedPath_.second);
+        }
+        band->prepare(getProcessor()->getSampleRate_(), 512);
     }
-    band->prepare(getProcessor()->getSampleRate_(), 512);
 
     refreshTabs();
     selectBand(chain->getNumBands() - 1);
@@ -918,16 +936,19 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             graph_.setChain(chain); phaseGraph_.setChain(chain);
         }
 
-        auto* band = chain->addBand();
-        if (diagonalMode_)
-            band->setDiagonal(true);
-        else
         {
-            band->setDiagonal(false);
-            band->setInputChannel(selectedPath_.first);
-            band->setOutputChannel(selectedPath_.second);
+            const SpinLock::ScopedLockType sl (getProcessor()->getModelLock());
+            auto* band = chain->addBand();
+            if (diagonalMode_)
+                band->setDiagonal(true);
+            else
+            {
+                band->setDiagonal(false);
+                band->setInputChannel(selectedPath_.first);
+                band->setOutputChannel(selectedPath_.second);
+            }
+            band->prepare(getProcessor()->getSampleRate_(), 512);
         }
-        band->prepare(getProcessor()->getSampleRate_(), 512);
 
         refreshTabs();
         selectBand(chain->getNumBands() - 1);
@@ -941,7 +962,10 @@ void Mcfx_mimoeqAudioProcessorEditor::buttonClicked(Button* b)
             dragUndoPushed_ = false;
             getProcessor()->pushUndoState();
             updateUndoRedoButtons();
-            chain->removeBand(selectedBand_);
+            {
+                const SpinLock::ScopedLockType sl (getProcessor()->getModelLock());
+                chain->removeBand(selectedBand_);
+            }
             int newSel = jmin(selectedBand_, chain->getNumBands() - 1);
             refreshTabs();
             selectBand(newSel);

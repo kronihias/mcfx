@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
+#include "mcfx_rt_change_broadcaster.h"
 #include "JuceCompat.h"
 
 #include "FilterInfo.h"
@@ -119,7 +120,7 @@ inline float param2gain (float param)
 
 class LowhighpassAudioProcessor  : public AudioProcessor,
                                    public FilterInfo,
-                                   public ChangeBroadcaster
+                                   public mcfx::RtChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -234,6 +235,11 @@ private:
 
     void resetFilters(double sampleRate);
     void updateFilterParameters(double sampleRate, bool fade);
+
+    // setParameter runs on the GUI thread or (automation) the audio thread;
+    // the filters' smoothers belong to the audio thread, so it only flags
+    // and processBlock retargets them.
+    std::atomic<bool> _params_dirty { false };
 
     float _lc_on_param, // 1 = on
     _lc_freq_param, // 0...20kHz log

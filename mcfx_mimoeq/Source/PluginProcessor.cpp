@@ -108,10 +108,15 @@ Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
     lp->setEnabled(false);
 
     syncModelToAPVTS();
+
+    // Applies host automation that arrived off the message thread, and frees
+    // processing states the audio thread has retired.
+    startTimerHz(50);
 }
 
 Mcfx_mimoeqAudioProcessor::~Mcfx_mimoeqAudioProcessor()
 {
+    stopTimer();
     cancelPendingUpdate();
     delete activeState_;
     delete pendingState_.load(std::memory_order_acquire);
@@ -128,6 +133,8 @@ void Mcfx_mimoeqAudioProcessor::prepareToPlay(double sampleRate, int samplesPerB
     mimoOutputMask_.assign(getTotalNumInputChannels(), false);
 
     int numCh = getTotalNumInputChannels();
+    chunkViewChannels_ = jmax(1, numCh);
+    chunkView_.setSize(chunkViewChannels_, 1);
     inputAnalyzer_.prepare(sampleRate, numCh);
     outputAnalyzer_.prepare(sampleRate, numCh);
 
@@ -325,6 +332,8 @@ EqChain* Mcfx_mimoeqAudioProcessor::getOrCreateChainForPath(int inCh, int outCh)
 
     auto* chain = new EqChain();
     chain->prepare(currentSampleRate_, currentBlockSize_);
+    // The audio thread's parameter sync looks paths up in the map.
+    const SpinLock::ScopedLockType sl (modelLock_);
     ownedPathChains_.add(chain);
     pathChains_[{inCh, outCh}] = chain;
     return chain;
@@ -336,9 +345,15 @@ bool Mcfx_mimoeqAudioProcessor::removePathChain(int inCh, int outCh)
     if (it == pathChains_.end())
         return false;
 
-    EqChain* chain = it->second;
-    pathChains_.erase(it);
-    ownedPathChains_.removeObject(chain, true);
+    // Unlink under the lock, delete after it (a band's convolver can take a
+    // while to shut down, and the audio thread's sync waits for the lock).
+    std::unique_ptr<EqChain> doomed;
+    {
+        const SpinLock::ScopedLockType sl (modelLock_);
+        EqChain* chain = it->second;
+        pathChains_.erase(it);
+        doomed.reset(ownedPathChains_.removeAndReturn(ownedPathChains_.indexOf(chain)));
+    }
     return true;
 }
 
@@ -353,43 +368,52 @@ std::vector<PathKey> Mcfx_mimoeqAudioProcessor::getPathKeys() const
 
 void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
 {
-    if (needsParamSync_.exchange(false, std::memory_order_acquire))
+    if (activeState_ == nullptr || ! needsParamSync_.load(std::memory_order_acquire))
+        return;
+
+    // The model belongs to the message thread. If it is mid-edit, keep the
+    // request and try again next block rather than read a changing model.
+    const SpinLock::ScopedTryLockType sl (modelLock_);
+    if (! sl.isLocked())
+        return;
+
+    needsParamSync_.store(false, std::memory_order_relaxed);
+
+    // Sync diagonal chain parameters to per-channel processing copies.
+    for (int ch = 0; ch < activeState_->diagChannelChains.size(); ++ch)
+        activeState_->diagChannelChains[ch]->syncParametersFrom(diagonalChain_);
+
+    // Sync MIMO path chain parameters to per-path processing copies.
+    for (auto& kv : activeState_->pathChains)
     {
-        if (activeState_ != nullptr)
-        {
-            // Sync diagonal chain parameters to per-channel processing copies.
-            for (int ch = 0; ch < activeState_->diagChannelChains.size(); ++ch)
-                activeState_->diagChannelChains[ch]->syncParametersFrom(diagonalChain_);
+        auto* modelChain = getChainForPath(kv.first.first, kv.first.second);
+        if (modelChain != nullptr)
+            kv.second->syncParametersFrom(*modelChain);
+    }
 
-            // Sync MIMO path chain parameters to per-path processing copies.
-            for (auto& kv : activeState_->pathChains)
-            {
-                auto* modelChain = getChainForPath(kv.first.first, kv.first.second);
-                if (modelChain != nullptr)
-                    kv.second->syncParametersFrom(*modelChain);
-            }
-
-            // Refresh linked dynamic detector params from the model (threshold/range/
-            // attack/release/auto/freq/Q can all change via the lightweight sync path).
-            for (auto* det : activeState_->diagLinkedDyn)
-            {
-                auto* band = diagonalChain_.getBand(det->getBandIndex());
-                if (band != nullptr)
-                    det->setParams(band->getIIRSubType(), band->getFrequency(), band->getQ(),
-                                   band->getDynThresholdDB(), band->getDynRangeDB(),
-                                   band->getDynAttackMs(), band->getDynReleaseMs(),
-                                   band->getDynAuto(),
-                                   band->getDynRatio(), band->getDynKneeDB(),
-                                   band->isDynamicBroadband());
-            }
-        }
+    // Refresh linked dynamic detector params from the model (threshold/range/
+    // attack/release/auto/freq/Q can all change via the lightweight sync path).
+    for (auto* det : activeState_->diagLinkedDyn)
+    {
+        auto* band = diagonalChain_.getBand(det->getBandIndex());
+        if (band != nullptr)
+            det->setParams(band->getIIRSubType(), band->getFrequency(), band->getQ(),
+                           band->getDynThresholdDB(), band->getDynRangeDB(),
+                           band->getDynAttackMs(), band->getDynReleaseMs(),
+                           band->getDynAuto(),
+                           band->getDynRatio(), band->getDynKneeDB(),
+                           band->isDynamicBroadband());
     }
 }
 
 void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuffer&)
 {
-    // Lock-free state swap: pick up new processing state if available
-    auto* pending = pendingState_.exchange(nullptr, std::memory_order_acquire);
+    // Lock-free state swap: pick up new processing state if available. Only
+    // while the garbage slot is empty: overwriting it would leak the state in
+    // it, so a pending state waits until the message thread has freed that.
+    auto* pending = garbageState_.load(std::memory_order_acquire) == nullptr
+                        ? pendingState_.exchange(nullptr, std::memory_order_acquire)
+                        : nullptr;
     if (pending != nullptr)
     {
         // Stash old state for GUI thread to delete (can't allocate/free on audio thread)
@@ -408,16 +432,39 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     if (activeState_ == nullptr)
         return;
 
+    const int numSamples = buffer.getNumSamples();
+    const int maxBlock = jmax(1, currentBlockSize_);
+    if (numSamples <= maxBlock)
+    {
+        processChunk(buffer);
+        return;
+    }
+
+    // A host block longer than prepareToPlay announced would overrun the
+    // scratch buffers, so cut it into sub-blocks of the prepared size.
+    const int numCh = jmin(buffer.getNumChannels(), chunkViewChannels_);
+    for (int start = 0; start < numSamples; start += maxBlock)
+    {
+        chunkView_.setDataToReferTo(buffer.getArrayOfWritePointers(), numCh, start,
+                                    jmin(maxBlock, numSamples - start));
+        processChunk(chunkView_);
+    }
+}
+
+void Mcfx_mimoeqAudioProcessor::processChunk(AudioSampleBuffer& buffer)
+{
     int numChannels = buffer.getNumChannels();
     int numSamples = buffer.getNumSamples();
 
     // Capture pre-processing spectrum
     bool analyzerOn = analyzerEnabled_.load(std::memory_order_relaxed);
+    const bool spectrogramOn = editorSpectrogramOn.load(std::memory_order_relaxed);
+    const bool spectroPost = editorSpectroPost.load(std::memory_order_relaxed);
     if (analyzerOn)
         inputAnalyzer_.pushBuffer(buffer, numSamples);
     // The spectrogram reads a constant-Q analysis of whichever side it shows;
     // feeding it costs a ring copy, and only while it is actually on screen.
-    if (analyzerOn && editorSpectrogramOn && !editorSpectroPost)
+    if (analyzerOn && spectrogramOn && !spectroPost)
         cqtAnalyzer_.push(buffer, numSamples, inputAnalyzer_.getAnalyzerChannel());
 
     auto& diagChains = activeState_->diagChannelChains;
@@ -520,7 +567,7 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
     // Capture post-processing spectrum
     if (analyzerOn)
         outputAnalyzer_.pushBuffer(buffer, numSamples);
-    if (analyzerOn && editorSpectrogramOn && editorSpectroPost)
+    if (analyzerOn && spectrogramOn && spectroPost)
         cqtAnalyzer_.push(buffer, numSamples, outputAnalyzer_.getAnalyzerChannel());
 
     // ---- Publish diagonal dynamic offsets for GUI metering (lock-free) ----
@@ -613,22 +660,17 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
         return;
 
     // Diagonal channel mask
-    diagChannelMask_.clear();
+    std::set<int> newMask;
     var diagCh = parsed["diag_channels"];
     if (diagCh.isArray())
         for (int i = 0; i < diagCh.size(); ++i)
-            diagChannelMask_.insert((int)diagCh[i]);
+            newMask.insert((int)diagCh[i]);
 
     // Editor view state
     editorPhaseOn = (bool) parsed.getProperty("editor_phase_on", false);
     editorSpectrogramOn = (bool) parsed.getProperty("editor_spectrogram_on", false);
     editorSpectroPost = (bool) parsed.getProperty("editor_spectro_post", false);
     editorSpectroSpanSec = (float) (double) parsed.getProperty("editor_spectro_span_s", 10.0);
-
-    // Clear model
-    diagonalChain_.fromJson(var(Array<var>()), sr);
-    pathChains_.clear();
-    ownedPathChains_.clear();
 
     // Separate bands into diagonal and per-path groups
     Array<var> diagBands;
@@ -651,16 +693,33 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
         }
     }
 
-    // Rebuild model
-    diagonalChain_.fromJson(var(diagBands), sr);
-    diagonalChain_.prepare(currentSampleRate_, currentBlockSize_);
+    // Build the new model off to the side (band setup, FIR convolvers), then
+    // swap it in under the model lock, so the audio thread's parameter sync
+    // never sees it half-replaced and only misses the lock for the swap.
+    EqChain newDiag;
+    newDiag.fromJson(var(diagBands), sr);
+    newDiag.prepare(currentSampleRate_, currentBlockSize_);
 
+    std::map<PathKey, EqChain*> newPaths;
+    OwnedArray<EqChain> newOwnedPaths;
     for (auto& kv : pathBandMap)
     {
-        auto* chain = getOrCreateChainForPath(kv.first.first, kv.first.second);
+        auto* chain = newOwnedPaths.add(new EqChain());
+        chain->prepare(currentSampleRate_, currentBlockSize_);
         chain->fromJson(var(kv.second), sr);
         chain->prepare(currentSampleRate_, currentBlockSize_);
+        newPaths[kv.first] = chain;
     }
+
+    {
+        const SpinLock::ScopedLockType sl (modelLock_);
+        diagChannelMask_.swap(newMask);
+        diagonalChain_.swapWith(newDiag);
+        pathChains_.swap(newPaths);
+        ownedPathChains_.swapWith(newOwnedPaths);
+    }
+    // The old model now sits in the temporaries and is freed on return, after
+    // the editor below has been told to let go of its bands.
 
     // Build and publish new processing state (lock-free)
     rebuildProcessingChains();
@@ -869,54 +928,58 @@ void Mcfx_mimoeqAudioProcessor::syncRestoreState(const String& targetState)
             diagBands.add(bandJson);
     }
 
-    // Apply parameter-only changes to the model diagonal chain
-    for (int i = 0; i < diagBands.size(); ++i)
+    // Apply parameter-only changes to the model diagonal chain (under the
+    // model lock: the audio thread's parameter sync reads these bands)
     {
-        auto* band = diagonalChain_.getBand(i);
-        auto bandJson = diagBands[i];
-        var params = bandJson["parameters"];
-
-        if (params.isObject())
+        const SpinLock::ScopedLockType sl (modelLock_);
+        for (int i = 0; i < diagBands.size(); ++i)
         {
-            if (params.hasProperty("f_Hz"))
-                band->setFrequency((float)params["f_Hz"]);
-            if (params.hasProperty("Q"))
-                band->setQ((float)params["Q"]);
+            auto* band = diagonalChain_.getBand(i);
+            auto bandJson = diagBands[i];
+            var params = bandJson["parameters"];
 
-            // Gain band: handle dB vs linear mode
-            if (params.hasProperty("gain_linear"))
+            if (params.isObject())
             {
-                band->setUseLinearGain(true);
-                band->setLinearGain((float)(double)params["gain_linear"]);
-            }
-            else
-            {
-                if (band->getType() == EqBandType::Gain)
-                    band->setUseLinearGain(false);
-                if (params.hasProperty("gain_db"))
-                    band->setGainDB((float)params["gain_db"]);
-                if (params.hasProperty("invert"))
-                    band->setInvertGain((bool)params["invert"]);
-                else if (band->getType() == EqBandType::Gain)
-                    band->setInvertGain(false);
+                if (params.hasProperty("f_Hz"))
+                    band->setFrequency((float)params["f_Hz"]);
+                if (params.hasProperty("Q"))
+                    band->setQ((float)params["Q"]);
+
+                // Gain band: handle dB vs linear mode
+                if (params.hasProperty("gain_linear"))
+                {
+                    band->setUseLinearGain(true);
+                    band->setLinearGain((float)(double)params["gain_linear"]);
+                }
+                else
+                {
+                    if (band->getType() == EqBandType::Gain)
+                        band->setUseLinearGain(false);
+                    if (params.hasProperty("gain_db"))
+                        band->setGainDB((float)params["gain_db"]);
+                    if (params.hasProperty("invert"))
+                        band->setInvertGain((bool)params["invert"]);
+                    else if (band->getType() == EqBandType::Gain)
+                        band->setInvertGain(false);
+                }
+
+                // Dynamic continuous params (active/linked are structural — handled by
+                // the rebuild path, so they never reach here).
+                var dyn = params["dynamic"];
+                if (dyn.isObject())
+                {
+                    if (dyn.hasProperty("threshold_db")) band->setDynThresholdDB((float)dyn["threshold_db"]);
+                    if (dyn.hasProperty("range_db"))     band->setDynRangeDB((float)dyn["range_db"]);
+                    if (dyn.hasProperty("attack_ms"))    band->setDynAttackMs((float)dyn["attack_ms"]);
+                    if (dyn.hasProperty("release_ms"))   band->setDynReleaseMs((float)dyn["release_ms"]);
+                    band->setDynAuto((bool)dyn.getProperty("auto", false));
+                }
             }
 
-            // Dynamic continuous params (active/linked are structural — handled by
-            // the rebuild path, so they never reach here).
-            var dyn = params["dynamic"];
-            if (dyn.isObject())
-            {
-                if (dyn.hasProperty("threshold_db")) band->setDynThresholdDB((float)dyn["threshold_db"]);
-                if (dyn.hasProperty("range_db"))     band->setDynRangeDB((float)dyn["range_db"]);
-                if (dyn.hasProperty("attack_ms"))    band->setDynAttackMs((float)dyn["attack_ms"]);
-                if (dyn.hasProperty("release_ms"))   band->setDynReleaseMs((float)dyn["release_ms"]);
-                band->setDynAuto((bool)dyn.getProperty("auto", false));
-            }
+            // enabled: absent means true, explicit false means disabled
+            bool enabled = !(bandJson.hasProperty("enabled") && !(bool)bandJson["enabled"]);
+            band->setEnabled(enabled);
         }
-
-        // enabled: absent means true, explicit false means disabled
-        bool enabled = !(bandJson.hasProperty("enabled") && !(bool)bandJson["enabled"]);
-        band->setEnabled(enabled);
     }
 
     // Lightweight sync: audio thread will pick up parameter changes via SmoothedValue
@@ -1004,53 +1067,120 @@ AudioProcessorValueTreeState::ParameterLayout Mcfx_mimoeqAudioProcessor::createP
     return layout;
 }
 
-void Mcfx_mimoeqAudioProcessor::parameterChanged(const String& parameterID, float newValue)
+// "B01_Freq" -> band 0, kAutoFreq. Character tests only, no substring():
+// this runs on the audio thread under host automation, where it must not
+// allocate.
+static bool parseAutomationParamID(const String& id, int& bandIdx, int& param)
 {
-    if (updatingFromModel_)
-        return;
+    if (id.length() < 5 || id[0] != 'B' || id[3] != '_'
+        || ! CharacterFunctions::isDigit(id[1]) || ! CharacterFunctions::isDigit(id[2]))
+        return false;
 
-    // Parse parameter ID: "B01_Freq" -> band index 0, param "Freq"
-    if (parameterID.length() < 4 || parameterID[0] != 'B')
-        return;
+    bandIdx = (int) (id[1] - '0') * 10 + (int) (id[2] - '0') - 1;  // 0-based
 
-    int bandIdx = parameterID.substring(1, 3).getIntValue() - 1;  // 0-based
-    String param = parameterID.substring(4);
+    // param in AutoParam order (Freq, Q, Gain, Enable)
+    const auto name = id.getCharPointer() + 4;
+    if      (name.compare(CharPointer_ASCII("Freq"))   == 0) param = 0;
+    else if (name.compare(CharPointer_ASCII("Q"))      == 0) param = 1;
+    else if (name.compare(CharPointer_ASCII("Gain"))   == 0) param = 2;
+    else if (name.compare(CharPointer_ASCII("Enable")) == 0) param = 3;
+    else return false;
+    return true;
+}
 
-    if (bandIdx < 0 || bandIdx >= diagonalChain_.getNumBands())
-        return;
-
+void Mcfx_mimoeqAudioProcessor::applyAutomationToModel(int bandIdx, int param, float newValue)
+{
     auto* band = diagonalChain_.getBand(bandIdx);
     if (band == nullptr)
         return;
 
     // Only apply freq/Q/gain to IIR bands (other types don't use these params)
-    if (param == "Freq")
+    if (param == kAutoFreq)
     {
         if (band->getType() == EqBandType::IIR)
             band->setFrequency(newValue);
     }
-    else if (param == "Q")
+    else if (param == kAutoQ)
     {
         if (band->getType() == EqBandType::IIR)
             band->setQ(newValue);
     }
-    else if (param == "Gain")
+    else if (param == kAutoGain)
     {
         if (band->getType() == EqBandType::IIR || band->getType() == EqBandType::Gain)
             band->setGainDB(newValue);
     }
-    else if (param == "Enable")
+    else if (param == kAutoEnable)
     {
         band->setEnabled(newValue >= 0.5f);
+    }
+}
+
+void Mcfx_mimoeqAudioProcessor::parameterChanged(const String& parameterID, float newValue)
+{
+    if (updatingFromModel_.load(std::memory_order_relaxed))
+        return;
+
+    int bandIdx = -1, param = -1;
+    if (! parseAutomationParamID(parameterID, bandIdx, param)
+        || bandIdx < 0 || bandIdx >= kMaxAutomatedBands)
+        return;
+
+    const int slot = bandIdx * kNumAutoParams + param;
+
+    if (! MessageManager::existsAndIsCurrentThread())
+    {
+        // Audio (or another host) thread: the model, the band designs and the
+        // change broadcast all belong to the message thread. Park the value;
+        // timerCallback() applies it there. A newer value overwrites an
+        // unapplied older one, which is all automation needs.
+        autoValue_[(size_t) slot].store(newValue, std::memory_order_relaxed);
+        autoDirty_[(size_t) slot].store(true, std::memory_order_release);
+        autoPending_.store(true, std::memory_order_release);
+        return;
+    }
+
+    // Message thread: apply now. Drop a parked value for the same parameter,
+    // which is older than this one.
+    autoDirty_[(size_t) slot].store(false, std::memory_order_relaxed);
+    {
+        const SpinLock::ScopedLockType sl (modelLock_);
+        applyAutomationToModel(bandIdx, param, newValue);
     }
 
     requestParameterSync();
     sendChangeMessage();
 }
 
+void Mcfx_mimoeqAudioProcessor::applyPendingAutomation()
+{
+    if (! autoPending_.exchange(false, std::memory_order_acquire))
+        return;
+
+    {
+        const SpinLock::ScopedLockType sl (modelLock_);
+        for (int slot = 0; slot < kNumAutoSlots; ++slot)
+            if (autoDirty_[(size_t) slot].exchange(false, std::memory_order_acquire))
+                applyAutomationToModel(slot / kNumAutoParams, slot % kNumAutoParams,
+                                       autoValue_[(size_t) slot].load(std::memory_order_relaxed));
+    }
+
+    requestParameterSync();
+    sendChangeMessage();
+}
+
+void Mcfx_mimoeqAudioProcessor::timerCallback()
+{
+    applyPendingAutomation();
+
+    // A pending processing state waits while the garbage slot is full (see
+    // processBlock), so empty it here too, not only on the next rebuild.
+    delete garbageState_.exchange(nullptr, std::memory_order_acquire);
+}
+
 void Mcfx_mimoeqAudioProcessor::syncModelToAPVTS()
 {
-    updatingFromModel_ = true;
+    updatingFromModel_.store(true, std::memory_order_relaxed);
 
     int numBands = diagonalChain_.getNumBands();
     for (int i = 0; i < kMaxAutomatedBands; ++i)
@@ -1083,7 +1213,7 @@ void Mcfx_mimoeqAudioProcessor::syncModelToAPVTS()
         }
     }
 
-    updatingFromModel_ = false;
+    updatingFromModel_.store(false, std::memory_order_relaxed);
 }
 
 AudioProcessor* JUCE_CALLTYPE createPluginFilter()

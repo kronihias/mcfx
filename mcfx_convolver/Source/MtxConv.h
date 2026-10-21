@@ -374,7 +374,7 @@ private:
 
     bool                isprocessing_;      // true = Processing is active
 
-    bool                configuration_;     // isconfigured
+    std::atomic<bool>   configuration_;     // isconfigured (read by the audio thread)
 
     CriticalSection     lock_;              // lock critical section
 
