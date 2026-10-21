@@ -66,6 +66,7 @@ public:
         // how fast the host wants to render.
         uint64_t framesSentTotal = 0;
         bool loggedFastMode = false;
+        constexpr int kBacklogBlocks = 3;   // the old FIFO held 4
 
         while (! threadShouldExit())
         {
@@ -101,9 +102,16 @@ public:
                                                   * (double) owner.ringSampleRate)
                                      + (uint64_t) owner.ringBlockSize;
 
+            // Send what the wall clock allows, plus anything queued beyond
+            // kBacklogBlocks: an audio clock running a few ppm faster than
+            // the wall clock would otherwise fill the FIFO, adding latency
+            // until it overran. The receiver's rate loop absorbs the
+            // occasional early block.
+            const int blockSamples = owner.ringBlockSize * owner.ringNumChannels;
             while (owner.fifo != nullptr
-                   && framesSentTotal + (uint64_t) owner.ringBlockSize <= framesDue
-                   && owner.fifo->getNumReady() >= owner.ringBlockSize * owner.ringNumChannels)
+                   && owner.fifo->getNumReady() >= blockSamples
+                   && (framesSentTotal + (uint64_t) owner.ringBlockSize <= framesDue
+                       || owner.fifo->getNumReady() > kBacklogBlocks * blockSamples))
             {
                 owner.sendPeriodFromFifoToAllActive();
                 framesSentTotal += (uint64_t) owner.ringBlockSize;
@@ -236,7 +244,12 @@ void SendStream::prepareToPlay (double sampleRate, int blockSize,
     ringFormat      = fmt;
     wireFormat.store (fmt, std::memory_order_release);
 
-    const int capacity = 4 * blockSize * numChannels;
+    // Headroom for a late SendThread or a host that bunches several
+    // blocks into one device period: at least 4 blocks and ~40 ms. Steady
+    // latency does not grow with it; SendThread drains anything above
+    // kBacklogBlocks without waiting for the wall clock.
+    const int headroomBlocks = (int) std::ceil (0.04 * sampleRate / blockSize) + 1;
+    const int capacity = juce::jmax (4, headroomBlocks) * blockSize * numChannels;
     ringBuffer.assign (static_cast<size_t> (capacity), 0.0f);
     fifo = std::make_unique<juce::AbstractFifo> (capacity);
 
@@ -471,6 +484,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
     {
         fifo->finishedWrite (0);
         audioOverruns.fetch_add (1, std::memory_order_relaxed);
+        wake.signal();
         return false;
     }
 
@@ -502,10 +516,8 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
         }
     }
 
-    // No wake.signal() here: WaitableEvent::signal() takes a mutex. SendThread
-    // paces itself off the wall clock and re-polls within 1 ms when it is
-    // waiting for data.
     fifo->finishedWrite (needed);
+    wake.signal();   // RtWake: no lock, see mcfx_net_rt.h
     return true;
 }
 
