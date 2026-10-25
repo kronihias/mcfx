@@ -159,8 +159,11 @@ public:
     // Returns after a signal() or timeoutMs, whichever comes first.
     void wait (int timeoutMs) noexcept
     {
-        if (! pending_.load (std::memory_order_acquire))
-            timedWait (timeoutMs);
+        // Always wait, even with the flag already set: every false->true
+        // flip posted once, and that post must be consumed here (it returns
+        // at once). Skipping it left the count growing, and later waits
+        // returned immediately instead of sleeping.
+        timedWait (timeoutMs);
         // Re-arm. A signal() that raced in between is not lost: either it
         // posted (the next wait returns at once) or it found the flag set
         // and this exchange acquires its writes.

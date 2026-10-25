@@ -680,10 +680,12 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
 
   // the signal generator runs every block (it keeps its own sequence state)
   // into a buffer preallocated in prepareToPlay, in chunks if the host
-  // hands us a bigger block than announced
-  for (int pos = 0; pos < numSamples; pos += _sig_buf.getNumSamples())
+  // hands us a bigger block than announced. Empty before prepareToPlay:
+  // skip rather than loop forever on a zero-length chunk.
+  const int sigChunkLen = _sig_buf.getNumSamples();
+  for (int pos = 0; sigChunkLen > 0 && pos < numSamples; pos += sigChunkLen)
   {
-    const int n = jmin (numSamples - pos, _sig_buf.getNumSamples());
+    const int n = jmin (numSamples - pos, sigChunkLen);
     AudioSampleBuffer sigChunk (_sig_buf.getArrayOfWritePointers(), 1, n);
     _siggen.fillBufferWithSignal(sigChunk);
 

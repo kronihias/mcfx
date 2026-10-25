@@ -101,6 +101,16 @@ def _trace_tail_means(trace, fraction=0.5):
 # Smoke + sanity
 # ---------------------------------------------------------------------------
 
+def test_rtwake_does_not_accumulate_posts():
+    """RtWake: signals that land while SendThread is awake must not leave
+    extra semaphore posts behind, or later waits stop sleeping and the
+    thread spins."""
+    _need_binary()
+    proc = subprocess.run([LOOPBACK, "--rtwake-test"],
+                          capture_output=True, text=True, timeout=30)
+    assert proc.returncode == 0, proc.stderr
+
+
 def test_smoke(tmp_path):
     """Connect, prime, audio flows, no errors."""
     m = run_loopback("smoke", 5, tmp_path / "m.json")

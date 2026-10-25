@@ -30,6 +30,8 @@
 
 #include <JuceHeader.h>
 
+#include <thread>
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -74,6 +76,7 @@ public:
         bool   noOutput    = false;
         bool   compensateLatency = true;
         bool   randomBlocks = false;
+        bool   audioThread  = false;
 
         for (int i = 0; i < args.size(); ++i)
         {
@@ -92,6 +95,7 @@ public:
             else if (a == "--no-output")                          noOutput    = true;
             else if (a == "--no-latency-compensation")            compensateLatency = false;
             else if (a == "--random-blocks")                      randomBlocks = true;
+            else if (a == "--audio-thread")                       audioThread  = true;
         }
 
         // ---- One-shot mode: print PluginDescription XML and exit -------
@@ -141,7 +145,10 @@ public:
                 "                     [--no-output]  (skip writing output WAV; for benchmarking)\n"
                 "                     [--no-latency-compensation]  (write raw output; default: strip plugin's reported latency)\n"
                 "                     [--random-blocks]  (irregular block sizes, 1..blocksize, like Premiere / Nuendo send;\n"
-                "                                         prepareToPlay still gets blocksize as the maximum)\n";
+                "                                         prepareToPlay still gets blocksize as the maximum)\n"
+                "                     [--audio-thread]   (set parameters and process on a separate thread, as a DAW\n"
+                "                                         does, so changes reach the plug-in off its message thread;\n"
+                "                                         the message loop runs for 200 ms after processing)\n";
             std::exit(1);
         }
 
@@ -371,21 +378,30 @@ public:
         const int latency = compensateLatency ? jmax(0, plugin->getLatencySamples()) : 0;
 
         // ---- Apply generic parameters (deferred from the --params block) ----
-        if (auto* obj = pendingParams.getDynamicObject())
+        // With --audio-thread they are set from the render thread, as a
+        // DAW's automation is: set here, they reach the plug-in on its
+        // message thread before the render starts.
+        auto applyParams = [&]
         {
-            int applied = 0;
-            for (auto* p : plugin->getParameters())
+            if (auto* obj = pendingParams.getDynamicObject())
             {
-                const String pname = p->getName(512);
-                if (obj->hasProperty(pname))
+                int applied = 0;
+                for (auto* p : plugin->getParameters())
                 {
-                    p->setValue(static_cast<float>(
-                        static_cast<double>(obj->getProperty(pname))));
-                    ++applied;
+                    const String pname = p->getName(512);
+                    if (obj->hasProperty(pname))
+                    {
+                        p->setValue(static_cast<float>(
+                            static_cast<double>(obj->getProperty(pname))));
+                        ++applied;
+                    }
                 }
+                std::cerr << "mcfx_testhost: applied " << applied << " parameter(s)\n";
             }
-            std::cerr << "mcfx_testhost: applied " << applied << " parameter(s)\n";
-        }
+        };
+
+        if (! audioThread)
+            applyParams();
 
         // Run latency extra samples of silence through the plugin so the output
         // we keep is aligned to the input.  Without this, plugins that report a
@@ -417,25 +433,40 @@ public:
         // scripts can isolate the audio-thread cost.
         const auto procStartMs = juce::Time::getMillisecondCounterHiRes();
 
-        // Fixed seed: an irregular-block run is reproducible.
-        Random blockRng (12345);
-
-        while (pos < processSamples)
+        auto processAll = [&]
         {
-            const int wanted    = randomBlocks ? 1 + blockRng.nextInt (blockSize) : blockSize;
-            const int thisBlock = jmin(wanted, processSamples - pos);
-            AudioBuffer<float> block(numChannels, thisBlock);
+            // Fixed seed: an irregular-block run is reproducible.
+            Random blockRng (12345);
 
-            for (int ch = 0; ch < numChannels; ++ch)
-                block.copyFrom(ch, 0, inputBuf, ch, pos, thisBlock);
+            while (pos < processSamples)
+            {
+                const int wanted    = randomBlocks ? 1 + blockRng.nextInt (blockSize) : blockSize;
+                const int thisBlock = jmin(wanted, processSamples - pos);
+                AudioBuffer<float> block(numChannels, thisBlock);
 
-            midi.clear();
-            plugin->processBlock(block, midi);
+                for (int ch = 0; ch < numChannels; ++ch)
+                    block.copyFrom(ch, 0, inputBuf, ch, pos, thisBlock);
 
-            for (int ch = 0; ch < numChannels; ++ch)
-                outputBuf.copyFrom(ch, pos, block, ch, 0, thisBlock);
+                midi.clear();
+                plugin->processBlock(block, midi);
 
-            pos += thisBlock;
+                for (int ch = 0; ch < numChannels; ++ch)
+                    outputBuf.copyFrom(ch, pos, block, ch, 0, thisBlock);
+
+                pos += thisBlock;
+            }
+        };
+
+        if (audioThread)
+        {
+            // The message thread waits here, so nothing it runs (the
+            // plug-in's timers) interleaves with the render.
+            std::thread renderThread ([&] { applyParams(); processAll(); });
+            renderThread.join();
+        }
+        else
+        {
+            processAll();
         }
 
         const auto procEndMs = juce::Time::getMillisecondCounterHiRes();
@@ -447,6 +478,11 @@ public:
                       << " audio_seconds="    << audioSeconds
                       << " realtime_factor="  << rtf << "\n";
         }
+
+        // Let the plug-in's timers run, as they would after a render in a
+        // DAW, before state is saved.
+        if (audioThread)
+            MessageManager::getInstance()->runDispatchLoopUntil (200);
 
         plugin->releaseResources();
 

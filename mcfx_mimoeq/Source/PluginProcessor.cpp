@@ -1175,7 +1175,11 @@ void Mcfx_mimoeqAudioProcessor::applyPendingAutomation()
 
 void Mcfx_mimoeqAudioProcessor::applyPendingAutomationOnAudioThread()
 {
-    // The setters only recompute biquad coefficients, which is fine here.
+    // Only what is cheap and leaves the model's storage alone: Enable, and
+    // freq/Q/gain of single-biquad bands (a closed-form recompute). A
+    // cascade band's setters run the full filter design and resize its
+    // coefficient storage, which the editor reads without the lock, so
+    // those values stay parked for the timer.
     // Never waits: if the editor holds the lock, the values stay parked for
     // the next block. Sets the sync flag directly: requestParameterSync()
     // may post an async update, so the timer calls it afterwards.
@@ -1186,13 +1190,34 @@ void Mcfx_mimoeqAudioProcessor::applyPendingAutomationOnAudioThread()
     if (! sl.isLocked() || ! autoPending_.exchange(false, std::memory_order_acquire))
         return;
 
+    bool applied = false, leftParked = false;
     for (int slot = 0; slot < kNumAutoSlots; ++slot)
-        if (autoDirty_[(size_t) slot].exchange(false, std::memory_order_acquire))
-            applyAutomationToModel(slot / kNumAutoParams, slot % kNumAutoParams,
-                                   autoValue_[(size_t) slot].load(std::memory_order_relaxed));
+    {
+        const int bandIdx = slot / kNumAutoParams, param = slot % kNumAutoParams;
+        auto* band = diagonalChain_.getBand(bandIdx);
+        if (param != kAutoEnable && band != nullptr
+            && band->getType() == EqBandType::IIR && band->usesCascade())
+        {
+            leftParked = leftParked || autoDirty_[(size_t) slot].load(std::memory_order_relaxed);
+            continue;
+        }
 
-    needsParamSync_.store(true, std::memory_order_release);
-    automationAppliedOnAudio_.store(true, std::memory_order_release);
+        if (! autoDirty_[(size_t) slot].exchange(false, std::memory_order_acquire))
+            continue;
+
+        applyAutomationToModel(bandIdx, param,
+                               autoValue_[(size_t) slot].load(std::memory_order_relaxed));
+        applied = true;
+    }
+
+    if (leftParked)
+        autoPending_.store(true, std::memory_order_release);
+
+    if (applied)
+    {
+        needsParamSync_.store(true, std::memory_order_release);
+        automationAppliedOnAudio_.store(true, std::memory_order_release);
+    }
 }
 
 void Mcfx_mimoeqAudioProcessor::timerCallback()

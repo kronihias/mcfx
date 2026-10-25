@@ -228,7 +228,8 @@ private:
 
     // Host automation that arrives off the message thread (usually the audio
     // thread) parks here, one slot per (band, parameter). processBlock()
-    // applies it at the start of the next block, timerCallback() when no
+    // applies the cheap ones at the start of the next block, timerCallback()
+    // the rest (a cascade band's freq/Q/gain) and anything parked while no
     // audio is running.
     enum AutoParam { kAutoFreq, kAutoQ, kAutoGain, kAutoEnable, kNumAutoParams };
     static constexpr int kNumAutoSlots = kMaxAutomatedBands * kNumAutoParams;
