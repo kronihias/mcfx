@@ -130,13 +130,15 @@ jobs:
           NOTARIZE_TEAM_ID="$NOTARIZE_TEAM_ID"
           EOF
 
-      # --vst3 also builds the mcfx_send / mcfx_receive / mcfx_graph standalone apps and
-      # packs them into the same .pkg (/Applications/mcfx).
-      - name: Build VST3 + standalone apps (signed + notarized)
+      # --vst3 also builds the mcfx_send / mcfx_receive / mcfx_graph standalone apps
+      # and a fixed 128-channel VST2 of every plug-in (a VST3 tops out at 64
+      # channels), and packs them into the same .pkg (/Applications/mcfx,
+      # /Library/Audio/Plug-Ins/VST/mcfx).
+      - name: Build VST3 + VST2 128ch + standalone apps (signed + notarized)
         if: env.SIGN == 'true'
         run: ./scripts/build_osx.sh --vst3
 
-      - name: Build VST3 + standalone apps (unsigned)
+      - name: Build VST3 + VST2 128ch + standalone apps (unsigned)
         if: env.SIGN != 'true'
         run: ./scripts/build_osx.sh --vst3 --no-sign
 
@@ -149,9 +151,22 @@ jobs:
             exit 1
           fi
           ls -lh "$PKG"
+          PAYLOAD=$(pkgutil --payload-files "$PKG")
           for app in mcfx_send mcfx_receive mcfx_graph; do
-            if ! pkgutil --payload-files "$PKG" | grep -qx "./Applications/mcfx/$app.app"; then
+            if ! grep -qx "./Applications/mcfx/$app.app" <<< "$PAYLOAD"; then
               echo "::error::$app.app missing from $PKG"
+              exit 1
+            fi
+          done
+          for p in mcfx_convolver mcfx_delay mcfx_filter mcfx_gain_delay mcfx_meter mcfx_mimoeq mcfx_anything mcfx_graph mcfx_send mcfx_receive; do
+            if ! grep -qx "./Library/Audio/Plug-Ins/VST/mcfx/${p}128.vst" <<< "$PAYLOAD"; then
+              echo "::error::${p}128.vst missing from $PKG"
+              exit 1
+            fi
+          done
+          for p in mcfx_anything128.vst/Contents/Helpers/mcfx_plugin_scanner mcfx_graph128.vst/Contents/Helpers/mcfx_graph_plugin_scanner; do
+            if ! grep -qx "./Library/Audio/Plug-Ins/VST/mcfx/$p" <<< "$PAYLOAD"; then
+              echo "::error::$p missing from $PKG"
               exit 1
             fi
           done
@@ -275,15 +290,16 @@ jobs:
         shell: cmd
         run: if not exist build mkdir build
 
-      # "vst3" also builds the mcfx_send / mcfx_receive / mcfx_graph standalone apps and
-      # packs them into the same installer (optional component).
-      - name: Build VST3 + standalone apps (signed)
+      # "vst3" also builds the mcfx_send / mcfx_receive / mcfx_graph standalone apps
+      # and a fixed 128-channel VST2 of every plug-in (a VST3 tops out at 64
+      # channels), and packs them into the same installer (optional components).
+      - name: Build VST3 + VST2 128ch + standalone apps (signed)
         if: env.SIGN == 'true'
         shell: cmd
         working-directory: scripts
         run: build_all_win64.bat vst3 sign
 
-      - name: Build VST3 + standalone apps (unsigned)
+      - name: Build VST3 + VST2 128ch + standalone apps (unsigned)
         if: env.SIGN != 'true'
         shell: cmd
         working-directory: scripts
@@ -302,6 +318,12 @@ jobs:
           for %%a in (mcfx_send mcfx_receive mcfx_graph mcfx_graph_plugin_scanner) do (
             if not exist "build\standalone\%%a.exe" (
               echo ::error::build\standalone\%%a.exe was not built
+              exit /b 1
+            )
+          )
+          for %%p in (mcfx_convolver mcfx_delay mcfx_filter mcfx_gain_delay mcfx_meter mcfx_mimoeq mcfx_anything mcfx_graph mcfx_send mcfx_receive) do (
+            if not exist "build\vst\%%p128.dll" (
+              echo ::error::build\vst\%%p128.dll was not built
               exit /b 1
             )
           )

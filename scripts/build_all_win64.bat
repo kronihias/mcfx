@@ -92,21 +92,26 @@ REM   A VST3 build always brings the mcfx_send / mcfx_receive / mcfx_graph
 REM   standalones along (VST3_STANDALONE_APPS): they go into the VST3 installer,
 REM   since the network tools and the graph host are the ones useful outside a
 REM   DAW. "standalone" builds all.
+REM   It also brings fixed-channel VST2s along (VST3_VST2_CHANNELS), in the same
+REM   configure: a VST3 tops out at 64 channels, so the VST3 installer carries
+REM   the 128-channel VST2s for hosts that need more.
 set VST3_STANDALONE_APPS=mcfx_send;mcfx_receive;mcfx_graph
+set VST3_VST2_CHANNELS=128
+set VST3_VST2_FLAGS=-DMCFX_BUILD_VST2_PER_CHANNEL=ON -DNUM_CHANNELS:STRING=%VST3_VST2_CHANNELS%
 if "%BUILD_VST3%%BUILD_SA%"=="11" (
     echo ================================================================
-    echo  BUILDING VST3 + Standalone  ^(universal, up to 64 channels^)
+    echo  BUILDING VST3 + Standalone  ^(universal, up to 64 channels^) + VST2 %VST3_VST2_CHANNELS%ch
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON %VST3_VST2_FLAGS% -DMCFX_MAX_CHANNELS=64
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 ) else if "%BUILD_VST3%"=="1" (
     echo ================================================================
-    echo  BUILDING VST3 + %VST3_STANDALONE_APPS% Standalone  ^(universal, up to 64 channels^)
+    echo  BUILDING VST3 + %VST3_STANDALONE_APPS% Standalone  ^(universal, up to 64 channels^) + VST2 %VST3_VST2_CHANNELS%ch
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE "-DMCFX_STANDALONE_PLUGINS=%VST3_STANDALONE_APPS%" -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE "-DMCFX_STANDALONE_PLUGINS=%VST3_STANDALONE_APPS%" -DMCFX_BUILD_MC=ON %VST3_VST2_FLAGS% -DMCFX_MAX_CHANNELS=64
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 ) else if "%BUILD_SA%"=="1" (
@@ -130,6 +135,11 @@ if "%BUILD_VST3%"=="1" if exist "..\build\vst3\mcfx_anything.vst3\Contents\x86_6
 if "%BUILD_VST3%"=="1" if exist "..\build\vst3\mcfx_graph.vst3\Contents\x86_64-win" (
     for /r "..\build\mcfx_graph\mcfx_graph_plugin_scanner_artefacts" %%f in (mcfx_graph_plugin_scanner.exe) do copy /Y "%%f" "..\build\vst3\mcfx_graph.vst3\Contents\x86_64-win\" >nul
 )
+REM The VST2s look for their scanner next to the DLL, in ..\build\vst.
+if "%BUILD_VST3%"=="1" if exist "..\build\vst" (
+    for /r "..\build\mcfx_anything\mcfx_plugin_scanner_artefacts" %%f in (mcfx_plugin_scanner.exe) do copy /Y "%%f" "..\build\vst\" >nul
+    for /r "..\build\mcfx_graph\mcfx_graph_plugin_scanner_artefacts" %%f in (mcfx_graph_plugin_scanner.exe) do copy /Y "%%f" "..\build\vst\" >nul
+)
 REM A VST3 build produces the mcfx_graph standalone too (VST3_STANDALONE_APPS).
 if not "%BUILD_VST3%%BUILD_SA%"=="00" if exist "..\build\standalone" (
     for /r "..\build\mcfx_anything\mcfx_plugin_scanner_artefacts" %%f in (mcfx_plugin_scanner.exe) do copy /Y "%%f" "..\build\standalone\" >nul
@@ -143,6 +153,14 @@ REM "for /r" matches only files, so the outer bundle directory is skipped.
 if "%BUILD_VST3%"=="1" if "%SIGN%"=="1" (
     echo Signing VST3 plugins...
     for /r "..\build\vst3" %%f in (*.vst3 *.exe) do call :do_sign "%%f"
+)
+
+REM Sign the VST2s a VST3 build brings along, and their scanners. A "vst2"
+REM build signs all of ..\build\vst\*.dll again below; that is harmless.
+if "%BUILD_VST3%"=="1" if "%SIGN%"=="1" (
+    echo Signing VST2 %VST3_VST2_CHANNELS%ch plugins...
+    call :do_sign "..\build\vst\*%VST3_VST2_CHANNELS%.dll"
+    if exist "..\build\vst\*.exe" call :do_sign "..\build\vst\*.exe"
 )
 
 REM Sign standalone executables (includes mcfx_plugin_scanner.exe). A VST3

@@ -47,6 +47,17 @@ Section "VST3 plug-ins" SecVST3
     File /r "..\build\vst3\*.vst3"
 SectionEnd
 
+; Built alongside the VST3s by build_all_win64.bat (VST3_VST2_CHANNELS): a
+; VST3 tops out at 64 channels, these give hosts a fixed 128. Always go to the
+; usual VST2 folder; the directory page is for the VST3s. mcfx_anything128 and
+; mcfx_graph128 find their plug-in scanners next to their .dll.
+Section "VST2 plug-ins (128 channels)" SecVST2
+    SetOutPath "$PROGRAMFILES64\Steinberg\VSTPlugins\mcfx"
+    File "..\build\vst\*128.dll"
+    File "..\build\vst\mcfx_plugin_scanner.exe"
+    File "..\build\vst\mcfx_graph_plugin_scanner.exe"
+SectionEnd
+
 ; Built alongside the VST3s by build_all_win64.bat (VST3_STANDALONE_APPS).
 ; The network tools and the graph host are shipped as apps; the effects are
 ; plug-in only. mcfx_graph finds its plug-in scanner next to its .exe.
@@ -80,6 +91,7 @@ FunctionEnd
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
     !insertmacro MUI_DESCRIPTION_TEXT ${SecVST3} "The mcfx VST3 plug-ins."
+    !insertmacro MUI_DESCRIPTION_TEXT ${SecVST2} "Every mcfx plug-in as a fixed 128-channel VST2 (VST3 supports up to 64 channels), installed to $PROGRAMFILES64\Steinberg\VSTPlugins\mcfx."
     !insertmacro MUI_DESCRIPTION_TEXT ${SecAppsGroup} "Standalone mcfx_send and mcfx_receive, to stream multichannel audio over the network without a DAW, and mcfx_graph, to host and route plug-ins."
     !insertmacro MUI_DESCRIPTION_TEXT ${SecApps} "The standalone apps, installed to $PROGRAMFILES64\mcfx."
     !insertmacro MUI_DESCRIPTION_TEXT ${SecShortcuts} "Start menu entries for the standalone apps (all users)."
