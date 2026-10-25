@@ -190,13 +190,18 @@ fi
 
 if $BUILD_VST3; then
     VST3_DIR=$BUILD_DIR/vst3
+    VST_DIR=$BUILD_DIR/vst
     STANDALONE_DIR=$BUILD_DIR/standalone
 
     # Standalone apps shipped alongside the VST3s: the network tools and the
     # graph host are useful outside a DAW; the effects stay plug-in only.
     VST3_STANDALONE_APPS="mcfx_send;mcfx_receive;mcfx_graph"
 
-    echo ""; echo "=== Building VST3 multichannel (+ ${VST3_STANDALONE_APPS} Standalone) v$VERSION ==="
+    # Fixed-channel VST2s shipped alongside the VST3s, for hosts that can't
+    # give a VST3 more than 64 channels. Same configure as the VST3s.
+    VST3_VST2_CHANNELS=128
+
+    echo ""; echo "=== Building VST3 multichannel (+ ${VST3_STANDALONE_APPS} Standalone, VST2 ${VST3_VST2_CHANNELS}ch) v$VERSION ==="
 
     pushd "$BUILD_DIR"
     cmake .. -G Ninja \
@@ -204,7 +209,8 @@ if $BUILD_VST3; then
         -DBUILD_VST3=TRUE \
         -DBUILD_AU=FALSE \
         -DBUILD_STANDALONE=TRUE \
-        -DMCFX_BUILD_VST2_PER_CHANNEL=OFF \
+        -DMCFX_BUILD_VST2_PER_CHANNEL=ON \
+        -DNUM_CHANNELS:STRING=$VST3_VST2_CHANNELS \
         -DMCFX_BUILD_MC=ON \
         "-DMCFX_STANDALONE_PLUGINS=${VST3_STANDALONE_APPS}" \
         -DVST2SDKPATH="$VST2SDK"
@@ -216,11 +222,18 @@ if $BUILD_VST3; then
     echo ""; echo "codesigning Standalone apps"
     codesign_bundles "$STANDALONE_DIR" "app"
 
-    # One package, two destinations: stage a tree rooted at / .
+    # One package, three destinations: stage a tree rooted at / .
     PKG_ROOT=$BUILD_DIR/pkg_vst3
+    PKG_VST_DIR="$PKG_ROOT/Library/Audio/Plug-Ins/VST/mcfx"
     rm -rf "$PKG_ROOT"
-    mkdir -p "$PKG_ROOT/Library/Audio/Plug-Ins/VST3/mcfx" "$PKG_ROOT/Applications/mcfx"
+    mkdir -p "$PKG_ROOT/Library/Audio/Plug-Ins/VST3/mcfx" "$PKG_VST_DIR" "$PKG_ROOT/Applications/mcfx"
     ditto "$VST3_DIR" "$PKG_ROOT/Library/Audio/Plug-Ins/VST3/mcfx"
+    # Only this channel count: with --vst2 too, build/vst holds every count.
+    for vst in "$VST_DIR"/*${VST3_VST2_CHANNELS}.vst; do
+        ditto "$vst" "$PKG_VST_DIR/$(basename "$vst")"
+    done
+    echo ""; echo "codesigning VST2 ${VST3_VST2_CHANNELS}ch plugins"
+    codesign_bundles "$PKG_VST_DIR" "vst"
     IFS=';' read -ra _apps <<< "$VST3_STANDALONE_APPS"
     for app in "${_apps[@]}"; do
         ditto "$STANDALONE_DIR/$app.app" "$PKG_ROOT/Applications/mcfx/$app.app"

@@ -308,6 +308,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ## Changelog
 ### Unreleased
 
+- installers: the VST3 installers (macOS, Windows) now also include **every plug-in as a fixed 128-channel VST2** (`mcfx_<name>128`), for hosts that need more channels than a VST3 offers (64 on Windows). `mcfx_anything128` and `mcfx_graph128` carry their plug-in scanner.
 - `mcfx_meter`: **oscilloscope view** — a channel range overlaid or stacked, auto or fixed time and amplitude, zero-crossing trigger, pause with scroll-back through the last second, hover readout and A/B cursors (time difference and frequency).
 - `mcfx_meter`: **spectrogram view** — scrolling history with a live spectrum strip on the same axis and dB scale (instant, average, held peak), a channel range averaged or stacked (up to 16), frequency zoom (wheel) and pan (drag), pause and hover readout with note names. "Fine bass" takes the rows below ~450 Hz from a constant-Q transform (separates 50 Hz from 55 Hz) and lines clicks up across all frequencies; the time axis shows the delay this takes. A settings panel (gear button) picks the colour map (11), colour scale, normalisation, log / mel / linear axis, note-name axis with a keyboard, treble window size, smooth or pixel picture, the spectrum strip and a harmonic cursor.
 - `mcfx_meter`: every view but the bars **pops out** into its own window or goes **fullscreen** on any display, for a second screen or a projector; the scope and spectrogram scale their text and lines with the window.

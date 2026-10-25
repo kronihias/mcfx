@@ -127,6 +127,38 @@ foreach(tgt IN LISTS MCFX_TARGETS)
                 VERBATIM)
         endif()
     endif()
+    if(TARGET ${tgt}_VST)
+        # Per-channel VST2 (the release ships the 128-channel one next to the
+        # VST3s). findScannerExecutable() looks in <bundle>/Contents/Helpers on
+        # macOS and next to the binary elsewhere.
+        add_dependencies(${tgt}_VST mcfx_plugin_scanner)
+        if(APPLE)
+            add_custom_command(TARGET ${tgt}_VST POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "$<TARGET_BUNDLE_DIR:${tgt}_VST>/Contents/Helpers"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:mcfx_plugin_scanner>"
+                    "$<TARGET_BUNDLE_DIR:${tgt}_VST>/Contents/Helpers/"
+                COMMAND ${CMAKE_COMMAND} -E make_directory
+                    "${BIN_DIR}/vst/${tgt}.vst/Contents/Helpers"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:mcfx_plugin_scanner>"
+                    "${BIN_DIR}/vst/${tgt}.vst/Contents/Helpers/"
+                VERBATIM)
+            mcfx_reseal_bundle(${tgt}_VST "$<TARGET_BUNDLE_DIR:${tgt}_VST>" mcfx_plugin_scanner)
+            mcfx_reseal_bundle(${tgt}_VST "${BIN_DIR}/vst/${tgt}.vst" mcfx_plugin_scanner)
+        else()
+            add_custom_command(TARGET ${tgt}_VST POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:mcfx_plugin_scanner>"
+                    "$<TARGET_FILE_DIR:${tgt}_VST>/"
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${BIN_DIR}/vst"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:mcfx_plugin_scanner>"
+                    "${BIN_DIR}/vst/"
+                VERBATIM)
+        endif()
+    endif()
     if(TARGET ${tgt}_AU)
         # AU is macOS-only
         add_dependencies(${tgt}_AU mcfx_plugin_scanner)
