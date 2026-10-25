@@ -93,8 +93,7 @@ public:
     void computeOffsets(const AudioBuffer<float>& input,
                         const std::set<int>& activeCh1based, int numSamples)
     {
-        // Audio thread: never grow the buffer here. The processor cuts host
-        // blocks to the prepared size, so this cap is only a safety net.
+        // Audio thread: never grow the buffer; the cap is only a safety net.
         numSamples = jmin(numSamples, (int) offsetDB_.size());
 
         const int numCh = jmin(input.getNumChannels(), (int) bandpasses_.size());

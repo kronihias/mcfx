@@ -59,9 +59,8 @@ void MatrixMixerNode::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
     // so the input data sits in channels [0, numIn_) and we'll write
     // outputs to channels [0, numOut_). Snapshot input first.
     //
-    // The scratch keeps the size prepareToPlay gave it; a host block larger
-    // than announced is mixed in chunks of that size rather than resizing
-    // (allocating) the scratch here on the audio thread.
+    // Host blocks larger than announced are mixed in chunks of the prepared
+    // scratch size, so nothing allocates on the audio thread.
     const int chunk = scratchIn_.getNumSamples();
     if (chunk <= 0 || scratchIn_.getNumChannels() < numIn_)
     {

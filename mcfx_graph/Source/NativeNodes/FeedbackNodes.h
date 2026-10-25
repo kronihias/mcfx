@@ -31,8 +31,7 @@ public:
 
     int getNumChannels() const noexcept { return numChannels_; }
 
-    /** Message thread, and only under GraphController's feedback lock, which
-        keeps the audio thread out of the render meanwhile — so no atomics. */
+    /** Message thread, under GraphController's feedback lock — so no atomics. */
     void setBus (FeedbackBus::Ptr bus) { bus_ = std::move (bus); }
     const FeedbackBus::Ptr& getBus() const noexcept { return bus_; }
 

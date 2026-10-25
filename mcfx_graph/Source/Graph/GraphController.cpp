@@ -160,9 +160,8 @@ void GraphController::releaseResources()
 
 void GraphController::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
-    // The send/return nodes touch their bus from inside the render, so the
-    // whole render sits under the lock. Never wait for it here: a feedback
-    // edit on the message thread costs this level one silent block instead.
+    // Send/return nodes touch their bus during the render. Never wait here:
+    // a feedback edit in progress costs one silent block instead.
     const juce::ScopedTryLock sl (feedbackLock_);
     if (! sl.isLocked())
     {
@@ -782,8 +781,7 @@ void GraphController::clearAllFeedbackLinks()
 
 void GraphController::bindFeedbackLink (const FeedbackLinkInfo& link)
 {
-    // Hand both ends the same bus. Called with feedbackLock_ held, so the
-    // nodes' plain (non-atomic) pointer swap is safe.
+    // Hand both ends the same bus; feedbackLock_ makes the plain pointer swap safe.
     for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)
     {
         if (feedbackLinks_[i] != link) continue;

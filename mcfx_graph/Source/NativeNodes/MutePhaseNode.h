@@ -75,12 +75,11 @@ private:
         const bool isInvert;
     };
     void applyParamChange (int channel, bool isInvert, bool on) noexcept;
-    // Atomics only, no write-back. Honours linked like setMute / setInvert.
+    // Atomics only, no write-back; honours linked.
     void storeSwitch (std::vector<std::atomic<uint8_t>>& dst, int channel, bool on) noexcept;
 
     std::vector<SwitchParam*> muteParams_, invertParams_;
-    // Thread currently writing the parameters back, so only its own echo is
-    // ignored. nullptr when none.
+    // Thread doing the parameter write-back (nullptr when none).
     std::atomic<juce::Thread::ThreadID> mirroringThread_ { nullptr };
 
     const int numChannels_;

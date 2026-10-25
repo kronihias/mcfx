@@ -142,8 +142,7 @@ private:
     void audioProcessorParameterChangeGestureEnd   (juce::AudioProcessor*, int) override;
 
     void scheduleDebouncedHistoryCommit();
-    // Message thread (timerCallback): act on what the listener callbacks
-    // above flagged.
+    // Called from timerCallback.
     void flushPendingHistoryCommits();
 
     void rebindAllSlotsAfterRestore();
@@ -172,8 +171,7 @@ private:
     // a deferred lambda only commits if no further changes arrived during
     // the wait. Prevents 60-events-per-second slider drags from spamming
     // the undo stack.
-    // The callbacks only bump it (and stamp lastParamChangeMs_); the 20 Hz
-    // timer commits once the epoch has been still for kHistoryDebounceMs.
+    // The timer commits once it has been still for kHistoryDebounceMs.
     std::atomic<int> paramDirtyEpoch_ { 0 };
     std::atomic<juce::uint32> lastParamChangeMs_ { 0 };
     int debouncedEpoch_ = 0;                // message thread only

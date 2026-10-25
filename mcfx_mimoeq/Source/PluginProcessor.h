@@ -116,13 +116,10 @@ public:
     bool removePathChain(int inCh, int outCh);
     std::vector<PathKey> getPathKeys() const;
 
-    /** Guards the model against the audio thread's parameter sync, which reads
-        it under a try-lock (and retries next block if it misses). Hold it on
-        the message thread around every model edit: band parameters, adding or
-        removing bands, anything that frees or reallocates. Not re-entrant —
-        never hold it across a call that may take it again (the processor's
-        path add/remove, setStateInformation, requestParameterSync, the
-        editor's listener callbacks). */
+    /** Hold on the message thread around every model edit; the audio thread's
+        parameter sync try-locks it. Not re-entrant: never hold it across path
+        add/remove, setStateInformation, requestParameterSync or editor
+        listener callbacks, which take it themselves. */
     SpinLock& getModelLock() { return modelLock_; }
 
     // --- VST3 Parameter Automation (diagonal chain) ---
@@ -206,9 +203,7 @@ public:
         If the change moves any chain's latency (a band with an FIR or lookahead
         switched on or off, a lookahead time changed), a full rebuild is queued
         as well, since latency accounting and compensation are only worked out
-        there. Message thread only: it reads the model's path map. (Host
-        automation from the audio thread is deferred there, see
-        parameterChanged.) */
+        there. Message thread only (it reads the model's path map). */
     void requestParameterSync();
 
     // --- Undo / Redo ---
@@ -226,11 +221,8 @@ private:
     void parameterChanged(const String& parameterID, float newValue) override;
     std::atomic<bool> updatingFromModel_ { false };  // feedback guard for syncModelToAPVTS
 
-    // Host automation that arrives off the message thread (usually the audio
-    // thread) parks here, one slot per (band, parameter). processBlock()
-    // applies the cheap ones at the start of the next block, timerCallback()
-    // the rest (a cascade band's freq/Q/gain) and anything parked while no
-    // audio is running.
+    // Automation arriving off the message thread parks here, one slot per
+    // (band, parameter); processBlock() or timerCallback() applies it.
     enum AutoParam { kAutoFreq, kAutoQ, kAutoGain, kAutoEnable, kNumAutoParams };
     static constexpr int kNumAutoSlots = kMaxAutomatedBands * kNumAutoParams;
     std::array<std::atomic<float>, kNumAutoSlots> autoValue_ {};
@@ -240,8 +232,7 @@ private:
     void applyPendingAutomation();
     void applyPendingAutomationOnAudioThread();
     void timerCallback() override;
-    // Set when the audio thread applied automation; the timer then does
-    // what the audio thread must not (editor refresh, latency check).
+    // Audio thread applied automation; timer does the editor refresh/latency check.
     std::atomic<bool> automationAppliedOnAudio_ { false };
 
     // ---- Model data (GUI thread writes, audio thread reads floats for sync) ----
@@ -266,9 +257,8 @@ private:
     AudioSampleBuffer tempBuffer_;    // single-channel scratch buffer for MIMO paths
     std::vector<bool> mimoOutputMask_; // pre-allocated per-channel MIMO output mask
 
-    // The buffers above (and every band's scratch) hold currentBlockSize_
-    // samples, so a bigger host block is processed in sub-blocks of that size,
-    // through this view onto the host buffer (no copy, no allocation).
+    // Larger host blocks are processed in currentBlockSize_ sub-blocks through
+    // this non-owning view onto the host buffer.
     AudioSampleBuffer chunkView_;
     int chunkViewChannels_ = 0;
     void processChunk(AudioSampleBuffer& buffer);

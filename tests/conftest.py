@@ -180,8 +180,7 @@ def run_testhost(plugin_name: str, params: dict, audio: np.ndarray,
     Call the mcfx_testhost CLI binary, return processed audio as numpy array.
 
     random_blocks: irregular block sizes (1..512), as some hosts send.
-    audio_thread: process on a separate thread, as a DAW does, so parameter
-                  changes reach the plug-in off its message thread.
+    audio_thread: set params and process on a separate thread, as a DAW does.
     extra_args:   further testhost arguments (e.g. --save-state <path>).
 
     Requires:

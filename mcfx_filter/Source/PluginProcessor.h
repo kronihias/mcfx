@@ -236,9 +236,7 @@ private:
     void resetFilters(double sampleRate);
     void updateFilterParameters(double sampleRate, bool fade);
 
-    // setParameter runs on the GUI thread or (automation) the audio thread;
-    // the filters' smoothers belong to the audio thread, so it only flags
-    // and processBlock retargets them.
+    // setParameter may run on any thread; processBlock owns the smoothers.
     std::atomic<bool> _params_dirty { false };
 
     float _lc_on_param, // 1 = on

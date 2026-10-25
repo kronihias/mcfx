@@ -259,8 +259,7 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
     // std::cout << "in: " << getTotalNumInputChannels() << " out: " << getTotalNumOutputChannels() << std::endl;
 
-    // raise the flag before checking _configLoaded: the loader drops
-    // _configLoaded first and then waits for us to leave (see LoadConfiguration)
+    // raise before checking _configLoaded (handshake with LoadConfiguration)
     _isProcessing = true;
 
     if (_configLoaded)
@@ -1437,8 +1436,7 @@ void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, 
 {
     if ( parameterID == "RELOAD" )
     {
-        // host automation lands here on the audio thread: loading starts a
-        // thread, touches Strings and the debug log, so hand it to the message thread
+        // host automation may land here on the audio thread: load on the message thread
         if (newValue == true)
         {
             if (MessageManager::existsAndIsCurrentThread())

@@ -102,9 +102,7 @@ def _trace_tail_means(trace, fraction=0.5):
 # ---------------------------------------------------------------------------
 
 def test_rtwake_does_not_accumulate_posts():
-    """RtWake: signals that land while SendThread is awake must not leave
-    extra semaphore posts behind, or later waits stop sleeping and the
-    thread spins."""
+    """RtWake must not accumulate semaphore posts (later waits would spin)."""
     _need_binary()
     proc = subprocess.run([LOOPBACK, "--rtwake-test"],
                           capture_output=True, text=True, timeout=30)

@@ -3,12 +3,9 @@
 
  ChangeBroadcaster that is safe to notify from the audio thread.
 
- The legacy setParameter() plug-ins call sendChangeMessage() so the editor
- refreshes. Host automation reaches setParameter() on the audio thread
- (the VST3 wrapper applies it inside process()), and sendChangeMessage()
- posts to the message queue: a lock and possibly an allocation. Off the
- message thread this only raises a flag; a message-thread timer turns it
- into a change message.
+ Host automation can reach setParameter() on the audio thread (VST3 applies
+ it inside process()), where sendChangeMessage() would lock and allocate.
+ Off the message thread this only raises a flag; a timer sends the message.
 
  ==============================================================================
  */
@@ -38,8 +35,7 @@ public:
     }
 
 protected:
-    /** Message thread, ~30 Hz: apply whatever the audio thread could only
-        flag (start a Timer, ...). Runs before a deferred change message. */
+    /** Message thread, ~30 Hz: do work the audio thread could only flag. */
     virtual void handleDeferredMessageThreadWork() {}
 
 private:

@@ -359,8 +359,7 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
                     params[slot]->setValue (v);
             }
 
-            // The sync timer recognises this as host-driven (the master's
-            // value now equals the proxy's) and won't re-notify the host.
+            // The sync timer sees this as host-driven and won't re-notify.
         }
     }
 
@@ -372,9 +371,8 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
     const int scNumCh = jmin (_sidechainNumChannels.load(), pluginTotalCh - mainBusCh);
     const int scratchCh = pluginTotalCh - mainBusCh;
 
-    // Everything the instances are handed was sized in loadPlugin /
-    // prepareToPlay; if it doesn't fit this configuration, output silence
-    // rather than allocate or run past the end.
+    // Buffers are sized in loadPlugin / prepareToPlay; if they don't fit,
+    // output silence rather than allocate or overrun.
     if (mainBusCh <= 0
         || (int) _instanceChannelPtrs.size() < pluginTotalCh
         || _instanceBuffer.getNumChannels() < pluginTotalCh
@@ -385,9 +383,8 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
         return;
     }
 
-    // The instances were prepared for _currentBlockSize, and the scratch holds
-    // that many samples. A host block larger than announced is handed on in
-    // chunks of that size rather than overrunning the scratch.
+    // Host blocks larger than announced are processed in chunks of the
+    // prepared size rather than overrunning the scratch.
     int maxChunk = jmax (1, _currentBlockSize);
     if (scratchCh > 0)
         maxChunk = jmin (maxChunk, _scratchBuffer.getNumSamples());
@@ -929,8 +926,7 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
         else
             _scratchBuffer.setSize (0, 0);
 
-        // The instance view's pointer table, sized once here so processBlock
-        // never allocates one (see _instanceBuffer).
+        // Sized here so processBlock never allocates (see _instanceBuffer).
         _instanceChannelPtrs.assign ((size_t) totalInstanceChannels, nullptr);
         _instanceBuffer.setSize (totalInstanceChannels, 0);
 
@@ -1180,11 +1176,9 @@ void Mcfx_anythingAudioProcessor::syncParametersFromMaster()
         {
             _lastParameterValues[(size_t) p] = currentValue;
 
-            // Host automation lands on the proxy first (setValue caches it)
-            // and processBlock then applies it to every instance, slaves
-            // included. A master value that already equals the proxy's is that
-            // write arriving, not a GUI move: re-notifying the host would feed
-            // the automation back as a recorded change.
+            // Host automation reaches all instances via processBlock, so a
+            // master value equal to the proxy's is that write, not a GUI move;
+            // re-notifying the host would record the automation back.
             auto* fp = getForwardingParameter (p);
             if (fp != nullptr && fp->isBound() && std::abs (fp->getValue() - currentValue) < 1.0e-6f)
                 continue;

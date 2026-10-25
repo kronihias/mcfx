@@ -471,9 +471,8 @@ public:
     void setListener(Listener* l) { listener_ = l; }
     void updateFromBand();
 
-    /** The lock the band's owner holds while it reads the model from the audio
-        thread (try-lock there). The editor holds it around every edit of the
-        band, so that read never sees a band mid-change. Optional. */
+    /** Optional owner lock (try-locked by the audio thread); held around every
+        band edit so that read never sees a band mid-change. */
     void setModelLock(SpinLock* lock) { modelLock_ = lock; }
 
     /** Tell the editor whether the current band lives on the diagonal chain.

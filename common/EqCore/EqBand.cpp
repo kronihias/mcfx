@@ -640,8 +640,7 @@ void EqBand::prepare(double sampleRate, int maxBlockSize)
 
     if (type_ == EqBandType::Delay)
     {
-        // Room for the longest delay the editor offers, so syncParametersFrom()
-        // (audio thread) never has to grow the line.
+        // Sized so syncParametersFrom() (audio thread) never grows the line.
         delayBuffer_.assign((size_t) jmax(kMaxDelaySamples, delaySamples_), 0.f);
         delayWritePos_ = 0;
     }
@@ -672,11 +671,8 @@ void EqBand::syncParametersFrom(const EqBand& source)
     // but preserve our filter state and SmoothedValue ramp state
     // so the transition is smooth (no click)
 
-    // This runs on the audio thread, so it must not allocate. A structural
-    // difference (band type, IIR subtype, raw-coefficient mode, a cascade's
-    // section count) would morph this copy's working storage, so leave it to
-    // the full rebuild every such edit queues; until that lands, the copy
-    // keeps processing with its old structure.
+    // Audio thread: must not allocate. Structural differences are left to the
+    // full rebuild such edits queue; until then the copy keeps its old structure.
     if (type_ != source.type_)
         return;
     if (type_ == EqBandType::IIR
@@ -745,8 +741,8 @@ void EqBand::syncParametersFrom(const EqBand& source)
                 // prototypes) are far too heavy for the audio thread, and the
                 // model band already ran them on the GUI thread when its
                 // parameter changed — copy the result, the same way raw
-                // coefficients are copied above. The section counts match
-                // (checked at the top), so this copies into existing storage.
+                // coefficients are copied above. Section counts match (checked
+                // at the top), so no allocation.
                 cascadeCoeffs_ = source.cascadeCoeffs_;
                 startSmoothing();
             }
@@ -767,14 +763,10 @@ void EqBand::syncParametersFrom(const EqBand& source)
     }
     else if (type_ == EqBandType::Delay)
     {
-        // prepare() sized the line for the longest editor delay; a longer one
-        // (only reachable from a hand-edited preset) is capped until the
-        // next rebuild sizes the line for it.
+        // Capped to the line prepare() sized; the next rebuild resizes it.
         delaySamples_ = jmin(source.delaySamples_, (int) delayBuffer_.size());
     }
-    // FIR: nothing beyond enabled_ (above). New taps, a resample or another
-    // file all need the convolver set up again, which only the full rebuild
-    // does; copying the coefficient vectors here allocated on the audio thread.
+    // FIR: only enabled_; coefficient changes need the full rebuild.
 }
 
 void EqBand::processBlock(float* data, int numSamples)

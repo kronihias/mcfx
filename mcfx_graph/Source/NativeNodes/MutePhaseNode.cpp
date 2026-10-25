@@ -38,11 +38,8 @@ MutePhaseNode::~MutePhaseNode() = default;
 
 void MutePhaseNode::applyParamChange (int channel, bool isInvert, bool on) noexcept
 {
-    // setMute / setInvert's write-back below re-enters here on the thread doing it; skip
-    // that echo, the atomics already hold the value. A write from any other
-    // thread — host automation on the audio thread while the message thread
-    // mirrors — always lands. Atomics only: the write-back is not
-    // realtime-safe, and this runs on the audio thread.
+    // Skip only this thread's own write-back echo; writes from other threads
+    // (host automation) always land. Atomics only: runs on the audio thread.
     if (mirroringThread_.load() == juce::Thread::getCurrentThreadId())
         return;
     storeSwitch (isInvert ? invert_ : mute_, channel, on);

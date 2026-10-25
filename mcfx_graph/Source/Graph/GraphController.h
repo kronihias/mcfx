@@ -202,14 +202,12 @@ public:
         ScopedSuspend (juce::AudioProcessor& outer)
             : outer_ (outer), wasSuspended_ (outer.isSuspended())
         {
-            // suspendProcessing takes the callback lock, so this also waits
-            // for a block already in flight to finish.
+            // Takes the callback lock, so also waits out a block in flight.
             outer_.suspendProcessing (true);
         }
         ~ScopedSuspend()
         {
-            // Restore rather than force-resume, so nested scopes (an import
-            // inside an already-suspended edit) don't resume audio early.
+            // Restore, not force-resume, so nested scopes don't resume early.
             outer_.suspendProcessing (wasSuspended_);
         }
     private:
@@ -314,11 +312,8 @@ private:
     // outlives neither.
     std::vector<FeedbackBus::Ptr> feedbackBuses_;
 
-    // Guards feedbackBuses_, the buses' contents and the nodes' bus pointers
-    // against the audio thread. Every message-thread change to them holds it;
-    // processBlock only try-locks it around the render, and skips the block
-    // (silence) when an edit is under way. Being internal, callers can't
-    // forget it, and it covers each nesting level on its own.
+    // Guards feedbackBuses_, the buses and the nodes' bus pointers. Message-
+    // thread edits hold it; processBlock only try-locks it (silence if busy).
     juce::CriticalSection feedbackLock_;
 
     TopologyListener             topologyListener_;

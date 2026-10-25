@@ -119,9 +119,7 @@ struct RecvStream::PeerStream
     std::atomic<uint64_t> gapFrames      { 0 };
     std::atomic<uint64_t> underruns      { 0 };
 
-    // Audio-thread events (underruns / anti-windup trips in pullAndMix),
-    // printed later by NetThread's housekeeping, which alone touches the
-    // logged* marks.
+    // Counted in pullAndMix, printed by NetThread (sole user of logged*).
     std::atomic<uint64_t> pullUnderruns  { 0 };
     std::atomic<uint64_t> antiWindups    { 0 };
     uint64_t              loggedPullUnderruns = 0;
@@ -1381,8 +1379,7 @@ void RecvStream::handleInviteAckPacket (const sockaddr_in& from,
 
 void RecvStream::publishPeers (std::shared_ptr<PeerList> newList)
 {
-    // peersSnapshot (audio thread) may still point at the current list:
-    // keep it alive here so the audio thread is never its last owner.
+    // The audio thread may still hold the current list; never be its last owner.
     if (peers) retiredPeers.push_back (std::move (peers));
     peers = std::move (newList);
 }
@@ -1425,14 +1422,11 @@ void RecvStream::netHousekeeping()
             publishPeers (std::move (newList));
         }
 
-        // Free retired lists the audio thread has let go of. use_count()
-        // == 1 is final: the audio thread only ever copies `peers` or its
-        // own snapshot, never a retired list.
+        // use_count() == 1 is final: the audio thread never copies a retired list.
         retiredPeers.erase (std::remove_if (retiredPeers.begin(), retiredPeers.end(),
                                             [] (const auto& l) { return l.use_count() == 1; }),
                             retiredPeers.end());
 
-        // Print what the audio thread counted since the last tick.
         if (peers)
         {
             for (auto& p : *peers)
@@ -1441,7 +1435,7 @@ void RecvStream::netHousekeeping()
                 const auto un = p->pullUnderruns.load (std::memory_order_relaxed);
                 if (un != p->loggedPullUnderruns)
                 {
-                    // same throttle as before: the first few, then every 50th
+                    // the first few, then every 50th
                     if (un < 5 || un / 50 != p->loggedPullUnderruns / 50)
                         std::cerr << "mcfx_recv: underrun #" << un
                                   << " uid=" << std::hex << p->uid << std::dec
@@ -1507,8 +1501,7 @@ void RecvStream::netHousekeeping()
 
 void RecvStream::netRecvOnce()
 {
-    // Before the waitUntilReady below: stale peers are by definition the
-    // ones that send nothing, so this must also run when the socket is idle.
+    // Before waitUntilReady: stale peers send nothing, so run it when idle too.
     netHousekeeping();
 
     if (! socketBound || ! socket) { juce::Thread::sleep (5); return; }
@@ -2158,9 +2151,7 @@ void RecvStream::pullAndMix (float* const* out,
         return;
     }
 
-    // Stale peers (no DATA for kStaleTimeoutSec) are evicted by NetThread
-    // in netHousekeeping(); the list rebuild, the accepted-senders lock and
-    // the PeerStream destructors have no place on the audio thread.
+    // Stale peers are evicted off the audio thread, in netHousekeeping().
 
     for (const auto& p : *snap)
     {
@@ -2454,9 +2445,8 @@ void RecvStream::pullAndMix (float* const* out,
 
         const double ratio = p->rcNominalRatio * p->rcRcorr;
 
-        // Output scratch was sized for the block size the peer was built
-        // with; a host block beyond that would overrun it. Skip the peer
-        // rather than write past the end (the gap is silence).
+        // Scratch is sized for the peer's build-time block size: skip the
+        // peer on a larger host block rather than overrun it.
         if ((size_t) blockSize * (size_t) chans > p->resOutScratch.size())
             continue;
 

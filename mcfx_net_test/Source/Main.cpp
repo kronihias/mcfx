@@ -915,16 +915,14 @@ void writeMetricsJson (const Driver& d, double measuredFreqCh0Hz,
 }  // namespace
 
 // ---------------------------------------------------------------------------
-// RtWake self-test (--rtwake-test): a signal() that arrives while the waiter
-// is awake must not leave the semaphore count raised, or later waits return
-// at once instead of sleeping. Exit 0 = pass.
+// RtWake self-test (--rtwake-test): signals while the waiter is awake must
+// not leave posts behind, or later waits stop sleeping. Exit 0 = pass.
 // ---------------------------------------------------------------------------
 int runRtWakeTest()
 {
     mcfx::net::RtWake wake;
 
-    // Signals that land while the waiter is busy, as when the audio thread
-    // pushes during a send: each wait() finds the flag already set.
+    // Signal while the waiter is awake: each wait() finds the flag set.
     for (int i = 0; i < 100; ++i)
     {
         wake.signal();

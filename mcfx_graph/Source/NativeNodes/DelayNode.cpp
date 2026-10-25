@@ -42,11 +42,8 @@ DelayNode::~DelayNode() = default;
 
 void DelayNode::applyParamChange (int channel, float samples) noexcept
 {
-    // setDelaySamples's write-back below re-enters here on the thread doing it; skip
-    // that echo, the atomics already hold the value. A write from any other
-    // thread — host automation on the audio thread while the message thread
-    // mirrors — always lands. Atomics only: the write-back is not
-    // realtime-safe, and this runs on the audio thread.
+    // Skip only this thread's own write-back echo; writes from other threads
+    // (host automation) always land. Atomics only: runs on the audio thread.
     if (mirroringThread_.load() == juce::Thread::getCurrentThreadId())
         return;
     if (channel < 0 || channel >= numChannels_) return;
@@ -114,8 +111,7 @@ void DelayNode::setDelaySamples (int channel, float samples) noexcept
     const bool linked = linked_.load (std::memory_order_relaxed);
     storeDelaySamples (channel, clamped);
 
-    // Mirror into the host-visible parameters; their echo back into
-    // applyParamChange is ignored on this thread only.
+    // Mirror into the host-visible parameters.
     if (! delayParams_.empty())
     {
         mirroringThread_.store (juce::Thread::getCurrentThreadId());

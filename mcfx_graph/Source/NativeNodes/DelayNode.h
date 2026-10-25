@@ -81,8 +81,7 @@ private:
     void storeDelaySamples (int channel, float clamped) noexcept;  // atomics only, no write-back
 
     std::vector<DelayParam*> delayParams_;                 // owned by AudioProcessor
-    // Thread currently writing the parameters back, so only its own echo is
-    // ignored. nullptr when none.
+    // Thread doing the parameter write-back (nullptr when none).
     std::atomic<juce::Thread::ThreadID> mirroringThread_ { nullptr };
 
     using Line = juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Lagrange3rd>;

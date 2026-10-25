@@ -80,8 +80,7 @@ private:
     void storeGainDb (int channel, float db) noexcept;     // atomics only, no write-back
 
     std::vector<GainParam*> gainParams_;                   // owned by AudioProcessor
-    // Thread currently writing the parameters back, so only its own echo is
-    // ignored. nullptr when none.
+    // Thread doing the parameter write-back (nullptr when none).
     std::atomic<juce::Thread::ThreadID> mirroringThread_ { nullptr };
 
     const int numChannels_;

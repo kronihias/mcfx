@@ -378,9 +378,7 @@ public:
         const int latency = compensateLatency ? jmax(0, plugin->getLatencySamples()) : 0;
 
         // ---- Apply generic parameters (deferred from the --params block) ----
-        // With --audio-thread they are set from the render thread, as a
-        // DAW's automation is: set here, they reach the plug-in on its
-        // message thread before the render starts.
+        // With --audio-thread they are set from the render thread, like DAW automation.
         auto applyParams = [&]
         {
             if (auto* obj = pendingParams.getDynamicObject())
@@ -459,8 +457,7 @@ public:
 
         if (audioThread)
         {
-            // The message thread waits here, so nothing it runs (the
-            // plug-in's timers) interleaves with the render.
+            // The message thread blocks here, so no plug-in timer runs mid-render.
             std::thread renderThread ([&] { applyParams(); processAll(); });
             renderThread.join();
         }
@@ -479,8 +476,7 @@ public:
                       << " realtime_factor="  << rtf << "\n";
         }
 
-        // Let the plug-in's timers run, as they would after a render in a
-        // DAW, before state is saved.
+        // Let the plug-in's timers run before state is saved.
         if (audioThread)
             MessageManager::getInstance()->runDispatchLoopUntil (200);
 

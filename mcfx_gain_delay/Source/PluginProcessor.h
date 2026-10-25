@@ -111,8 +111,7 @@ private:
 
   void calcGainFact(int ch);
 
-  // Start/stop/retime the channel stepper (a Timer) to match
-  // _stepper_wanted/_stepspeed. Message thread only.
+  // Sync the stepper Timer with _stepper_wanted/_stepspeed. Message thread only.
   void applyStepperState();
   void handleDeferredMessageThreadWork() override { applyStepperState(); }
 
@@ -140,8 +139,7 @@ private:
 
   float _stepspeed; // hold time for each channel while iterating
   bool _stepper_on; // step through channels with testsignal on/off (message thread)
-  // Requested stepper state: setParameter may run on the audio thread, where
-  // it must not start or stop a Timer, so it only records the request.
+  // Requested by setParameter, which may run on the audio thread (no Timer calls there)
   std::atomic<bool> _stepper_wanted { false };
   std::atomic<bool> _stepspeed_changed { false };
   ChannelStepper _channelstepper; // helper object to iterate testsignal over channels

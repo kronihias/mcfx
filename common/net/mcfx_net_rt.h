@@ -116,11 +116,9 @@ inline void setCurrentThreadRealtime (double periodMs,
    #endif
 }
 
-// Wakes one waiting thread; signal() is safe on the audio thread.
-// juce::WaitableEvent::signal() takes a mutex, which the waiter may hold.
-// Here signal() is an atomic exchange plus, at most once per wait, an OS
-// semaphore post (dispatch / futex / kernel semaphore), none of which
-// take a user-space lock. Signals between waits coalesce into one wake.
+// Wakes one waiting thread; unlike juce::WaitableEvent (which takes a mutex)
+// signal() is audio-thread safe: an atomic exchange plus at most one OS
+// semaphore post per wait. Signals between waits coalesce into one wake.
 class RtWake
 {
 public:
@@ -138,8 +136,7 @@ public:
     ~RtWake()
     {
        #if defined(__APPLE__)
-        // libdispatch traps on releasing a semaphore whose count is below
-        // its initial value, never above it, so leftover posts are fine.
+        // libdispatch only traps if the count is below its initial value.
         dispatch_release (sem_);
        #elif defined(__linux__)
         sem_destroy (&sem_);
@@ -150,8 +147,7 @@ public:
 
     void signal() noexcept
     {
-        // acq_rel: the waiter's exchange in wait() acquires whatever was
-        // written before this call (the FIFO write).
+        // acq_rel: wait()'s exchange acquires writes made before signal().
         if (! pending_.exchange (true, std::memory_order_acq_rel))
             post();
     }
@@ -159,14 +155,11 @@ public:
     // Returns after a signal() or timeoutMs, whichever comes first.
     void wait (int timeoutMs) noexcept
     {
-        // Always wait, even with the flag already set: every false->true
-        // flip posted once, and that post must be consumed here (it returns
-        // at once). Skipping it left the count growing, and later waits
-        // returned immediately instead of sleeping.
+        // Always wait, even with the flag set: each false->true flip posted
+        // once, and that post must be consumed or later waits won't sleep.
         timedWait (timeoutMs);
-        // Re-arm. A signal() that raced in between is not lost: either it
-        // posted (the next wait returns at once) or it found the flag set
-        // and this exchange acquires its writes.
+        // Re-arm. A racing signal() is not lost: it either posted (next wait
+        // returns at once) or found the flag set and is acquired here.
         pending_.exchange (false, std::memory_order_acq_rel);
     }
 

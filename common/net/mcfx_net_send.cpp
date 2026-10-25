@@ -66,12 +66,11 @@ public:
         // how fast the host wants to render.
         uint64_t framesSentTotal = 0;
         bool loggedFastMode = false;
-        constexpr int kBacklogBlocks = 3;   // the old FIFO held 4
+        constexpr int kBacklogBlocks = 3;
 
         while (! threadShouldExit())
         {
-            // Fast-mode transitions are detected on the audio thread and
-            // reported from here.
+            // Log fast-mode transitions flagged by the audio thread.
             if (const bool fast = owner.fastModeActive.load (std::memory_order_relaxed);
                 fast != loggedFastMode)
             {
@@ -102,11 +101,8 @@ public:
                                                   * (double) owner.ringSampleRate)
                                      + (uint64_t) owner.ringBlockSize;
 
-            // Send what the wall clock allows, plus anything queued beyond
-            // kBacklogBlocks: an audio clock running a few ppm faster than
-            // the wall clock would otherwise fill the FIFO, adding latency
-            // until it overran. The receiver's rate loop absorbs the
-            // occasional early block.
+            // Also drain anything beyond kBacklogBlocks: an audio clock a few
+            // ppm faster than the wall clock would otherwise fill the FIFO.
             const int blockSamples = owner.ringBlockSize * owner.ringNumChannels;
             while (owner.fifo != nullptr
                    && owner.fifo->getNumReady() >= blockSamples
@@ -244,10 +240,8 @@ void SendStream::prepareToPlay (double sampleRate, int blockSize,
     ringFormat      = fmt;
     wireFormat.store (fmt, std::memory_order_release);
 
-    // Headroom for a late SendThread or a host that bunches several
-    // blocks into one device period: at least 4 blocks and ~40 ms. Steady
-    // latency does not grow with it; SendThread drains anything above
-    // kBacklogBlocks without waiting for the wall clock.
+    // >= 4 blocks and ~40 ms of headroom for a late SendThread or bunched
+    // host blocks; no added latency, SendThread drains above kBacklogBlocks.
     const int headroomBlocks = (int) std::ceil (0.04 * sampleRate / blockSize) + 1;
     const int capacity = juce::jmax (4, headroomBlocks) * blockSize * numChannels;
     ringBuffer.assign (static_cast<size_t> (capacity), 0.0f);
@@ -517,7 +511,7 @@ bool SendStream::pushAudioBlock (const float* const* channelData,
     }
 
     fifo->finishedWrite (needed);
-    wake.signal();   // RtWake: no lock, see mcfx_net_rt.h
+    wake.signal();
     return true;
 }
 

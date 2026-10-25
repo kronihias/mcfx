@@ -241,16 +241,12 @@ private:
     // but that don't map to our multichannel I/O
     AudioBuffer<float> _scratchBuffer;
 
-    // Per-instance view handed to the hosted plugin's processBlock: a channel
-    // pointer table into our buffer + _scratchBuffer. Both are sized to
-    // _totalInstanceChannels under _pluginLock in loadPlugin, so processBlock
-    // only re-points them (setDataToReferTo with no more channels than
-    // allocated doesn't allocate). A local AudioBuffer would malloc its
-    // pointer table from 32 channels up.
+    // Per-instance view for the hosted processBlock, sized in loadPlugin so
+    // processBlock only re-points it (a local AudioBuffer would malloc its
+    // pointer table from 32 channels up).
     std::vector<float*> _instanceChannelPtrs;
     AudioBuffer<float> _instanceBuffer;
-    // Shared, always-empty MIDI for the instances; cleared before each one
-    // (a plugin may write into it) and pre-sized in prepareToPlay.
+    // Always-empty MIDI for the instances, cleared before each (they may write to it).
     MidiBuffer _instanceMidi;
 
     // Fixed pool of forwarding parameters. Owned by AudioProcessor (via
@@ -259,14 +255,12 @@ private:
     Array<ForwardingParameter*> _forwardingParameters;
 
     // Sidechain routing: route one of our input channels to the sidechain bus
-    // Atomic: the source is set from the editor / host parameter on the
-    // message thread without _pluginLock while processBlock reads it.
+    // Atomic: set on the message thread without _pluginLock.
     std::atomic<bool> _hasSidechain { false };
     std::atomic<int> _sidechainNumChannels { 0 };       // number of channels in the sidechain bus
     std::atomic<int> _sidechainSourceChannel { -1 };    // -1 = off, 0-based index into our multichannel buffer
 
-    // Master instance's tail, cached at load so getTailLengthSeconds (any
-    // thread) needn't touch _pluginInstances without the lock.
+    // Cached at load so getTailLengthSeconds needn't touch _pluginInstances.
     std::atomic<double> _tailLengthSeconds { 0.0 };
 
     // "Packed" sidechain support for plugins (e.g. Waves) that expose a larger
@@ -297,9 +291,7 @@ private:
     };
     ParameterSyncTimer _paramSyncTimer { *this };
     void syncParametersFromMaster();
-    // Message thread only (loadPlugin, handleDeferredLoad, sync timer). The
-    // audio thread never writes it — host-driven changes are told apart in
-    // the timer by comparing against the forwarding proxy's value.
+    // Message thread only.
     std::vector<float> _lastParameterValues;
 
     // Deferred load support (for state restoration)

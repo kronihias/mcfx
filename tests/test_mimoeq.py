@@ -883,13 +883,8 @@ def test_json_crossover_lp_freq_response():
 
 
 def test_automation_on_audio_thread_keeps_cascade_design_off_it(tmp_path):
-    """Host automation arriving on the audio thread: a single-biquad band's
-    change lands in the same render, while a cascade band's change (a full
-    filter design that reallocates) waits for the message thread and is
-    there once its timer has run.
-
-    --audio-thread renders on a separate thread while the message thread
-    waits, so no timer runs during the render."""
+    """Automation on the audio thread: a biquad band's change lands in the
+    render; a cascade band's redesign (allocates) waits for the message thread."""
     config = {
         "sample_rate": SR,
         "sos": [

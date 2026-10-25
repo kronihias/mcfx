@@ -673,15 +673,12 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
 
   int numChannels = buffer.getNumChannels();
 
-  // never grow the delay ring here: channels beyond what prepareToPlay
-  // sized it for are passed through untouched
+  // never grow the delay ring here: extra channels pass through untouched
   jassert (numChannels <= _delay_buffer.getNumChannels());
   numChannels = jmin (numChannels, _delay_buffer.getNumChannels());
 
-  // the signal generator runs every block (it keeps its own sequence state)
-  // into a buffer preallocated in prepareToPlay, in chunks if the host
-  // hands us a bigger block than announced. Empty before prepareToPlay:
-  // skip rather than loop forever on a zero-length chunk.
+  // run the generator every block (it keeps sequence state), chunked to the
+  // preallocated _sig_buf; skipped while _sig_buf is empty (no prepareToPlay)
   const int sigChunkLen = _sig_buf.getNumSamples();
   for (int pos = 0; sigChunkLen > 0 && pos < numSamples; pos += sigChunkLen)
   {
@@ -781,7 +778,7 @@ void Mcfx_gain_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, Mid
       buffer.applyGain(i, 0, numSamples, newGain);
     }
 
-    _gain_factor_.setUnchecked(i, newGain); // store old value, in place (no Array copy)
+    _gain_factor_.setUnchecked(i, newGain); // store old value (no Array copy)
   }
 
 

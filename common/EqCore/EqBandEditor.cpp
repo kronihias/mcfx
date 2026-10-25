@@ -1102,9 +1102,9 @@ void EqBandEditor::sliderValueChanged(Slider* s)
 
     if (lookaheadChanged)
     {
-        // Lookahead is structural (changes latency/PDC). The model is updated now,
-        // but the rebuild waits for drag-end (sliderDragEnded) to avoid PDC thrash;
-        // a non-drag change (text entry) rebuilds immediately.
+        // Lookahead is structural (changes latency/PDC). Update the model now, but
+        // defer the rebuild to drag-end (sliderDragEnded) to avoid PDC thrash; a
+        // non-drag change (text entry) rebuilds immediately.
         if (! dynLookaheadDragging_ && listener_ != nullptr)
             listener_->bandStructureChanged(bandIndex_);
         return;

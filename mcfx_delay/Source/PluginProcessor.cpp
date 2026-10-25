@@ -207,8 +207,7 @@ bool Mcfx_delayAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
 void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
 
-    // never grow the delay ring here: channels beyond what prepareToPlay
-    // sized it for are passed through untouched
+    // never grow the delay ring here: extra channels pass through untouched
     jassert (buffer.getNumChannels() <= _delay_buffer.getNumChannels());
     const int numChannels = jmin (buffer.getNumChannels(), _delay_buffer.getNumChannels());
 

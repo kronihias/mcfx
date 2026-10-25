@@ -35,11 +35,8 @@ GainNode::~GainNode() = default;
 
 void GainNode::applyParamChange (int channel, float db) noexcept
 {
-    // setGainDb's write-back below re-enters here on the thread doing it; skip
-    // that echo, the atomics already hold the value. A write from any other
-    // thread — host automation on the audio thread while the message thread
-    // mirrors — always lands. Atomics only: the write-back is not
-    // realtime-safe, and this runs on the audio thread.
+    // Skip only this thread's own write-back echo; writes from other threads
+    // (host automation) always land. Atomics only: runs on the audio thread.
     if (mirroringThread_.load() == juce::Thread::getCurrentThreadId())
         return;
     storeGainDb (channel, db);
@@ -89,8 +86,7 @@ void GainNode::setGainDb (int channel, float db) noexcept
     const bool linked = linked_.load (std::memory_order_relaxed);
     storeGainDb (channel, db);
 
-    // Mirror into the host-visible parameters; their echo back into
-    // applyParamChange is ignored on this thread only.
+    // Mirror into the host-visible parameters.
     if (! gainParams_.empty())
     {
         mirroringThread_.store (juce::Thread::getCurrentThreadId());

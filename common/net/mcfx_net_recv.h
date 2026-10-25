@@ -281,18 +281,15 @@ private:
     std::shared_ptr<PeerList> peers;
     std::shared_ptr<PeerList> peersSnapshot; // audio-thread cache
 
-    // Lists replaced while the audio thread may still hold them in
-    // peersSnapshot. NetThread frees them (and any PeerStream only they
-    // reference) once nothing else holds them, so the audio thread never
-    // drops a last reference and never frees a ring or a resampler.
-    // Guarded by peersLock.
+    // Replaced lists the audio thread may still hold in peersSnapshot.
+    // NetThread frees them, so the audio thread never drops a last
+    // reference (and never frees a PeerStream). Guarded by peersLock.
     std::vector<std::shared_ptr<PeerList>> retiredPeers;
 
     // Swap in a new peer list, retiring the old one. Caller holds peersLock.
     void publishPeers (std::shared_ptr<PeerList> newList);
 
-    // NetThread, once per netRecvOnce: free retired lists, evict stale
-    // peers, print what the audio thread left in the log flags below.
+    // NetThread: evict stale peers, free retired lists, print audio-thread logs.
     void netHousekeeping();
 
     int outputBlockSize = 0;
@@ -337,8 +334,7 @@ private:
     bool   pullInFastMode    = false;
     int    pullFastSilenceLogged = 0; // counts log spam — only print once per entry
 
-    // Fast-mode transitions, set by the audio thread and printed by
-    // NetThread (the audio thread never writes to stderr).
+    // Set by the audio thread, printed by NetThread.
     std::atomic<int>  fastModeEnterLog { 0 };   // > 0: entered at this many x realtime
     std::atomic<bool> fastModeExitLog  { false };
 

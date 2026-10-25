@@ -109,8 +109,7 @@ Mcfx_mimoeqAudioProcessor::Mcfx_mimoeqAudioProcessor()
 
     syncModelToAPVTS();
 
-    // Applies host automation that arrived off the message thread, and frees
-    // processing states the audio thread has retired.
+    // Applies parked automation and frees retired processing states.
     startTimerHz(50);
 }
 
@@ -332,7 +331,7 @@ EqChain* Mcfx_mimoeqAudioProcessor::getOrCreateChainForPath(int inCh, int outCh)
 
     auto* chain = new EqChain();
     chain->prepare(currentSampleRate_, currentBlockSize_);
-    // The audio thread's parameter sync looks paths up in the map.
+    // The audio thread's parameter sync reads the map.
     const SpinLock::ScopedLockType sl (modelLock_);
     ownedPathChains_.add(chain);
     pathChains_[{inCh, outCh}] = chain;
@@ -345,8 +344,7 @@ bool Mcfx_mimoeqAudioProcessor::removePathChain(int inCh, int outCh)
     if (it == pathChains_.end())
         return false;
 
-    // Unlink under the lock, delete after it (a band's convolver can take a
-    // while to shut down, and the audio thread's sync waits for the lock).
+    // Unlink under the lock, delete outside it (convolver teardown can be slow).
     std::unique_ptr<EqChain> doomed;
     {
         const SpinLock::ScopedLockType sl (modelLock_);
@@ -371,8 +369,7 @@ void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
     if (activeState_ == nullptr || ! needsParamSync_.load(std::memory_order_acquire))
         return;
 
-    // The model belongs to the message thread. If it is mid-edit, keep the
-    // request and try again next block rather than read a changing model.
+    // Model is mid-edit on the message thread: keep the request, retry next block.
     const SpinLock::ScopedTryLockType sl (modelLock_);
     if (! sl.isLocked())
         return;
@@ -408,9 +405,8 @@ void Mcfx_mimoeqAudioProcessor::doParamSyncIfNeeded()
 
 void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuffer&)
 {
-    // Lock-free state swap: pick up new processing state if available. Only
-    // while the garbage slot is empty: overwriting it would leak the state in
-    // it, so a pending state waits until the message thread has freed that.
+    // Lock-free state swap: pick up new processing state if available, but only
+    // while the garbage slot is empty (overwriting it would leak that state).
     auto* pending = garbageState_.load(std::memory_order_acquire) == nullptr
                         ? pendingState_.exchange(nullptr, std::memory_order_acquire)
                         : nullptr;
@@ -427,8 +423,7 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
         needsParamSync_.store(true, std::memory_order_relaxed);
     }
 
-    // Automation parked by parameterChanged() lands with this block, not at
-    // timer rate: offline renders run far faster than the timer.
+    // Not left to the timer: offline renders run far faster than it.
     applyPendingAutomationOnAudioThread();
 
     doParamSyncIfNeeded();
@@ -444,8 +439,7 @@ void Mcfx_mimoeqAudioProcessor::processBlock(AudioSampleBuffer& buffer, MidiBuff
         return;
     }
 
-    // A host block longer than prepareToPlay announced would overrun the
-    // scratch buffers, so cut it into sub-blocks of the prepared size.
+    // Larger than prepared: split so the scratch buffers aren't overrun.
     const int numCh = jmin(buffer.getNumChannels(), chunkViewChannels_);
     for (int start = 0; start < numSamples; start += maxBlock)
     {
@@ -697,9 +691,8 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
         }
     }
 
-    // Build the new model off to the side (band setup, FIR convolvers), then
-    // swap it in under the model lock, so the audio thread's parameter sync
-    // never sees it half-replaced and only misses the lock for the swap.
+    // Build the new model off to the side, then swap it in under the model
+    // lock so the audio thread's sync never sees it half-replaced.
     EqChain newDiag;
     newDiag.fromJson(var(diagBands), sr);
     newDiag.prepare(currentSampleRate_, currentBlockSize_);
@@ -722,8 +715,7 @@ void Mcfx_mimoeqAudioProcessor::setStateInformation(const void* data, int sizeIn
         pathChains_.swap(newPaths);
         ownedPathChains_.swapWith(newOwnedPaths);
     }
-    // The old model now sits in the temporaries and is freed on return, after
-    // the editor below has been told to let go of its bands.
+    // The old model is freed on return, after the editor has let go of it.
 
     // Build and publish new processing state (lock-free)
     rebuildProcessingChains();
@@ -932,8 +924,7 @@ void Mcfx_mimoeqAudioProcessor::syncRestoreState(const String& targetState)
             diagBands.add(bandJson);
     }
 
-    // Apply parameter-only changes to the model diagonal chain (under the
-    // model lock: the audio thread's parameter sync reads these bands)
+    // Apply parameter-only changes to the model diagonal chain
     {
         const SpinLock::ScopedLockType sl (modelLock_);
         for (int i = 0; i < diagBands.size(); ++i)
@@ -1071,9 +1062,7 @@ AudioProcessorValueTreeState::ParameterLayout Mcfx_mimoeqAudioProcessor::createP
     return layout;
 }
 
-// "B01_Freq" -> band 0, kAutoFreq. Character tests only, no substring():
-// this runs on the audio thread under host automation, where it must not
-// allocate.
+// "B01_Freq" -> band 0, kAutoFreq. No substring(): may run on the audio thread.
 static bool parseAutomationParamID(const String& id, int& bandIdx, int& param)
 {
     if (id.length() < 5 || id[0] != 'B' || id[3] != '_'
@@ -1134,18 +1123,15 @@ void Mcfx_mimoeqAudioProcessor::parameterChanged(const String& parameterID, floa
 
     if (! MessageManager::existsAndIsCurrentThread())
     {
-        // Audio (or another host) thread: the model, the band designs and the
-        // change broadcast all belong to the message thread. Park the value;
-        // timerCallback() applies it there. A newer value overwrites an
-        // unapplied older one, which is all automation needs.
+        // Not the message thread: park the value for processBlock()/timerCallback().
+        // A newer value overwrites an unapplied older one.
         autoValue_[(size_t) slot].store(newValue, std::memory_order_relaxed);
         autoDirty_[(size_t) slot].store(true, std::memory_order_release);
         autoPending_.store(true, std::memory_order_release);
         return;
     }
 
-    // Message thread: apply now. Drop a parked value for the same parameter,
-    // which is older than this one.
+    // Message thread: apply now and drop any older parked value.
     autoDirty_[(size_t) slot].store(false, std::memory_order_relaxed);
     {
         const SpinLock::ScopedLockType sl (modelLock_);
@@ -1175,14 +1161,10 @@ void Mcfx_mimoeqAudioProcessor::applyPendingAutomation()
 
 void Mcfx_mimoeqAudioProcessor::applyPendingAutomationOnAudioThread()
 {
-    // Only what is cheap and leaves the model's storage alone: Enable, and
-    // freq/Q/gain of single-biquad bands (a closed-form recompute). A
-    // cascade band's setters run the full filter design and resize its
-    // coefficient storage, which the editor reads without the lock, so
-    // those values stay parked for the timer.
-    // Never waits: if the editor holds the lock, the values stay parked for
-    // the next block. Sets the sync flag directly: requestParameterSync()
-    // may post an async update, so the timer calls it afterwards.
+    // Only Enable and single-biquad freq/Q/gain. A cascade band's setters
+    // redesign and resize coefficients the editor reads unlocked, so those
+    // stay parked for the timer. Never waits on the lock; sets the sync flag
+    // directly since requestParameterSync() may post an async update.
     if (! autoPending_.load(std::memory_order_acquire))
         return;
 
@@ -1230,8 +1212,7 @@ void Mcfx_mimoeqAudioProcessor::timerCallback()
         sendChangeMessage();      // editor refresh
     }
 
-    // A pending processing state waits while the garbage slot is full (see
-    // processBlock), so empty it here too, not only on the next rebuild.
+    // A pending state waits for an empty garbage slot (see processBlock).
     delete garbageState_.exchange(nullptr, std::memory_order_acquire);
 }
 

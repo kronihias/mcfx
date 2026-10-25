@@ -250,9 +250,8 @@ public:
     void setInvertGain(bool inv);
 
     // --- Delay ---
-    /** Longest delay the band editor offers. prepare() sizes the delay line to
-        at least this, so the audio-thread parameter sync can change the delay
-        without reallocating. */
+    /** Longest delay the band editor offers; prepare() sizes the line to at
+        least this so the audio-thread sync never reallocates. */
     static constexpr int kMaxDelaySamples = 24000;
     int getDelaySamples() const { return delaySamples_; }
     void setDelaySamples(int samples);

@@ -242,9 +242,8 @@ private:
     unsigned int _ConvBufferSize; // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
     unsigned int _MaxPartSize; // maximum size of the partition
 
-    // Handshake with the loader thread (seq_cst on purpose: processBlock
-    // raises _isProcessing before it checks _configLoaded, the loader drops
-    // _configLoaded before it waits for _isProcessing to fall).
+    // seq_cst handshake: processBlock raises _isProcessing before checking
+    // _configLoaded; the loader clears _configLoaded before waiting on it.
     std::atomic<bool> _isProcessing;
 
     std::atomic<bool> _configLoaded; // is a configuration successfully loaded?
