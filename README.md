@@ -306,7 +306,7 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
-### Unreleased
+### 0.9.1 (2026-10-25)
 
 - installers: the VST3 installers (macOS, Windows) now also include **every plug-in as a fixed 128-channel VST2** (`mcfx_<name>128`), for hosts that need more channels than a VST3 offers (64 on Windows). `mcfx_anything128` and `mcfx_graph128` carry their plug-in scanner.
 - `mcfx_meter`: **oscilloscope view** — a channel range overlaid or stacked, auto or fixed time and amplitude, zero-crossing trigger, pause with scroll-back through the last second, hover readout and A/B cursors (time difference and frequency).
