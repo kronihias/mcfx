@@ -102,6 +102,7 @@ private:
     int   selected_ = -1;
 
     Grid  grid_;
+    float s_ = 1.f;                    // display scale, see displayScaleFor()
     Image gradientImage_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DotMatrixComponent)

@@ -29,6 +29,7 @@
 #include "ScopeCapture.h"
 #include "OscilloscopeComponent.h"
 #include "SpectrogramComponent.h"
+#include "SpectrumComponent.h"
 
 //==============================================================================
 /**
@@ -100,7 +101,7 @@ public:
         parameter: it is a view setting, so it has no business being automatable,
         and adding a fifth parameter would change getNumParameters() — which is
         the bound of the state loop below and of the host's parameter list. */
-    enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2, Dots = 3, Scope = 4, Spectrogram = 5 };
+    enum class ViewMode { Bars = 0, Circle = 1, Waterfall = 2, Dots = 3, Scope = 4, Spectrogram = 5, Spectrum = 6 };
     ViewMode _view_mode = ViewMode::Bars;
 
     /** Bumped by every setStateInformation() that restored the view settings
@@ -117,6 +118,7 @@ public:
     int _size_dots_w   = 420, _size_dots_h   = 260;
     int _size_scope_w  = 900, _size_scope_h  = 520;
     int _size_spec_w   = 1000, _size_spec_h  = 560;
+    int _size_rta_w    = 1000, _size_rta_h   = 560;
 
     /** Highlighted channel, -1 for none. Shared by the ring, the waterfall and
         the dots: it is one idea — which channel you are looking at — so it
@@ -136,6 +138,9 @@ public:
 
     /** The spectrogram reads the same sample history as the scope. */
     SpectroSettings _spectro_settings;
+
+    /** The spectrum reads it too. */
+    SpectrumSettings _spectrum_settings;
 
     float _hold; // peak hold time, seconds
     float _fall; // peak fallback rate, dB/s

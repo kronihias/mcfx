@@ -19,6 +19,7 @@
 
 #include "SpectrogramComponent.h"
 #include "OscilloscopeComponent.h"   // displayScaleFor()
+#include "ViewStyle.h"
 
 namespace
 {
@@ -29,7 +30,7 @@ namespace
 
     constexpr int   kToolbarH = 22;
     constexpr int   kPlotTop  = 28;
-    constexpr float kMarginL  = 46.f, kMarginR = 4.f, kMarginB = 16.f;
+    constexpr float kMarginL  = 46.f, kMarginR = 6.f, kMarginB = 16.f;
     constexpr float kLaneGap  = 6.f;
 
     constexpr float kAvgTauSec   = 1.f;     // the strip's average
@@ -101,7 +102,7 @@ namespace
 
     constexpr int kNumColourScales = 3, kNumNormalise = 4, kNumFreqScales = 3, kNumWindows = 4;
 
-    const Colour kAccent (0xffff9a3d);
+    const Colour kAccent = ViewStyle::accentOrange;
 }
 
 //==============================================================================
@@ -149,23 +150,14 @@ SpectrogramComponent::SpectrogramComponent()
     addAndMakeVisible (btnPause_);
     btnPause_.setButtonText ("pause");
     btnPause_.setClickingTogglesState (true);
-    btnPause_.setColour (TextButton::buttonOnColourId, Colour (0xffb03030));
+    btnPause_.setColour (TextButton::buttonOnColourId, ViewStyle::pauseButtonOn);
     btnPause_.setTooltip ("Stop scrolling to read the picture. Hover for frequency, note, level and time.");
     btnPause_.addListener (this);
 
-    {
-        // A gear: eight teeth around a hole.
-        Path gear;
-        gear.addStar ({ 8.f, 8.f }, 8, 5.2f, 8.f);
-        gear.addEllipse (5.2f, 5.2f, 5.6f, 5.6f);
-        gear.setUsingNonZeroWinding (false);
-        btnSettings_.setShape (gear, false, true, false);
-        btnSettings_.setBorderSize (BorderSize<int> (3));
-        btnSettings_.setTooltip ("Display settings: colours, colour scale, normalisation, "
-                                 "frequency axis, note names, window size...");
-        btnSettings_.onClick = [this] { showSettings(); };
-        addAndMakeVisible (btnSettings_);
-    }
+    ViewStyle::makeGearButton (btnSettings_, "Display settings: colours, colour scale, normalisation, "
+                                             "frequency axis, note names, window size...");
+    btnSettings_.onClick = [this] { showSettings(); };
+    addAndMakeVisible (btnSettings_);
 
     syncControlsFromSettings();
 }
@@ -904,11 +896,11 @@ namespace
 {
     /** The display options, in a callout from the gear button. Edits the
         settings in place and reports each change. */
-    class SpectroSettingsPanel : public Component
+    class SpectroSettingsPanel : public ViewStyle::SettingsPanel<SpectroSettings>
     {
     public:
         SpectroSettingsPanel (SpectroSettings& s, std::function<void()> onChange)
-            : settings (s), changed (std::move (onChange))
+            : SettingsPanel (s, std::move (onChange))
         {
             addRow ("colours",        SpectrogramComponent::colourMapNames(), s.colourMap,
                     "Colour map. The first four read correctly in greyscale; black on white "
@@ -949,57 +941,8 @@ namespace
                        "tells a fundamental and its harmonics from unrelated tones.",
                        [] (SpectroSettings& x, bool v) { x.harmonics = v; });
 
-            setSize (330, 8 + (int) combos.size() * 28 + (int) toggles.size() * 24 + 6);
+            fitToContent();
         }
-
-        void resized() override
-        {
-            int y = 8;
-            for (size_t i = 0; i < combos.size(); ++i, y += 28)
-            {
-                labels[i]->setBounds (8, y, 104, 22);
-                combos[i]->setBounds (114, y, getWidth() - 122, 22);
-            }
-            for (auto* t : toggles)
-            {
-                t->setBounds (110, y, getWidth() - 118, 22);
-                y += 24;
-            }
-        }
-
-    private:
-        void addRow (const String& name, const StringArray& items, int selected, const String& tip,
-                     std::function<void (SpectroSettings&, int)> set)
-        {
-            auto* l = labels.add (new Label ({}, name));
-            l->setColour (Label::textColourId, Colours::white);
-            l->setJustificationType (Justification::centredRight);
-            addAndMakeVisible (l);
-
-            auto* cb = combos.add (new ComboBox());
-            cb->addItemList (items, 1);
-            cb->setSelectedItemIndex (selected, dontSendNotification);
-            cb->setTooltip (tip);
-            cb->onChange = [this, cb, set] { set (settings, cb->getSelectedItemIndex()); changed(); };
-            addAndMakeVisible (cb);
-        }
-
-        void addToggle (const String& name, bool on, const String& tip,
-                        std::function<void (SpectroSettings&, bool)> set)
-        {
-            auto* t = toggles.add (new ToggleButton (name));
-            t->setToggleState (on, dontSendNotification);
-            t->setTooltip (tip);
-            t->setColour (ToggleButton::textColourId, Colours::white);
-            t->onClick = [this, t, set] { set (settings, t->getToggleState()); changed(); };
-            addAndMakeVisible (t);
-        }
-
-        SpectroSettings& settings;
-        std::function<void()> changed;
-        OwnedArray<Label> labels;
-        OwnedArray<ComboBox> combos;
-        OwnedArray<ToggleButton> toggles;
     };
 }
 
@@ -1014,7 +957,7 @@ void SpectrogramComponent::showSettings()
             if (safe != nullptr)
                 safe->settingsChanged();
         });
-    callout_ = &CallOutBox::launchAsynchronously (std::move (panel), btnSettings_.getScreenBounds(), nullptr);
+    callout_ = &ViewStyle::launchCallout (std::move (panel), btnSettings_);
 }
 
 void SpectrogramComponent::settingsChanged()
@@ -1234,11 +1177,6 @@ void SpectrogramComponent::paint (Graphics& g)
     // Text and margins scale with the window, for projection.
     auto S = [this] (float v) { return roundToInt (v * s_); };
 
-    // Candidate grid frequencies, fine enough to still label a zoomed-in
-    // range; the ones that would crowd their neighbour are skipped.
-    static const float gridHz[] = { 20.f, 30.f, 40.f, 50.f, 60.f, 80.f, 100.f, 150.f, 200.f, 300.f,
-                                    400.f, 500.f, 600.f, 800.f, 1000.f, 1500.f, 2000.f, 3000.f, 4000.f,
-                                    5000.f, 6000.f, 8000.f, 10000.f, 12000.f, 15000.f, 20000.f };
 
     // The image rows the zoom shows (image y grows downwards, rows upwards).
     const float imgTop = (float) rows_ - rowPos (zHi);
@@ -1289,61 +1227,61 @@ void SpectrogramComponent::paint (Graphics& g)
         const bool hasStrip = s.getWidth() >= 1.f;
         if (hasStrip)
         {
-        g.setColour (Colour (0xe0101010));
-        g.fillRect (s);
+            g.setColour (ViewStyle::plotBg);
+            g.fillRect (s);
 
-        auto dbToX = [&] (float db) { return s.getX() + jlimit (0.f, 1.f, (db - floorDb) / rangeDb()) * s.getWidth(); };
+            auto dbToX = [&] (float db) { return s.getX() + jlimit (0.f, 1.f, (db - floorDb) / rangeDb()) * s.getWidth(); };
 
-        g.setColour (Colours::white.withAlpha (0.07f));
-        for (float d = topDb(); d > floorDb; d -= 12.f)
-            g.drawVerticalLine ((int) dbToX (d), s.getY(), s.getBottom());
+            g.setColour (Colours::white.withAlpha (ViewStyle::gridMinor));
+            for (float d = topDb(); d > floorDb; d -= 12.f)
+                g.drawVerticalLine ((int) dbToX (d), s.getY(), s.getBottom());
 
-        {
-            Graphics::ScopedSaveState ss (g);
-            g.reduceClipRegion (s.getSmallestIntegerContainer());
-
-            const int r0 = jlimit (0, rows_ - 1, (int) std::floor (rowPos (zLo)) - 1);
-            const int r1 = jlimit (0, rows_ - 1, (int) std::ceil (rowPos (zHi)) + 1);
-
-            Path avg, inst, peak;
-            for (int r = r0; r <= r1; ++r)
             {
-                const float y = hzToY (rowHz (r), s);
-                const float aDb = 10.f * std::log10 (jmax (lane.avgPow[(size_t) r], 1.0e-20f));
-                const Point<float> pa (dbToX (aDb), y), pi (dbToX (lane.inst[(size_t) r]), y),
-                                   pp (dbToX (lane.peak[(size_t) r]), y);
-                if (r == r0)
+                Graphics::ScopedSaveState ss (g);
+                g.reduceClipRegion (s.getSmallestIntegerContainer());
+
+                const int r0 = jlimit (0, rows_ - 1, (int) std::floor (rowPos (zLo)) - 1);
+                const int r1 = jlimit (0, rows_ - 1, (int) std::ceil (rowPos (zHi)) + 1);
+
+                Path avg, inst, peak;
+                for (int r = r0; r <= r1; ++r)
                 {
-                    avg.startNewSubPath (s.getX(), y);
-                    inst.startNewSubPath (pi);
-                    peak.startNewSubPath (pp);
+                    const float y = hzToY (rowHz (r), s);
+                    const float aDb = 10.f * std::log10 (jmax (lane.avgPow[(size_t) r], 1.0e-20f));
+                    const Point<float> pa (dbToX (aDb), y), pi (dbToX (lane.inst[(size_t) r]), y),
+                                       pp (dbToX (lane.peak[(size_t) r]), y);
+                    if (r == r0)
+                    {
+                        avg.startNewSubPath (s.getX(), y);
+                        inst.startNewSubPath (pi);
+                        peak.startNewSubPath (pp);
+                    }
+                    avg.lineTo (pa);
+                    if (r != r0) { inst.lineTo (pi); peak.lineTo (pp); }
+                    if (r == r1)
+                        avg.lineTo (s.getX(), y);
                 }
-                avg.lineTo (pa);
-                if (r != r0) { inst.lineTo (pi); peak.lineTo (pp); }
-                if (r == r1)
-                    avg.lineTo (s.getX(), y);
+                avg.closeSubPath();
+
+                g.setColour (Colour (0xff3d7bd9).withAlpha (0.45f));
+                g.fillPath (avg);
+                g.setColour (Colours::white.withAlpha (0.75f));
+                g.strokePath (inst, PathStrokeType (jmax (1.f, s_)));
+                g.setColour (kAccent.withAlpha (0.9f));
+                g.strokePath (peak, PathStrokeType (jmax (1.f, s_)));
             }
-            avg.closeSubPath();
 
-            g.setColour (Colour (0xff3d7bd9).withAlpha (0.45f));
-            g.fillPath (avg);
-            g.setColour (Colours::white.withAlpha (0.75f));
-            g.strokePath (inst, PathStrokeType (jmax (1.f, s_)));
-            g.setColour (kAccent.withAlpha (0.9f));
-            g.strokePath (peak, PathStrokeType (jmax (1.f, s_)));
-        }
-
-        // Colour legend along the strip's bottom edge: the strip's level axis
-        // is the colour scale's, so this is exactly how a level is coloured.
-        {
-            const float lh = 5.f * s_;
-            for (int px = 0; px < (int) s.getWidth(); ++px)
+            // Colour legend along the strip's bottom edge: the strip's level axis
+            // is the colour scale's, so this is exactly how a level is coloured.
             {
-                const float db = floorDb + rangeDb() * ((float) px + 0.5f) / s.getWidth();
-                g.setColour (colourFor (db));
-                g.fillRect (s.getX() + (float) px, s.getBottom() - lh, 1.f, lh);
+                const float lh = 5.f * s_;
+                for (int px = 0; px < (int) s.getWidth(); ++px)
+                {
+                    const float db = floorDb + rangeDb() * ((float) px + 0.5f) / s.getWidth();
+                    g.setColour (colourFor (db));
+                    g.fillRect (s.getX() + (float) px, s.getBottom() - lh, 1.f, lh);
+                }
             }
-        }
         }
 
         // Shared frequency grid, across history and strip alike: Hz, or notes
@@ -1379,9 +1317,9 @@ void SpectrogramComponent::paint (Graphics& g)
         }
         else
         {
-            for (float f : gridHz)
-                if (f >= zLo && f <= zHi)
-                    marks.push_back ({ f, f >= 1000.f ? String (f / 1000.f) + "k" : String ((int) f), true });
+            // Decades first, then the 2s and 5s, so thinning keeps the round ones.
+            for (float f : ViewStyle::freqTicks (zLo, zHi, [&] (float hz) { return hzToY (hz, h); }, 16.f * s_))
+                marks.push_back ({ f, ViewStyle::freqLabel (f), ViewStyle::isDecade (f) });
         }
 
         if (kbW > 0.f)
@@ -1413,13 +1351,13 @@ void SpectrogramComponent::paint (Graphics& g)
             if (lastY - y < (notes ? 12.f : 16.f) * s_) continue;   // would crowd the one below
             lastY = y;
 
-            g.setColour (Colours::white.withAlpha (mk.major ? 0.14f : 0.07f));
+            g.setColour (Colours::white.withAlpha (mk.major ? ViewStyle::gridMajor : ViewStyle::gridMinor));
             g.drawHorizontalLine ((int) y, h.getX(), h.getRight());
             if (hasStrip)
                 g.drawHorizontalLine ((int) y, s.getX(), s.getRight());
             if (h.getHeight() >= 60.f * s_)
             {
-                g.setColour (Colours::white.withAlpha (mk.major ? 0.8f : 0.55f));
+                g.setColour (Colours::white.withAlpha (mk.major ? 0.85f : ViewStyle::axisText));
                 // Kept inside the lane, so the top label of one stacked lane
                 // cannot land on the bottom label of the lane above.
                 const int ly = jlimit ((int) h.getY(), (int) h.getBottom() - S (12), (int) y - S (6));
@@ -1434,12 +1372,12 @@ void SpectrogramComponent::paint (Graphics& g)
                          : "ch " + String (settings_->firstCh + 1) + "-" + String (settings_->lastCh + 1) + " avg";
         g.setFont (Font (FontOptions (11.f * s_)));
         const int lw = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), label) + S (10);
-        g.setColour (Colours::black.withAlpha (0.55f));
-        g.fillRect ((int) h.getX() + 3, (int) h.getY() + 3, lw, S (14));
+        g.setColour (Colours::black.withAlpha (ViewStyle::plateAlpha));
+        g.fillRoundedRectangle ((float) h.getX() + 3.f, (float) h.getY() + 3.f, (float) lw, (float) S (14), 3.f * s_);
         g.setColour (Colours::white.withAlpha (0.85f));
         g.drawText (label, (int) h.getX() + 3, (int) h.getY() + 3, lw, S (14), Justification::centred);
 
-        g.setColour (Colours::white.withAlpha (0.25f));
+        g.setColour (Colours::white.withAlpha (ViewStyle::frame));
         g.drawRect (h, 1.f);
         if (hasStrip)
             g.drawRect (s, 1.f);
@@ -1451,20 +1389,30 @@ void SpectrogramComponent::paint (Graphics& g)
         const auto h = historyArea ((int) lanes_.size() - 1);
         const auto s = stripArea ((int) lanes_.size() - 1);
         g.setFont (Font (FontOptions (10.f * s_)));
-        g.setColour (Colours::white.withAlpha (0.75f));
         const int y = (int) h.getBottom() + 2;
-        for (int i = 0; i <= 4; ++i)
+
+        // Round times, relative to the real "now" (the newest column is lead
+        // old), as many as fit; one whose label would leave the history is
+        // left out rather than squeezed against the strip's scale.
+        const float tRight = -leadSec, tLeft = -leadSec - span;
+        const float step = ViewStyle::niceStep (span * 70.f * s_ / jmax (1.f, h.getWidth()));
+        const int labelW = S (50);
+        for (float t = std::ceil (tLeft / step) * step; t <= tRight + 1.0e-4f; t += step)
         {
-            const float x = h.getX() + h.getWidth() * (float) i / 4.f;
-            // Relative to the real "now": the newest column is lead old.
-            const float t = -leadSec - span * (1.f - (float) i / 4.f);
-            const String txt = (std::abs (t) < 1.f ? String (t, 2)
-                                 : std::abs (t) < 10.f ? String (t, 1) : String (roundToInt (t))) + " s";
-            const auto j = i == 0 ? Justification::centredLeft : (i == 4 ? Justification::centredRight : Justification::centred);
-            g.drawText (txt, i == 0 ? (int) x : (i == 4 ? (int) x - S (60) : (int) x - S (30)), y, S (60), S (12), j);
+            const float x = h.getX() + (t - tLeft) / span * h.getWidth();
+            const int lx = (int) x - labelW / 2;
+            if (lx < (int) h.getX() - S (20) || lx + labelW > (int) h.getRight() + 2)
+                continue;
+            const float tr = std::abs (t) < 1.0e-4f ? 0.f : t;
+            const String txt = (step < 1.f ? String (tr, step < 0.1f ? 2 : 1) : String (roundToInt (tr))) + " s";
+            g.setColour (Colours::white.withAlpha (ViewStyle::gridMinor));
+            g.drawVerticalLine ((int) x, h.getBottom() - 4.f * s_, h.getBottom());
+            g.setColour (Colours::white.withAlpha (ViewStyle::axisText));
+            g.drawText (txt, lx, y, labelW, S (12), Justification::centred);
         }
         if (s.getWidth() >= 1.f)
         {
+            g.setColour (Colours::white.withAlpha (ViewStyle::axisText));
             g.drawText (String ((int) floorDb), (int) s.getX(), y, S (40), S (12), Justification::centredLeft);
             g.drawText (String (roundToInt (topDb())) + " dB", (int) s.getRight() - S (50), y, S (50), S (12),
                         Justification::centredRight);
@@ -1474,20 +1422,12 @@ void SpectrogramComponent::paint (Graphics& g)
     // Status, top right of the first history: pause, and the zoom with how to undo it.
     {
         const auto h = historyArea (0);
-        String st;
+        int row = 0;
         if (zoomed)
-            st << formatHz (zLo) << " - " << formatHz (zHi) << "   (double click: all)";
+            ViewStyle::drawStatusTag (g, formatHz (zLo) + " - " + formatHz (zHi) + "   " + ViewStyle::resetHint(),
+                                      Colours::white.withAlpha (0.85f), h, row++, s_);
         if (paused_)
-            st << (st.isEmpty() ? "" : "   ") << "PAUSED";
-        if (st.isNotEmpty())
-        {
-            g.setFont (Font (FontOptions (11.f * s_)));
-            const int tw = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), st) + S (10);
-            g.setColour (Colours::black.withAlpha (0.55f));
-            g.fillRect ((int) h.getRight() - tw - 3, (int) h.getY() + 3, tw, S (14));
-            g.setColour (paused_ ? Colour (0xffff6060) : Colours::white.withAlpha (0.85f));
-            g.drawText (st, (int) h.getRight() - tw - 3, (int) h.getY() + 3, tw, S (14), Justification::centred);
-        }
+            ViewStyle::drawStatusTag (g, "PAUSED", ViewStyle::pausedText, h, row, s_);
     }
 
     // Hover: one horizontal line across history and strip — the shared axis —
@@ -1509,14 +1449,13 @@ void SpectrogramComponent::paint (Graphics& g)
     const float hz = yToHz (hover_.y, h);
     const int row = jlimit (0, rows_ - 1, (int) rowPos (hz));
 
-    g.setColour (Colours::white.withAlpha (0.4f));
+    g.setColour (Colours::white.withAlpha (ViewStyle::crosshair));
     g.drawHorizontalLine ((int) hover_.y, h.getX(), h.getRight());
     g.drawHorizontalLine ((int) hover_.y, s.getX(), s.getRight());
 
     StringArray lines;
     lines.add (formatHz (hz) + "   " + noteName (hz));
 
-    if (inH || inS)
     {
         // Harmonic cursor: 2x..20x the pointer's frequency, longer ticks on the
         // even and the fourfold ones (as Sonic Visualiser marks them). Lines a
@@ -1566,23 +1505,7 @@ void SpectrogramComponent::paint (Graphics& g)
         lines.add ("peak " + String (lane.peak[(size_t) row], 1) + " dB");
     }
 
-    g.setFont (Font (FontOptions (11.f * s_)));
-    int bw = 0;
-    for (auto& l : lines) bw = jmax (bw, GlyphArrangement::getStringWidthInt (g.getCurrentFont(), l));
-    bw += S (12);
-    const int lh = S (14);
-    const int bh = lh * lines.size() + S (6);
-    const auto area = plotArea();
-    int bx = (int) hover_.x + 12, by = (int) hover_.y + 12;
-    if (bx + bw > (int) area.getRight())  bx = (int) hover_.x - 12 - bw;
-    if (by + bh > (int) area.getBottom()) by = (int) hover_.y - 12 - bh;
-    by = jmax ((int) area.getY(), by);
-
-    g.setColour (Colours::black.withAlpha (0.78f));
-    g.fillRoundedRectangle ((float) bx, (float) by, (float) bw, (float) bh, 3.f);
-    g.setColour (Colours::white);
-    for (int i = 0; i < lines.size(); ++i)
-        g.drawText (lines[i], bx + S (6), by + S (3) + lh * i, bw - S (8), lh, Justification::centredLeft);
+    ViewStyle::drawReadoutBox (g, lines, {}, hover_, plotArea(), s_);
 }
 
 //==============================================================================

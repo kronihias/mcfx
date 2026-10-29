@@ -58,6 +58,38 @@ float iec_scale(float dB)
     
 }
 //[MiscUserDefs] You can add your own user definitions and misc code here...
+
+/** The gradient images have the scale marks baked in as rows of pure white.
+    The one at -50 dB has no label (the scale hides it) and sits 13 px under
+    -40 and 8 px over -60, so at the quiet end it turns three marks plus the
+    peak tick into a white smear. Returns a copy with that row painted over by
+    its neighbour; the cached original is shared with the dots and ring views. */
+static Image withoutTickAt (const Image& src, float dB)
+{
+    Image img = src.createCopy();
+    const int h = img.getHeight();
+    if (h < 3)
+        return img;
+
+    auto isTick = [&img] (int y)
+    {
+        for (int x = 0; x < img.getWidth(); ++x)
+            if (img.getPixelAt (x, y).getARGB() != 0xffffffff)
+                return false;
+        return true;
+    };
+
+    const int y0 = roundToInt ((float) h * (1.f - iec_scale (dB)));
+    for (int y = jmax (1, y0 - 2); y <= jmin (h - 1, y0 + 2); ++y)
+        if (isTick (y))
+        {
+            for (int x = 0; x < img.getWidth(); ++x)
+                img.setPixelAt (x, y, img.getPixelAt (x, y - 1));
+            break;
+        }
+
+    return img;
+}
 //[/MiscUserDefs]
 
 //==============================================================================
@@ -69,9 +101,9 @@ MeterComponent::MeterComponent ()
     _offset(0)
     
 {
-    cachedImage_meter_gradient_png = ImageCache::getFromMemory (meter_gradient_png, meter_gradient_pngSize);
+    cachedImage_meter_gradient_png = withoutTickAt (ImageCache::getFromMemory (meter_gradient_png, meter_gradient_pngSize), -50.f);
     
-    cachedImage_meter_gradient_off_png = ImageCache::getFromMemory (meter_gradient_off_png, meter_gradient_off_pngSize);
+    cachedImage_meter_gradient_off_png = withoutTickAt (ImageCache::getFromMemory (meter_gradient_off_png, meter_gradient_off_pngSize), -50.f);
     //[UserPreSize]
     //[/UserPreSize]
 

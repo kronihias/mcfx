@@ -158,7 +158,7 @@ Per-channel gain and delay calibration tool, useful for multi-speaker setups.
 
 ### mcfx_meter
 
-Multichannel level meter with RMS, peak, and peak hold. Six views: the classic bars, a ring that stays compact at any channel count, a dot grid small enough to leave open in a corner, a 3D waterfall showing every channel's spectrum at once, an oscilloscope and a spectrogram.
+Multichannel level meter with RMS, peak, and peak hold. Seven views: the classic bars, a ring that stays compact at any channel count, a dot grid small enough to leave open in a corner, a 3D waterfall showing every channel's spectrum at once, an oscilloscope, a spectrogram and a real-time spectrum analyser.
 
 <img src="screenshots/mcfx_meter_bars.png" width="700" alt="mcfx_meter bar view">
 
@@ -169,8 +169,9 @@ Multichannel level meter with RMS, peak, and peak hold. Six views: the classic b
 
 <img src="screenshots/mcfx_meter_waterfall.png" width="700" alt="mcfx_meter waterfall view">
 
-- **Scope**: a range of channels, overlaid or stacked; auto or fixed time and amplitude range; rising zero-crossing trigger; pause and scroll back through the last second; hover readout and A/B cursors for time difference and frequency.
+- **Scope**: a range of channels, overlaid or stacked; auto or fixed time and amplitude range; rising zero-crossing trigger; pause and scroll back through the last second; hover readout and A/B cursors for time difference, frequency and each trace's level at both cursors.
 - **Spectrogram**: scrolling history on a log, mel or linear frequency axis, with a live spectrum strip (instant, average, held peak) on the same axis and dB scale. A channel range averaged or stacked (up to 16), span, top and range of the scale, wheel zoom and drag pan, pause, hover readout with note names. "Fine bass" (the default) takes the rows below ~450 Hz from a constant-Q transform, which separates 50 Hz from 55 Hz; clicks line up from 20 Hz to 20 kHz, and the time axis shows the resulting delay (0.34 s fine, 85 ms fast). The gear button opens display settings: 11 colour maps, dB / meter / linear colour scale, normalisation, note-name axis, treble window size, harmonic cursor.
+- **Spectrum**: real-time analyser on a log frequency axis, levels in dBFS (a full-scale sine reads 0 dB). A channel range overlaid in the scope's channel colours or power-averaged into one curve (up to 16); time averaging (none, 125 ms, 1 s, 5 s); fractional-octave smoothing (1/24 to 1/3 octave) or third-octave bands, which read a tone at its level and noise at its band power; falling or held peak curves (a click clears them); FFT window 4096 to 32768 points; zoom with the wheel or a pinch and pan by dragging or two-finger scrolling, on either axis (drag an axis along to move it, across to zoom it; double click resets), pause, hover readout with note names and every curve's level.
 - Every view but the bars can be **popped out** into its own window or made **fullscreen** on any display, e.g. for a projector; text and lines grow with the window.
 
 <img src="screenshots/mcfx_meter_scope.png" width="700" alt="mcfx_meter scope view">

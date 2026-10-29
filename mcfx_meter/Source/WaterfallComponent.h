@@ -146,6 +146,7 @@ private:
     int   hoverFreqCh_   = 0;
 
     Layout layout_;
+    float  s_ = 1.f;                    // display scale, see displayScaleFor()
 
     // Scratch, so paint() allocates nothing per frame.
     std::vector<float> bandX_;          // freqToNorm per band — constant, so cached

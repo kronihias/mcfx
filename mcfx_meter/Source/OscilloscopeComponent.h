@@ -50,8 +50,9 @@ struct ScopeSettings
     an amplitude range that are each either auto or one of a few fixed steps,
     a trigger switch and pause. Everything else is the mouse:
       - hover:            crosshair with time and the level of every trace
-      - click:            set cursor A, then B (shows the time difference and
-                          the matching frequency); double click clears them
+      - click:            set cursor A, then B (shows the time difference, the
+                          matching frequency and every trace's level at A, B
+                          and B - A); double click clears them
       - wheel:            time zoom;  shift + wheel: amplitude zoom
       - drag (paused):    scroll back through the captured second */
 class OscilloscopeComponent : public Component,
@@ -84,6 +85,9 @@ public:
     void mouseDoubleClick (const MouseEvent&) override;
     void mouseWheelMove (const MouseEvent&, const MouseWheelDetails&) override;
 
+    /** A channel's trace colour; the spectrum view uses the same ones. */
+    static Colour channelColour (int ch);
+
 private:
     void comboBoxChanged (ComboBox*) override;
     void buttonClicked (Button*) override;
@@ -111,7 +115,6 @@ private:
     float  valueAt (int ch, double idx) const;
 
     void drawTrace (Graphics&, int ch, Rectangle<float> lane, Colour c) const;
-    static Colour channelColour (int ch);
     static String formatTime (double seconds);
     static String formatLevel (float v);
 
