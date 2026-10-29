@@ -20,7 +20,8 @@
 
  Threading:
    * Audio thread   — pushAudioBlock() interleaves & writes float frames into
-                      a lock-free SPSC FIFO. RT-safe (no allocs, no locks).
+                      a lock-free SPSC FIFO and wakes SendThread. RT-safe
+                      (no allocs, no locks, no logging).
    * SendThread     — drains the FIFO, format-converts to wire sample format
                       (int16/int24/float32), packetises per the wire protocol,
                       sendto()s. Periodically emits a descriptor packet so a
@@ -47,6 +48,7 @@
 #include "mcfx_net_wire.h"
 
 #include "mcfx_net_socket.h"
+#include "mcfx_net_rt.h"
 
 #include <atomic>
 #include <memory>
@@ -249,9 +251,10 @@ private:
     int    pushFastSilenceLogged = 0;
     std::atomic<bool>     fastModeActive  { false };   // UI mirror of pushInFastMode
     std::atomic<uint32_t> fastModeEntries { 0 };
+    std::atomic<int>      fastModeRatio   { 0 };       // x realtime at the last entry, for the log
 
     std::atomic<bool> running { false };
-    juce::WaitableEvent wake;
+    RtWake wake;   // signalled from the audio thread
 
     std::unique_ptr<SendThread> sendThread;
     std::unique_ptr<NetThread>  netThread;

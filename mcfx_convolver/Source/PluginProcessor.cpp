@@ -88,6 +88,8 @@ Mcfx_convolverAudioProcessor::Mcfx_convolverAudioProcessor() :
 
 Mcfx_convolverAudioProcessor::~Mcfx_convolverAudioProcessor()
 {
+    cancelPendingUpdate();
+
 #ifdef USE_ZITA_CONVOLVER
     zita_conv.stop_process();
     zita_conv.cleanup();
@@ -257,10 +259,11 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
     // std::cout << "in: " << getTotalNumInputChannels() << " out: " << getTotalNumOutputChannels() << std::endl;
 
+    // raise before checking _configLoaded (handshake with LoadConfiguration)
+    _isProcessing = true;
+
     if (_configLoaded)
     {
-
-        _isProcessing = true;
 
         int NumSamples = buffer.getNumSamples();
 
@@ -296,13 +299,13 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
             _previous_master_gain = currentGain;
         }
 
-        _isProcessing = false;
-
     } else { // config loaded
 
         // clear output in case no config is loaded!
         buffer.clear();
     }
+
+    _isProcessing = false;
 
 
 }
@@ -434,6 +437,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     // unload first....
     if (_configLoaded) {
 
+        // stop processBlock from entering, then wait for a running one to leave
+        _configLoaded = false;
         while (_isProcessing) {
             Sleep(1);
         }
@@ -1431,9 +1436,20 @@ void Mcfx_convolverAudioProcessor::parameterChanged (const String& parameterID, 
 {
     if ( parameterID == "RELOAD" )
     {
+        // host automation may land here on the audio thread: load on the message thread
         if (newValue == true)
-            ReloadConfiguration();
+        {
+            if (MessageManager::existsAndIsCurrentThread())
+                ReloadConfiguration();
+            else
+                triggerAsyncUpdate();
+        }
     }
+}
+
+void Mcfx_convolverAudioProcessor::handleAsyncUpdate()
+{
+    ReloadConfiguration();
 }
 
 //==============================================================================

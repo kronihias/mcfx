@@ -78,9 +78,11 @@ private:
         const int channel;
     };
     void applyParamChange (int channel, float samples) noexcept;
+    void storeDelaySamples (int channel, float clamped) noexcept;  // atomics only, no write-back
 
     std::vector<DelayParam*> delayParams_;                 // owned by AudioProcessor
-    std::atomic<bool> applyingParam_ { false };
+    // Thread doing the parameter write-back (nullptr when none).
+    std::atomic<juce::Thread::ThreadID> mirroringThread_ { nullptr };
 
     using Line = juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Lagrange3rd>;
 

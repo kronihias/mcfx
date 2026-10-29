@@ -12,6 +12,7 @@
 
   CLI:
     mcfx_net_loopback_test --scenario <name> [options...]
+    mcfx_net_loopback_test --rtwake-test     (RtWake unit check, exit 0 = pass)
 
   Scenarios are documented in the kScenarios table below. Most common:
     smoke           5 s    basic connect + audio
@@ -55,6 +56,7 @@
 
 #include "mcfx_net_send.h"
 #include "mcfx_net_recv.h"
+#include "mcfx_net_rt.h"
 
 #include <atomic>
 #include <chrono>
@@ -913,10 +915,64 @@ void writeMetricsJson (const Driver& d, double measuredFreqCh0Hz,
 }  // namespace
 
 // ---------------------------------------------------------------------------
+// RtWake self-test (--rtwake-test): signals while the waiter is awake must
+// not leave posts behind, or later waits stop sleeping. Exit 0 = pass.
+// ---------------------------------------------------------------------------
+int runRtWakeTest()
+{
+    mcfx::net::RtWake wake;
+
+    // Signal while the waiter is awake: each wait() finds the flag set.
+    for (int i = 0; i < 100; ++i)
+    {
+        wake.signal();
+        wake.wait (50);
+    }
+
+    // Nothing signalled now, so each wait must sleep for its timeout.
+    constexpr int kTimeoutMs = 20;
+    for (int i = 0; i < 3; ++i)
+    {
+        const auto t0 = std::chrono::steady_clock::now();
+        wake.wait (kTimeoutMs);
+        const auto ms = std::chrono::duration<double, std::milli> (
+                            std::chrono::steady_clock::now() - t0).count();
+        if (ms < kTimeoutMs / 2)
+        {
+            std::cerr << "rtwake: wait " << i << " returned after " << ms
+                      << " ms with nothing signalled (timeout " << kTimeoutMs << " ms)\n";
+            return 1;
+        }
+    }
+
+    // And a signal still wakes a sleeping waiter early.
+    std::thread signaller ([&wake] {
+        std::this_thread::sleep_for (std::chrono::milliseconds (10));
+        wake.signal();
+    });
+    const auto t0 = std::chrono::steady_clock::now();
+    wake.wait (2000);
+    const auto ms = std::chrono::duration<double, std::milli> (
+                        std::chrono::steady_clock::now() - t0).count();
+    signaller.join();
+    if (ms > 1000)
+    {
+        std::cerr << "rtwake: signal did not wake the waiter (" << ms << " ms)\n";
+        return 1;
+    }
+
+    std::cerr << "rtwake: ok\n";
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
 int main (int argc, char** argv)
 {
+    if (argc == 2 && std::strcmp (argv[1], "--rtwake-test") == 0)
+        return runRtWakeTest();
+
     Options opts;
     if (! parseArgs (argc, argv, opts)) return 2;
 

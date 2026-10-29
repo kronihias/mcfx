@@ -39,6 +39,7 @@
 class Mcfx_convolverAudioProcessor  : public AudioProcessor,
                                       public ChangeBroadcaster,
                                       public Thread,
+                                      private AsyncUpdater,
                                       private OSCReceiver::ListenerWithOSCAddress<OSCReceiver::RealtimeCallback>,
                                       private AudioProcessorValueTreeState::Listener
 {
@@ -85,6 +86,8 @@ public:
     
     /// Callback for AudioProcessorValueTreeState::Listener
     void parameterChanged(const String& parameterID, float newValue) override;
+    /// Runs a RELOAD that host automation requested from the audio thread
+    void handleAsyncUpdate() override;
     float _previous_master_gain;                    //!< Previous RAW value of the master gain, used for interpolation
     std::atomic<float>* _master_gain_raw = nullptr; //!< Pointer to the RAW master gain parameter value
     // =========================================================================
@@ -239,9 +242,11 @@ private:
     unsigned int _ConvBufferSize; // size of the head convolution block (possibility to make it larger in order to reduce CPU load)
     unsigned int _MaxPartSize; // maximum size of the partition
 
-    bool _isProcessing;
+    // seq_cst handshake: processBlock raises _isProcessing before checking
+    // _configLoaded; the loader clears _configLoaded before waiting on it.
+    std::atomic<bool> _isProcessing;
 
-    bool _configLoaded; // is a configuration successfully loaded?
+    std::atomic<bool> _configLoaded; // is a configuration successfully loaded?
 
 	bool _paramReload; // vst parameter to allow triggering reload of configuration
 

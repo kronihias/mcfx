@@ -145,7 +145,9 @@ def reset_mimoeq(plugin) -> None:
 def run_mimoeq_json(config: dict, audio: np.ndarray,
                    n_channels: int = 2,
                    compensate_latency: bool = True,
-                   random_blocks: bool = False) -> np.ndarray:
+                   random_blocks: bool = False,
+                   params: dict = None,
+                   **testhost_kwargs) -> np.ndarray:
     """
     Write *config* to a temp JSON file, then run mcfx_mimoeq via testhost
     with "Mimoeq Config File" pointing to it.
@@ -162,10 +164,10 @@ def run_mimoeq_json(config: dict, audio: np.ndarray,
     try:
         with os.fdopen(fd, "w") as fp:
             json.dump(config, fp)
-        params = {"Mimoeq Config File": cfg_path}
+        params = {"Mimoeq Config File": cfg_path, **(params or {})}
         return run_testhost("mcfx_mimoeq", params, audio, SR,
                             compensate_latency=compensate_latency,
-                            random_blocks=random_blocks)
+                            random_blocks=random_blocks, **testhost_kwargs)
     finally:
         if os.path.exists(cfg_path):
             os.unlink(cfg_path)
@@ -878,6 +880,45 @@ def test_json_crossover_lp_freq_response():
         f"Crossover LP: passband at {f/4:.0f} Hz below -1 dB ({spectrum_db[pb_idx]:.2f})"
     assert spectrum_db[sb_idx] < -20.0, \
         f"Crossover LP: stopband at {f*4:.0f} Hz above -20 dB ({spectrum_db[sb_idx]:.2f})"
+
+
+def test_automation_on_audio_thread_keeps_cascade_design_off_it(tmp_path):
+    """Automation on the audio thread: a biquad band's change lands in the
+    render; a cascade band's redesign (allocates) waits for the message thread."""
+    config = {
+        "sample_rate": SR,
+        "sos": [
+            {"diagonal": True, "parameters": {
+                "type": "peak", "f_Hz": 300.0, "Q": 1.0, "gain_db": 0.0}},
+            {"diagonal": True, "parameters": {
+                "type": "butterworth_lp", "f_Hz": 1000.0, "order": 8}},
+        ],
+    }
+    automation = {
+        "Band 1 Gain": gain_to_norm(12.0),
+        "Band 2 Freq": freq_to_norm(4000.0),
+    }
+    # Silence first, so the parameter ramps settle before the impulse.
+    audio = np.zeros((2, SETTLE_SAMPLES + FFT_N), dtype=np.float32)
+    audio[:, SETTLE_SAMPLES] = 1.0
+    freqs = np.fft.rfftfreq(FFT_N, 1.0 / SR)
+    state = tmp_path / "state.bin"
+
+    out = run_mimoeq_json(config, audio, params=automation, audio_thread=True,
+                          extra_args=("--save-state", str(state)))
+    spec = freq_response_db(out[0, SETTLE_SAMPLES:])
+    assert _db_at(freqs, spec, 300.0) == pytest.approx(12.0, abs=1.5), \
+        "peak gain automation did not land in the render"
+    assert _db_at(freqs, spec, 2000.0) < -30.0, \
+        "cascade band was redesigned on the audio thread"
+
+    # The saved state was taken after the message loop ran: both changes are in.
+    out = run_testhost("mcfx_mimoeq", {}, audio, SR,
+                       extra_args=("--load-state", str(state)))
+    spec = freq_response_db(out[0, SETTLE_SAMPLES:])
+    assert _db_at(freqs, spec, 300.0) == pytest.approx(12.0, abs=1.5)
+    assert _db_at(freqs, spec, 2000.0) > -3.0, \
+        "cascade band automation was lost instead of applied by the timer"
 
 
 # ===========================================================================

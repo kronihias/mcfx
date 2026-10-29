@@ -121,7 +121,7 @@ void Ambix_meterAudioProcessor::setParameter (int index, float newValue)
 
             break;
     }
-    sendChangeMessage();
+    sendChangeMessageRtSafe(); // setParameter may run on the audio thread
 }
 
 const String Ambix_meterAudioProcessor::getParameterName (int index)

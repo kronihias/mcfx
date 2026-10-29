@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
+#include "mcfx_rt_change_broadcaster.h"
 #include "JuceCompat.h"
 
 #include "MySignalGenerator.h"
@@ -38,7 +39,7 @@
 /**
 */
 class Mcfx_gain_delayAudioProcessor  : public AudioProcessor,
-                                       public ChangeBroadcaster
+                                       public mcfx::RtChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -110,9 +111,14 @@ private:
 
   void calcGainFact(int ch);
 
+  // Sync the stepper Timer with _stepper_wanted/_stepspeed. Message thread only.
+  void applyStepperState();
+  void handleDeferredMessageThreadWork() override { applyStepperState(); }
+
   Array<float> _delay_ms;
   Array<int> _delay_smpls;
   AudioSampleBuffer _delay_buffer;
+  AudioSampleBuffer _sig_buf; // signal generator scratch, sized in prepareToPlay
 
   Array<float> _gain_param;
   Array<float> _gain_factor;
@@ -123,7 +129,7 @@ private:
   Array<bool> _solo;
   Array<bool> _siggen_flag;
 
-  int _solocount;
+  std::atomic<int> _solocount; // touched by GUI and host automation
 
   int _buf_write_pos;
   int _buf_size;
@@ -132,7 +138,10 @@ private:
   MySignalGenerator _siggen;
 
   float _stepspeed; // hold time for each channel while iterating
-  bool _stepper_on; // step through channels with testsignal on/off
+  bool _stepper_on; // step through channels with testsignal on/off (message thread)
+  // Requested by setParameter, which may run on the audio thread (no Timer calls there)
+  std::atomic<bool> _stepper_wanted { false };
+  std::atomic<bool> _stepspeed_changed { false };
   ChannelStepper _channelstepper; // helper object to iterate testsignal over channels
     //==============================================================================
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Mcfx_gain_delayAudioProcessor)

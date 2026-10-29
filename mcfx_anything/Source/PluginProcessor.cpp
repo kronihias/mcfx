@@ -231,9 +231,7 @@ bool Mcfx_anythingAudioProcessor::silenceInProducesSilenceOut() const { return f
 
 double Mcfx_anythingAudioProcessor::getTailLengthSeconds() const
 {
-    if (_currentPluginDesc != nullptr && _pluginInstances.size() > 0)
-        return _pluginInstances.getUnchecked(0)->getTailLengthSeconds();
-    return 0.0;
+    return _tailLengthSeconds.load();
 }
 
 int Mcfx_anythingAudioProcessor::getNumPrograms()    { return 0; }
@@ -269,6 +267,8 @@ void Mcfx_anythingAudioProcessor::prepareToPlay (double sampleRate, int samplesP
         int scratchCh = _totalInstanceChannels - _channelsPerInstance;
         if (scratchCh > 0)
             _scratchBuffer.setSize (scratchCh, samplesPerBlock, false, true);
+
+        _instanceMidi.ensureSize (2048);
     }
 
     // React to host-driven channel count changes: if the host re-negotiated
@@ -354,16 +354,12 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
             for (int i = 0; i < numInstances; ++i)
             {
                 auto* inst = _pluginInstances.getUnchecked (i);
-                auto params = inst->getParameters();
+                const auto& params = inst->getParameters();   // reference: no copy on the audio thread
                 if (slot < params.size())
                     params[slot]->setValue (v);
             }
 
-            // Keep the change-detector snapshot in sync so the next sync
-            // timer tick does not mistake this host-driven write for a GUI
-            // change and re-notify the host (automation feedback loop).
-            if (slot < (int) _lastParameterValues.size())
-                _lastParameterValues[(size_t) slot] = v;
+            // The sync timer sees this as host-driven and won't re-notify.
         }
     }
 
@@ -371,50 +367,72 @@ void Mcfx_anythingAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiB
     const int numSamples = buffer.getNumSamples();
     const int mainBusCh = _channelsPerInstance;       // stride through our buffer
     const int pluginTotalCh = _totalInstanceChannels; // what the plugin expects
-    const int scSourceCh = _sidechainSourceChannel;   // sidechain source (-1 = off)
-    const int scNumCh = _sidechainNumChannels;
+    const int scSourceCh = _sidechainSourceChannel.load();   // sidechain source (-1 = off)
+    const int scNumCh = jmin (_sidechainNumChannels.load(), pluginTotalCh - mainBusCh);
+    const int scratchCh = pluginTotalCh - mainBusCh;
 
-    MidiBuffer emptyMidi;
+    // Buffers are sized in loadPlugin / prepareToPlay; if they don't fit,
+    // output silence rather than allocate or overrun.
+    if (mainBusCh <= 0
+        || (int) _instanceChannelPtrs.size() < pluginTotalCh
+        || _instanceBuffer.getNumChannels() < pluginTotalCh
+        || (scratchCh > 0 && (_scratchBuffer.getNumChannels() < scratchCh
+                              || _scratchBuffer.getNumSamples() <= 0)))
+    {
+        buffer.clear();
+        return;
+    }
+
+    // Host blocks larger than announced are processed in chunks of the
+    // prepared size rather than overrunning the scratch.
+    int maxChunk = jmax (1, _currentBlockSize);
+    if (scratchCh > 0)
+        maxChunk = jmin (maxChunk, _scratchBuffer.getNumSamples());
+
+    float** channelPtrs = _instanceChannelPtrs.data();
 
     // Track how many channels are actually processed by plugin instances
     int channelsProcessed = 0;
 
-    for (int i = 0; i < _numInstances; ++i)
+    for (int start = 0; start < numSamples; start += maxChunk)
     {
-        auto* instance = _pluginInstances.getUnchecked (i);
-        const int startChannel = i * mainBusCh;
+        const int len = jmin (maxChunk, numSamples - start);
 
-        if (startChannel + mainBusCh > totalChannels)
-            break;
-
-        // Build a sub-buffer for processBlock:
-        // - channels 0..mainBusCh-1 reference our main multichannel buffer
-        // - channels mainBusCh..pluginTotalCh-1 reference scratch (sidechain/aux)
-        float* channelPtrs[256];
-        jassert (pluginTotalCh <= 256);
-
-        for (int ch = 0; ch < mainBusCh; ++ch)
-            channelPtrs[ch] = buffer.getWritePointer (startChannel + ch);
-
-        // Clear scratch buffer for this instance (sidechain + any aux channels)
-        if (_scratchBuffer.getNumChannels() > 0)
-            _scratchBuffer.clear (0, numSamples);
-
-        for (int ch = mainBusCh; ch < pluginTotalCh; ++ch)
-            channelPtrs[ch] = _scratchBuffer.getWritePointer (ch - mainBusCh);
-
-        // Route sidechain: copy source channel data into sidechain channels
-        if (_hasSidechain && scSourceCh >= 0 && scSourceCh < totalChannels && scNumCh > 0)
+        for (int i = 0; i < _numInstances; ++i)
         {
-            const float* src = buffer.getReadPointer (scSourceCh);
-            for (int ch = 0; ch < scNumCh; ++ch)
-                FloatVectorOperations::copy (channelPtrs[mainBusCh + ch], src, numSamples);
+            auto* instance = _pluginInstances.getUnchecked (i);
+            const int startChannel = i * mainBusCh;
+
+            if (startChannel + mainBusCh > totalChannels)
+                break;
+
+            // Build a sub-buffer for processBlock:
+            // - channels 0..mainBusCh-1 reference our main multichannel buffer
+            // - channels mainBusCh..pluginTotalCh-1 reference scratch (sidechain/aux)
+            for (int ch = 0; ch < mainBusCh; ++ch)
+                channelPtrs[ch] = buffer.getWritePointer (startChannel + ch, start);
+
+            // Clear scratch buffer for this instance (sidechain + any aux channels)
+            if (_scratchBuffer.getNumChannels() > 0)
+                _scratchBuffer.clear (0, len);
+
+            for (int ch = mainBusCh; ch < pluginTotalCh; ++ch)
+                channelPtrs[ch] = _scratchBuffer.getWritePointer (ch - mainBusCh);
+
+            // Route sidechain: copy source channel data into sidechain channels
+            if (_hasSidechain.load() && scSourceCh >= 0 && scSourceCh < totalChannels && scNumCh > 0)
+            {
+                const float* src = buffer.getReadPointer (scSourceCh, start);
+                for (int ch = 0; ch < scNumCh; ++ch)
+                    FloatVectorOperations::copy (channelPtrs[mainBusCh + ch], src, len);
+            }
+
+            _instanceBuffer.setDataToReferTo (channelPtrs, pluginTotalCh, len);
+            _instanceMidi.clear();
+            instance->processBlock (_instanceBuffer, _instanceMidi);
+
+            channelsProcessed = startChannel + mainBusCh;
         }
-
-        AudioBuffer<float> subBuffer (channelPtrs, pluginTotalCh, numSamples);
-        instance->processBlock (subBuffer, emptyMidi);
-
-        channelsProcessed = startChannel + mainBusCh;
     }
 
     // Silence any remaining channels not covered by plugin instances
@@ -459,8 +477,8 @@ void Mcfx_anythingAudioProcessor::getStateInformation (MemoryBlock& destData)
     }
 
     // Save sidechain routing
-    if (_hasSidechain && _sidechainSourceChannel >= 0)
-        xml->setAttribute ("sidechainSourceChannel", _sidechainSourceChannel);
+    if (_hasSidechain.load() && _sidechainSourceChannel.load() >= 0)
+        xml->setAttribute ("sidechainSourceChannel", _sidechainSourceChannel.load());
 
     // Save hosted plugin state (from master instance)
     if (_currentPluginDesc != nullptr && _pluginInstances.size() > 0)
@@ -486,11 +504,11 @@ void Mcfx_anythingAudioProcessor::setStateInformation (const void* data, int siz
 
     // Restore sidechain routing (applied after plugin loads)
     if (xml->hasAttribute ("sidechainSourceChannel"))
-        _sidechainSourceChannel = xml->getIntAttribute ("sidechainSourceChannel", -1);
+        _sidechainSourceChannel.store (xml->getIntAttribute ("sidechainSourceChannel", -1));
 
     // Keep the host parameter in step with the restored routing.
     if (_scSourceParam != nullptr)
-        *_scSourceParam = _sidechainSourceChannel + 1;
+        *_scSourceParam = _sidechainSourceChannel.load() + 1;
 
     // Restore current plugin description and schedule deferred loading.
     // CURRENT_PLUGIN is a wrapper around a <PLUGIN> child — we can't just
@@ -787,7 +805,7 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
     // For packed plugins, decide the operating layout based on whether a
     // sidechain source is currently selected. With no source we apply the
     // reduced layout so the plugin runs as a plain N-channel effect.
-    const bool useReducedLayout = packedCapable && _sidechainSourceChannel < 0;
+    const bool useReducedLayout = packedCapable && _sidechainSourceChannel.load() < 0;
     if (useReducedLayout)
     {
         if (applyReducedMainBus (*firstInstance, packedReduced))
@@ -897,7 +915,8 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
         _packedFullChannels      = packedFull;
         // Keep existing sidechain source if valid, otherwise reset
         if (! hasSidechain)
-            _sidechainSourceChannel = -1;
+            _sidechainSourceChannel.store (-1);
+        _tailLengthSeconds.store (_pluginInstances.getFirst()->getTailLengthSeconds());
 
         // Allocate scratch buffer for sidechain/aux channels that the plugin
         // expects in processBlock but don't map to our multichannel I/O
@@ -907,8 +926,12 @@ void Mcfx_anythingAudioProcessor::loadPlugin (const PluginDescription& desc)
         else
             _scratchBuffer.setSize (0, 0);
 
+        // Sized here so processBlock never allocates (see _instanceBuffer).
+        _instanceChannelPtrs.assign ((size_t) totalInstanceChannels, nullptr);
+        _instanceBuffer.setSize (totalInstanceChannels, 0);
+
         // Snapshot initial parameter values for change detection
-        auto masterParams = _pluginInstances.getFirst()->getParameters();
+        const auto& masterParams = _pluginInstances.getFirst()->getParameters();
         _lastParameterValues.resize ((size_t) masterParams.size());
         for (int p = 0; p < masterParams.size(); ++p)
             _lastParameterValues[(size_t) p] = masterParams[p]->getValue();
@@ -984,13 +1007,16 @@ void Mcfx_anythingAudioProcessor::unloadPlugin()
         _lastHostChannelCount = 0;
         _pluginNumInputChannels = 0;
         _pluginNumOutputChannels = 0;
-        _hasSidechain = false;
-        _sidechainNumChannels = 0;
-        _sidechainSourceChannel = -1;
+        _hasSidechain.store (false);
+        _sidechainNumChannels.store (0);
+        _sidechainSourceChannel.store (-1);
+        _tailLengthSeconds.store (0.0);
         _packedSidechainCapable = false;
         _packedReducedChannels = 0;
         _packedFullChannels = 0;
         _scratchBuffer.setSize (0, 0);
+        _instanceChannelPtrs.clear();
+        _instanceBuffer.setSize (0, 0);
 
         // Unbind all forwarding parameters — they persist as empty slots
         // until a new plugin is loaded (or processor destruction).
@@ -1033,14 +1059,14 @@ String Mcfx_anythingAudioProcessor::getLoadedPluginName() const
 void Mcfx_anythingAudioProcessor::setSidechainSourceChannel (int channel)
 {
     const int newValue = (channel >= 0 && channel < getTotalNumInputChannels()) ? channel : -1;
-    if (newValue == _sidechainSourceChannel)
+    if (newValue == _sidechainSourceChannel.load())
         return;
 
-    const bool wasOff   = _sidechainSourceChannel < 0;
+    const bool wasOff   = _sidechainSourceChannel.load() < 0;
     const bool willBeOff = newValue < 0;
     const bool crossing = (wasOff != willBeOff);
 
-    _sidechainSourceChannel = newValue;
+    _sidechainSourceChannel.store (newValue);
 
     // Reflect editor-driven changes into the host parameter (skipped when the
     // change came FROM the parameter, or automation would feed back).
@@ -1102,7 +1128,7 @@ void Mcfx_anythingAudioProcessor::handleDeferredLoad()
             // "changes" for every parameter on the next tick.
             if (_pluginInstances.size() > 0)
             {
-                auto masterParams = _pluginInstances.getFirst()->getParameters();
+                const auto& masterParams = _pluginInstances.getFirst()->getParameters();
                 for (int p = 0; p < masterParams.size(); ++p)
                 {
                     const float v = masterParams[p]->getValue();
@@ -1111,6 +1137,9 @@ void Mcfx_anythingAudioProcessor::handleDeferredLoad()
                     if (auto* fp = getForwardingParameter (p))
                         fp->updateFromInner (v);
                 }
+
+                // The restored state may change the tail too.
+                _tailLengthSeconds.store (_pluginInstances.getFirst()->getTailLengthSeconds());
             }
         }
 
@@ -1128,7 +1157,7 @@ void Mcfx_anythingAudioProcessor::syncParametersFromMaster()
         return;
 
     auto* master = _pluginInstances.getUnchecked (0);
-    auto masterParams = master->getParameters();
+    const auto& masterParams = master->getParameters();
     const int numParams = masterParams.size();
 
     if ((int) _lastParameterValues.size() != numParams)
@@ -1147,6 +1176,13 @@ void Mcfx_anythingAudioProcessor::syncParametersFromMaster()
         {
             _lastParameterValues[(size_t) p] = currentValue;
 
+            // Host automation reaches all instances via processBlock, so a
+            // master value equal to the proxy's is that write, not a GUI move;
+            // re-notifying the host would record the automation back.
+            auto* fp = getForwardingParameter (p);
+            if (fp != nullptr && fp->isBound() && std::abs (fp->getValue() - currentValue) < 1.0e-6f)
+                continue;
+
             // Push to all slave instances. We also explicitly notify each
             // slave parameter's JUCE listeners — AUInstanceParameter::setValue
             // calls AUEventListenerNotify with itself as the sending listener,
@@ -1159,7 +1195,7 @@ void Mcfx_anythingAudioProcessor::syncParametersFromMaster()
             for (int i = 1; i < _pluginInstances.size(); ++i)
             {
                 auto* slave = _pluginInstances.getUnchecked (i);
-                auto slaveParams = slave->getParameters();
+                const auto& slaveParams = slave->getParameters();
                 if (p < slaveParams.size())
                 {
                     auto* slaveParam = slaveParams[p];
@@ -1173,8 +1209,8 @@ void Mcfx_anythingAudioProcessor::syncParametersFromMaster()
             // updateFromInner does NOT set the dirty flag, so this does not
             // feed the value back into the master instance on the next
             // processBlock tick.
-            if (p < _forwardingParameters.size())
-                _forwardingParameters.getUnchecked (p)->updateFromInner (currentValue);
+            if (fp != nullptr)
+                fp->updateFromInner (currentValue);
         }
     }
 }

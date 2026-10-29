@@ -638,9 +638,10 @@ void EqBand::prepare(double sampleRate, int maxBlockSize)
         rebuildConvolver();
     }
 
-    if (type_ == EqBandType::Delay && delaySamples_ > 0)
+    if (type_ == EqBandType::Delay)
     {
-        delayBuffer_.resize(delaySamples_, 0.f);
+        // Sized so syncParametersFrom() (audio thread) never grows the line.
+        delayBuffer_.assign((size_t) jmax(kMaxDelaySamples, delaySamples_), 0.f);
         delayWritePos_ = 0;
     }
 
@@ -670,7 +671,15 @@ void EqBand::syncParametersFrom(const EqBand& source)
     // but preserve our filter state and SmoothedValue ramp state
     // so the transition is smooth (no click)
 
-    type_ = source.type_;
+    // Audio thread: must not allocate. Structural differences are left to the
+    // full rebuild such edits queue; until then the copy keeps its old structure.
+    if (type_ != source.type_)
+        return;
+    if (type_ == EqBandType::IIR
+        && (iirSubType_ != source.iirSubType_
+            || hasRawCoeffs_ != source.hasRawCoeffs_
+            || (usesCascade() && cascadeCoeffs_.size() != source.cascadeCoeffs_.size())))
+        return;
 
     enabled_ = source.enabled_;
 
@@ -703,12 +712,6 @@ void EqBand::syncParametersFrom(const EqBand& source)
 
     if (type_ == EqBandType::IIR)
     {
-        if (iirSubType_ != source.iirSubType_)
-        {
-            iirSubType_ = source.iirSubType_;
-            hasRawCoeffs_ = source.hasRawCoeffs_;
-        }
-
         originalSampleRate_ = source.originalSampleRate_;
 
         if (source.hasRawCoeffs_)
@@ -738,9 +741,8 @@ void EqBand::syncParametersFrom(const EqBand& source)
                 // prototypes) are far too heavy for the audio thread, and the
                 // model band already ran them on the GUI thread when its
                 // parameter changed — copy the result, the same way raw
-                // coefficients are copied above. Allocation-free once the
-                // section count has settled; a count change is a structural
-                // edit, for which startSmoothing() snaps rather than ramps.
+                // coefficients are copied above. Section counts match (checked
+                // at the top), so no allocation.
                 cascadeCoeffs_ = source.cascadeCoeffs_;
                 startSmoothing();
             }
@@ -761,22 +763,10 @@ void EqBand::syncParametersFrom(const EqBand& source)
     }
     else if (type_ == EqBandType::Delay)
     {
-        delaySamples_ = source.delaySamples_;
-        if (delaySamples_ > 0 && (int)delayBuffer_.size() < delaySamples_)
-        {
-            delayBuffer_.resize(delaySamples_, 0.f);
-        }
+        // Capped to the line prepare() sized; the next rebuild resizes it.
+        delaySamples_ = jmin(source.delaySamples_, (int) delayBuffer_.size());
     }
-    else if (type_ == EqBandType::FIR)
-    {
-        firCoeffs_ = source.firCoeffs_;
-        firOriginalCoeffs_ = source.firOriginalCoeffs_;
-        originalSampleRate_ = source.originalSampleRate_;
-        firFilePath_ = source.firFilePath_;
-        firFileChannel_ = source.firFileChannel_;
-        if (firState_.size() != firCoeffs_.size())
-            firState_.resize(firCoeffs_.size(), 0.f);
-    }
+    // FIR: only enabled_; coefficient changes need the full rebuild.
 }
 
 void EqBand::processBlock(float* data, int numSamples)

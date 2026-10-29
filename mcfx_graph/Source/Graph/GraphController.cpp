@@ -160,6 +160,16 @@ void GraphController::releaseResources()
 
 void GraphController::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
+    // Send/return nodes touch their bus during the render. Never wait here:
+    // a feedback edit in progress costs one silent block instead.
+    const juce::ScopedTryLock sl (feedbackLock_);
+    if (! sl.isLocked())
+    {
+        buffer.clear();
+        midi.clear();
+        return;
+    }
+
     graph_->processBlock (buffer, midi);
 
     // Close every feedback loop, once, after the whole level has rendered.
@@ -705,10 +715,13 @@ bool GraphController::addFeedbackLink (const juce::Uuid& sendUuid,
         return false;
 
     FeedbackLinkInfo link { sendUuid, returnUuid };
-    feedbackLinks_.push_back (link);
-    feedbackBuses_.push_back (std::make_shared<FeedbackBus>());
+    {
+        const juce::ScopedLock sl (feedbackLock_);
+        feedbackLinks_.push_back (link);
+        feedbackBuses_.push_back (std::make_shared<FeedbackBus>());
 
-    bindFeedbackLink (link);
+        bindFeedbackLink (link);
+    }
     notifyTopologyChanged();
     return true;
 }
@@ -716,19 +729,26 @@ bool GraphController::addFeedbackLink (const juce::Uuid& sendUuid,
 bool GraphController::removeFeedbackLink (const juce::Uuid& sendUuid,
                                           const juce::Uuid& returnUuid)
 {
-    for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)
+    bool removed = false;
     {
-        if (feedbackLinks_[i].sendUuid == sendUuid
-            && feedbackLinks_[i].returnUuid == returnUuid)
+        const juce::ScopedLock sl (feedbackLock_);
+        for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)
         {
-            unbindFeedbackLink (feedbackLinks_[i]);
-            feedbackLinks_.erase (feedbackLinks_.begin() + (long) i);
-            feedbackBuses_.erase (feedbackBuses_.begin() + (long) i);
-            notifyTopologyChanged();
-            return true;
+            if (feedbackLinks_[i].sendUuid == sendUuid
+                && feedbackLinks_[i].returnUuid == returnUuid)
+            {
+                unbindFeedbackLink (feedbackLinks_[i]);
+                feedbackLinks_.erase (feedbackLinks_.begin() + (long) i);
+                feedbackBuses_.erase (feedbackBuses_.begin() + (long) i);
+                removed = true;
+                break;
+            }
         }
     }
-    return false;
+
+    if (removed)
+        notifyTopologyChanged();
+    return removed;
 }
 
 std::vector<GraphController::FeedbackLinkInfo> GraphController::getAllFeedbackLinks() const
@@ -752,6 +772,7 @@ bool GraphController::findFeedbackLinkFor (const juce::Uuid& nodeUuid,
 
 void GraphController::clearAllFeedbackLinks()
 {
+    const juce::ScopedLock sl (feedbackLock_);
     for (const auto& l : feedbackLinks_)
         unbindFeedbackLink (l);
     feedbackLinks_.clear();
@@ -760,9 +781,7 @@ void GraphController::clearAllFeedbackLinks()
 
 void GraphController::bindFeedbackLink (const FeedbackLinkInfo& link)
 {
-    // Hand both ends the same bus. Called with the graph either not yet
-    // running or suspended by the caller, so the nodes' plain (non-atomic)
-    // pointer swap is safe.
+    // Hand both ends the same bus; feedbackLock_ makes the plain pointer swap safe.
     for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)
     {
         if (feedbackLinks_[i] != link) continue;
@@ -793,6 +812,7 @@ void GraphController::unbindFeedbackLink (const FeedbackLinkInfo& link)
 
 void GraphController::prepareFeedbackBuses()
 {
+    const juce::ScopedLock sl (feedbackLock_);
     pruneFeedbackLinks();
 
     for (std::size_t i = 0; i < feedbackLinks_.size(); ++i)

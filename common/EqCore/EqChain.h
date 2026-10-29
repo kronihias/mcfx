@@ -70,6 +70,10 @@ public:
     var toJson() const;
     void fromJson(const var& json, double sampleRate);
 
+    /** Exchange bands and settings with another chain. Lets a caller build a
+        replacement off to the side and swap it in under a short lock. */
+    void swapWith(EqChain& other) noexcept;
+
 private:
     OwnedArray<EqBand> bands_;
     double sampleRate_ = 48000.0;

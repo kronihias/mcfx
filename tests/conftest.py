@@ -174,11 +174,14 @@ def pytest_addoption(parser):
 
 def run_testhost(plugin_name: str, params: dict, audio: np.ndarray,
                  fs: int = SR, compensate_latency: bool = True,
-                 random_blocks: bool = False) -> np.ndarray:
+                 random_blocks: bool = False, audio_thread: bool = False,
+                 extra_args: tuple = ()) -> np.ndarray:
     """
     Call the mcfx_testhost CLI binary, return processed audio as numpy array.
 
     random_blocks: irregular block sizes (1..512), as some hosts send.
+    audio_thread: set params and process on a separate thread, as a DAW does.
+    extra_args:   further testhost arguments (e.g. --save-state <path>).
 
     Requires:
       - BUILD_TESTHOST=ON when configuring CMake
@@ -220,6 +223,9 @@ def run_testhost(plugin_name: str, params: dict, audio: np.ndarray,
             cmd.append("--no-latency-compensation")
         if random_blocks:
             cmd.append("--random-blocks")
+        if audio_thread:
+            cmd.append("--audio-thread")
+        cmd += list(extra_args)
         subprocess.run(cmd, check=True, capture_output=True)
 
         data, _ = sf.read(out_wav, dtype="float32")

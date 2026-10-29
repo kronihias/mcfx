@@ -73,7 +73,7 @@ void Mcfx_delayAudioProcessor::setParameter (int index, float newValue)
 
     _delay_ms = _delay_smpls/_samplerate/MAX_DELAYTIME_S;
 
-    sendChangeMessage();
+    sendChangeMessageRtSafe(); // setParameter may run on the audio thread
 }
 
 const String Mcfx_delayAudioProcessor::getParameterName (int index)
@@ -207,23 +207,22 @@ bool Mcfx_delayAudioProcessor::isBusesLayoutSupported (const BusesLayout& layout
 void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuffer& midiMessages)
 {
 
+    // never grow the delay ring here: extra channels pass through untouched
+    jassert (buffer.getNumChannels() <= _delay_buffer.getNumChannels());
+    const int numChannels = jmin (buffer.getNumChannels(), _delay_buffer.getNumChannels());
+
     // compute read position
     _buf_read_pos = _buf_write_pos - _delay_smpls;
     if (_buf_read_pos < 0)
         _buf_read_pos = _buf_size + _buf_read_pos;
 
     // std::cout << "size : " << _buf_size << " read pos: " << _buf_read_pos << std::endl;
-    // resize buffer if necessary
-    if (_delay_buffer.getNumChannels() < buffer.getNumChannels() || _delay_buffer.getNumSamples() < _buf_size) {
-        // resize buffer
-        _delay_buffer.setSize(buffer.getNumChannels(), _buf_size, true, true, false);
-    }
 
     // write to the buffer
 
     if (_buf_write_pos + buffer.getNumSamples() < _buf_size)
     {
-        for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+        for (int ch = 0; ch < numChannels; ch++)
         {
             // copy straight into buffer
             _delay_buffer.copyFrom(ch, _buf_write_pos, buffer, ch, 0, buffer.getNumSamples());
@@ -238,7 +237,7 @@ void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuff
 
         // std::cout << "spl_write1: " << samples_to_write1 << " spl_write2: " << samples_to_write2 << std::endl;
 
-        for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+        for (int ch = 0; ch < numChannels; ch++)
         {
 
             // copy until end
@@ -256,7 +255,7 @@ void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuff
     // read from buffer
     if (_buf_read_pos + buffer.getNumSamples() < _buf_size)
     {
-        for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+        for (int ch = 0; ch < numChannels; ch++)
         {
             buffer.copyFrom(ch, 0, _delay_buffer, ch, _buf_read_pos, buffer.getNumSamples());
         }
@@ -267,7 +266,7 @@ void Mcfx_delayAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuff
         int samples_to_read1 = _buf_size - _buf_read_pos;
         int samples_to_read2 = buffer.getNumSamples() - samples_to_read1;
 
-        for (int ch = 0; ch < buffer.getNumChannels(); ch++)
+        for (int ch = 0; ch < numChannels; ch++)
         {
 
             // copy until end
