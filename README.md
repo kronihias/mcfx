@@ -307,6 +307,18 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### 0.9.2 (2026-11-15)
+
+- `mcfx_meter`: **spectrum view** — a channel range overlaid or power-averaged, time averaging, fractional-octave smoothing or third-octave bands, peak curves, FFT window 4096–32768.
+- `mcfx_meter`: **interactive zoom** — pinch and wheel zoom, drag and two-finger pan on both axes; dragging along an axis pans it, across zooms it; double click resets. The level view can sit between the preset steps and is saved.
+- `mcfx_meter`: the views share one look (palette, readouts, settings panel, frequency grid); spectrum and spectrogram always label 100 / 1k / 10k, text scales with the window in the waterfall, circle and dots views, detached windows get a minimum size.
+- `mcfx_gain_delay`: **cleaner signal generator** — sine without table spurs, sawtooth and square with far less aliasing (PolyBLEP), sample-accurate dirac and pulsed mode with 5 ms fades, tonebursts that always start at phase 0, noise that is no longer correlated between instances, pink noise that keeps its 1/f slope at high sample rates.
+- `mcfx_send`: no more dropped blocks when the network thread wakes late, the host delivers several blocks back to back, or the audio clock runs slightly faster than the system clock; the send buffer has ~40 ms of headroom without added latency.
+- `mcfx_send`, `mcfx_receive`: the audio thread no longer takes locks, allocates, frees memory or prints; peer clean-up and logging moved to the network thread. `mcfx_receive` no longer writes past a buffer when the host sends a block larger than announced. No change to the network protocol.
+- `mcfx_convolver`: fix a host freeze when first and maximum partition size are equal (e.g. both 8192) and the impulse response is longer than two partitions.
+- `mcfx_convolver`, `mcfx_mimoeq` (long FIRs): fix short glitches with long impulse responses at small block sizes; partition levels could lose their output when adding into the shared buffer at the same time.
+- `mcfx_graph`: fix a crash hosting plug-ins that keep several buses enabled (e.g. SynthEdit exports with 32 stereo buses); three or more buses per direction are now all switched on and shown as pins.
+
 ### 0.9.1 (2026-10-25)
 
 - installers: the VST3 installers (macOS, Windows) now also include **every plug-in as a fixed 128-channel VST2** (`mcfx_<name>128`), for hosts that need more channels than a VST3 offers (64 on Windows). `mcfx_anything128` and `mcfx_graph128` carry their plug-in scanner.
