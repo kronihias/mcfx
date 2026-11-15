@@ -202,7 +202,8 @@ private:
                      int offset,
                      int priority,
                      AudioSampleBuffer *inbuf,
-                     AudioSampleBuffer *outbuf );
+                     AudioSampleBuffer *outbuf,
+                     CriticalSection *outbuflock );
 
     void SetBufsize ( int inbufsize, int outbufsize, int blocksize );
 
@@ -228,6 +229,7 @@ private:
 
     AudioSampleBuffer   *inbuf_;            // Shared Input Buffer
     AudioSampleBuffer   *outbuf_;           // Shared Output Buffer
+    CriticalSection     *outbuflock_;       // guards the adds into the shared output buffer
 
 	int					inbufsize_;			// size of time domain input buffer (2*maxpart_)
 	int                 outbufsize_;        // size of time domain output buffer (2*maxsize_)
@@ -377,6 +379,10 @@ private:
     bool                configuration_;     // isconfigured
 
     CriticalSection     lock_;              // lock critical section
+
+    // the partition levels add their (overlapping) output into outbuf_ from
+    // the callback and from their own threads -> these adds must not interleave
+    CriticalSection     outbuflock_;
 
     OwnedArray<MtxConvSlave>    partitions_;// these are my partitions with different size
 

@@ -188,6 +188,10 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
     if (maxpart < blocksize)
         maxpart = blocksize;
 
+    // the input ring buffer is sized from maxpart, it has to hold the first partition as well
+    if (maxpart < minpart)
+        maxpart = minpart;
+
 	minpart_ = nextPowerOfTwo(minpart);
 	maxpart_ = nextPowerOfTwo(maxpart);
 
@@ -206,7 +210,7 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
 
     int numpartitions = ceil((float)maxsize/blocksize_);
 
-    partitions_.getLast()->Configure(blocksize_, numpartitions, 0, 0, &inbuf_, &outbuf_); // for now no offset and zero priority
+    partitions_.getLast()->Configure(blocksize_, numpartitions, 0, 0, &inbuf_, &outbuf_, &outbuflock_); // for now no offset and zero priority
 
     numpartitions_ = 1;
 
@@ -247,7 +251,7 @@ bool MtxConvMaster::Configure(int numins, int numouts, int blocksize, int maxsiz
 
         }
 
-        partitions_.getLast()->Configure(partsize, numpartitions, offset, priority, &inbuf_, &outbuf_);
+        partitions_.getLast()->Configure(partsize, numpartitions, offset, priority, &inbuf_, &outbuf_, &outbuflock_);
 
         maxsize_ += numpartitions*partsize;
 
@@ -391,7 +395,7 @@ void MtxConvSlave::WriteLog(String &text)
 		debug_out_->writeText(text, false, false, nullptr);
 }
 
-bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, int priority, AudioSampleBuffer *inbuf, AudioSampleBuffer *outbuf)
+bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, int priority, AudioSampleBuffer *inbuf, AudioSampleBuffer *outbuf, CriticalSection *outbuflock)
 {
     partitionsize_ = partitionsize;
     numpartitions_ = numpartitions;
@@ -400,6 +404,7 @@ bool MtxConvSlave::Configure(int partitionsize, int numpartitions, int offset, i
 
     inbuf_ = inbuf;
     outbuf_ = outbuf;
+    outbuflock_ = outbuflock;
 
     numnewinsamples_ = 0;
     outnodeoffset_ = 0;
@@ -501,7 +506,10 @@ void MtxConvSlave::StartProc()
 
     // start a thread for each partitionsize
 #if GARDNER_SCHEME
-    if (offset_ >= partitionsize_ )
+    // the head level (offset 0) computes its first two partitions in the callback.
+    // it only has more than two if it is the last level as well (first partition
+    // size == maximum partition size), the thread has to do the remaining ones then.
+    if (offset_ >= partitionsize_ || numpartitions_ > 2)
         startThread(threadPriority);
 #else
     startThread(threadPriority);
@@ -694,7 +702,14 @@ void MtxConvSlave::run()
 			if ( threadShouldExit() )
 				return;
 
-			for (int i = 1; i < numpartitions_; i++)
+#if GARDNER_SCHEME
+			// head level: partition 0 and 1 are done in the callback
+			const int firstpart = (offset_ == 0) ? 2 : 1;
+#else
+			const int firstpart = 1;
+#endif
+
+			for (int i = firstpart; i < numpartitions_; i++)
 			{
 				Process(i);
 			}
@@ -930,6 +945,11 @@ void MtxConvSlave::WriteToOutbuf(int numsamples, bool skip)
 
             OutNode *outnode = outnodes_.getUnchecked(i);
 
+            // other levels add into the same samples from their threads,
+            // an unsynchronized add would lose their contribution.
+            // locked per channel to keep the hold time short.
+            const ScopedLock outbufLock (*outbuflock_);
+
             if (smplstowrite_end)
                 outbuf_->addFrom(outnode->out_, outoffset_, outnode->outbuf_, 0, outnodeoffset_, smplstowrite_end);
 
@@ -1160,6 +1180,11 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
             skip_cycles_.operator++(); // signal the next cycle to skip a cycle... (ensure threadsafety...)
 
             skip = true;
+
+            // we consumed the event above and nobody is going to signal it again
+            // -> never block the audio callback forever
+            if (forcesync)
+                waitprocessing_.signal();
         }
         else
         {
@@ -1184,7 +1209,7 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
 
                 // signal thread to do the other partitions
 #if GARDNER_SCHEME
-                if (offset_ == partitionsize_)
+                if (offset_ == partitionsize_ || (offset_ == 0 && numpartitions_ > 2))
                 {
                     waitnewdata_.signal();
                 }
@@ -1200,7 +1225,10 @@ bool MtxConvSlave::ReadOutput(int numsamples, bool forcesync)
                 if (priority_ == 0)
                 {
                     Process(1);
-                    waitprocessing_.signal();
+
+                    // with more than two partitions the thread signals when it is done
+                    if (numpartitions_ <= 2)
+                        waitprocessing_.signal();
                 }
 #endif
             }
