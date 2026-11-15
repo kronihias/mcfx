@@ -22,6 +22,7 @@
 #include "NativeNodes/DelayNode.h"
 #include "NativeNodes/FeedbackNodes.h"
 #include "NativeNodes/GainNode.h"
+#include "Hosting/PluginInstanceFactory.h"
 
 #include <functional>
 #include <iostream>
@@ -691,6 +692,156 @@ namespace
     }
 }
 
+//==============================================================================
+// Hosted plug-ins with more than one bus per direction.
+namespace
+{
+    /** Stands in for a hosted plug-in with `numBuses` stereo buses in and
+        out. Halves every channel. Like a real plug-in it trusts the host to
+        hand it a buffer covering all of its enabled buses; here it only
+        notes when the host didn't, where the real one runs off the end. */
+    struct MultiBusPlugin : juce::AudioPluginInstance
+    {
+        MultiBusPlugin (int numInBuses, int numOutBuses, bool auxEnabled, bool lockedLayout)
+            : juce::AudioPluginInstance (makeBuses (numInBuses, numOutBuses, auxEnabled)),
+              locked (lockedLayout) {}
+
+        static BusesProperties makeBuses (int numIn, int numOut, bool auxEnabled)
+        {
+            BusesProperties p;
+            for (int i = 0; i < numIn; ++i)
+                p.addBus (true,  "In "  + juce::String (i + 1), juce::AudioChannelSet::stereo(), i == 0 || auxEnabled);
+            for (int i = 0; i < numOut; ++i)
+                p.addBus (false, "Out " + juce::String (i + 1), juce::AudioChannelSet::stereo(), i == 0 || auxEnabled);
+            return p;
+        }
+
+        bool isBusesLayoutSupported (const BusesLayout& l) const override
+        {
+            if (locked) return false;      // SynthEdit-style: buses can't be switched
+            for (const auto& set : l.inputBuses)
+                if (! set.isDisabled() && set != juce::AudioChannelSet::stereo()) return false;
+            for (const auto& set : l.outputBuses)
+                if (! set.isDisabled() && set != juce::AudioChannelSet::stereo()) return false;
+            return true;
+        }
+
+        void processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&) override
+        {
+            const int needed = juce::jmax (getTotalNumInputChannels(), getTotalNumOutputChannels());
+            if (buffer.getNumChannels() < needed)
+            {
+                bufferTooSmall = true;
+                return;
+            }
+            buffer.applyGain (0.5f);
+        }
+
+        const juce::String getName() const override              { return "MultiBus"; }
+        void prepareToPlay (double, int) override                {}
+        void releaseResources() override                         {}
+        bool acceptsMidi() const override                        { return false; }
+        bool producesMidi() const override                       { return false; }
+        double getTailLengthSeconds() const override             { return 0.0; }
+        bool hasEditor() const override                          { return false; }
+        juce::AudioProcessorEditor* createEditor() override      { return nullptr; }
+        int getNumPrograms() override                            { return 1; }
+        int getCurrentProgram() override                         { return 0; }
+        void setCurrentProgram (int) override                    {}
+        const juce::String getProgramName (int) override         { return {}; }
+        void changeProgramName (int, const juce::String&) override {}
+        void getStateInformation (juce::MemoryBlock&) override   {}
+        void setStateInformation (const void*, int) override     {}
+        void fillInPluginDescription (juce::PluginDescription& d) const override { d.name = getName(); }
+
+        bool locked;
+        bool bufferTooSmall = false;
+    };
+
+    /** Add the plug-in the way the editor does: set up its buses, then size
+        the node from what is enabled. */
+    MultiBusPlugin* addMultiBus (Fixture& f, const juce::String& name,
+                                 int numInBuses, int numOutBuses, bool auxEnabled, bool locked)
+    {
+        auto p = std::make_unique<MultiBusPlugin> (numInBuses, numOutBuses, auxEnabled, locked);
+        auto* raw = p.get();
+        PluginInstanceFactory::configureBuses (*p);
+        const int chIn  = p->getTotalNumInputChannels();
+        const int chOut = p->getTotalNumOutputChannels();
+        f.nodes[name] = f.graph.addNode (std::move (p), NodeKind::Plugin, name, chIn, chOut, { 300, 100 });
+        return raw;
+    }
+
+    /** in0 through the plug-in's pin `ch` to out0; true if it came out halved. */
+    bool passesHalved (Fixture& f, const juce::String& name, int ch)
+    {
+        f.wire (f.in(), 0, f[name], ch);
+        f.wire (f[name], ch, f.out(), 0);
+        const auto out = render (f.graph);
+
+        Fixture straight;
+        straight.wire (straight.in(), 0, straight.out(), 0);
+        const auto in = render (straight.graph);
+
+        float diff = 0.0f;
+        for (int i = 0; i < out.getNumSamples(); ++i)
+            diff = juce::jmax (diff, std::abs (out.getSample (0, i) - 0.5f * in.getSample (0, i)));
+        return peak (out) > 0.01f && diff == 0.0f;
+    }
+
+    void scenarioMultiBus()
+    {
+        {   // 32 stereo buses the plug-in won't let us switch off: the crash.
+            Fixture f;
+            auto* p = addMultiBus (f, "P", 32, 32, true, true);
+            auto* gn = f.graph.getNode (f["P"]);
+            check (gn != nullptr && gn->channelCountIn == 64 && gn->channelCountOut == 64,
+                   "32 locked stereo buses give a 64-channel node");
+            check (passesHalved (f, "P", 63), "audio passes on the last channel of the last bus");
+            check (! p->bufferTooSmall, "locked multi-bus plug-in gets a full-size buffer");
+        }
+        {   // Same plug-in with only the main bus on by default: switch all on.
+            Fixture f;
+            auto* p = addMultiBus (f, "P", 32, 32, false, false);
+            check (p->getTotalNumInputChannels() == 64 && p->getTotalNumOutputChannels() == 64,
+                   "more than two buses are all switched on");
+            check (passesHalved (f, "P", 63), "audio passes on the last bus once enabled");
+            check (! p->bufferTooSmall, "enabled multi-bus plug-in gets a full-size buffer");
+        }
+        {   // Main + sidechain: the sidechain goes, as before.
+            Fixture f;
+            auto* p = addMultiBus (f, "P", 2, 1, true, false);
+            check (p->getTotalNumInputChannels() == 2, "a single aux input is switched off");
+            check (passesHalved (f, "P", 1), "audio passes through the main bus");
+            check (! p->bufferTooSmall, "sidechain plug-in gets a full-size buffer");
+        }
+        {   // A sidechain the plug-in insists on keeping: pins for it, no overrun.
+            Fixture f;
+            auto* p = addMultiBus (f, "P", 2, 1, true, true);
+            auto* gn = f.graph.getNode (f["P"]);
+            check (gn != nullptr && gn->channelCountIn == 4 && gn->channelCountOut == 2,
+                   "a sidechain that can't be switched off shows up as pins");
+            check (passesHalved (f, "P", 0), "audio passes with the sidechain kept");
+            check (! p->bufferTooSmall, "kept sidechain is covered by the buffer");
+        }
+        {   // The plug-in grows after the node was built (a state restore can
+            // switch buses back on): the node keeps its width, nothing overruns.
+            Fixture f;
+            auto* p = addMultiBus (f, "P", 2, 2, true, false);
+            check (p->getTotalNumInputChannels() == 2, "starts on the main bus");
+            p->enableAllBuses();
+            check (p->getTotalNumInputChannels() == 4, "then switches its aux bus back on");
+            render (f.graph);
+            check (! p->bufferTooSmall, "a plug-in that grew mid-run is not handed too small a buffer");
+
+            f.graph.releaseResources();
+            f.graph.prepareToPlay (kSampleRate, kBlockSize, kChannels, kChannels);
+            check (passesHalved (f, "P", 1), "after the next prepare, audio passes through the main bus again");
+            check (! p->bufferTooSmall, "a plug-in that grew is run in a buffer of its own size");
+        }
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -710,6 +861,7 @@ int main (int argc, char** argv)
         { "latency-subgraph", scenarioLatencySubgraph },
         { "latency-runtime",  scenarioLatencyRuntime },
         { "latency-ignored",  scenarioLatencyIgnored },
+        { "multibus",         scenarioMultiBus },
     };
 
     juce::String only;

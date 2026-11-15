@@ -3,28 +3,49 @@
 namespace PluginInstanceFactory
 {
 
-void disableNonMainBuses (juce::AudioPluginInstance& instance)
+void configureBuses (juce::AudioPluginInstance& instance)
 {
     auto layout = instance.getBusesLayout();
     bool changed = false;
 
-    for (int b = 1; b < layout.inputBuses.size(); ++b)
+    for (const bool isInput : { true, false })
     {
-        if (! layout.inputBuses.getReference (b).isDisabled())
+        auto& buses = isInput ? layout.inputBuses : layout.outputBuses;
+
+        // More than one extra bus: this is not a sidechain, it is a plug-in
+        // that spreads its channels over several buses (SynthEdit exports
+        // 32 stereo buses to get 64 channels, multi-out instruments do the
+        // same). Switch them all on, so every channel gets a pin.
+        const bool keepAll = buses.size() > 2;
+
+        for (int b = 1; b < buses.size(); ++b)
         {
-            layout.inputBuses.getReference (b) = juce::AudioChannelSet::disabled();
-            changed = true;
-        }
-    }
-    for (int b = 1; b < layout.outputBuses.size(); ++b)
-    {
-        if (! layout.outputBuses.getReference (b).isDisabled())
-        {
-            layout.outputBuses.getReference (b) = juce::AudioChannelSet::disabled();
-            changed = true;
+            auto& set = buses.getReference (b);
+
+            if (keepAll)
+            {
+                if (! set.isDisabled()) continue;
+                if (auto* bus = instance.getBus (isInput, b))
+                {
+                    const auto last = bus->getLastEnabledLayout();
+                    if (! last.isDisabled())
+                    {
+                        set = last;
+                        changed = true;
+                    }
+                }
+            }
+            else if (! set.isDisabled())
+            {
+                set = juce::AudioChannelSet::disabled();
+                changed = true;
+            }
         }
     }
 
+    // The plug-in may refuse (SynthEdit ones don't let a host switch buses
+    // off). That is fine: every caller sizes the node from the buses that
+    // are enabled afterwards, whatever they turn out to be.
     if (changed)
         instance.setBusesLayout (layout);
 }
@@ -157,7 +178,7 @@ create (juce::AudioPluginFormatManager& formatManager,
     auto inst = formatManager.createPluginInstance (desc, sampleRate, blockSize, errorOut);
     if (inst == nullptr) return nullptr;
 
-    disableNonMainBuses (*inst);
+    configureBuses (*inst);
 
     if (requestedMainChannels > 0)
         trySetMainBusChannels (*inst, requestedMainChannels);

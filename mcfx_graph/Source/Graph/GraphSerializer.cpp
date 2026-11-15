@@ -368,13 +368,13 @@ std::unique_ptr<juce::AudioProcessor> GraphSerializer::buildProcessorFromNodeVar
                             *pluginDesc, 44100.0, 512, err);
             if (inst == nullptr) return nullptr;
 
-            // Only disable non-main buses if there are any — for
-            // most plug-ins this is a no-op, but it avoids touching
-            // the bus layout on instances that don't need it (which
-            // some plug-ins handle poorly mid-state-restore).
+            // Only touch the buses if there is more than the main one
+            // — for most plug-ins this is a no-op, but it avoids
+            // touching the bus layout on instances that don't need it
+            // (which some plug-ins handle poorly mid-state-restore).
             if (inst->getBusCount (true)  > 1
              || inst->getBusCount (false) > 1)
-                PluginInstanceFactory::disableNonMainBuses (*inst);
+                PluginInstanceFactory::configureBuses (*inst);
 
             const auto stateB64 = nObj->getProperty ("state").toString();
             if (stateB64.isNotEmpty())
@@ -388,11 +388,19 @@ std::unique_ptr<juce::AudioProcessor> GraphSerializer::buildProcessorFromNodeVar
             // Many plug-ins encode their bus layout in their state,
             // so the post-setStateInformation channel count is
             // already correct and this branch becomes a no-op.
-            if (chIn > 0 && chIn == chOut
-                && (inst->getMainBusNumInputChannels()  != chIn
-                 || inst->getMainBusNumOutputChannels() != chOut))
+            //
+            // The saved counts are the node's totals over every
+            // enabled bus, so take the other buses off before sizing
+            // the main one (a no-op for single-bus plug-ins).
+            const int totalIn  = inst->getTotalNumInputChannels();
+            const int totalOut = inst->getTotalNumOutputChannels();
+            const int mainIn   = chIn  - (totalIn  - inst->getMainBusNumInputChannels());
+            const int mainOut  = chOut - (totalOut - inst->getMainBusNumOutputChannels());
+
+            if (mainIn > 0 && mainIn == mainOut
+                && (totalIn != chIn || totalOut != chOut))
             {
-                PluginInstanceFactory::trySetMainBusChannels (*inst, chIn);
+                PluginInstanceFactory::trySetMainBusChannels (*inst, mainIn);
             }
 
             outPluginDesc = std::move (pluginDesc);
@@ -456,8 +464,8 @@ bool GraphSerializer::graphFromVar (const juce::var& v,
                     // carry audio.
                     if (gn->processor != nullptr)
                     {
-                        const int actualIn  = gn->processor->getMainBusNumInputChannels();
-                        const int actualOut = gn->processor->getMainBusNumOutputChannels();
+                        const int actualIn  = gn->processor->getTotalNumInputChannels();
+                        const int actualOut = gn->processor->getTotalNumOutputChannels();
                         if (actualIn != gn->channelCountIn || actualOut != gn->channelCountOut)
                         {
                             gn->channelCountIn  = actualIn;
