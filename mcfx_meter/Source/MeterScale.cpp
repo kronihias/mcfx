@@ -58,7 +58,9 @@ void MeterScaleComponent::resized()
 {
     for (int i=0; i<7; i++)
     {
-        _scale_labels.getUnchecked(i)->setBounds(0, _size-iec_scale(-10*i)*_size, 30, getWidth());
+        // Height is one line of the 11 pt font; it was getWidth(), which made
+        // each label 50 px tall and reach far past its own mark.
+        _scale_labels.getUnchecked(i)->setBounds(0, (int) (_size-iec_scale(-10*i)*_size), 30, 16);
     }
 }
 

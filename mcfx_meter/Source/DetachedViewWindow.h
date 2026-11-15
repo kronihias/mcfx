@@ -21,6 +21,7 @@
 #define DETACHEDVIEWWINDOW_H_INCLUDED
 
 #include "JuceHeader.h"
+#include "ViewStyle.h"
 
 /** A meter view lifted out of the editor into its own window — for a second
     screen, a projector, or just more room than the host's plug-in window gives.
@@ -32,13 +33,21 @@
 class DetachedViewWindow : public DocumentWindow
 {
 public:
-    DetachedViewWindow (const String& title, Component& view)
+    DetachedViewWindow (const String& title, Component& view, int minW, int minH)
         : DocumentWindow (title, Colour (0xff141414), DocumentWindow::allButtons, true)
     {
+        // Not inherited from the editor out here.
+        setLookAndFeel (&lnf_.get());
         setUsingNativeTitleBar (true);
         setResizable (true, false);
+        setResizeLimits (minW, minH, 16384, 16384);
         setContentNonOwned (&view, false);
         setWantsKeyboardFocus (true);
+    }
+
+    ~DetachedViewWindow() override
+    {
+        setLookAndFeel (nullptr);
     }
 
     /** Called when the window is closed by the user; the owner takes the view
@@ -95,6 +104,8 @@ private:
                 safe->onClose();
         });
     }
+
+    SharedResourcePointer<ViewStyle::MeterLookAndFeel> lnf_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (DetachedViewWindow)
 };

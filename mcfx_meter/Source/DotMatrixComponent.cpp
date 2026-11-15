@@ -19,6 +19,7 @@
 
 #include "DotMatrixComponent.h"
 #include "meter.h"          // MeterComponent's gradient resources + iec_scale
+#include "OscilloscopeComponent.h"   // displayScaleFor()
 
 extern float iec_scale (float dB);
 
@@ -31,6 +32,11 @@ namespace
     // Strip along the bottom for the selected channel's numbers. Taken out of
     // the grid rather than drawn over it, or the readout covers the last row.
     constexpr float kReadoutH   = 18.f;
+    // The gradient starts at saturated blue, which glares and swallows the
+    // channel numbers. Below this point on the ramp (-40 dB) it is faded in
+    // from a dark navy instead, so quiet channels read as cold, not bright.
+    const Colour    kRampFloor (0xff14204a);
+    constexpr float kRampFadeTop = 0.15f;  // iec_scale (-40)
 }
 
 DotMatrixComponent::DotMatrixComponent()
@@ -60,6 +66,8 @@ DotMatrixComponent::DotMatrixComponent()
             if (up >= 0)      c = gradientImage_.getPixelAt (0, up);
             else if (dn < h)  c = gradientImage_.getPixelAt (0, dn);
         }
+        if (t < kRampFadeTop)
+            c = kRampFloor.interpolatedWith (c, t / kRampFadeTop);
         ramp_[(size_t) i] = c.withAlpha (1.f);
     }
 }
@@ -141,8 +149,9 @@ DotMatrixComponent::Grid DotMatrixComponent::computeGrid (int numChannels, float
 
 void DotMatrixComponent::resized()
 {
+    s_ = displayScaleFor (getWidth(), getHeight());
     grid_ = computeGrid (numCh_, (float) getWidth(),
-                         jmax (10.f, (float) getHeight() - kReadoutH));
+                         jmax (10.f, (float) getHeight() - kReadoutH * s_));
 }
 
 Point<float> DotMatrixComponent::dotCentre (int channel) const
@@ -229,7 +238,7 @@ void DotMatrixComponent::paint (Graphics& g)
     const float r = grid_.cell * kDotFill;
     // Numbers only while they would still be readable inside a dot.
     const bool  labels   = grid_.cell >= 26.f;
-    const float labelPt  = jlimit (8.f, 13.f, grid_.cell * 0.30f);
+    const float labelPt  = jlimit (8.f, 13.f * s_, grid_.cell * 0.30f);
 
     // One font for every label — constructing it per dot went through the
     // typeface cache once per channel per frame.
@@ -283,9 +292,14 @@ void DotMatrixComponent::paint (Graphics& g)
 
         if (labels)
         {
-            // Dark text on a lit dot, light on an unlit one.
-            g.setColour (on ? Colours::black.withAlpha (0.65f)
-                            : Colours::white.withAlpha (0.45f));
+            // White on every level colour, lifted off the yellow end by a
+            // shadow; dimmer on an unlit dot.
+            if (on)
+            {
+                g.setColour (Colours::black.withAlpha (0.5f));
+                g.drawText (String (ch + 1), box.translated (0.f, 1.f), Justification::centred, false);
+            }
+            g.setColour (Colours::white.withAlpha (on ? 0.92f : 0.45f));
             g.drawText (String (ch + 1), box, Justification::centred, false);
         }
     }
@@ -308,14 +322,22 @@ void DotMatrixComponent::paint (Graphics& g)
 
         String s;
         s << "ch " << (readout + 1)
-          << "    rms " << dbText (L.rmsDb)
-          << "    pk "  << dbText (L.peakDb);
-        if (peakHold_)
-            s << "    hold " << dbText (L.holdDb);
+          << "  rms " << dbText (L.rmsDb)
+          << "  pk "  << dbText (L.peakDb);
 
-        g.setFont (Font (FontOptions (12.f, Font::bold)));
+        const Font font (FontOptions (12.f * s_, Font::bold));
+        const int w = getWidth() - 8;
+        // Hold is the first to go when the line does not fit, before squeezing.
+        if (peakHold_)
+        {
+            const String withHold = s + "  hold " + dbText (L.holdDb);
+            if (GlyphArrangement::getStringWidthInt (font, withHold) <= w)
+                s = withHold;
+        }
+
+        const int h = roundToInt (kReadoutH * s_);
+        g.setFont (font);
         g.setColour (readout == selected_ && hovered_ < 0 ? Colours::aquamarine : Colours::white);
-        g.drawText (s, 4, (int) ((float) getHeight() - kReadoutH), getWidth() - 8, (int) kReadoutH,
-                    Justification::centredLeft, false);
+        g.drawFittedText (s, 4, getHeight() - h, w, h, Justification::centredLeft, 1, 0.8f);
     }
 }

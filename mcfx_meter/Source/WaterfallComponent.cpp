@@ -18,6 +18,8 @@
  */
 
 #include "WaterfallComponent.h"
+#include "OscilloscopeComponent.h"   // displayScaleFor()
+#include "ViewStyle.h"
 
 #include <array>
 
@@ -148,6 +150,7 @@ Point<float> WaterfallComponent::project (float freqNorm, float levelNorm, int c
 
 void WaterfallComponent::resized()
 {
+    s_ = displayScaleFor (getWidth(), getHeight());
     rebuildLayout();
 }
 
@@ -156,11 +159,12 @@ void WaterfallComponent::rebuildLayout()
     Layout L;
     L.numCh = numCh_;
 
-    const float availW = jmax (40.f, (float) getWidth()  - kLeftAxis - kRightPad);
-    const float availH = jmax (40.f, (float) getHeight() - kTopPad   - kBottomAxis);
+    // The gutters hold text, so they grow with it.
+    const float availW = jmax (40.f, (float) getWidth()  - (kLeftAxis + kRightPad) * s_);
+    const float availH = jmax (40.f, (float) getHeight() - (kTopPad + kBottomAxis) * s_);
 
-    L.originX = kLeftAxis;
-    L.originY = kTopPad + availH;
+    L.originX = kLeftAxis * s_;
+    L.originY = kTopPad * s_ + availH;
 
     if (numCh_ <= 1)
     {
@@ -202,22 +206,22 @@ void WaterfallComponent::paintGrid (Graphics& g) const
     const int back = n - 1;
 
     // --- floor lines, one per decade marker, receding into depth ---
-    const bool sparseLabels = layout_.plotW < 300.f;
+    const bool sparseLabels = layout_.plotW < 300.f * s_;
     int idx = 0;
-    g.setFont (Font (FontOptions (10.f, Font::plain)));
+    g.setFont (Font (FontOptions (10.f * s_, Font::plain)));
     for (float hz : kGridFreqs)
     {
         const float fn = freqToNorm (hz);
         const auto  a  = project (fn, 0.f, 0);
         const auto  b  = project (fn, 0.f, back);
 
-        g.setColour (Colours::white.withAlpha (0.09f));
+        g.setColour (Colours::white.withAlpha (ViewStyle::gridMinor));
         g.drawLine (a.x, a.y, b.x, b.y, 0.6f);
 
         if (! sparseLabels || (idx % 2) == 0)
         {
-            g.setColour (Colours::white.withAlpha (0.45f));
-            g.drawText (freqLabel (hz), (int) (a.x - 20.f), (int) (a.y + 4.f), 40, 14,
+            g.setColour (Colours::white.withAlpha (ViewStyle::axisText * 0.8f));
+            g.drawText (freqLabel (hz), Rectangle<float> (a.x - 20.f * s_, a.y + 4.f * s_, 40.f * s_, 14.f * s_),
                         Justification::centred, false);
         }
         ++idx;
@@ -237,19 +241,19 @@ void WaterfallComponent::paintGrid (Graphics& g) const
     // --- dB scale up the front-left edge. Past ~64 channels the ridge is only
     //     its minimum tall, and a 20 dB grid would stack five labels inside
     //     26 px of it, so the step follows the space actually available. ---
-    const float dbStep = layout_.ridgeH >= 150.f ? 20.f
-                       : layout_.ridgeH >= 80.f  ? 40.f
+    const float dbStep = layout_.ridgeH >= 150.f * s_ ? 20.f
+                       : layout_.ridgeH >= 80.f * s_  ? 40.f
                                                  : -floorDb_;
-    g.setFont (Font (FontOptions (10.f, Font::plain)));
+    g.setFont (Font (FontOptions (10.f * s_, Font::plain)));
     for (float db = 0.f; db >= floorDb_ - 0.5f; db -= dbStep)
     {
         const float ln = (db - floorDb_) / (-floorDb_);
         const auto  p  = project (0.f, ln, 0);
         g.setColour (Colours::white.withAlpha (0.22f));
-        g.drawLine (p.x - 4.f, p.y, p.x, p.y, 0.8f);
-        g.setColour (Colours::white.withAlpha (0.45f));
+        g.drawLine (p.x - 4.f * s_, p.y, p.x, p.y, 0.8f);
+        g.setColour (Colours::white.withAlpha (ViewStyle::axisText * 0.8f));
         g.drawText (String ((int) (db + (float) offset_)),
-                    2, (int) (p.y - 7.f), 26, 14,
+                    Rectangle<float> (2.f, p.y - 7.f * s_, 26.f * s_, 14.f * s_),
                     Justification::centredRight, false);
     }
 
@@ -264,7 +268,7 @@ void WaterfallComponent::paintGrid (Graphics& g) const
             const float fn = freqToNorm (fHz);
             const auto  a  = project (fn, 0.f, 0);
             const auto  b  = project (fn, 0.f, back);
-            g.setColour (Colours::orange.withAlpha (0.22f));
+            g.setColour (ViewStyle::accentOrange.withAlpha (0.22f));
             g.drawLine (a.x, a.y, b.x, b.y, 1.f);
         }
     }
@@ -418,14 +422,14 @@ void WaterfallComponent::paintFreqCursor (Graphics& g) const
     // Level readout beside the tip, nudged inside the component at the edges.
     {
         const auto  lvl = (db <= -199.f ? String ("-inf") : String (db, 1) + " dB");
-        const float w = 58.f, h = 13.f;
-        auto r = Rectangle<float> (tip.x + 6.f, tip.y - h * 0.5f, w, h);
+        const float w = 58.f * s_, h = 13.f * s_, gap = 6.f * s_;
+        auto r = Rectangle<float> (tip.x + gap, tip.y - h * 0.5f, w, h);
         if (r.getRight() > (float) getWidth() - 2.f)
-            r.setX (tip.x - 6.f - w);
-        g.setColour (Colours::black.withAlpha (0.7f));
-        g.fillRoundedRectangle (r, 3.f);
+            r.setX (tip.x - gap - w);
+        g.setColour (Colours::black.withAlpha (ViewStyle::plateAlpha));
+        g.fillRoundedRectangle (r, 3.f * s_);
         g.setColour (Colours::aquamarine.withAlpha (0.9f));
-        g.setFont (Font (FontOptions (10.f, Font::plain)));
+        g.setFont (Font (FontOptions (10.f * s_, Font::plain)));
         g.drawText (lvl, r, Justification::centred, false);
     }
 
@@ -433,14 +437,14 @@ void WaterfallComponent::paintFreqCursor (Graphics& g) const
     {
         const auto  axisPt = project (fn, 0.f, 0);
         const auto  text   = freqLabel (normToFreq (fn)) + " Hz";
-        const float w = 62.f;
-        auto plate = Rectangle<float> (axisPt.x - w * 0.5f, axisPt.y + 3.f, w, 14.f);
+        const float w = 62.f * s_;
+        auto plate = Rectangle<float> (axisPt.x - w * 0.5f, axisPt.y + 3.f * s_, w, 14.f * s_);
         plate.setX (jlimit (2.f, jmax (2.f, (float) getWidth() - w - 2.f), plate.getX()));
 
-        g.setColour (Colours::black.withAlpha (0.8f));
-        g.fillRoundedRectangle (plate, 3.f);
+        g.setColour (Colours::black.withAlpha (ViewStyle::plateAlpha));
+        g.fillRoundedRectangle (plate, 3.f * s_);
         g.setColour (Colours::aquamarine);
-        g.setFont (Font (FontOptions (10.f, Font::bold)));
+        g.setFont (Font (FontOptions (10.f * s_, Font::bold)));
         g.drawText (text, plate, Justification::centred, false);
     }
 }
@@ -466,7 +470,7 @@ int WaterfallComponent::channelLabelAt (Point<float> p) const
         const auto q = project (0.f, 0.f, ch);
         // Matches the drawText rectangle in paint(), padded so the numbers are
         // clickable at the pitch they are drawn at.
-        if (Rectangle<float> (q.x - 26.f, q.y - 8.f, 24.f, 16.f).contains (p))
+        if (Rectangle<float> (q.x - 26.f * s_, q.y - 8.f * s_, 24.f * s_, 16.f * s_).contains (p))
             return ch;
     }
     return -1;
@@ -584,8 +588,8 @@ void WaterfallComponent::paint (Graphics& g)
     if (numCh_ > 0)
     {
         const int every = labelEvery();
-        const Font plainFont (FontOptions (9.f, Font::plain));
-        const Font boldFont  (FontOptions (9.f, Font::bold));
+        const Font plainFont (FontOptions (9.f * s_, Font::plain));
+        const Font boldFont  (FontOptions (9.f * s_, Font::bold));
         g.setFont (plainFont);
 
         for (int ch = 0; ch < numCh_; ++ch)
@@ -602,12 +606,12 @@ void WaterfallComponent::paint (Graphics& g)
             if (sel)
             {
                 g.setColour (Colours::white.withAlpha (0.22f));
-                g.fillRoundedRectangle (p.x - 26.f, p.y - 8.f, 24.f, 16.f, 3.f);
+                g.fillRoundedRectangle (p.x - 26.f * s_, p.y - 8.f * s_, 24.f * s_, 16.f * s_, 3.f * s_);
                 g.setFont (boldFont);
             }
 
             g.setColour (Colours::white.withAlpha (sel ? 1.f : (ch == hovered_ ? 1.f : 0.4f)));
-            g.drawText (String (ch + 1), (int) (p.x - 24.f), (int) (p.y - 7.f), 20, 14,
+            g.drawText (String (ch + 1), Rectangle<float> (p.x - 24.f * s_, p.y - 7.f * s_, 20.f * s_, 14.f * s_),
                         Justification::centredRight, false);
 
             if (sel)
@@ -618,8 +622,9 @@ void WaterfallComponent::paint (Graphics& g)
     if (hovered_ >= 0)
     {
         g.setColour (Colours::white);
-        g.setFont (Font (FontOptions (12.f, Font::bold)));
-        g.drawText ("ch " + String (hovered_ + 1), getWidth() - 90, 4, 82, 16,
+        g.setFont (Font (FontOptions (12.f * s_, Font::bold)));
+        g.drawText ("ch " + String (hovered_ + 1),
+                    Rectangle<float> ((float) getWidth() - 90.f * s_, 4.f * s_, 82.f * s_, 16.f * s_),
                     Justification::centredRight, false);
     }
 }

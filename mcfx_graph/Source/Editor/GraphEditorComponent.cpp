@@ -798,8 +798,10 @@ void GraphEditorComponent::showPluginSearchPopup (juce::Point<int> localPos)
                 return;
             }
 
-            const int chIn  = inst->getMainBusNumInputChannels();
-            const int chOut = inst->getMainBusNumOutputChannels();
+            // Every enabled bus, not just the main one: a plug-in that keeps
+            // several buses on is handed a buffer covering all of them.
+            const int chIn  = inst->getTotalNumInputChannels();
+            const int chOut = inst->getTotalNumOutputChannels();
             auto pluginDesc = std::make_unique<juce::PluginDescription> (desc);
 
             auto uuid = activeController_->addNode (std::move (inst), NodeKind::Plugin,

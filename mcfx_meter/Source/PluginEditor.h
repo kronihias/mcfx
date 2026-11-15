@@ -30,6 +30,7 @@
 #include "DotMatrixComponent.h"
 #include "OscilloscopeComponent.h"
 #include "DetachedViewWindow.h"
+#include "ViewStyle.h"
 
 
 #define METER_WIDTH 16
@@ -77,13 +78,12 @@ public:
 
     void changeListenerCallback (ChangeBroadcaster *source);
 
-    // Binary resources:
-    static const char* meter_scale_png;
-    static const int meter_scale_pngSize;
-
 
 private:
     //[UserVariables]   -- You can add your own custom variables in this section.
+    // First, so it outlives every component that draws with it.
+    SharedResourcePointer<ViewStyle::MeterLookAndFeel> _lnf;
+
     OwnedArray<MeterComponent> _meters;
     OwnedArray<Label> _labels;
 
@@ -104,6 +104,9 @@ private:
 
     // Alternate view: spectral history with a live spectrum alongside.
     SpectrogramComponent _spectro;
+
+    // Alternate view: real-time spectrum, one curve per channel or their average.
+    SpectrumComponent _spectrum;
 
     // The view the current mode shows, or nullptr for the bars (which are
     // many fixed-size strips, not one component that could move elsewhere).
@@ -159,12 +162,9 @@ private:
     int _cachedNumCh = 0;
     int _appliedStateGen = 0;   // the processor's _state_generation last applied
 
-    int _width;
-    int _height;
+    int _width = 0;
 
     TooltipWindow tooltipWindow;
-
-    LookAndFeel_V3 MyLookAndFeel;
 
     Ambix_meterAudioProcessor* getProcessor() const
 	{

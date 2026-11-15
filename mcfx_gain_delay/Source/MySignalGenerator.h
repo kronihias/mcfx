@@ -25,8 +25,6 @@
 #define _USE_MATH_DEFINES
 #include <math.h>
 
-#define SIGTABLEN 512
-
 /////////////////////////////////
 
 /* RANDOM GENERATOR from Numerical Recipes in C */
@@ -47,9 +45,9 @@ public:
   MyRandomGenerator()
   {
     iy = 0;
-    setSeed(-123456789L);
+    setSeed(-(long)(Random::getSystemRandom().nextInt(IM - 1) + 1)); // own seed per instance
     
-    iset=0;
+    iset=false;
   }
   
   ~MyRandomGenerator()
@@ -125,14 +123,15 @@ public:
         
       } while (rsq >= 1.0 || rsq == 0.0);
       
-      fac=sqrt(-2.0*log(rsq)/rsq);
+      fac=sqrt(-2.0*log(rsq)/rsq)*0.2239f; // -12dB
       gset=v1*fac;
+      iset=true;
       
-      return v2*fac*0.2239f; // -12dB
+      return v2*fac;
     }
     else
     {
-      iset=0;
+      iset=false;
       return gset;
     }
   }
@@ -225,8 +224,13 @@ public:
     b5_.resize(numChannels_);
     b6_.resize(numChannels_);
     
+    ext_x1_.resize(numChannels_);
+    ext_y1_.resize(numChannels_);
+    
     for (int i=0; i < numChannels_; i++)
     {
+      ext_x1_.set(i, 0.f);
+      ext_y1_.set(i, 0.f);
       b0_.set(i, 0.f);
       b1_.set(i, 0.f);
       b2_.set(i, 0.f);
@@ -240,6 +244,13 @@ public:
   ~MyPinkNoiseFilter()
   {
     
+  }
+  
+  // above 96 kHz the filter below would flatten under 40 Hz, extend it with a low shelf
+  void setSamplerate(float samplerate)
+  {
+    ext_on_ = samplerate > 100000.f;
+    ext_p_ = expf(-2.f*(float)M_PI*3.3f/samplerate);
   }
   
   // http://www.firstpr.com.au/dsp/pink-noise/
@@ -270,6 +281,20 @@ public:
         *b6 = white * 0.115926;
         
       }
+    
+    if (ext_on_)
+    {
+      wp = (&buffer)->getWritePointer(ch);
+      float* x1 = &ext_x1_.getReference(ch);
+      float* y1 = &ext_y1_.getReference(ch);
+      
+      for (int k=0; k<numSamples; k++) {
+        float x = *wp;
+        *y1 = x - 0.999655f * *x1 + ext_p_ * *y1;
+        *x1 = x;
+        (*wp++) = *y1;
+      }
+    }
 
   }
   
@@ -284,42 +309,26 @@ public:
   
 private:
   Array<float> b0_, b1_, b2_, b3_, b4_, b5_, b6_;
+  Array<float> ext_x1_, ext_y1_;
+  bool ext_on_ = false;
+  float ext_p_ = 0.f;
   int numChannels_;
   
 };
 
-/* PROTOTYPE TONE GENERATOR */
+/* Tone Generators */
 
-class MyToneGenerator
+class MyOscillator
 {
 public:
-  MyToneGenerator() : sigtable_(1,256), phase_(0.), dphase_(0.)
-  {
-    f_ = 440.f;
-    samplerate_ = 44100.f;
-    sigtablen_ = SIGTABLEN;
-  }
-  
-  virtual ~MyToneGenerator() {};
-  
   void setSamplerate(float samplerate)
   {
-    if (samplerate <= 0)
-      samplerate = 44100.f;
-    
-    samplerate_ = samplerate;
-    
-    setFreq(f_);
+    samplerate_ = samplerate > 0.f ? samplerate : 44100.f;
   }
   
   void setFreq(float f)
   {
-    if (f <= 0)
-      f = 440.f;
-    
-    f_ = f;
-    
-    dphase_ = sigtablen_ * f_ / samplerate_;
+    f_ = f > 0.f ? f : 440.f;
   }
   
   float getFreq()
@@ -327,229 +336,185 @@ public:
     return f_;
   }
   
-  void fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
-  {
-    int numSamples = buffer.getNumSamples();
-    
-    float *out = buffer.getWritePointer(ch);
-    float *tab = sigtable_.getWritePointer(0);
-    
-    for (int i=0; i<numSamples; i++)
-    {
-      float phase = floor(phase_);
-      
-      float frac = (float)phase_ - phase;
-      
-      float *addr = tab + (int)phase;
-      
-      float f1 = addr[0];
-      float f2 = addr[1];
-      
-      *out++ = f1 + frac * (f2 - f1); // linear interpolation
-      
-      phase_ += dphase_;
-      
-      if (phase_ >= (double)sigtablen_)
-        phase_ -= (double)sigtablen_;
-    }
-  }
-  
 protected:
-  
-  virtual void updateTable() = 0; // use this method to write the lookup table
-  
-  float samplerate_;
-  float f_;
-  
-  int sigtablen_;
-  AudioSampleBuffer sigtable_;
-  
-  double phase_; // current phase
-  double dphase_; // phase increment
-  
+  float samplerate_ = 44100.f;
+  float f_ = 440.f;
 };
 
 
 /* Sine Generator */
-class MySineGenerator : public MyToneGenerator
+// recursive quadrature oscillator in double precision
+class MySineGenerator : public MyOscillator
 {
 public:
-  MySineGenerator()
+  void fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
   {
-    updateTable();
+    if (f_ != coeff_f_ || samplerate_ != coeff_sr_)
+    {
+      coeff_f_ = f_;
+      coeff_sr_ = samplerate_;
+      const double w = 2.*M_PI*(double)coeff_f_/(double)coeff_sr_;
+      c_ = cos(w);
+      s_ = sin(w);
+    }
+    
+    int numSamples = buffer.getNumSamples();
+    float *out = buffer.getWritePointer(ch);
+    
+    double re = re_, im = im_;
+    const double c = c_, s = s_;
+    
+    for (int i=0; i<numSamples; i++)
+    {
+      *out++ = (float)im;
+      
+      const double re_new = re*c - im*s;
+      im = re*s + im*c;
+      re = re_new;
+    }
+    
+    // renormalise magnitude
+    const double g = 1.5 - 0.5*(re*re + im*im);
+    re_ = re*g;
+    im_ = im*g;
   }
-  
-  ~MySineGenerator()
-  {}
   
 private:
+  float coeff_f_ = 0.f;
+  float coeff_sr_ = 0.f;
   
-  void updateTable() // update the sine table
-  {
-    sigtable_.setSize(1, sigtablen_+1);
-    sigtable_.clear();
-    
-    double phase = 0.f;
-    double phaseinc = 2.*M_PI/(double)sigtablen_;
-    
-    float* wp = sigtable_.getWritePointer(0);
-    
-    for (int i=0; i<sigtablen_+1; i++) {
-      (*wp++) = (float)sin(phase);
-      phase += phaseinc;
-    }
-  }
-  
-  
+  double re_ = 1., im_ = 0.;
+  double c_ = 1., s_ = 0.;
 };
 
 
-
-/* Sawtooth Generator */
-class MySawtoothGenerator : public MyToneGenerator
+/* Sawtooth and Square Generator */
+// PolyBLEP band limited
+class MyBlepGenerator : public MyOscillator
 {
 public:
-  MySawtoothGenerator()
-  {
-    updateTable();
-  }
+  enum shape { saw, square };
   
-  ~MySawtoothGenerator()
-  {}
+  MyBlepGenerator(shape s) : shape_(s) {}
   
-private:
-  
-  void updateTable() // update the table
-  {
-    sigtable_.setSize(1, sigtablen_+1);
-    sigtable_.clear();
-    
-    float* wp = sigtable_.getWritePointer(0);
-    
-    double val = -1.;
-    
-    double inc = 2./sigtablen_;
-    
-    for (int i=0; i<sigtablen_; i++) {
-      (*wp++) = (float)val*0.707f;
-      val += inc;
-    }
-    
-    (*wp++) = 0.;
-    
-  }
-  
-};
-
-/* Square Generator */
-class MySquareGenerator : public MyToneGenerator
-{
-public:
-  MySquareGenerator()
-  {
-    updateTable();
-  }
-  
-  ~MySquareGenerator()
-  {}
-  
-private:
-  
-  void updateTable() // update the table
-  {
-    
-    sigtable_.setSize(1, sigtablen_+1);
-    sigtable_.clear();
-    
-    float* wp = sigtable_.getWritePointer(0);
-    
-    for (int i=0; i<sigtablen_/2; i++) {
-      (*wp++) = 0.707f;
-    }
-    
-    for (int i=0; i<sigtablen_/2; i++) {
-      (*wp++) = -0.707f;
-    }
-    
-    (*wp++) = 0.707f;
-  }
-  
-};
-
-/* Toneburst Generator */
-class MyToneburstGenerator : public MyToneGenerator
-{
-public:
-  MyToneburstGenerator()
-  {
-    pausecount_ = 0.6 * 48000;
-    sigtablen_ = ceil(6.5 * SIGTABLEN); // this includes several cycles plus the pause
-    updateTable();
-  }
-
-  ~MyToneburstGenerator()
-  {}
-
-
-  /* Override fill buffer methode to include pause in signal */
   void fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
   {
     int numSamples = buffer.getNumSamples();
-
     float *out = buffer.getWritePointer(ch);
-    float *tab = sigtable_.getWritePointer(0);
-
-    for (int i = 0; i<numSamples; i++)
+    
+    const double dt = jmin(0.5, (double)f_/(double)samplerate_);
+    double t = t_;
+    
+    for (int i=0; i<numSamples; i++)
     {
-      // one cycle is over -> pause!
-      if (phase_ >= (double)sigtablen_)
+      double y;
+      
+      if (shape_ == saw)
       {
-        if (pausecount_-- <= 0)
-        {
-          phase_ -= (double)sigtablen_;
-          pausecount_ = 0.6 * samplerate_;
-        }
-        *out++ = 0.;
-      } 
-      else 
+        y = 2.*t - 1. - blep(t, dt);
+      }
+      else
       {
-        float phase = floor(phase_);
-
-        float frac = (float)phase_ - phase;
-
-        float *addr = tab + (int)phase;
-
-        float f1 = addr[0];
-        float f2 = addr[1];
-
-        *out++ = f1 + frac * (f2 - f1); // linear interpolation
-
-        phase_ += dphase_;
+        double t2 = t + 0.5;
+        if (t2 >= 1.)
+          t2 -= 1.;
+        
+        y = (t < 0.5 ? 1. : -1.) + blep(t, dt) - blep(t2, dt);
       }
       
+      *out++ = (float)(0.707*y);
+      
+      t += dt;
+      if (t >= 1.)
+        t -= 1.;
     }
+    
+    t_ = t;
   }
-
+  
 private:
-
-  int pausecount_;
-
-  void updateTable() // update the sine table
+  static double blep(double t, double dt)
   {
-    sigtable_.setSize(1, sigtablen_ + 1);
-    sigtable_.clear();
+    if (t < dt)
+    {
+      t /= dt;
+      return t + t - t*t - 1.;
+    }
+    if (t > 1. - dt)
+    {
+      t = (t - 1.)/dt;
+      return t*t + t + t + 1.;
+    }
+    return 0.;
+  }
+  
+  shape shape_;
+  double t_ = 0.;
+};
 
-    double phase = 0.f;
-    double phaseinc = 1. / sigtablen_;
 
-    float* wp = sigtable_.getWritePointer(0);
-
-    for (int i = 0; i<sigtablen_ + 1; i++) {
-      (*wp++) = (float) 0.5* (1.-cos(2*M_PI*phase)) * sin(2 * M_PI * phase * 6.5);
-      phase += phaseinc;
+/* Toneburst Generator */
+// 6.5 cycles with hann window, then 0.6 s pause
+class MyToneburstGenerator : public MyOscillator
+{
+public:
+  void setSamplerate(float samplerate)
+  {
+    MyOscillator::setSamplerate(samplerate);
+    pos_ = burst_len_ = pause_len_ = 0;
+  }
+  
+  void fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
+  {
+    int numSamples = buffer.getNumSamples();
+    float *out = buffer.getWritePointer(ch);
+    
+    for (int i=0; i<numSamples; i++)
+    {
+      if (pos_ >= burst_len_ + pause_len_)
+        startBurst();
+      
+      if (pos_ < burst_len_)
+      {
+        *out++ = (float)(0.5*(1. - wre_)*im_);
+        
+        double tmp = re_*c_ - im_*s_;
+        im_ = re_*s_ + im_*c_;
+        re_ = tmp;
+        
+        tmp = wre_*wc_ - wim_*ws_;
+        wim_ = wre_*ws_ + wim_*wc_;
+        wre_ = tmp;
+      }
+      else
+      {
+        *out++ = 0.f;
+      }
+      
+      pos_++;
     }
   }
-
+  
+private:
+  void startBurst()
+  {
+    const double w = 2.*M_PI*(double)f_/(double)samplerate_;
+    c_ = cos(w);
+    s_ = sin(w);
+    wc_ = cos(w/6.5);
+    ws_ = sin(w/6.5);
+    re_ = wre_ = 1.;
+    im_ = wim_ = 0.;
+    
+    burst_len_ = (int)ceil(6.5*samplerate_/f_);
+    pause_len_ = (int)(0.6f*samplerate_);
+    pos_ = 0;
+  }
+  
+  int pos_ = 0, burst_len_ = 0, pause_len_ = 0;
+  
+  double re_ = 1., im_ = 0., c_ = 1., s_ = 0.; // tone
+  double wre_ = 1., wim_ = 0., wc_ = 1., ws_ = 0.; // window
 };
 
 class MySignalGenerator
@@ -613,8 +578,8 @@ private:
   MyRandomGenerator random_gen_;
   MyPinkNoiseFilter pink_noise_filt_;
   MySineGenerator sine_generator_;
-  MySawtoothGenerator sawtooth_generator_;
-  MySquareGenerator square_generator_;
+  MyBlepGenerator sawtooth_generator_ { MyBlepGenerator::saw };
+  MyBlepGenerator square_generator_ { MyBlepGenerator::square };
   MyToneburstGenerator tuneburst_generator_;
 
   sigtype signal_type_;
@@ -626,6 +591,7 @@ private:
   
   float pulse_len_s_; // pulse length in seconds
   int pulse_len_; // length of the pulse/pause in samples
+  int ramp_len_; // pulse fade in/out in samples
   int cur_time_smpl_; // used for pulsed signal type
   
   float samplerate_;

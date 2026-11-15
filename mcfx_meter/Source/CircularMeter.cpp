@@ -19,6 +19,8 @@
 
 #include "CircularMeter.h"
 #include "meter.h"          // MeterComponent's gradient resources + iec_scale
+#include "OscilloscopeComponent.h"   // displayScaleFor()
+#include "ViewStyle.h"
 
 extern float iec_scale (float dB);
 
@@ -134,7 +136,9 @@ void CircularMeter::resized()
 {
     auto b = getLocalBounds().toFloat();
     centre_ = b.getCentre();
-    outerR_ = jmax (10.f, 0.5f * jmin (b.getWidth(), b.getHeight()) - 26.f);
+    s_ = displayScaleFor (getWidth(), getHeight());
+    // The margin is the channel numbers' room outside the rim.
+    outerR_ = jmax (10.f, 0.5f * jmin (b.getWidth(), b.getHeight()) - 26.f * s_);
     innerR_ = outerR_ * kInnerFraction;
     buildGradient();
 }
@@ -379,7 +383,7 @@ void CircularMeter::paint (Graphics& g)
     // Channel numbers outside the rim, thinned as the ring fills. The
     // selected one is always numbered, or the selection has no anchor.
     {
-        const float pt = numCh_ > 64 ? 9.f : 11.f;
+        const float pt = (numCh_ > 64 ? 9.f : 11.f) * s_;
         const Font plainFont (FontOptions (pt, Font::plain));
         const Font boldFont  (FontOptions (pt, Font::bold));
         g.setFont (plainFont);
@@ -390,12 +394,12 @@ void CircularMeter::paint (Graphics& g)
                 continue;
 
             const float a  = angles_[(size_t) ch];
-            const auto  lp = centre_ + Point<float> (std::sin (a), -std::cos (a)) * (outerR_ + 13.f);
+            const auto  lp = centre_ + Point<float> (std::sin (a), -std::cos (a)) * (outerR_ + 13.f * s_);
             g.setColour (ch == selected_ ? Colours::aquamarine
                                          : Colours::white.withAlpha (ch == hovered_ ? 1.f : 0.55f));
             if (ch == selected_)
                 g.setFont (boldFont);
-            g.drawText (String (ch + 1), (int) lp.x - 14, (int) lp.y - 7, 28, 14,
+            g.drawText (String (ch + 1), Rectangle<float> (28.f * s_, 14.f * s_).withCentre (lp),
                         Justification::centred, false);
             if (ch == selected_)
                 g.setFont (plainFont);
@@ -405,7 +409,7 @@ void CircularMeter::paint (Graphics& g)
     // --- dB scale, on top of the wedges so it stays readable whatever the
     //     levels are doing. Each label sits just inside its own ring, on the
     //     vertical, over a dark plate. ---
-    g.setFont (Font (FontOptions (10.f, Font::plain)));
+    g.setFont (Font (FontOptions (10.f * s_, Font::plain)));
 
     // Thinned by the space actually between the rings, not by a fixed list:
     // iec_scale bunches the quiet end up, and in a small window the whole scale
@@ -416,15 +420,15 @@ void CircularMeter::paint (Graphics& g)
     for (float db : kRingDb)
     {
         const float r = radiusForScaleDb (db);
-        if (r < innerR_ + 7.f)              // too close to the hub to place
+        if (r < innerR_ + 7.f * s_)         // too close to the hub to place
             continue;
-        if (std::abs (db) > 0.01f && lastLabelR - r < 13.f)
+        if (std::abs (db) > 0.01f && lastLabelR - r < 13.f * s_)
             continue;                       // 0 dB is always labelled
         lastLabelR = r;
 
-        const auto plate = Rectangle<float> (centre_.x - 13.f, centre_.y - r + 1.f, 26.f, 12.f);
-        g.setColour (Colours::black.withAlpha (0.62f));
-        g.fillRoundedRectangle (plate, 2.f);
+        const auto plate = Rectangle<float> (centre_.x - 13.f * s_, centre_.y - r + s_, 26.f * s_, 12.f * s_);
+        g.setColour (Colours::black.withAlpha (ViewStyle::plateAlpha));
+        g.fillRoundedRectangle (plate, 3.f * s_);
         g.setColour (Colours::white.withAlpha (std::abs (db) < 0.01f ? 0.85f : 0.6f));
         g.drawText (String ((int) db + offset_), plate, Justification::centred, false);
     }
@@ -444,27 +448,32 @@ void CircularMeter::paint (Graphics& g)
             return db <= -199.f ? String ("-inf") : String (db, 1) + " dB";
         };
         const int x = (int) (centre_.x - innerR_), w = (int) (innerR_ * 2.f);
+        // Sized by the hub, which is what the text has to fit in: full size
+        // from a 50 px hub up, smaller below, larger on a big display.
+        const float k = jlimit (8.f, 15.f * s_, innerR_ * 0.3f) / 15.f;
+        auto line = [&] (const String& text, float y, float h)
+        {
+            g.drawFittedText (text, x, roundToInt (centre_.y + y * k), w, roundToInt (h * k),
+                              Justification::centred, 1, 0.8f);
+        };
 
         g.setColour (readout == selected_ && hovered_ < 0 ? Colours::aquamarine : Colours::white);
-        g.setFont (Font (FontOptions (15.f, Font::bold)));
-        g.drawText ("ch " + String (readout + 1),
-                    x, (int) (centre_.y - innerR_ * 0.62f), w, 18, Justification::centred, false);
+        g.setFont (Font (FontOptions (15.f * k, Font::bold)));
+        g.drawFittedText ("ch " + String (readout + 1), x, (int) (centre_.y - innerR_ * 0.62f),
+                          w, roundToInt (18.f * k), Justification::centred, 1, 0.8f);
 
-        g.setFont (Font (FontOptions (13.f, Font::plain)));
+        g.setFont (Font (FontOptions (13.f * k, Font::plain)));
         g.setColour (Colours::white.withAlpha (0.85f));
-        g.drawText ("rms " + dbText (L.rmsDb),
-                    x, (int) (centre_.y - 12.f), w, 18, Justification::centred, false);
+        line ("rms " + dbText (L.rmsDb), -12.f, 18.f);
 
         g.setColour (Colours::white.withAlpha (0.6f));
-        g.setFont (Font (FontOptions (12.f, Font::plain)));
-        g.drawText ("pk " + dbText (L.peakDb),
-                    x, (int) (centre_.y + 6.f), w, 16, Justification::centred, false);
+        g.setFont (Font (FontOptions (12.f * k, Font::plain)));
+        line ("pk " + dbText (L.peakDb), 6.f, 16.f);
 
         if (peakHold_)
         {
             g.setColour (Colours::yellow.withAlpha (0.7f));
-            g.drawText ("hold " + dbText (L.holdDb),
-                        x, (int) (centre_.y + 22.f), w, 16, Justification::centred, false);
+            line ("hold " + dbText (L.holdDb), 22.f, 16.f);
         }
     }
 }

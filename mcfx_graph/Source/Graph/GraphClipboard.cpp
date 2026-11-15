@@ -195,8 +195,8 @@ std::vector<juce::Uuid> GraphClipboard::pasteFromClipboard (
                 // actual bus.
                 if (gn->processor != nullptr)
                 {
-                    const int actualIn  = gn->processor->getMainBusNumInputChannels();
-                    const int actualOut = gn->processor->getMainBusNumOutputChannels();
+                    const int actualIn  = gn->processor->getTotalNumInputChannels();
+                    const int actualOut = gn->processor->getTotalNumOutputChannels();
                     if (actualIn != gn->channelCountIn || actualOut != gn->channelCountOut)
                     {
                         gn->channelCountIn  = actualIn;

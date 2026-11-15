@@ -137,6 +137,7 @@ private:
     // Geometry, recomputed on resize.
     Point<float> centre_;
     float outerR_ = 0.f, innerR_ = 0.f;
+    float s_ = 1.f;                    // display scale, see displayScaleFor()
 
     // Radial gradient sampled from the bar view's own gradient image, so a wedge
     // shows the colour the bar shows at the same height.

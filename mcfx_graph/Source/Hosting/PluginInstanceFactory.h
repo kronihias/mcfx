@@ -2,9 +2,8 @@
   ==============================================================================
 
    PluginInstanceFactory — wraps juce::AudioPluginFormatManager::createPluginInstance
-   with the same bus-disabling and main-bus channel probing tricks
-   mcfx_anything uses, so hosted plugins behave consistently regardless of
-   how many sidechain / aux buses they advertise.
+   with bus set-up and main-bus channel probing, so hosted plugins behave
+   consistently regardless of how many sidechain / aux buses they advertise.
 
   ==============================================================================
 */
@@ -17,9 +16,17 @@
 
 namespace PluginInstanceFactory
 {
-    /** Disable every input/output bus except the main bus on `instance`.
-        Reuses mcfx_anything's strategy (PluginProcessor.cpp:574+). */
-    void disableNonMainBuses (juce::AudioPluginInstance& instance);
+    /** Decide which of the plug-in's buses stay enabled. Per direction:
+
+        - one or two buses: the second is taken for a sidechain / aux and
+          switched off, so the node carries the main bus only;
+        - three or more: the plug-in spreads its channels over several buses
+          (e.g. 32 stereo buses for 64 channels), so all are switched on.
+
+        The plug-in may refuse either change. Whatever ends up enabled is
+        what the node exposes: size it with getTotalNumInputChannels() /
+        getTotalNumOutputChannels(), never with the main bus alone. */
+    void configureBuses (juce::AudioPluginInstance& instance);
 
     /** Return the channel counts that the plugin's main input bus accepts
         from a candidate list, in declaration order. Used to populate a UX
@@ -33,7 +40,7 @@ namespace PluginInstanceFactory
         untouched. */
     bool trySetMainBusChannels (juce::AudioPluginInstance& instance, int numChannels);
 
-    /** Convenience: createPluginInstance + disableNonMainBuses + optional
+    /** Convenience: createPluginInstance + configureBuses + optional
         main-bus channel sizing. Returns nullptr on failure (errorOut populated). */
     std::unique_ptr<juce::AudioPluginInstance>
     create (juce::AudioPluginFormatManager& formatManager,

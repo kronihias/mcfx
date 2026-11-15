@@ -90,7 +90,8 @@ def write_convolver_config(config_path: str, ir_wav_path: str,
 
 
 def run_convolver(audio: np.ndarray, ir_1d: np.ndarray,
-                  n_channels: int = N_CH) -> np.ndarray:
+                  n_channels: int = N_CH, blocksize: int = 512,
+                  timeout: float = 120.0) -> np.ndarray:
     """
     Run audio through mcfx_convolver via testhost, return output array.
     audio:  (n_channels, n_samples) float32
@@ -110,7 +111,7 @@ def run_convolver(audio: np.ndarray, ir_1d: np.ndarray,
         # block-based FFT processing flushes its internal buffers before the
         # file ends.  The testhost blocksize defaults to 512, so 512 zeros is
         # enough to push the last partial block through.
-        flush_pad = 512
+        flush_pad = blocksize
         padded = np.concatenate(
             [audio, np.zeros((n_channels, flush_pad), dtype=np.float32)], axis=1
         )
@@ -126,15 +127,22 @@ def run_convolver(audio: np.ndarray, ir_1d: np.ndarray,
             json.dump(params, f)
 
         import subprocess
-        result = subprocess.run([
-            TESTHOST_BIN,
-            "--plugin",   os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                                       "_build", "vst3", "mcfx_convolver.vst3"),
-            "--params",   params_json,
-            "--input",    in_wav,
-            "--channels", str(n_channels),
-            "--output",   out_wav,
-        ], capture_output=True)
+        # a timeout turns an engine deadlock into a failure instead of a
+        # test run that never ends
+        try:
+            result = subprocess.run([
+                TESTHOST_BIN,
+                "--plugin",   os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                           "_build", "vst3", "mcfx_convolver.vst3"),
+                "--params",   params_json,
+                "--input",    in_wav,
+                "--channels", str(n_channels),
+                "--blocksize", str(blocksize),
+                "--output",   out_wav,
+            ], capture_output=True, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            pytest.fail(f"testhost did not finish within {timeout:.0f} s "
+                        f"(blocksize {blocksize}) — convolver deadlock?")
 
         if result.returncode != 0:
             pytest.skip(
@@ -215,6 +223,59 @@ def test_known_ir_matches_scipy(noise_stereo):
         np.testing.assert_allclose(
             out[ch, :BLOCK - ir_length], ref[:BLOCK - ir_length],
             atol=1e-3,
+            err_msg=f"Channel {ch}: scipy vs plugin mismatch"
+        )
+
+
+def test_first_partition_equals_max_partition_long_ir():
+    """
+    First partition size == maximum partition size (8192) with an IR longer
+    than two partitions. The head level then holds all partitions; the ones
+    after the first two were never computed and the audio callback blocked
+    forever (host had to be force-quit).
+    """
+    blocksize = 8192
+    rng = np.random.default_rng(5)
+    ir_length = 40000   # 5 partitions of 8192
+    ir = (rng.standard_normal(ir_length)
+          * np.exp(-np.arange(ir_length) / 8000.0) * 0.05).astype(np.float32)
+    audio = (rng.standard_normal((N_CH, 12 * blocksize)) * 0.1).astype(np.float32)
+
+    out = run_convolver(audio, ir, blocksize=blocksize, timeout=60.0)
+
+    from scipy.signal import fftconvolve
+    for ch in range(N_CH):
+        ref = fftconvolve(audio[ch].astype(np.float64),
+                          ir.astype(np.float64))[:audio.shape[1]].astype(np.float32)
+        np.testing.assert_allclose(
+            out[ch], ref, atol=1e-3,
+            err_msg=f"Channel {ch}: scipy vs plugin mismatch"
+        )
+
+
+def test_multilevel_long_ir_matches_scipy():
+    """
+    Small block size with a long IR: five partition levels (512 ... 8192),
+    three of them computed in their own threads. All levels add into one
+    shared output buffer; those adds were not synchronized and overlapping
+    ones intermittently dropped a level's contribution (short glitches,
+    roughly every second 2 s render). 8 s of audio makes a regression very
+    likely to show.
+    """
+    rng = np.random.default_rng(6)
+    ir_length = 40000
+    ir = (rng.standard_normal(ir_length)
+          * np.exp(-np.arange(ir_length) / 8000.0) * 0.05).astype(np.float32)
+    audio = (rng.standard_normal((N_CH, 8 * SR)) * 0.1).astype(np.float32)
+
+    out = run_convolver(audio, ir)
+
+    from scipy.signal import fftconvolve
+    for ch in range(N_CH):
+        ref = fftconvolve(audio[ch].astype(np.float64),
+                          ir.astype(np.float64))[:audio.shape[1]].astype(np.float32)
+        np.testing.assert_allclose(
+            out[ch], ref, atol=1e-3,
             err_msg=f"Channel {ch}: scipy vs plugin mismatch"
         )
 

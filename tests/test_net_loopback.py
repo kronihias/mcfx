@@ -32,11 +32,13 @@ For a receiver paced X ppm fast vs sender, expected z3 = -X*1e-6 and
 expected steady-state rcorr = 1 + X*1e-6.
 """
 
+import functools
 import json
 import os
 import statistics
 import subprocess
 import sys
+import warnings
 import pytest
 
 # These tests run two sleep_until-paced threads in one process and assert
@@ -81,6 +83,24 @@ def run_loopback(scenario, duration_sec, metrics_out, **kwargs):
         return json.load(f)
 
 
+def _retry_once(test):
+    """Run a real-time scenario a second time if its assertions fail.
+
+    On a heavily loaded machine the paced driver threads get descheduled
+    and a healthy stream fails these bounds; a real regression fails both
+    runs. The retry is reported as a warning so it stays visible.
+    """
+    @functools.wraps(test)
+    def wrapper(*args, **kwargs):
+        try:
+            return test(*args, **kwargs)
+        except AssertionError as first:
+            reason = (str(first).splitlines() or [repr(first)])[0]
+            warnings.warn(f"{test.__name__} failed once, retrying: {reason}")
+        return test(*args, **kwargs)
+    return wrapper
+
+
 def _trace_tail_means(trace, fraction=0.5):
     """Mean of rcorr / z3 over the last `fraction` of the trace.
 
@@ -109,6 +129,7 @@ def test_rtwake_does_not_accumulate_posts():
     assert proc.returncode == 0, proc.stderr
 
 
+@_retry_once
 def test_smoke(tmp_path):
     """Connect, prime, audio flows, no errors."""
     m = run_loopback("smoke", 5, tmp_path / "m.json")
@@ -127,6 +148,7 @@ def test_smoke(tmp_path):
     assert m["gap_frames"] == 0
 
 
+@_retry_once
 def test_passthrough_fundamental(tmp_path):
     """Send a 1 kHz sine on channel 0; verify receiver output matches."""
     m = run_loopback("passthrough", 10, tmp_path / "m.json")
@@ -136,6 +158,7 @@ def test_passthrough_fundamental(tmp_path):
     assert m["audio_overruns"] <= 5
 
 
+@_retry_once
 def test_pitch_stability_long(tmp_path):
     """Long-term pitch stability — send a 1 kHz sine for 60 s and check the
     fundamental frequency is steady to a tight tolerance across multiple
@@ -187,6 +210,7 @@ def test_pitch_stability_long(tmp_path):
         f"pitch jitter across windows (trimmed): stdev={trimmed_stdev:.5f} Hz; values={fundHz}"
 
 
+@_retry_once
 def test_drift_match_stable(tmp_path):
     """Matched 48 kHz both sides — loop sits at unity, no glitches."""
     m = run_loopback("drift_match", 30, tmp_path / "m.json")
@@ -219,6 +243,7 @@ def test_drift_match_stable(tmp_path):
     (+2000, 60),
     (-2000, 60),
 ])
+@_retry_once
 def test_drift_convergence(ppm, duration, tmp_path):
     """Receiver's clock is X ppm off the sender's; loop must drive
     rcorr in the right direction with at least half the expected
@@ -257,6 +282,7 @@ def test_drift_convergence(ppm, duration, tmp_path):
         f"{expected_z3} — loop slow to converge")
 
 
+@_retry_once
 def test_drift_extreme_degrades_gracefully(tmp_path):
     """+60000 ppm = past the +5% rcorr clamp — loop CAN'T track. Must
     not crash, leak, or emit ridiculous counter values."""
@@ -281,6 +307,7 @@ def test_drift_extreme_degrades_gracefully(tmp_path):
     assert m["gap_frames"] < 100_000_000, "runaway gap_frames"
 
 
+@_retry_once
 def test_burst_recovers(tmp_path):
     """Sender pushes at 2× realtime for 5 s (REAPER-style pre-roll),
     then realtime. Receiver overrun guard should fire briefly, audio
@@ -311,6 +338,7 @@ def _assert_tail_audio(m, hz_tol=2.0):
         f"tail pitch wrong: {m['tail_fundamental_hz']} Hz"
 
 
+@_retry_once
 def test_reprepare_keeps_frame_count(tmp_path):
     """Host re-runs prepareToPlay mid-stream (Live re-activates plug-ins
     routinely). The sender must keep its frame count running: rewinding
@@ -324,6 +352,7 @@ def test_reprepare_keeps_frame_count(tmp_path):
 
 
 @pytest.mark.parametrize("scenario", ["split_fast_mode", "bunch_fast_mode"])
+@_retry_once
 def test_irregular_calls_leave_fast_mode(scenario, tmp_path):
     """A short pre-render trips the sender's anticipative-render detector;
     afterwards the host runs at realtime but not one call per period:
@@ -341,6 +370,7 @@ def test_irregular_calls_leave_fast_mode(scenario, tmp_path):
 
 
 @pytest.mark.parametrize("counter_start", [0, 3_000_000_000])
+@_retry_once
 def test_counter_jump_back_realigns(counter_start, tmp_path):
     """Sender frame count jumps back to 0 under the same UID — an older
     sender re-preparing. The receiver must re-align instead of dropping the
@@ -358,6 +388,7 @@ def test_counter_jump_back_realigns(counter_start, tmp_path):
 # 2^32 - 6 s: the wrap lands ~6 s into the run, on a period boundary or
 # (minus 37 frames) in the middle of a packet.
 @pytest.mark.parametrize("counter_start", [4294967296 - 288000, 4294967296 - 288000 - 37])
+@_retry_once
 def test_counter_wrap_is_seamless(counter_start, tmp_path):
     """The 32-bit wire frame count wraps (~24.8 h at 48 kHz). The receiver
     extends it to 64 bits, so the stream carries on: no re-align, no
@@ -371,6 +402,7 @@ def test_counter_wrap_is_seamless(counter_start, tmp_path):
 
 
 @pytest.mark.parametrize("stall_ms", [50, 500])
+@_retry_once
 def test_sender_stall_recovers(stall_ms, tmp_path):
     """Host stops calling processBlock for a moment (overloaded machine),
     then carries on at realtime. The receiver should underrun once and

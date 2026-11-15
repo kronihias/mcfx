@@ -127,6 +127,9 @@ public:
     int   getNumCols() const { return cols_; }
     int   getNumRows() const { return rows_; }
 
+    /** The colour maps' names, as the settings panel lists them. */
+    static StringArray colourMapNames();
+
 private:
     void comboBoxChanged (ComboBox*) override;
     void buttonClicked (Button*) override;
@@ -162,9 +165,6 @@ private:
     /** Apply a change made in the settings panel. */
     void   settingsChanged();
     void   updateAutoTop();
-public:
-    static StringArray colourMapNames();
-private:
 
     // Shown frequency range (the zoom), and the analysis row a frequency
     // falls in — fractional, 0 at the bottom of the lowest row.

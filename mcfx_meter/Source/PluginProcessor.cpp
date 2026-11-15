@@ -351,6 +351,23 @@ void Ambix_meterAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute ("spec_smooth",   _spectro_settings.smooth);
     xml.setAttribute ("spec_strip",    _spectro_settings.showStrip);
     xml.setAttribute ("spec_harm",     _spectro_settings.harmonics);
+    xml.setAttribute ("rta_w",         _size_rta_w);
+    xml.setAttribute ("rta_h",         _size_rta_h);
+    xml.setAttribute ("rta_first",     _spectrum_settings.firstCh);
+    xml.setAttribute ("rta_last",      _spectrum_settings.lastCh);
+    xml.setAttribute ("rta_average",   _spectrum_settings.average);
+    xml.setAttribute ("rta_avg",       _spectrum_settings.avgIdx);
+    xml.setAttribute ("rta_smooth",    _spectrum_settings.smoothIdx);
+    xml.setAttribute ("rta_top",       _spectrum_settings.topIdx);
+    xml.setAttribute ("rta_range",     _spectrum_settings.rangeIdx);
+    xml.setAttribute ("rta_zlo",       _spectrum_settings.zoomLo);
+    xml.setAttribute ("rta_zhi",       _spectrum_settings.zoomHi);
+    xml.setAttribute ("rta_dbtop",     _spectrum_settings.dbTop);
+    xml.setAttribute ("rta_dbrange",   _spectrum_settings.dbRange);
+    xml.setAttribute ("rta_window",    _spectrum_settings.windowIdx);
+    xml.setAttribute ("rta_peak",      _spectrum_settings.peakMode);
+    xml.setAttribute ("rta_bands",     _spectrum_settings.bands);
+    xml.setAttribute ("rta_fill",      _spectrum_settings.fill);
 
     // then use this helper function to stuff it into the binary blob and return it..
     copyXmlToBinary (xml, destData);
@@ -374,7 +391,7 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
 
             // Absent in sessions saved before these existed, which is exactly
             // the default: the classic bar view at its usual size.
-            _view_mode = (ViewMode) jlimit (0, 5, xmlState->getIntAttribute ("view_mode", 0));
+            _view_mode = (ViewMode) jlimit (0, 6, xmlState->getIntAttribute ("view_mode", 0));
             _size_circle_w = xmlState->getIntAttribute ("circle_w", _size_circle_w);
             _size_circle_h = xmlState->getIntAttribute ("circle_h", _size_circle_h);
             _size_wf_w     = xmlState->getIntAttribute ("wf_w",     _size_wf_w);
@@ -415,6 +432,27 @@ void Ambix_meterAudioProcessor::setStateInformation (const void* data, int sizeI
                 s.smooth      = xmlState->getBoolAttribute ("spec_smooth", s.smooth);
                 s.showStrip   = xmlState->getBoolAttribute ("spec_strip",  s.showStrip);
                 s.harmonics   = xmlState->getBoolAttribute ("spec_harm",   s.harmonics);
+            }
+
+            _size_rta_w = xmlState->getIntAttribute ("rta_w", _size_rta_w);
+            _size_rta_h = xmlState->getIntAttribute ("rta_h", _size_rta_h);
+            {
+                auto& s = _spectrum_settings;    // range-checked by the view
+                s.firstCh   = xmlState->getIntAttribute  ("rta_first",   s.firstCh);
+                s.lastCh    = xmlState->getIntAttribute  ("rta_last",    s.lastCh);
+                s.average   = xmlState->getBoolAttribute ("rta_average", s.average);
+                s.avgIdx    = xmlState->getIntAttribute  ("rta_avg",     s.avgIdx);
+                s.smoothIdx = xmlState->getIntAttribute  ("rta_smooth",  s.smoothIdx);
+                s.topIdx    = xmlState->getIntAttribute  ("rta_top",     s.topIdx);
+                s.rangeIdx  = xmlState->getIntAttribute  ("rta_range",   s.rangeIdx);
+                s.zoomLo    = (float) xmlState->getDoubleAttribute ("rta_zlo", s.zoomLo);
+                s.zoomHi    = (float) xmlState->getDoubleAttribute ("rta_zhi", s.zoomHi);
+                s.dbTop     = (float) xmlState->getDoubleAttribute ("rta_dbtop",   s.dbTop);
+                s.dbRange   = (float) xmlState->getDoubleAttribute ("rta_dbrange", s.dbRange);
+                s.windowIdx = xmlState->getIntAttribute  ("rta_window",  s.windowIdx);
+                s.peakMode  = xmlState->getIntAttribute  ("rta_peak",    s.peakMode);
+                s.bands     = xmlState->getBoolAttribute ("rta_bands",   s.bands);
+                s.fill      = xmlState->getBoolAttribute ("rta_fill",    s.fill);
             }
 
             _state_generation.fetch_add (1, std::memory_order_release);

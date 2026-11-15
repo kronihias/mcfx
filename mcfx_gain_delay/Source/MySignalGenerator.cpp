@@ -64,6 +64,7 @@ void MySignalGenerator::setSamplerate(float samplerate)
   
   samplerate_ = samplerate;
   
+  pink_noise_filt_.setSamplerate(samplerate_);
   sine_generator_.setSamplerate(samplerate_);
   sawtooth_generator_.setSamplerate(samplerate_);
   square_generator_.setSamplerate(samplerate_);
@@ -228,7 +229,8 @@ void MySignalGenerator::setPulseLength(float seconds)
   if (seconds > 0)
     pulse_len_s_ = seconds;
   
-  pulse_len_ = (int)floorf(pulse_len_s_*samplerate_);
+  pulse_len_ = jmax(1, (int)floorf(pulse_len_s_*samplerate_));
+  ramp_len_ = jmin((int)(0.005f*samplerate_), pulse_len_/2);
 }
 
 float MySignalGenerator::getPulseLength()
@@ -241,7 +243,7 @@ void MySignalGenerator::setFreq(float f)
   sine_generator_.setFreq(f);
   sawtooth_generator_.setFreq(f);
   square_generator_.setFreq(f);
-  tuneburst_generator_.setFreq(f/6.5);
+  tuneburst_generator_.setFreq(f);
 }
 
 float MySignalGenerator::getFreq()
@@ -303,16 +305,20 @@ void MySignalGenerator::fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
       break;
       
     case dirac:
+    {
       buffer.clear(ch, 0, numSamples);
+      float *out = buffer.getWritePointer(ch);
       
-      if (cur_time_smpl_ > 2*pulse_len_)
+      for (int i=0; i<numSamples; i++)
       {
-        buffer.setSample(ch, 0, 1.f);
-        cur_time_smpl_ = 0;
+        if (cur_time_smpl_ >= 2*pulse_len_)
+          cur_time_smpl_ = 0;
+        
+        if (cur_time_smpl_++ == 0)
+          out[i] = 1.f;
       }
-      
-      cur_time_smpl_+= numSamples;
       break;
+    }
 
     case toneburst:
       tuneburst_generator_.fillBufferWithSignal(buffer, ch);
@@ -323,29 +329,28 @@ void MySignalGenerator::fillBufferWithSignal(AudioSampleBuffer &buffer, int ch)
       
   }
   
-  float tmpgain = wantedgain_;
-  
-  // calc gain value for pulsed signal
+  // pulsed: on/off with raised cosine fades
   if ((signal_time_ == pulsed) && (signal_type_ != dirac))
   {
+    float *out = buffer.getWritePointer(ch);
     
-    if (cur_time_smpl_ < pulse_len_) {
-      // tmpgain = 0.f;// let the signal pass
-    }
-    else if (cur_time_smpl_ < 2*pulse_len_) {
-      // mute the signal
-      tmpgain = 0.f;
-    }
-    else
+    for (int i=0; i<numSamples; i++)
     {
-      // reset the couter
-      cur_time_smpl_ = 0;
+      if (cur_time_smpl_ >= 2*pulse_len_)
+        cur_time_smpl_ = 0;
+      
+      const int t = cur_time_smpl_++;
+      
+      if (t >= pulse_len_)
+        out[i] = 0.f;
+      else if (t < ramp_len_)
+        out[i] *= 0.5f - 0.5f*cosf((float)M_PI*(t + 0.5f)/ramp_len_);
+      else if (t >= pulse_len_ - ramp_len_)
+        out[i] *= 0.5f - 0.5f*cosf((float)M_PI*(pulse_len_ - t - 0.5f)/ramp_len_);
     }
-    
-    cur_time_smpl_+= numSamples;
   }
   
-  buffer.applyGainRamp(ch, 0, numSamples, gainstate_, tmpgain);
+  buffer.applyGainRamp(ch, 0, numSamples, gainstate_, wantedgain_);
   
-  gainstate_ = tmpgain;
+  gainstate_ = wantedgain_;
 }

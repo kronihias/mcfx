@@ -80,6 +80,10 @@ private:
     void reportLatency();
 
     std::unique_ptr<juce::AudioProcessor> inner_;
+
+    /** Only sized when the inner needs more channels than this wrapper
+        exposes; see prepareToPlay. Empty otherwise. */
+    juce::AudioBuffer<float> scratch_;
     std::atomic<bool> bypassed_ { false };
     std::atomic<bool> muted_    { false };
     std::atomic<bool> ignoreLatency_ { false };

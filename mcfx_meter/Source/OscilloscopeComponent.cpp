@@ -18,6 +18,7 @@
  */
 
 #include "OscilloscopeComponent.h"
+#include "ViewStyle.h"
 
 namespace
 {
@@ -41,7 +42,7 @@ namespace
     constexpr int kAmpDivs  = 8;
 
     const Colour kCursorA (0xffffd54a);
-    const Colour kCursorB (0xffff8a3d);
+    const Colour kCursorB = ViewStyle::accentOrange;
 
     // Rising crossings of 0 with hysteresis: a sample must first dip below
     // -hyst to re-arm, so noise around a slow crossing fires once, not ten
@@ -116,7 +117,7 @@ OscilloscopeComponent::OscilloscopeComponent()
     addAndMakeVisible (btnPause_);
     btnPause_.setButtonText ("pause");
     btnPause_.setClickingTogglesState (true);
-    btnPause_.setColour (TextButton::buttonOnColourId, Colour (0xffb03030));
+    btnPause_.setColour (TextButton::buttonOnColourId, ViewStyle::pauseButtonOn);
     btnPause_.setTooltip ("Freeze the display to inspect it. While paused, drag the plot to "
                           "scroll back through the last second.");
     btnPause_.addListener (this);
@@ -624,11 +625,11 @@ void OscilloscopeComponent::paint (Graphics& g)
     const bool stacked = settings_->stacked;
     const float amp = currentAmp();
 
-    g.setColour (Colour (0xe0101010));
+    g.setColour (ViewStyle::plotBg);
     g.fillRect (plot);
 
     // Grid.
-    g.setColour (Colours::white.withAlpha (0.08f));
+    g.setColour (Colours::white.withAlpha (ViewStyle::gridMinor));
     for (int i = 1; i < kTimeDivs; ++i)
     {
         const float gx = plot.getX() + plot.getWidth() * (float) i / (float) kTimeDivs;
@@ -640,7 +641,7 @@ void OscilloscopeComponent::paint (Graphics& g)
         for (int i = 1; i < kAmpDivs; ++i)
         {
             const float gy = plot.getY() + plot.getHeight() * (float) i / (float) kAmpDivs;
-            g.setColour (Colours::white.withAlpha (i == kAmpDivs / 2 ? 0.22f : 0.08f));
+            g.setColour (Colours::white.withAlpha (i == kAmpDivs / 2 ? ViewStyle::gridMajor : ViewStyle::gridMinor));
             g.drawHorizontalLine ((int) gy, plot.getX(), plot.getRight());
         }
     }
@@ -668,17 +669,17 @@ void OscilloscopeComponent::paint (Graphics& g)
         drawTrace (g, c, lane, channelColour (settings_->firstCh + c));
     }
 
-    g.setColour (Colours::white.withAlpha (0.3f));
+    g.setColour (Colours::white.withAlpha (ViewStyle::frame));
     g.drawRect (plot, 1.f);
 
-    // Trigger point.
+    // Trigger point, on the bottom edge: the top left holds the status line.
     if (triggered_ || paused_)
     {
         const float tx = idxToX (zeroIdx_);
         if (tx >= plot.getX() && tx <= plot.getRight())
         {
             Path tri;
-            tri.addTriangle (tx - 5.f, plot.getY(), tx + 5.f, plot.getY(), tx, plot.getY() + 7.f);
+            tri.addTriangle (tx - 5.f * s_, plot.getBottom(), tx + 5.f * s_, plot.getBottom(), tx, plot.getBottom() - 7.f * s_);
             g.setColour (Colours::white.withAlpha (triggered_ ? 0.7f : 0.35f));
             g.fillPath (tri);
         }
@@ -689,16 +690,27 @@ void OscilloscopeComponent::paint (Graphics& g)
     auto S = [this] (float v) { return roundToInt (v * s_); };
     const int marginL = S (kMarginL);
 
-    // Amplitude labels.
+    // Amplitude labels: three significant digits at most, so half of
+    // 0.0015 reads 0.00075 rather than a rounded 0.0007.
+    auto ampLabel = [] (float v)
+    {
+        if (v == 0.f)
+            return String ("0");
+        const int decimals = jlimit (0, 6, 2 - (int) std::floor (std::log10 (std::abs (v))));
+        String t (v, decimals);
+        if (t.containsChar ('.'))
+            t = t.trimCharactersAtEnd ("0").trimCharactersAtEnd (".");
+        return (v > 0.f ? "+" : "") + t;
+    };
     g.setFont (Font (FontOptions (10.f * s_)));
-    g.setColour (Colours::white.withAlpha (0.75f));
+    g.setColour (Colours::white.withAlpha (ViewStyle::axisText));
     if (! stacked)
     {
         for (int i = 0; i <= kAmpDivs; i += 2)
         {
             const float v = amp * (1.f - 2.f * (float) i / (float) kAmpDivs);
             const float gy = plot.getY() + plot.getHeight() * (float) i / (float) kAmpDivs;
-            g.drawText ((v > 0.f ? "+" : "") + String (v, v != 0.f && std::abs (v) < 0.01f ? 4 : (std::abs (v) < 0.1f ? 3 : 2)),
+            g.drawText (ampLabel (v),
                         0, jlimit ((int) plot.getY(), (int) plot.getBottom() - S (12), (int) gy - S (6)),
                         marginL - 4, S (12), Justification::centredRight);
         }
@@ -718,7 +730,7 @@ void OscilloscopeComponent::paint (Graphics& g)
     // Time labels, relative to the trigger point (or to "now" when free-running).
     // One number format for the whole axis, from the spacing between labels,
     // so "2.0 ms" and "14.0 ms" don't come out as "2.000 ms" and "14.00 ms".
-    g.setColour (Colours::white.withAlpha (0.75f));
+    g.setColour (Colours::white.withAlpha (ViewStyle::axisText));
     const double labelStepMs = 1000.0 * std::abs (idxToTime (xToIdx (plot.getX() + plot.getWidth() * 2.f / (float) kTimeDivs))
                                                   - idxToTime (xToIdx (plot.getX())));
     const int axisDecimals = labelStepMs > 0.0
@@ -743,18 +755,15 @@ void OscilloscopeComponent::paint (Graphics& g)
           << "   " << String::charToString ((juce_wchar) 0xb1) << String (amp, amp < 0.01f ? 4 : 3)
           << (settings_->ampIdx == 0 ? " (auto)" : "");
         if (settings_->trigger)
-            s << "   " << (triggered_ ? "trig'd" : "free-run");
+            s << "   " << (triggered_ ? "triggered" : "free-run");
 
         g.setFont (Font (FontOptions (11.f * s_)));
-        g.setColour (Colours::white.withAlpha (0.6f));
+        g.setColour (Colours::white.withAlpha (ViewStyle::statusText));
         g.drawText (s, (int) plot.getX() + 6, (int) plot.getY() + 3, S (360), S (14), Justification::centredLeft);
 
+        // Under the legend, as in the other views.
         if (paused_)
-        {
-            g.setColour (Colour (0xffff6060));
-            g.drawText ("PAUSED  -  drag to scroll", (int) plot.getX() + 6, (int) plot.getY() + 3 + S (14), S (240), S (14),
-                        Justification::centredLeft);
-        }
+            ViewStyle::drawStatusTag (g, "PAUSED  -  drag to scroll", ViewStyle::pausedText, plot, 1, s_);
     }
 
     // Overlay legend, top right.
@@ -787,35 +796,132 @@ void OscilloscopeComponent::paint (Graphics& g)
     if (hasA_) drawCursor (cursorA_, kCursorA, "A");
     if (hasB_) drawCursor (cursorB_, kCursorB, "B");
 
+    // Where the cursors cross the traces.
+    auto drawCursorDots = [&] (double t, Colour c)
+    {
+        const double idx = timeToIdx (t);
+        const float cx = idxToX (idx);
+        if (cx < plot.getX() || cx > plot.getRight())
+            return;
+        const float r = 3.f * s_;
+        for (int ch = 0; ch < jmin (shown, work_.getNumChannels()); ++ch)
+        {
+            const auto lane = laneArea (ch);
+            const float cy = jlimit (lane.getY(), lane.getBottom(),
+                                     lane.getCentreY() - valueAt (ch, idx) * 0.5f * lane.getHeight() / jmax (1.0e-9f, amp));
+            g.setColour (channelColour (settings_->firstCh + ch));
+            g.fillEllipse (cx - r, cy - r, 2.f * r, 2.f * r);
+            g.setColour (c);
+            g.drawEllipse (cx - r, cy - r, 2.f * r, 2.f * r, jmax (1.f, s_));
+        }
+    };
+    if (hasA_) drawCursorDots (cursorA_, kCursorA);
+    if (hasB_) drawCursorDots (cursorB_, kCursorB);
+
+    // Cursor readout, bottom right: times, then each channel's level at A / B.
     if (hasA_)
     {
-        String s;
-        s << "A " << formatTime (cursorA_);
+        String head;
+        head << "A " << formatTime (cursorA_);
         if (hasB_)
         {
             const double dt = std::abs (cursorB_ - cursorA_);
-            s << "    B " << formatTime (cursorB_) << "    " << String::charToString ((juce_wchar) 0x394) << "t " << formatTime (dt);
+            head << "    B " << formatTime (cursorB_) << "    " << String::charToString ((juce_wchar) 0x394) << "t " << formatTime (dt);
             if (dt > 0.0)
-                s << "  =  " << String (1.0 / dt, 1) << " Hz";
+                head << "  =  " << String (1.0 / dt, 1) << " Hz";
         }
         else
         {
-            s << "    (click again for B)";
+            head << "    (click again for B)";
+        }
+
+        auto fmt = [] (float v) { return (v >= 0.f ? "+" : "") + String (v, 4); };
+        const double idxA = timeToIdx (cursorA_), idxB = timeToIdx (cursorB_);
+        const int rows = jmin (jmin (shown, work_.getNumChannels()), 8);
+
+        // Columns: channel, A, B, delta (+ dB ratio).
+        Array<StringArray> cells;
+        for (int c = 0; c < rows; ++c)
+        {
+            StringArray row;
+            const float a = valueAt (c, idxA);
+            row.add ("ch " + String (settings_->firstCh + c + 1));
+            row.add ("A " + fmt (a));
+            if (hasB_)
+            {
+                const float b = valueAt (c, idxB);
+                String d;
+                d << String::charToString ((juce_wchar) 0x394) << " " << fmt (b - a);
+                if (std::abs (a) > 0.f && std::abs (b) > 0.f)
+                    d << "  (" << (std::abs (b) >= std::abs (a) ? "+" : "")
+                      << String (Decibels::gainToDecibels (std::abs (b) / std::abs (a)), 1) << " dB)";
+                row.add ("B " + fmt (b));
+                row.add (d);
+            }
+            cells.add (row);
         }
 
         g.setFont (Font (FontOptions (11.f * s_)));
-        const int tw = GlyphArrangement::getStringWidthInt (g.getCurrentFont(), s) + S (12);
-        Rectangle<int> box ((int) plot.getRight() - tw - 4, (int) plot.getBottom() - S (20), tw, S (16));
-        g.setColour (Colours::black.withAlpha (0.7f));
-        g.fillRect (box);
+        const auto& font = g.getCurrentFont();
+        const int gap = S (12);
+        Array<int> colW;
+        for (auto& row : cells)
+            for (int k = 0; k < row.size(); ++k)
+            {
+                while (colW.size() <= k) colW.add (0);
+                colW.set (k, jmax (colW[k], GlyphArrangement::getStringWidthInt (font, row[k])));
+            }
+
+        int tableW = 0;
+        for (int w : colW) tableW += w + gap;
+        const int bw = jmax (GlyphArrangement::getStringWidthInt (font, head) + S (12), tableW + S (12) - gap);
+        const int lh = S (14);
+        const bool more = shown > rows;
+        const int bh = lh * (1 + rows + (more ? 1 : 0)) + S (6);
+        // Bottom right, unless a cursor runs through that corner and the left one is clear.
+        Rectangle<int> box ((int) plot.getRight() - bw - 4, (int) plot.getBottom() - S (4) - bh, bw, bh);
+        auto hitsCursor = [&] (Rectangle<int> r)
+        {
+            for (int k = 0; k < (hasB_ ? 2 : 1); ++k)
+            {
+                const float cx = idxToX (timeToIdx (k == 0 ? cursorA_ : cursorB_));
+                if (cx >= (float) r.getX() - 4.f && cx <= (float) r.getRight() + 4.f)
+                    return true;
+            }
+            return false;
+        };
+        const auto leftBox = box.withX ((int) plot.getX() + 4);
+        if (hitsCursor (box) && ! hitsCursor (leftBox))
+            box = leftBox;
+
+        g.setColour (Colours::black.withAlpha (ViewStyle::plateAlpha));
+        g.fillRoundedRectangle (box.toFloat(), 3.f * s_);
         g.setColour (kCursorA);
-        g.drawText (s, box, Justification::centred);
+        g.drawText (head, box.getX() + S (6), box.getY() + S (3), bw - S (12), lh, Justification::centredLeft);
+
+        for (int r = 0; r < rows; ++r)
+        {
+            g.setColour (channelColour (settings_->firstCh + r));
+            int x = box.getX() + S (6);
+            for (int k = 0; k < cells[r].size(); ++k)
+            {
+                g.drawText (cells[r][k], x, box.getY() + S (3) + (r + 1) * lh, colW[k], lh,
+                            k == 0 ? Justification::centredLeft : Justification::centredRight);
+                x += colW[k] + gap;
+            }
+        }
+        if (more)
+        {
+            g.setColour (Colours::white.withAlpha (0.6f));
+            g.drawText (String (shown - rows) + " more...", box.getX() + S (6), box.getY() + S (3) + (rows + 1) * lh,
+                        bw - S (12), lh, Justification::centredLeft);
+        }
     }
 
     // Hover crosshair and readout.
     if (hovering_ && plot.contains (hover_))
     {
-        g.setColour (Colours::white.withAlpha (0.35f));
+        g.setColour (Colours::white.withAlpha (ViewStyle::crosshair));
         g.drawVerticalLine ((int) hover_.x, plot.getY(), plot.getBottom());
         g.drawHorizontalLine ((int) hover_.y, plot.getX(), plot.getRight());
 
@@ -837,32 +943,10 @@ void OscilloscopeComponent::paint (Graphics& g)
         if (lane < 0 && shown > 8)
             lines.add (String (shown - 8) + " more...");
 
-        g.setFont (Font (FontOptions (11.f * s_)));
-        int bw = 0;
-        for (auto& l : lines)
-            bw = jmax (bw, GlyphArrangement::getStringWidthInt (g.getCurrentFont(), l));
-        bw += S (12);
-        const int lh = S (14);
-        const int bh = lh * lines.size() + S (6);
-
-        int bx = (int) hover_.x + 12;
-        int by = (int) hover_.y + 12;
-        if (bx + bw > (int) plot.getRight()) bx = (int) hover_.x - 12 - bw;
-        if (by + bh > (int) plot.getBottom()) by = (int) hover_.y - 12 - bh;
-        bx = jmax ((int) plot.getX() + 2, bx);
-        by = jmax ((int) plot.getY() + 2, by);
-
-        g.setColour (Colours::black.withAlpha (0.75f));
-        g.fillRoundedRectangle ((float) bx, (float) by, (float) bw, (float) bh, 3.f);
-
-        for (int i = 0; i < lines.size(); ++i)
-        {
-            Colour c = Colours::white;
-            if (i >= 2 && i - 2 < chans.size())
-                c = channelColour (settings_->firstCh + chans[i - 2]);
-            g.setColour (c);
-            g.drawText (lines[i], bx + 6, by + 3 + i * lh, bw - 8, lh, Justification::centredLeft);
-        }
+        Array<Colour> colours { Colours::white, Colours::white };
+        for (int c : chans)
+            colours.add (channelColour (settings_->firstCh + c));
+        ViewStyle::drawReadoutBox (g, lines, colours, hover_, plot, s_);
     }
 }
 

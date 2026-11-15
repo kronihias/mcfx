@@ -1285,14 +1285,18 @@ void NodeComponent::changePluginNodeMainBusChannels (int newMainCh)
         PluginInstanceFactory::trySetMainBusChannels (*inst, newMainCh);
     }
 
-    const int chIn  = inst->getMainBusNumInputChannels();
-    const int chOut = inst->getMainBusNumOutputChannels();
+    const int mainIn  = inst->getMainBusNumInputChannels();
+    const int mainOut = inst->getMainBusNumOutputChannels();
+
+    // The node carries every enabled bus, the popup only sizes the main one.
+    const int chIn  = inst->getTotalNumInputChannels();
+    const int chOut = inst->getTotalNumOutputChannels();
 
     // The probe should have screened this out, but plug-ins sometimes lie.
     // If the plugin ended up at a different channel count than requested,
     // tell the user instead of silently leaving them with a node that doesn't
     // match the popup choice.
-    if (chIn != newMainCh || chOut != newMainCh)
+    if (mainIn != newMainCh || mainOut != newMainCh)
     {
         juce::NativeMessageBox::showAsync (
             juce::MessageBoxOptions()
@@ -1300,7 +1304,7 @@ void NodeComponent::changePluginNodeMainBusChannels (int newMainCh)
                 .withTitle ("Channel-count change rejected")
                 .withMessage ("The plugin didn't accept "
                               + juce::String (newMainCh) + " channels and stayed at "
-                              + juce::String (chIn) + " in / " + juce::String (chOut) + " out. "
+                              + juce::String (mainIn) + " in / " + juce::String (mainOut) + " out. "
                               "This often happens with VST3 plug-ins whose host "
                               "wrapper has no SpeakerArrangement that fits the "
                               "requested channel count, or with plug-ins that "
