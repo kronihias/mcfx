@@ -86,7 +86,7 @@ echo.
 echo Build targets:  VST2=%BUILD_VST2%  VST3=%BUILD_VST3%  Standalone=%BUILD_SA%  Sign=%SIGN%
 echo.
 
-REM ── VST3 + Standalone universal builds (single binary, up to 64 channels) ────
+REM ── VST3 + Standalone universal builds (single binary, up to 128 channels) ───
 REM   When both are requested they share one cmake configure + MSBuild pass.
 REM   A VST3 build always brings the mcfx_send / mcfx_receive / mcfx_graph
 REM   standalones along (VST3_STANDALONE_APPS): they go into the VST3 installer,
@@ -95,31 +95,34 @@ REM   DAW. "standalone" builds all.
 REM   It also brings fixed-channel VST2s along (VST3_VST2_CHANNELS), in the same
 REM   configure: a VST3 tops out at 64 channels, so the VST3 installer carries
 REM   the 128-channel VST2s for hosts that need more.
+REM   MCFX_MAX_CHANNELS=128 matches build_osx.sh (CMake default; passed
+REM   explicitly so a reused build dir cached at 64 is overridden): the standalones then open up to 128 device channels
+REM   (ASIO), while the VST3s stay capped at 64 per bus by mcfx_buses.h.
 set VST3_STANDALONE_APPS=mcfx_send;mcfx_receive;mcfx_graph
 set VST3_VST2_CHANNELS=128
 set VST3_VST2_FLAGS=-DMCFX_BUILD_VST2_PER_CHANNEL=ON -DNUM_CHANNELS:STRING=%VST3_VST2_CHANNELS%
 if "%BUILD_VST3%%BUILD_SA%"=="11" (
     echo ================================================================
-    echo  BUILDING VST3 + Standalone  ^(universal, up to 64 channels^) + VST2 %VST3_VST2_CHANNELS%ch
+    echo  BUILDING VST3 + Standalone  ^(universal, up to 128 channels^) + VST2 %VST3_VST2_CHANNELS%ch
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON %VST3_VST2_FLAGS% -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON %VST3_VST2_FLAGS% -DMCFX_MAX_CHANNELS=128
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 ) else if "%BUILD_VST3%"=="1" (
     echo ================================================================
-    echo  BUILDING VST3 + %VST3_STANDALONE_APPS% Standalone  ^(universal, up to 64 channels^) + VST2 %VST3_VST2_CHANNELS%ch
+    echo  BUILDING VST3 + %VST3_STANDALONE_APPS% Standalone  ^(universal, up to 128 channels^) + VST2 %VST3_VST2_CHANNELS%ch
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE "-DMCFX_STANDALONE_PLUGINS=%VST3_STANDALONE_APPS%" -DMCFX_BUILD_MC=ON %VST3_VST2_FLAGS% -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=TRUE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE "-DMCFX_STANDALONE_PLUGINS=%VST3_STANDALONE_APPS%" -DMCFX_BUILD_MC=ON %VST3_VST2_FLAGS% -DMCFX_MAX_CHANNELS=128
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 ) else if "%BUILD_SA%"=="1" (
     echo ================================================================
-    echo  BUILDING Standalone  ^(universal, up to 64 channels^)
+    echo  BUILDING Standalone  ^(universal, up to 128 channels^)
     echo ================================================================
     pushd "%BUILD_DIR%"
-    cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=64
+    cmake .. %CMAKE_COMMON% -DBUILD_VST3=FALSE -DBUILD_VST=TRUE -DBUILD_STANDALONE=TRUE -DMCFX_STANDALONE_PLUGINS= -DMCFX_BUILD_MC=ON -DMCFX_BUILD_VST2_PER_CHANNEL=OFF -DMCFX_MAX_CHANNELS=128
     %MSBUILD% mcfx_plugin_suite.sln %MSBUILD_FLAGS%
     popd
 )
