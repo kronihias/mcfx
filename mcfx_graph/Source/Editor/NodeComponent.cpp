@@ -20,6 +20,12 @@ namespace
     constexpr int kSubtitleH  = 12;   // plug-in name row under the title
     constexpr int kPaddingX   = 16;
     constexpr int kMinWidth   = 140;
+
+    // Largest channel count a node can be set to: the plug-in's channel
+    // ceiling (256 in the multichannel build, see mcfx_graph/CMakeLists.txt),
+    // but never below the historical 64 (the per-channel VST2 build has
+    // NUM_CHANNELS == its fixed width, which may be smaller).
+    constexpr int kMaxNodeChannels = (NUM_CHANNELS > 64) ? NUM_CHANNELS : 64;
 }
 
 NodeComponent::NodeComponent (GraphEditorComponent& editor, GraphNode& node)
@@ -1031,11 +1037,12 @@ void NodeComponent::showRenamePopup()
 
 void NodeComponent::showChangeChannelCountPopup()
 {
-    // Full 1..64 range. Plugin nodes are restricted by what the plugin probes
-    // as supported on its main bus.
+    // Native nodes: the full 1..kMaxNodeChannels range (same ceiling as the
+    // outer bus / standalone device). Plugin nodes are restricted by what the
+    // plugin probes as supported on its main bus.
     std::vector<int> all;
-    all.reserve (64);
-    for (int i = 1; i <= 64; ++i) all.push_back (i);
+    all.reserve ((size_t) kMaxNodeChannels);
+    for (int i = 1; i <= kMaxNodeChannels; ++i) all.push_back (i);
 
     std::vector<int> allowedIn  = all;
     std::vector<int> allowedOut = all;
@@ -1058,7 +1065,16 @@ void NodeComponent::showChangeChannelCountPopup()
                 // cycle. Causes a brief audio dropout (< 1 s typical), which
                 // is the price of an accurate channel-count list.
                 GraphController::ScopedSuspend suspend (editor_.getProcessor());
-                probed = PluginInstanceFactory::probeAvailableMainBusSizes (*inst, all);
+                // Every count up to 64, then multiples of 8: each candidate is
+                // a real release / setBusesLayout round-trip, so probing all
+                // 256 would stretch the dropout. (VST3 can't exceed 64 anyway;
+                // AU / VST2 / LV2 plug-ins can.)
+                std::vector<int> candidates;
+                for (int n : all)
+                    if (n <= 64 || n % 8 == 0)
+                        candidates.push_back (n);
+
+                probed = PluginInstanceFactory::probeAvailableMainBusSizes (*inst, candidates);
             }
         }
 

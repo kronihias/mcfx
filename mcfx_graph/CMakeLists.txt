@@ -32,6 +32,12 @@ IF(UNIX AND NOT APPLE)
     LIST(APPEND MCFX_EXTRA_DEFS JUCE_PLUGINHOST_LADSPA=1)
 ENDIF()
 
+# The standalone is used with large interfaces (ASIO / CoreAudio / JACK), so
+# raise mcfx_graph's channel ceiling above the suite-wide MCFX_MAX_CHANNELS.
+# This also bounds the native nodes' channel counts (NUM_CHANNELS). VST3 stays
+# capped at 64 per bus (kMaxChPerBus in common/mcfx_buses.h).
+SET(MCFX_PLUGIN_MAX_CHANNELS 256)
+
 # The graph host routes arbitrary in/out, so keep the standalone's input and
 # output channel selectors independent (don't auto-link them).
 LIST(APPEND MCFX_EXTRA_DEFS JSA_STANDALONE_INDEPENDENT_IO=1)
@@ -225,3 +231,4 @@ endforeach()
 UNSET(MCFX_EXTRA_DEFS)
 UNSET(MCFX_EXTRA_SOURCES)
 UNSET(MCFX_EXTRA_INCLUDES)
+UNSET(MCFX_PLUGIN_MAX_CHANNELS)
