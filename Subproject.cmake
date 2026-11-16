@@ -11,6 +11,7 @@
 #   2. Multichannel MC target    — name: ${SUBDIRNAME}
 #                                   formats: ${MCFX_FORMATS_MC} (VST3/AU/Standalone)
 #                                   NUM_CHANNELS=${MCFX_MAX_CHANNELS}
+#                                       (or MCFX_PLUGIN_MAX_CHANNELS, see below)
 #                                   MCFX_MULTICHANNEL_BUILD=1
 #                                   no PreferredChannelConfigurations — host
 #                                       negotiates layout via
@@ -23,6 +24,10 @@
 #   - (optional) set(MCFX_EXTRA_SOURCES ...) extra source files
 #   - (optional) set(MCFX_EXTRA_INCLUDES ...) extra include directories
 #   - (optional) set(MCFX_EXTRA_DEFS   ...)   extra compile definitions
+#   - (optional) set(MCFX_PLUGIN_MAX_CHANNELS N) raise this plug-in's MC channel
+#                ceiling (NUM_CHANNELS + standalone device channels) above
+#                MCFX_MAX_CHANNELS; the larger of the two is used. VST3 stays
+#                capped at kMaxChPerBus regardless. Unset it after the include.
 #   - include(${SRC_DIR}/Subproject.cmake)
 #
 # After the include, ${MCFX_TARGETS} contains the list of created targets so
@@ -211,6 +216,14 @@ if(MCFX_BUILD_MC AND _mc_formats AND DEFINED MC_PLUGIN_CODE)
         ${_MCFX_HEADER}
         ${MCFX_EXTRA_SOURCES})
 
+    # Channel ceiling of the MC target: the suite-wide MCFX_MAX_CHANNELS, or a
+    # larger per-plug-in MCFX_PLUGIN_MAX_CHANNELS (e.g. mcfx_graph, whose
+    # standalone has to open large ASIO / CoreAudio / JACK devices).
+    set(_mc_max_ch ${MCFX_MAX_CHANNELS})
+    if(DEFINED MCFX_PLUGIN_MAX_CHANNELS AND MCFX_PLUGIN_MAX_CHANNELS GREATER _mc_max_ch)
+        set(_mc_max_ch ${MCFX_PLUGIN_MAX_CHANNELS})
+    endif()
+
     # NO JucePlugin_PreferredChannelConfigurations — host negotiates bus layout.
     target_compile_definitions(${_mc_target} PRIVATE
         JUCE_USE_CURL=0
@@ -222,9 +235,9 @@ if(MCFX_BUILD_MC AND _mc_formats AND DEFINED MC_PLUGIN_CODE)
         JUCE_USE_LAME_AUDIO_FORMAT=0
         JUCE_USE_WINDOWS_MEDIA_FORMAT=0
         JUCE_VST3_CAN_REPLACE_VST2=0
-        NUM_CHANNELS=${MCFX_MAX_CHANNELS}
+        NUM_CHANNELS=${_mc_max_ch}
         MCFX_MULTICHANNEL_BUILD=1
-        JSA_STANDALONE_MAX_CHANNELS=${MCFX_MAX_CHANNELS}
+        JSA_STANDALONE_MAX_CHANNELS=${_mc_max_ch}
         ${MCFX_EXTRA_DEFS})
 
     target_include_directories(${_mc_target} PRIVATE ${SRC_DIR}/common ${MCFX_EXTRA_INCLUDES})

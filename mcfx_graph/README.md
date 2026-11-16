@@ -37,6 +37,7 @@ Flexible plug-in graph / patchbay for the mcfx suite. Load any number of VST2 / 
 - Resizable side panel + tooltips on every toolbar button; in-app help popup (`?` button) lists every shortcut
 - Drag and drop a `.json` file onto the editor to load it
 - Outer in / out channel count is determined by the host (DAW track) and rebuilt automatically when the host re-negotiates the bus
+- **Up to 256 channels:** the outer in / out (and, in the standalone, the audio device) and every native node (Gain, Mute / Phase, Matrix Mixer, Delay, Feedback, Subgraph) go up to 256 channels. VST3 hosts still limit a bus to 64 channels; hosted plug-ins are offered whatever sizes they accept (every count up to 64, then multiples of 8)
 
 ## Persistence
 
