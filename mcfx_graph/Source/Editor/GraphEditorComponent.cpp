@@ -23,7 +23,8 @@ GraphEditorComponent::GraphEditorComponent (Mcfx_graphAudioProcessor& processor,
     setInterceptsMouseClicks (true, true);
     setWantsKeyboardFocus (true);
 
-    // Fixed world size; the surrounding Viewport handles pan via scrollbars.
+    // Minimum world size (grows to fit the nodes, see updateWorldSize); the
+    // surrounding Viewport handles pan via scrollbars.
     setSize (kWorldW, kWorldH);
 
     hookTopologyListener();
@@ -129,6 +130,10 @@ void GraphEditorComponent::onNodeMoved (NodeComponent& node)
             nc->setTopLeftPosition (nc->getNode().editorPosition);
         }
     }
+
+    // Dragging a node toward the bottom / right edge extends the world so
+    // there's always room (and scroll range) to keep going.
+    updateWorldSize (false);
     repaint();
 }
 
@@ -1234,8 +1239,7 @@ void GraphEditorComponent::setZoom (float newZoom, juce::Point<int> anchorScreen
 
     // Resize the canvas to the new world-times-zoom so the Viewport's
     // scrollbars cover the right range.
-    setSize ((int) std::ceil (kWorldW * zoom_),
-             (int) std::ceil (kWorldH * zoom_));
+    applyCanvasSize();
     layoutNodeComponents();
 
     // Adjust the Viewport's scroll position so the same world point lands
@@ -1256,7 +1260,7 @@ void GraphEditorComponent::setZoom (float newZoom, juce::Point<int> anchorScreen
 void GraphEditorComponent::resetZoom()
 {
     zoom_ = 1.0f;
-    setSize (kWorldW, kWorldH);
+    applyCanvasSize();
     layoutNodeComponents();
 
     // Scroll the viewport to the upper-left of the typical Input/Output area.
@@ -1299,6 +1303,43 @@ void GraphEditorComponent::layoutNodeComponents()
         nc->setTopLeftPosition (nc->getNode().editorPosition);
         nc->setTransform (juce::AffineTransform::scale (zoom_));
     }
+
+    updateWorldSize (true);
+}
+
+void GraphEditorComponent::updateWorldSize (bool allowShrink)
+{
+    // Node sizes are untransformed (world) sizes; the zoom is a transform.
+    int right = 0, bottom = 0;
+    for (auto* nc : nodeComps_)
+    {
+        const auto pos = nc->getNode().editorPosition;
+        right  = juce::jmax (right,  pos.x + nc->getWidth());
+        bottom = juce::jmax (bottom, pos.y + nc->getHeight());
+    }
+
+    int w = juce::jmax (kWorldW, right  + kWorldMargin);
+    int h = juce::jmax (kWorldH, bottom + kWorldMargin);
+    if (! allowShrink)
+    {
+        w = juce::jmax (w, worldW_);
+        h = juce::jmax (h, worldH_);
+    }
+
+    if (w == worldW_ && h == worldH_)
+        return;
+
+    worldW_ = w;
+    worldH_ = h;
+    applyCanvasSize();
+}
+
+void GraphEditorComponent::applyCanvasSize()
+{
+    // setSize triggers resized() -> layoutNodeComponents() -> updateWorldSize,
+    // which then finds the size unchanged and stops.
+    setSize ((int) std::ceil (worldW_ * zoom_),
+             (int) std::ceil (worldH_ * zoom_));
 }
 
 juce::Point<int> GraphEditorComponent::canvasToWorld (juce::Point<int> canvasPos) const
