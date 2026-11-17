@@ -254,6 +254,19 @@ private:
     static constexpr float kMinZoom  = 0.25f;
     static constexpr float kMaxZoom  = 3.0f;
 
-    static constexpr int kWorldW = 4000;
-    static constexpr int kWorldH = 3000;
+    // Minimum world size. The world grows past it to fit the nodes (a
+    // 256-channel I/O node alone is ~4100 px tall) plus kWorldMargin of
+    // empty room to drag into, so the Viewport can always scroll to them.
+    static constexpr int kWorldW      = 4000;
+    static constexpr int kWorldH      = 3000;
+    static constexpr int kWorldMargin = 400;
+    int worldW_ = kWorldW;
+    int worldH_ = kWorldH;
+
+    /** Recompute worldW_ / worldH_ from the node extents and resize the
+        canvas to world * zoom_. With allowShrink == false the world only
+        grows (used mid-drag, so the scroll range doesn't jump under the
+        cursor). */
+    void updateWorldSize (bool allowShrink);
+    void applyCanvasSize();
 };
