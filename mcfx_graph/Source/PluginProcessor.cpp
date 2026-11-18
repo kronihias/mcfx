@@ -392,19 +392,17 @@ void Mcfx_graphAudioProcessor::commitHistorySnapshot()
     // redo history because each call truncates entries past the current
     // index). Compare the new state against the current head as JSON.
     auto newState = exportToVar();
-    if (historyIndex_ >= 0 && historyIndex_ < (int) history_.size())
-    {
-        const auto a = juce::JSON::toString (history_[(std::size_t) historyIndex_], true);
-        const auto b = juce::JSON::toString (newState, true);
-        if (a == b) return;
-    }
+    auto newJson  = juce::JSON::toString (newState, true);
+    if (historyIndex_ >= 0 && historyIndex_ < (int) history_.size()
+        && history_[(std::size_t) historyIndex_].json == newJson)
+        return;
 
     // Truncate any redo entries past the current point — a fresh action
     // invalidates redo history.
     if (historyIndex_ + 1 < (int) history_.size())
         history_.erase (history_.begin() + historyIndex_ + 1, history_.end());
 
-    history_.push_back (std::move (newState));
+    history_.push_back ({ std::move (newState), std::move (newJson) });
     historyIndex_ = (int) history_.size() - 1;
 
     // Cap memory: drop oldest entries when we exceed kMaxHistory.
@@ -422,7 +420,7 @@ bool Mcfx_graphAudioProcessor::undo()
 {
     if (! canUndo()) return false;
     --historyIndex_;
-    importFromVar (history_[(std::size_t) historyIndex_]);
+    importFromVar (history_[(std::size_t) historyIndex_].state);
     return true;
 }
 
@@ -430,7 +428,7 @@ bool Mcfx_graphAudioProcessor::redo()
 {
     if (! canRedo()) return false;
     ++historyIndex_;
-    importFromVar (history_[(std::size_t) historyIndex_]);
+    importFromVar (history_[(std::size_t) historyIndex_].state);
     return true;
 }
 

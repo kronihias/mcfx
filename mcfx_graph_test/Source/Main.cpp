@@ -22,6 +22,7 @@
 #include "NativeNodes/DelayNode.h"
 #include "NativeNodes/FeedbackNodes.h"
 #include "NativeNodes/GainNode.h"
+#include "NativeNodes/MatrixMixerNode.h"
 #include "Hosting/PluginInstanceFactory.h"
 
 #include <functional>
@@ -842,6 +843,113 @@ namespace
     }
 }
 
+namespace
+{
+    // Through JSON text, like presets and the host state.
+    juce::var viaJson (const juce::var& v)
+    {
+        return juce::JSON::parse (juce::JSON::toString (v, true));
+    }
+
+    bool sameMatrix (const MatrixMixerNode& a, const MatrixMixerNode& b)
+    {
+        if (a.getNumIn() != b.getNumIn() || a.getNumOut() != b.getNumOut()) return false;
+        for (int o = 0; o < a.getNumOut(); ++o)
+            for (int i = 0; i < a.getNumIn(); ++i)
+                if (a.getMatrix (o, i) != b.getMatrix (o, i)) return false;
+        return true;
+    }
+
+    void scenarioMatrixState()
+    {
+        // Sparse: a 256 x 256 routing matrix is stored as its non-zero cells.
+        {
+            MatrixMixerNode src (256, 256), dst (256, 256);
+            src.setMatrix (3, 7, 0.5f);
+            src.setMatrix (0, 0, 0.0f);
+            src.setMatrix (255, 0, -0.25f);
+            const auto v = src.toVar();
+            check (v["gains"].isArray() && ! v.hasProperty ("matrixF32"), "sparse matrix is stored as gains");
+            const auto json = juce::JSON::toString (v, true);
+            check (json.length() < 16000, "sparse 256x256 state is small (" + juce::String (json.length()) + " chars)");
+            dst.setMatrix (10, 20, 1.0f);   // stale value that must be cleared
+            dst.fromVar (juce::JSON::parse (json));
+            check (sameMatrix (src, dst), "sparse 256x256 round-trips");
+        }
+
+        // Dense: every cell set, stored as one base64 float32 block, bit exact.
+        {
+            MatrixMixerNode src (256, 256), dst (256, 256);
+            juce::Random rng (42);
+            for (int o = 0; o < 256; ++o)
+                for (int i = 0; i < 256; ++i)
+                    src.setMatrix (o, i, rng.nextFloat() * 2.0f - 1.0f + 1.0e-3f);
+            const auto v = src.toVar();
+            check (v["matrixF32"].isString() && ! v.hasProperty ("gains"), "dense matrix is stored as matrixF32");
+            dst.fromVar (viaJson (v));
+            check (sameMatrix (src, dst), "dense 256x256 round-trips bit exact");
+        }
+
+        // All zero: loading it clears the destination's identity diagonal.
+        {
+            MatrixMixerNode src (4, 4), dst (4, 4);
+            for (int c = 0; c < 4; ++c) src.setMatrix (c, c, 0.0f);
+            dst.fromVar (viaJson (src.toVar()));
+            check (sameMatrix (src, dst), "all-zero matrix round-trips");
+        }
+
+        // Legacy nested "matrix" rows (out-major) still load.
+        {
+            juce::Array<juce::var> rows;
+            rows.add (juce::Array<juce::var> { 0.0, 0.5, 0.0 });   // out 0
+            rows.add (juce::Array<juce::var> { 1.0, 0.0, 0.25 });  // out 1
+            auto* obj = new juce::DynamicObject();
+            obj->setProperty ("matrix", rows);
+            MatrixMixerNode dst (3, 2);
+            dst.fromVar (viaJson (juce::var (obj)));
+            check (dst.getMatrix (0, 0) == 0.0f && dst.getMatrix (0, 1) == 0.5f
+                   && dst.getMatrix (1, 0) == 1.0f && dst.getMatrix (1, 2) == 0.25f,
+                   "legacy nested matrix loads");
+        }
+
+        // Channel-count change (node rebuilt with fromVar (old->toVar())):
+        // the overlap is taken over, the rest keeps the identity diagonal.
+        {
+            MatrixMixerNode src (4, 4);                  // sparse
+            src.setMatrix (0, 0, 0.0f);
+            src.setMatrix (1, 2, 0.75f);
+            MatrixMixerNode grown (6, 6);
+            grown.fromVar (viaJson (src.toVar()));
+            check (grown.getMatrix (1, 2) == 0.75f && grown.getMatrix (0, 0) == 0.0f
+                   && grown.getMatrix (1, 1) == 1.0f && grown.getMatrix (5, 5) == 1.0f,
+                   "sparse resize keeps the overlap and the new diagonal");
+        }
+        {
+            MatrixMixerNode src (80, 80);                // 6400 cells: dense
+            for (int o = 0; o < 80; ++o)
+                for (int i = 0; i < 80; ++i)
+                    src.setMatrix (o, i, 0.01f * (float) ((o + i) % 7 + 1));
+            check (src.toVar().hasProperty ("matrixF32"), "80x80 full matrix uses the dense form");
+
+            MatrixMixerNode grown (100, 90);             // numIn 100, numOut 90
+            grown.fromVar (viaJson (src.toVar()));
+            bool ok = grown.getMatrix (85, 85) == 1.0f && grown.getMatrix (85, 10) == 0.0f;
+            for (int o = 0; o < 80 && ok; ++o)
+                for (int i = 0; i < 80 && ok; ++i)
+                    ok = grown.getMatrix (o, i) == src.getMatrix (o, i);
+            check (ok, "dense resize keeps the overlap and the new diagonal");
+
+            MatrixMixerNode shrunk (50, 40);
+            shrunk.fromVar (viaJson (src.toVar()));
+            ok = true;
+            for (int o = 0; o < 40 && ok; ++o)
+                for (int i = 0; i < 50 && ok; ++i)
+                    ok = shrunk.getMatrix (o, i) == src.getMatrix (o, i);
+            check (ok, "dense shrink keeps the overlap");
+        }
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juce;
@@ -862,6 +970,7 @@ int main (int argc, char** argv)
         { "latency-runtime",  scenarioLatencyRuntime },
         { "latency-ignored",  scenarioLatencyIgnored },
         { "multibus",         scenarioMultiBus },
+        { "matrix-state",     scenarioMatrixState },
     };
 
     juce::String only;

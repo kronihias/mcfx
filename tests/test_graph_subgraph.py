@@ -35,7 +35,7 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("scenario", ["mixed", "isolated", "feedback", "refusals", "nested",
                                       "resize", "insert", "insert-partial", "insert-refusals",
                                       "removal-notices", "latency-parallel", "latency-subgraph",
-                                      "latency-runtime", "latency-ignored"])
+                                      "latency-runtime", "latency-ignored", "matrix-state"])
 def test_graph_editing(scenario):
     proc = subprocess.run([GRAPH_TEST_BIN, "--scenario", scenario],
                           capture_output=True, text=True, timeout=120)
