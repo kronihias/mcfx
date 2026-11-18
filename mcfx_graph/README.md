@@ -10,7 +10,7 @@ Flexible plug-in graph / patchbay for the mcfx suite. Load any number of VST2 / 
 |---|---|
 | **Gain** | Per-channel gain. dB range **-120 dB ... +40 dB**; double-click resets to 0 dB. **Linked** toggle: one slider drives all channels. **Linear / dB** mode toggle; type `0.5 lin` / `0.5 x` to enter linear in dB mode, or `-6 dB` to enter dB in linear mode. |
 | **Mute / Phase invert** | Per-channel mute and polarity invert, both with a **Linked** toggle that mirrors all channels. |
-| **Matrix Mixer** | N × M matrix with independent input / output counts. **Copy / Paste** matrix from clipboard as TSV. **dB** display toggle (-120 dB ≡ 0.0 linear). Focused-cell row / column header highlight makes it easy to see which entry is being edited. |
+| **Matrix Mixer** | N × M matrix with independent input / output counts. **Copy / Paste** matrix from clipboard as TSV. **dB** display toggle (-120 dB ≡ 0.0 linear): type signed dB (`-6` → 0.5), add `inv` to invert polarity (`-6 inv` → -0.5). Click a cell to edit; **Return** / clicking elsewhere commits, **Esc** cancels, **Tab** / **Shift+Tab** and **↑** / **↓** move between cells. Input / output headers stay pinned while scrolling and highlight the edited cell's row / column; non-zero cells are shaded. Stays responsive at 256 × 256. |
 | **Delay** | Per-channel sample-accurate fractional delay (Lagrange-3rd interpolation). **Linked** mode broadcasts one slider to all channels. **Samples / ms** unit toggle. |
 | **Subgraph** | A node that contains its own graph with configurable in / out channel counts — nest as deep as you like. |
 
