@@ -178,7 +178,14 @@ private:
 
     // Snapshot-based undo/redo. The stack always has the current state at
     // historyIndex_; undo decrements the index, redo increments it.
-    std::vector<juce::var> history_;
+    // Each entry keeps its one-line JSON so the duplicate check in
+    // commitHistorySnapshot encodes only the new state, not the head again.
+    struct HistoryEntry
+    {
+        juce::var    state;
+        juce::String json;
+    };
+    std::vector<HistoryEntry> history_;
     int historyIndex_ = -1;
     // Counter (not bool) so it can survive across deferred MessageManager
     // callAsync invocations — see importFromVar for the FIFO-flush trick.

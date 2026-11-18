@@ -60,6 +60,10 @@ private:
 
     inline int idx (int outCh, int inCh) const noexcept { return outCh * numIn_ + inCh; }
 
+    // toVar() lists non-zero cells up to this many, else stores every cell
+    // as one base64 float32 block.
+    static constexpr int kMaxSparseCells = 4096;
+
     const int numIn_, numOut_;
     std::vector<std::atomic<float>> matrix_; // size numOut_ * numIn_, row-major (out, in)
     juce::AudioBuffer<float> scratchIn_;     // input copy so we can write outputs in place
