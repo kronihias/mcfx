@@ -542,7 +542,8 @@ namespace
 
             dbToggle_.setButtonText ("dB");
             dbToggle_.setTooltip ("Show / enter cell values in dB instead of linear gain. "
-                                   "0.0 linear corresponds to -120.0 dB.");
+                                   "0.0 linear corresponds to -120.0 dB. Type e.g. -6 for -6 dB; "
+                                   "add \"inv\" to invert polarity (-6 inv).");
             dbToggle_.onClick = [this] { endEdit (false); repaint(); };
             addAndMakeVisible (dbToggle_);
 
@@ -728,8 +729,8 @@ namespace
             editing_   = true;
 
             cellEditor_.setBounds (cellBounds (i, o).reduced (1));
-            cellEditor_.setText (formatCell (mixer_.getMatrix (o, i), dbMode()),
-                                 juce::dontSendNotification);
+            editStartText_ = formatCell (mixer_.getMatrix (o, i), dbMode());
+            cellEditor_.setText (editStartText_, juce::dontSendNotification);
             cellEditor_.setVisible (true);
             cellEditor_.grabKeyboardFocus();
             cellEditor_.selectAll();
@@ -741,7 +742,9 @@ namespace
             if (! editing_) return;
             editing_ = false;   // first: hiding the editor fires onFocusLost again
 
-            if (commit)
+            // Leaving a cell untouched mustn't re-parse its rounded text
+            // ("-6.0 dB" -> 0.501, not the 0.5 it shows).
+            if (commit && cellEditor_.getText() != editStartText_)
             {
                 const float v = parseCell (cellEditor_.getText());
                 if (v != mixer_.getMatrix (activeOut_, activeIn_))
@@ -798,36 +801,35 @@ namespace
         bool dbMode() const { return dbToggle_.getToggleState(); }
 
         // Render a linear-gain matrix cell using the current display mode.
-        // dB mode: signed dB, with -120 dB representing 0.0 linear (clamp floor).
+        // dB mode: signed dB of the magnitude (-120 dB stands for 0.0), with a
+        // trailing "inv" for a negative (polarity-inverted) gain, so the sign
+        // of the number always means above / below 0 dB.
         static juce::String formatCell (float v, bool dB)
         {
             if (! dB) return juce::String (v, 2);
-            const float mag = std::abs (v);
-            const float db  = juce::Decibels::gainToDecibels (mag, -120.0f);
+            const float db = juce::Decibels::gainToDecibels (std::abs (v), -120.0f);
             const juce::String s = juce::String (db, 1) + " dB";
-            return v < 0.0f ? "-" + s : s;
+            return v < 0.0f ? s + " inv" : s;
         }
 
-        // Parse what the user typed into a cell back to linear gain. Honours
-        // the current display mode but also accepts the OTHER mode's syntax
-        // (a trailing "dB" in linear mode → dB; otherwise raw number in dB
-        // mode is interpreted as dB).
+        // Parse what the user typed into a cell back to linear gain.
+        //   dB mode, or a trailing "dB" in linear mode: the number is signed
+        //     dB ("-6" -> 0.5, "6" -> 2.0, "-120" or below -> 0).
+        //   linear mode: the number is the gain, a negative one inverts.
+        //   "inv" anywhere inverts polarity in either mode ("-6 dB inv").
         float parseCell (const juce::String& text) const
         {
-            const auto trimmed = text.trim();
-            const auto lower   = trimmed.toLowerCase();
-            const bool hasDb   = lower.endsWith ("db");
-            const bool asDb    = dbMode() || hasDb;
+            auto lower = text.trim().toLowerCase();
+            const bool inv = lower.contains ("inv");
+            lower = lower.replace ("inv", "");
+            const bool hasDb = lower.contains ("db");
+            lower = lower.replace ("db", "").trim();
 
-            if (! asDb)
-                return (float) trimmed.getDoubleValue();
-
-            // dB → linear. In dB mode a leading "-" denotes "below 0 dB" —
-            // not polarity invert.
-            const double v = trimmed.getDoubleValue();
-            const double mag = std::abs (v);
-            const float lin = (float) juce::Decibels::decibelsToGain (mag, -120.0);
-            return (! dbMode() && v < 0.0) ? -lin : lin;
+            const double v = lower.getDoubleValue();
+            const float gain = (dbMode() || hasDb)
+                                   ? (float) juce::Decibels::decibelsToGain (v, -120.0)
+                                   : (float) v;
+            return inv ? -gain : gain;
         }
 
         /** Format: rows separated by '\n', cells in each row by '\t'.
@@ -884,6 +886,7 @@ namespace
         juce::ToggleButton dbToggle_;
         CellEditor         cellEditor_;
         bool editing_  = false;
+        juce::String editStartText_;
         int activeIn_  = -1;
         int activeOut_ = -1;
     };
