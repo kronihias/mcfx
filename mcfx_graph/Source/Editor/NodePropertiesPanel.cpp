@@ -519,12 +519,14 @@ namespace
     class MatrixMixerPropertiesPanel : public juce::Component
     {
     public:
+        // The grid is painted, not built from one TextEditor per cell: a
+        // 256 x 256 matrix would be 65,536 components, which froze the editor
+        // for minutes. Only the cells inside the clip are drawn, and a single
+        // shared TextEditor is overlaid on the cell being edited.
         MatrixMixerPropertiesPanel (MatrixMixerNode& r, Mcfx_graphAudioProcessor& proc)
-            : mixer_ (r), proc_ (proc)
+            : mixer_ (r), proc_ (proc),
+              nIn_ (mixer_.getNumIn()), nOut_ (mixer_.getNumOut())
         {
-            const int nIn  = mixer_.getNumIn();
-            const int nOut = mixer_.getNumOut();
-
             copyButton_.setButtonText  ("Copy");
             copyButton_.setTooltip ("Copy matrix to clipboard (TSV: rows = inputs, cols = outputs). "
                                     "Always copied as raw linear gain regardless of the dB toggle.");
@@ -541,144 +543,265 @@ namespace
             dbToggle_.setButtonText ("dB");
             dbToggle_.setTooltip ("Show / enter cell values in dB instead of linear gain. "
                                    "0.0 linear corresponds to -120.0 dB.");
-            dbToggle_.onClick = [this] { repaintCells(); };
+            dbToggle_.onClick = [this] { endEdit (false); repaint(); };
             addAndMakeVisible (dbToggle_);
 
-            // Header row: empty cell + "Out 1".."Out N"
-            for (int o = 0; o < nOut; ++o)
-            {
-                auto* h = colHeaders_.add (new juce::Label ({}, "O" + juce::String (o + 1)));
-                h->setJustificationType (juce::Justification::centred);
-                h->setColour (juce::Label::textColourId, juce::Colours::orange);
-                addAndMakeVisible (h);
-            }
+            cellEditor_.owner = this;
+            cellEditor_.setMultiLine (false);
+            cellEditor_.setJustification (juce::Justification::centred);
+            cellEditor_.onReturnKey = [this] { endEdit (true); };
+            cellEditor_.onEscapeKey = [this] { endEdit (false); };
+            cellEditor_.onFocusLost = [this] { endEdit (true); };
+            addChildComponent (cellEditor_);
 
-            for (int i = 0; i < nIn; ++i)
-            {
-                auto* rh = rowHeaders_.add (new juce::Label ({}, "In " + juce::String (i + 1)));
-                rh->setJustificationType (juce::Justification::centredRight);
-                rh->setColour (juce::Label::textColourId, juce::Colours::lightblue);
-                addAndMakeVisible (rh);
-
-                for (int o = 0; o < nOut; ++o)
-                {
-                    auto* ed = cellEditors_.add (new MatrixCellEditor());
-                    ed->setMultiLine (false);
-                    ed->setText (formatCell (mixer_.getMatrix (o, i)),
-                                 juce::dontSendNotification);
-                    ed->setJustification (juce::Justification::centred);
-                    ed->onReturnKey  = [this, ed, i, o] { commitCell (ed, i, o); };
-                    ed->onFocusLost  = [this, ed, i, o]
-                    {
-                        commitCell (ed, i, o);
-                        clearHeaderHighlight (i, o);
-                    };
-                    ed->onFocusGained = [this, i, o] { highlightHeaders (i, o); };
-                    addAndMakeVisible (ed);
-                }
-            }
-
-            setSize (juce::jmax (260, 48 + nOut * 76),
-                     kHeaderHeight + (nIn + 2) * kRowHeight + 8);
+            setSize (juce::jmax (260, kPad * 2 + kRowLabelW + nOut_ * kMinCellW),
+                     gridTop() + (nIn_ + 1) * kCellH + kPad);
         }
 
         void resized() override
         {
-            const int nIn  = mixer_.getNumIn();
-            const int nOut = mixer_.getNumOut();
-            if (nIn == 0 || nOut == 0) return;
-
-            auto area = getLocalBounds().reduced (4);
-
-            // Toolbar: Copy / Paste / dB
-            auto toolbar = area.removeFromTop (kRowHeight);
+            auto toolbar = getLocalBounds().reduced (kPad).removeFromTop (kRowHeight);
             copyButton_ .setBounds (toolbar.removeFromLeft (60));
             toolbar.removeFromLeft (4);
             pasteButton_.setBounds (toolbar.removeFromLeft (60));
             toolbar.removeFromLeft (10);
             dbToggle_   .setBounds (toolbar.removeFromLeft (50));
-            area.removeFromTop (4);
 
-            const int rowLabelW = 48;
-            // Min cell width fits "-120.0 dB" with a bit of padding so the
-            // dB display mode never clips.
-            const int cellW     = juce::jmax (72, (area.getWidth() - rowLabelW) / nOut);
+            // Stretch the cells when the panel is wider than the matrix needs.
+            cellW_ = nOut_ > 0 ? juce::jmax (kMinCellW, (getWidth() - kPad * 2 - kRowLabelW) / nOut_)
+                               : kMinCellW;
+            endEdit (true);
+        }
 
-            // Column headers
-            auto headerRow = area.removeFromTop (kRowHeight);
-            headerRow.removeFromLeft (rowLabelW);
-            for (int o = 0; o < nOut; ++o)
-                colHeaders_[o]->setBounds (headerRow.removeFromLeft (cellW));
+        // The hosting Viewport scrolls by moving this component. Repaint so the
+        // sticky headers follow, and close the editor rather than letting it
+        // slide under them.
+        void moved() override
+        {
+            endEdit (true);
+            repaint();
+        }
 
-            // Rows
-            for (int i = 0; i < nIn; ++i)
+        void paint (juce::Graphics& g) override
+        {
+            if (nIn_ == 0 || nOut_ == 0) return;
+
+            const auto clip  = g.getClipBounds();
+            const auto view  = visibleArea();
+            const int  hdrY  = juce::jmax (gridTop(), view.getY());   // sticky column header
+            const int  hdrX  = juce::jmax (kPad, view.getX());        // sticky row header
+            const bool dB    = dbMode();
+
+            const int o0 = juce::jlimit (0, nOut_ - 1, (clip.getX() - gridLeft()) / cellW_);
+            const int o1 = juce::jlimit (0, nOut_ - 1, (clip.getRight() - gridLeft()) / cellW_);
+            const int i0 = juce::jlimit (0, nIn_ - 1, (clip.getY() - cellsTop()) / kCellH);
+            const int i1 = juce::jlimit (0, nIn_ - 1, (clip.getBottom() - cellsTop()) / kCellH);
+
+            g.setFont (juce::FontOptions (13.0f));
+
+            for (int i = i0; i <= i1; ++i)
             {
-                auto row = area.removeFromTop (kRowHeight);
-                rowHeaders_[i]->setBounds (row.removeFromLeft (rowLabelW));
-                for (int o = 0; o < nOut; ++o)
-                    cellEditors_[i * nOut + o]->setBounds (row.removeFromLeft (cellW).reduced (1));
+                for (int o = o0; o <= o1; ++o)
+                {
+                    const auto r = cellBounds (i, o);
+                    const float v = mixer_.getMatrix (o, i);
+                    const bool active = (i == activeIn_ && o == activeOut_);
+
+                    g.setColour (active ? juce::Colour (0xff3a3a20)
+                                        : (v != 0.0f ? juce::Colour (0xff2c3440)
+                                                     : juce::Colour (0xff23232b)));
+                    g.fillRect (r.reduced (1));
+
+                    if (! (editing_ && active))
+                    {
+                        g.setColour (v != 0.0f ? juce::Colours::white
+                                               : juce::Colours::white.withAlpha (0.35f));
+                        g.drawText (formatCell (v, dB), r, juce::Justification::centred, false);
+                    }
+                }
             }
+
+            // Column header (outputs) pinned to the top of the visible area.
+            const auto bg = juce::Colour (0xff1c1c24);
+            g.setColour (bg);
+            g.fillRect (clip.getX(), hdrY, clip.getWidth(), kCellH);
+            for (int o = o0; o <= o1; ++o)
+            {
+                g.setColour (o == activeOut_ ? juce::Colours::yellow : juce::Colours::orange);
+                g.drawText ("O" + juce::String (o + 1),
+                            gridLeft() + o * cellW_, hdrY, cellW_, kCellH,
+                            juce::Justification::centred, false);
+            }
+
+            // Row header (inputs) pinned to the left of the visible area.
+            g.setColour (bg);
+            g.fillRect (hdrX, clip.getY(), kRowLabelW, clip.getHeight());
+            for (int i = i0; i <= i1; ++i)
+            {
+                const int y = cellsTop() + i * kCellH;
+                if (y + kCellH <= hdrY + kCellH) continue;   // hidden behind the column header
+                g.setColour (i == activeIn_ ? juce::Colours::yellow : juce::Colours::lightblue);
+                g.drawText ("In " + juce::String (i + 1), hdrX, y, kRowLabelW - 6, kCellH,
+                            juce::Justification::centredRight, false);
+            }
+
+            // Corner where the two headers meet.
+            g.setColour (bg);
+            g.fillRect (hdrX, hdrY, kRowLabelW, kCellH);
+        }
+
+        void mouseDown (const juce::MouseEvent& e) override
+        {
+            const auto view = visibleArea();
+            const int  hdrY = juce::jmax (gridTop(), view.getY());
+            const int  hdrX = juce::jmax (kPad, view.getX());
+
+            // Clicks on the pinned headers don't reach the cells beneath them.
+            if (e.y < hdrY + kCellH || e.x < hdrX + kRowLabelW)
+            {
+                endEdit (true);
+                return;
+            }
+
+            const int o = (e.x - gridLeft()) / cellW_;
+            const int i = (e.y - cellsTop()) / kCellH;
+            if (juce::isPositiveAndBelow (o, nOut_) && juce::isPositiveAndBelow (i, nIn_))
+                beginEdit (i, o);
+            else
+                endEdit (true);
         }
 
     private:
-        // TextEditor subclass that exposes focusGained as a std::function,
-        // matching the style of the built-in onFocusLost. Used so the matrix
-        // panel can highlight the row / column header for the focused cell.
-        struct MatrixCellEditor : juce::TextEditor
+        static constexpr int kPad       = 4;
+        static constexpr int kRowLabelW = 48;
+        static constexpr int kCellH     = 22;
+        // Min cell width fits "-120.0 dB" with a bit of padding so the dB
+        // display mode never clips.
+        static constexpr int kMinCellW  = 72;
+
+        // Shared overlay editor. Tab / Shift+Tab and the arrow keys move to
+        // the neighbouring cell, like a spreadsheet.
+        struct CellEditor : juce::TextEditor
         {
-            std::function<void()> onFocusGained;
-            void focusGained (FocusChangeType t) override
+            MatrixMixerPropertiesPanel* owner = nullptr;
+
+            bool keyPressed (const juce::KeyPress& k) override
             {
-                juce::TextEditor::focusGained (t);
-                if (onFocusGained) onFocusGained();
+                if (owner != nullptr)
+                {
+                    const auto code = k.getKeyCode();
+                    if (code == juce::KeyPress::tabKey)
+                        return owner->moveEdit (0, k.getModifiers().isShiftDown() ? -1 : 1, true);
+                    if (code == juce::KeyPress::upKey)   return owner->moveEdit (-1, 0, false);
+                    if (code == juce::KeyPress::downKey) return owner->moveEdit ( 1, 0, false);
+                }
+                return juce::TextEditor::keyPressed (k);
             }
         };
 
-        static juce::Colour rowDefaultColour() { return juce::Colours::lightblue; }
-        static juce::Colour colDefaultColour() { return juce::Colours::orange; }
-        static juce::Colour rowFocusedColour() { return juce::Colours::yellow; }
-        static juce::Colour colFocusedColour() { return juce::Colours::yellow; }
+        int gridTop()  const { return kPad + kRowHeight + 4; }       // column header row
+        int cellsTop() const { return gridTop() + kCellH; }
+        int gridLeft() const { return kPad + kRowLabelW; }
 
-        void highlightHeaders (int inCh, int outCh)
+        juce::Rectangle<int> cellBounds (int i, int o) const
         {
-            activeIn_  = inCh;
-            activeOut_ = outCh;
-            applyHeaderColours();
+            return { gridLeft() + o * cellW_, cellsTop() + i * kCellH, cellW_, kCellH };
         }
 
-        // Only revert if no other cell has stolen focus in the meantime —
-        // when tabbing between cells, focusLost fires on the old cell BEFORE
-        // focusGained on the new one, so a blanket clear here would briefly
-        // reset the state the new cell is about to set.
-        void clearHeaderHighlight (int inCh, int outCh)
+        // The part of this component the hosting Viewport currently shows
+        // (all of it when not in a Viewport).
+        juce::Rectangle<int> visibleArea() const
         {
-            if (activeIn_ == inCh && activeOut_ == outCh)
+            if (auto* vp = findParentComponentOfClass<juce::Viewport>())
+                if (vp->getViewedComponent() == this)
+                    return vp->getViewArea();
+            return getLocalBounds();
+        }
+
+        void beginEdit (int i, int o)
+        {
+            endEdit (true);
+            scrollCellIntoView (i, o);
+
+            activeIn_  = i;
+            activeOut_ = o;
+            editing_   = true;
+
+            cellEditor_.setBounds (cellBounds (i, o).reduced (1));
+            cellEditor_.setText (formatCell (mixer_.getMatrix (o, i), dbMode()),
+                                 juce::dontSendNotification);
+            cellEditor_.setVisible (true);
+            cellEditor_.grabKeyboardFocus();
+            cellEditor_.selectAll();
+            repaint();
+        }
+
+        void endEdit (bool commit)
+        {
+            if (! editing_) return;
+            editing_ = false;   // first: hiding the editor fires onFocusLost again
+
+            if (commit)
             {
-                activeIn_  = -1;
-                activeOut_ = -1;
-                applyHeaderColours();
+                const float v = parseCell (cellEditor_.getText());
+                if (v != mixer_.getMatrix (activeOut_, activeIn_))
+                {
+                    mixer_.setMatrix (activeOut_, activeIn_, v);
+                    proc_.commitHistorySnapshot();
+                }
             }
+
+            cellEditor_.setVisible (false);
+            activeIn_  = -1;
+            activeOut_ = -1;
+            repaint();
         }
 
-        void applyHeaderColours()
+        // Move the edit by (di, do_). With wrap, running off a row's end
+        // continues on the next / previous row (Tab order).
+        bool moveEdit (int di, int dout, bool wrap)
         {
-            for (int i = 0; i < rowHeaders_.size(); ++i)
-                rowHeaders_[i]->setColour (juce::Label::textColourId,
-                                            i == activeIn_ ? rowFocusedColour()
-                                                            : rowDefaultColour());
-            for (int o = 0; o < colHeaders_.size(); ++o)
-                colHeaders_[o]->setColour (juce::Label::textColourId,
-                                            o == activeOut_ ? colFocusedColour()
-                                                             : colDefaultColour());
+            int i = activeIn_ + di, o = activeOut_ + dout;
+            if (wrap)
+            {
+                if (o >= nOut_) { o = 0;         ++i; }
+                if (o < 0)      { o = nOut_ - 1; --i; }
+            }
+            if (! juce::isPositiveAndBelow (i, nIn_) || ! juce::isPositiveAndBelow (o, nOut_))
+                return true;   // at the edge: swallow the key
+            beginEdit (i, o);
+            return true;
+        }
+
+        // Scroll the hosting Viewport so the cell is visible below / right of
+        // the sticky headers.
+        void scrollCellIntoView (int i, int o)
+        {
+            auto* vp = findParentComponentOfClass<juce::Viewport>();
+            if (vp == nullptr || vp->getViewedComponent() != this) return;
+
+            const auto view = vp->getViewArea();
+            const auto cell = cellBounds (i, o);
+            int x = view.getX(), y = view.getY();
+
+            if (cell.getX() - kRowLabelW < x)                 x = cell.getX() - gridLeft();
+            else if (cell.getRight() > view.getRight())       x = cell.getRight() - view.getWidth();
+            if (cell.getY() - kCellH < y)                     y = cell.getY() - cellsTop();
+            else if (cell.getBottom() > view.getBottom())     y = cell.getBottom() - view.getHeight();
+
+            // Called before editing_ is set, so the moved() this triggers
+            // doesn't end the new edit.
+            if (x != view.getX() || y != view.getY())
+                vp->setViewPosition (juce::jmax (0, x), juce::jmax (0, y));
         }
 
         bool dbMode() const { return dbToggle_.getToggleState(); }
 
         // Render a linear-gain matrix cell using the current display mode.
         // dB mode: signed dB, with -120 dB representing 0.0 linear (clamp floor).
-        juce::String formatCell (float v) const
+        static juce::String formatCell (float v, bool dB)
         {
-            if (! dbMode()) return juce::String (v, 2);
+            if (! dB) return juce::String (v, 2);
             const float mag = std::abs (v);
             const float db  = juce::Decibels::gainToDecibels (mag, -120.0f);
             const juce::String s = juce::String (db, 1) + " dB";
@@ -699,34 +822,12 @@ namespace
             if (! asDb)
                 return (float) trimmed.getDoubleValue();
 
-            // dB → linear, preserving sign.
+            // dB → linear. In dB mode a leading "-" denotes "below 0 dB" —
+            // not polarity invert.
             const double v = trimmed.getDoubleValue();
             const double mag = std::abs (v);
-            // Preserve sign written in front of an explicit "dB" suffix only
-            // when the user typed a negative magnitude into linear-mode (we
-            // shouldn't get here in that path anyway). In dB mode a leading
-            // "-" denotes "below 0 dB" — not polarity invert.
             const float lin = (float) juce::Decibels::decibelsToGain (mag, -120.0);
             return (! dbMode() && v < 0.0) ? -lin : lin;
-        }
-
-        void repaintCells()
-        {
-            const int nIn  = mixer_.getNumIn();
-            const int nOut = mixer_.getNumOut();
-            for (int i = 0; i < nIn; ++i)
-                for (int o = 0; o < nOut; ++o)
-                    if (auto* ed = cellEditors_[i * nOut + o])
-                        ed->setText (formatCell (mixer_.getMatrix (o, i)),
-                                     juce::dontSendNotification);
-        }
-
-        void commitCell (juce::TextEditor* ed, int inCh, int outCh)
-        {
-            const float v = parseCell (ed->getText());
-            mixer_.setMatrix (outCh, inCh, v);
-            ed->setText (formatCell (v), juce::dontSendNotification);
-            proc_.commitHistorySnapshot();
         }
 
         /** Format: rows separated by '\n', cells in each row by '\t'.
@@ -735,12 +836,11 @@ namespace
             round-trip through a spreadsheet preserves precision. */
         void copyMatrixToClipboard()
         {
-            const int nIn  = mixer_.getNumIn();
-            const int nOut = mixer_.getNumOut();
+            endEdit (true);
             juce::String s;
-            for (int i = 0; i < nIn; ++i)
+            for (int i = 0; i < nIn_; ++i)
             {
-                for (int o = 0; o < nOut; ++o)
+                for (int o = 0; o < nOut_; ++o)
                 {
                     if (o > 0) s += "\t";
                     s += juce::String (mixer_.getMatrix (o, i), 6);
@@ -756,39 +856,34 @@ namespace
             (matches copyMatrixToClipboard). */
         void pasteMatrixFromClipboard()
         {
+            endEdit (true);
             const auto text = juce::SystemClipboard::getTextFromClipboard();
             if (text.isEmpty()) return;
-
-            const int nIn  = mixer_.getNumIn();
-            const int nOut = mixer_.getNumOut();
 
             juce::StringArray rows;
             rows.addTokens (text, "\n;", "");
             rows.removeEmptyStrings();
 
-            for (int i = 0; i < juce::jmin (nIn, rows.size()); ++i)
+            for (int i = 0; i < juce::jmin (nIn_, rows.size()); ++i)
             {
                 juce::StringArray cells;
                 cells.addTokens (rows[i], "\t,; ", "\"");
                 cells.removeEmptyStrings();
-                for (int o = 0; o < juce::jmin (nOut, cells.size()); ++o)
-                {
-                    const float v = (float) cells[o].getDoubleValue();
-                    mixer_.setMatrix (o, i, v);
-                    if (auto* ed = cellEditors_[i * nOut + o])
-                        ed->setText (formatCell (v), juce::dontSendNotification);
-                }
+                for (int o = 0; o < juce::jmin (nOut_, cells.size()); ++o)
+                    mixer_.setMatrix (o, i, (float) cells[o].getDoubleValue());
             }
             proc_.commitHistorySnapshot();
+            repaint();
         }
 
         MatrixMixerNode& mixer_;
         Mcfx_graphAudioProcessor& proc_;
-        juce::TextButton                       copyButton_, pasteButton_;
-        juce::ToggleButton                     dbToggle_;
-        juce::OwnedArray<juce::Label>          colHeaders_;
-        juce::OwnedArray<juce::Label>          rowHeaders_;
-        juce::OwnedArray<MatrixCellEditor>     cellEditors_;
+        const int nIn_, nOut_;
+        int cellW_ = kMinCellW;
+        juce::TextButton   copyButton_, pasteButton_;
+        juce::ToggleButton dbToggle_;
+        CellEditor         cellEditor_;
+        bool editing_  = false;
         int activeIn_  = -1;
         int activeOut_ = -1;
     };
