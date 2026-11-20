@@ -114,13 +114,16 @@ public:
     void run() override;
 
     // do the loading in a background thread
-    void LoadConfigurationAsync(File configFile);
+    // If configText is non-empty, it is parsed instead of reading configFile from disk.
+    // configFile then only names the preset and defines the base directory for relative IR paths
+    // (it does not need to exist). Used for .wav files dropped into read-only folders.
+    void LoadConfigurationAsync(File configFile, const String& configText = {});
 
-    void LoadConfiguration(File configFile); // do the loading
+    void LoadConfiguration(File configFile, const String& configText = {}); // do the loading
 
     int getWavInputChannelMetadata(File wavFile);
 
-    void LoadWavFile(File wavFile, int numInputChannels = 0); // this will first create a .conf file, then load it async
+    void LoadWavFile(File wavFile, int numInputChannels = 0); // generates a configuration in memory (or uses an existing <name>.conf next to the .wav), then loads it async
 
     void UnloadConfiguration();
 
@@ -197,6 +200,7 @@ public:
     int _num_conv;
 
     File _configFile;
+    String _configText; // in-memory configuration text of the loaded preset (empty if loaded from a .conf file)
 
 
     //==============================================================================
@@ -224,6 +228,7 @@ private:
 
 
     File _desConfigFile;
+    String _desConfigText;
 
     File _tempConfigZipFile;
     Array<File> _cleanUpFilesOnExit;
