@@ -307,6 +307,16 @@ Use **cmake-gui** or **cmake/ccmake** from the terminal.
 ---
 
 ## Changelog
+### 0.9.3 (2026-11-20)
+
+- `mcfx_graph`: **up to 256 channels** in the standalone and for native nodes (VST3 stays at 64 per bus); hosted plug-in nodes offer every count up to 64, then multiples of 8.
+- `mcfx_graph`: **fast matrix mixer for large matrices** — the grid is painted instead of built from one text field per cell, so a 256 × 256 matrix no longer freezes the GUI. Click a cell to edit; Return commits, Esc cancels, Tab / arrow keys move between cells; non-zero cells are highlighted.
+- `mcfx_graph`: matrix mixer state is stored compactly (sparse cells or one binary block) and undo snapshots are much cheaper; older projects still load.
+- `mcfx_graph`: in dB mode, negative entries are now negative dB (`-6` was +6 dB before); polarity inversion uses the `inv` suffix (`-6 inv`). Leaving a cell unedited no longer changes its value or adds an undo step.
+- `mcfx_graph`: the editor canvas grows to fit tall nodes, so all pins of a 256-channel I/O node are reachable.
+- `mcfx_convolver`: dropped `.wav` files load without writing a `.conf` next to them (works in read-only folders); the generated configuration is kept in the plug-in state. Fixed leaks / crashes in the `.wav` helpers.
+- Windows: standalone apps support up to 128 device channels (was 64), matching macOS.
+
 ### 0.9.2 (2026-11-15)
 
 - `mcfx_meter`: **spectrum view** — a channel range overlaid or power-averaged, time averaging, fractional-octave smoothing or third-octave bands, peak curves, FFT window 4096–32768.
