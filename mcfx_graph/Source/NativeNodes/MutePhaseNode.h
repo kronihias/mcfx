@@ -75,9 +75,12 @@ private:
         const bool isInvert;
     };
     void applyParamChange (int channel, bool isInvert, bool on) noexcept;
+    // Atomics only, no write-back; honours linked.
+    void storeSwitch (std::vector<std::atomic<uint8_t>>& dst, int channel, bool on) noexcept;
 
     std::vector<SwitchParam*> muteParams_, invertParams_;
-    std::atomic<bool> applyingParam_ { false };
+    // Thread doing the parameter write-back (nullptr when none).
+    std::atomic<juce::Thread::ThreadID> mirroringThread_ { nullptr };
 
     const int numChannels_;
     std::atomic<bool> linked_ { false };

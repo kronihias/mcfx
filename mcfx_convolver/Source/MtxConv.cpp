@@ -71,8 +71,13 @@ void MtxConvMaster::processBlock(juce::AudioSampleBuffer &inbuf, juce::AudioSamp
     if (configuration_)
     {
 
-        // lock configuration
-        const ScopedLock myScopedLock (lock_);
+        // lock configuration; never wait for Cleanup() on the audio thread
+        const ScopedTryLock myScopedLock (lock_);
+        if (! myScopedLock.isLocked())
+        {
+            outbuf.clear();
+            return;
+        }
 
         /////////////////////////
         // write to input ring buffer

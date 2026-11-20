@@ -263,9 +263,9 @@ void LowhighpassAudioProcessor::setParameter (int index, float newValue)
             break;
 	}
 
-    updateFilterParameters(getSampleRate(), true);
+    _params_dirty = true; // picked up by processBlock
 
-    sendChangeMessage();
+    sendChangeMessageRtSafe(); // setParameter may run on the audio thread
 }
 
 const String LowhighpassAudioProcessor::getParameterName (int index)
@@ -761,6 +761,9 @@ void LowhighpassAudioProcessor::processBlock (AudioSampleBuffer& buffer, MidiBuf
     int const numSamples = buffer.getNumSamples();
 
     int const numChannels = buffer.getNumChannels();
+
+    if (_params_dirty.exchange(false))
+        updateFilterParameters(getSampleRate(), true);
 
     // this is for the fft analysis
     int x1 = numSamples;

@@ -47,6 +47,8 @@ public:
         numChannels_ = jmax(0, numChannels);
         bandpasses_.assign((size_t) numChannels_, BiquadSection{});
         offsetDB_.assign((size_t) jmax(1, maxBlockSize), 0.f);
+        activeIdx_.clear();
+        activeIdx_.reserve((size_t) numChannels_);   // computeOffsets() must not allocate
         env_ = 0.f;
         threshEnv_ = thresholdDB_;
         ctrlCounter_ = 0;
@@ -91,8 +93,8 @@ public:
     void computeOffsets(const AudioBuffer<float>& input,
                         const std::set<int>& activeCh1based, int numSamples)
     {
-        if ((int) offsetDB_.size() < numSamples)
-            offsetDB_.assign((size_t) numSamples, 0.f);
+        // Audio thread: never grow the buffer; the cap is only a safety net.
+        numSamples = jmin(numSamples, (int) offsetDB_.size());
 
         const int numCh = jmin(input.getNumChannels(), (int) bandpasses_.size());
 

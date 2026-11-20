@@ -31,8 +31,7 @@ public:
 
     int getNumChannels() const noexcept { return numChannels_; }
 
-    /** Message thread, and only with the graph's processing suspended — the
-        caller uses GraphController's scoped pause, so no atomics here. */
+    /** Message thread, under GraphController's feedback lock — so no atomics. */
     void setBus (FeedbackBus::Ptr bus) { bus_ = std::move (bus); }
     const FeedbackBus::Ptr& getBus() const noexcept { return bus_; }
 

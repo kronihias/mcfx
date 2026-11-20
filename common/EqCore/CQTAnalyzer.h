@@ -79,7 +79,7 @@ public:
 
 private:
     double sampleRate_ = 0.0;
-    bool   ready_      = false;
+    std::atomic<bool> ready_ { false };   // GUI writes, audio thread reads
 
     mcfx::ConstantQ cq_;
 

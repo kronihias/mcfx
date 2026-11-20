@@ -42,12 +42,12 @@ DelayNode::~DelayNode() = default;
 
 void DelayNode::applyParamChange (int channel, float samples) noexcept
 {
-    // Re-entrancy guard, and it keeps the not-realtime-safe write-back out of
-    // this path, which runs on the audio thread.
-    if (applyingParam_.exchange (true))
+    // Skip only this thread's own write-back echo; writes from other threads
+    // (host automation) always land. Atomics only: runs on the audio thread.
+    if (mirroringThread_.load() == juce::Thread::getCurrentThreadId())
         return;
-    setDelaySamples (channel, samples);
-    applyingParam_.store (false);
+    if (channel < 0 || channel >= numChannels_) return;
+    storeDelaySamples (channel, juce::jlimit (0.0f, maxDelaySamples_, samples));
 }
 
 bool DelayNode::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -94,24 +94,27 @@ void DelayNode::setLinked (bool linked) noexcept
     }
 }
 
+void DelayNode::storeDelaySamples (int channel, float clamped) noexcept
+{
+    if (linked_.load (std::memory_order_relaxed))
+        for (auto& t : targetSamples_)
+            t.store (clamped, std::memory_order_relaxed);
+    else
+        targetSamples_[channel].store (clamped, std::memory_order_relaxed);
+}
+
 void DelayNode::setDelaySamples (int channel, float samples) noexcept
 {
     if (channel < 0 || channel >= numChannels_) return;
     const float clamped = juce::jlimit (0.0f, maxDelaySamples_, samples);
 
     const bool linked = linked_.load (std::memory_order_relaxed);
+    storeDelaySamples (channel, clamped);
 
-    if (linked)
-        for (auto& t : targetSamples_)
-            t.store (clamped, std::memory_order_relaxed);
-    else
-        targetSamples_[channel].store (clamped, std::memory_order_relaxed);
-
-    // Mirror into the host-visible parameters, unless we are being called
-    // from one of them.
-    if (! applyingParam_.load() && ! delayParams_.empty())
+    // Mirror into the host-visible parameters.
+    if (! delayParams_.empty())
     {
-        applyingParam_.store (true);
+        mirroringThread_.store (juce::Thread::getCurrentThreadId());
         if (linked)
             for (auto* p : delayParams_)
                 p->setValueNotifyingHost (p->convertTo0to1 (clamped));
@@ -120,7 +123,7 @@ void DelayNode::setDelaySamples (int channel, float samples) noexcept
             auto* p = delayParams_[(size_t) channel];
             p->setValueNotifyingHost (p->convertTo0to1 (clamped));
         }
-        applyingParam_.store (false);
+        mirroringThread_.store (nullptr);
     }
 }
 

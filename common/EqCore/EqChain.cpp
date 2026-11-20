@@ -157,3 +157,10 @@ void EqChain::fromJson(const var& json, double sampleRate)
         }
     }
 }
+
+void EqChain::swapWith(EqChain& other) noexcept
+{
+    bands_.swapWith(other.bands_);
+    std::swap(sampleRate_, other.sampleRate_);
+    std::swap(maxBlockSize_, other.maxBlockSize_);
+}

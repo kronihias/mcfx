@@ -22,6 +22,7 @@
 
 #include "JuceHeader.h"
 #include "mcfx_buses.h"
+#include "mcfx_rt_change_broadcaster.h"
 #include "JuceCompat.h"
 
 #ifndef MAX_DELAYTIME_S
@@ -32,7 +33,7 @@
 /**
 */
 class Mcfx_delayAudioProcessor  : public AudioProcessor,
-                                  public ChangeBroadcaster
+                                  public mcfx::RtChangeBroadcaster
 {
 public:
     //==============================================================================
@@ -107,7 +108,7 @@ public:
 private:
 
     float _delay_ms;
-    int _delay_smpls;
+    std::atomic<int> _delay_smpls; // set by GUI/automation, read by processBlock
     AudioSampleBuffer _delay_buffer;
 
     int _buf_write_pos;
