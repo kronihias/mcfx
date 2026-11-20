@@ -309,21 +309,22 @@ void Mcfx_convolverAudioProcessor::processBlock (AudioSampleBuffer& buffer, Midi
 
 void Mcfx_convolverAudioProcessor::run()
 {
-    LoadConfiguration(_desConfigFile);
+    LoadConfiguration(_desConfigFile, _desConfigText);
     valueTreeState.getParameter("RELOAD")->setValueNotifyingHost(false); // "Recoil" action on the reload parameter, so that it goes back to 0 after the configuration is loaded, and it can then be used again to reload the configuration.
 }
 
-void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile)
+void Mcfx_convolverAudioProcessor::LoadConfigurationAsync(File configFile, const String& configText)
 {
     DebugPrint("Loading preset...");
     _desConfigFile = configFile;
+    _desConfigText = configText;
     startThread(Thread::Priority::normal);
 }
 
 void Mcfx_convolverAudioProcessor::ReloadConfiguration()
 {
     if (_configLoaded || activePreset.isNotEmpty())
-        LoadConfigurationAsync(_configFile);
+        LoadConfigurationAsync(_configFile, _configText);
 }
 
 void getIntFromLine(int &ret, String &line)
@@ -347,7 +348,9 @@ int Mcfx_convolverAudioProcessor::getWavInputChannelMetadata(File wavFile)
     // check audio file, maybe there is Info metadata specifying the number of input channels (x-mcfx does this, MATLAB can write it as well)
     AudioFormatManager formatManager;
     formatManager.registerBasicFormats();
-    AudioFormatReader* reader = formatManager.createReaderFor(wavFile);
+    std::unique_ptr<AudioFormatReader> reader (formatManager.createReaderFor(wavFile));
+    if (reader == nullptr)
+        return 0;
     // get metadata
     String metaTagValue =  reader->metadataValues.getValue(WavAudioFormat::riffInfoKeywords, "0");
 
@@ -362,9 +365,8 @@ void Mcfx_convolverAudioProcessor::LoadWavFile(File wavFile, int numPassedInputC
     }
 
     this->presetWavFilename = wavFile.getFullPathName();
-    // conf file should be located in the same folder
+    // a user-provided .conf next to the .wav takes precedence (unless the channel count was passed explicitly)
     File confFile(wavFile.getParentDirectory().getChildFile(wavFile.getFileNameWithoutExtension() + ".conf"));
-    // check for existing .conf file and try to load if we don't have a specific numPassedInputChannels
     if (confFile.existsAsFile() && !numPassedInputChannels) {
         LoadConfigurationAsync(confFile);
         return;
@@ -373,21 +375,20 @@ void Mcfx_convolverAudioProcessor::LoadWavFile(File wavFile, int numPassedInputC
     // use either the metadata or the passed value
     int inChannels = numPassedInputChannels ? numPassedInputChannels : getWavInputChannelMetadata(wavFile);
 
-    // confText header
-    String confText = "# mcfx_convolver configuration\n";
-    confText << "# ------------------------\n";
-    confText << "/cd \n";
-    confText << "#\n#\n#\n";
-
-    if (!confFile.hasWriteAccess()) {
-        DebugPrint("Error: can not write config file");
-        return;
-    }
-
     if (inChannels == 0) {
         DebugPrint("Error: Invalid input channel count!");
         return;
     }
+
+    // The configuration is generated in memory, nothing is written to disk, so this also works
+    // for .wav files in read-only folders. confFile is only used as the preset name and as base
+    // directory for the (relative) .wav filename, it does not need to exist.
+
+    // confText header
+    String confText = "# mcfx_convolver configuration\n";
+    confText << "# generated from " << wavFile.getFileName() << "\n";
+    confText << "# ------------------------\n";
+    confText << "#\n#\n#\n";
 
     if (inChannels > 0) {
         // dense matrix
@@ -403,8 +404,12 @@ void Mcfx_convolverAudioProcessor::LoadWavFile(File wavFile, int numPassedInputC
 
         AudioFormatManager formatManager;
         formatManager.registerBasicFormats();
-        AudioFormatReader* reader = formatManager.createReaderFor(wavFile);
-        int numChannels = reader->getChannelLayout().size();
+        std::unique_ptr<AudioFormatReader> reader (formatManager.createReaderFor(wavFile));
+        if (reader == nullptr) {
+            DebugPrint("Error: can not read " + wavFile.getFullPathName());
+            return;
+        }
+        int numChannels = (int)reader->numChannels;
 
         for (int i = 1; i <= numChannels; i++) {
             confText << "/impulse/read " << i << " " << i << " 1.0 0 0 0 " << i << " " << wavFile.getFileName() << "\n";
@@ -412,14 +417,14 @@ void Mcfx_convolverAudioProcessor::LoadWavFile(File wavFile, int numPassedInputC
 
     }
 
-    confFile.replaceWithText(confText);
-
-    LoadConfigurationAsync(confFile);
+    LoadConfigurationAsync(confFile, confText);
 }
 
-void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
+void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile, const String& configText)
 {
-    if (!configFile.existsAsFile())
+    const bool inMemoryConfig = configText.isNotEmpty();
+
+    if (!inMemoryConfig && !configFile.existsAsFile())
     {
 
         String debug;
@@ -452,6 +457,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
     String debug;
     debug << "trying to load " << configFile.getFullPathName();
+    if (inMemoryConfig)
+        debug << " (generated in memory)";
 
     DebugPrint(debug);
 
@@ -472,7 +479,10 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
 
     StringArray myLines;
 
-    configFile.readLines(myLines);
+    if (inMemoryConfig)
+        myLines.addLines(configText);
+    else
+        configFile.readLines(myLines);
 
     // global settings
 
@@ -810,6 +820,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     _num_conv = conv_data.getNumIRs();
 
     _configFile = configFile;
+    _configText = configText;
 
 
     this->_presetLoadState = PresetLoadState::Loaded;
@@ -827,9 +838,17 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     ZipFile::Builder compressedConfigFileAndDataFiles;
     for (int i = 0; i < configFileAndDataFiles.size(); i++)
     {
+      if (i == 0 && inMemoryConfig)
+      {
+        // generated configuration doesn't exist on disk, add it from memory
+        compressedConfigFileAndDataFiles.addEntry(std::make_unique<MemoryInputStream>(configText.toRawUTF8(), configText.getNumBytesAsUTF8(), true),
+                                                  5, configFile.getFileName(), Time::getCurrentTime());
+        continue;
+      }
+
       String storedPath = ""; // add relative path
-      if (i > 0)
-        storedPath = configFileAndDataFiles.getUnchecked(i).getRelativePathFrom(configFileAndDataFiles.getUnchecked(0));
+      if (i > 0) // relative to the config's directory (pass the directory explicitly, the config file may not exist)
+        storedPath = configFileAndDataFiles.getUnchecked(i).getRelativePathFrom(configFile.getParentDirectory());
 
         compressedConfigFileAndDataFiles.addFile(configFileAndDataFiles.getUnchecked(i), 5, storedPath);
     }
@@ -861,6 +880,13 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
     if (storeNumInputsIntoWav.get() && numInputChannels > 0 && presetWavFilename.isNotEmpty() && _presetLoadState != PresetLoadState::Failed)
     {
         DebugPrint("Storing number of input channels ("+String(numInputChannels)+") into the wavefile ("+presetWavFilename+") metadata...");
+      if (!File(presetWavFilename).hasWriteAccess())
+      {
+        DebugPrint("Error: no write access, can not store the number of input channels into " + presetWavFilename);
+        storeNumInputsIntoWav = false;
+      }
+      else
+      {
 
         // We: (1) read the wav file, (2) write the number of input channels into the metadata, (3) write the wav file again, same filepath, overwriting the original
 
@@ -873,6 +899,8 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
         {
             File wavFile = File(presetWavFilename);
             reader = formatManager.createReaderFor(wavFile);
+            if (reader == nullptr)
+                throw std::runtime_error("can not read " + presetWavFilename.toStdString());
 
             AudioSampleBuffer ReadBuffer(reader->numChannels, reader->lengthInSamples); // create buffer
             reader->read(&ReadBuffer, 0, reader->lengthInSamples, 0, true, true);
@@ -909,6 +937,7 @@ void Mcfx_convolverAudioProcessor::LoadConfiguration(File configFile)
             if (writer) delete writer;
             if (wave)   delete wave;
         }
+      }
     }
 }
 
@@ -1309,6 +1338,14 @@ void Mcfx_convolverAudioProcessor::getStateInformation (MemoryBlock& destData)
     xml.setAttribute("oscInPort", _osc_in_port);
     xml.setAttribute("storeConfigDataInProject", _storeConfigDataInProject.get());
 
+    // configuration generated in memory (e.g. from a dropped .wav file): store its text and
+    // (virtual) location, so it can be regenerated on project load without a .conf file on disk
+    if (_configText.isNotEmpty())
+    {
+      xml.setAttribute("configText", _configText);
+      xml.setAttribute("configPath", _configFile.getFullPathName());
+    }
+
     // add .zip configuration as base64 dump
     if (_tempConfigZipFile.existsAsFile() && _storeConfigDataInProject.get())
     {
@@ -1390,6 +1427,17 @@ void Mcfx_convolverAudioProcessor::setStateInformation (const void* data, int si
           }
 
           return;
+        }
+
+        // in-memory configuration (e.g. from a dropped .wav file), IRs referenced relative to configPath
+        if (xmlState->hasAttribute("configText") && xmlState->hasAttribute("configPath"))
+        {
+            String configPath = xmlState->getStringAttribute("configPath");
+            if (File::isAbsolutePath(configPath))
+            {
+                LoadConfigurationAsync(File(configPath), xmlState->getStringAttribute("configText"));
+                return;
+            }
         }
 
         // load preset from file in case it was not stored
