@@ -542,11 +542,9 @@ void Ambix_meterAudioProcessorEditor::timerCallback() // update meters
     }
     else
     {
-        // Bounded work per tick: a fixed slice of channels is transformed and
-        // the cursor carries on next time, so the cost is the same at 8
-        // channels as at 128.
-        // Every channel, every tick, from one latched read position — the
-        // channels have to describe the same instant to be comparable.
+        // Every frame that arrived since the last tick, every channel from
+        // the same frames — the channels have to describe the same instant
+        // to be comparable.
         ourProcessor->_band_analyser.compute();
         _waterfall.setOffset ((int) ourProcessor->_offset);
 
@@ -673,8 +671,8 @@ void Ambix_meterAudioProcessorEditor::applyModeVisibility()
     {
         p->_band_analyser.prepare (p->getSampleRate() > 0.0 ? p->getSampleRate() : 48000.0,
                                    jmax (1, _cachedNumCh));
-        // ~200 ms to settle, from the 40 ms timer.
-        p->_band_analyser.setSmoothing (std::exp (-0.040f / 0.20f));
+        // ~200 ms to settle.
+        p->_band_analyser.setSmoothingTime (0.20f);
     }
     p->_band_analyser.setActive (wf);
 

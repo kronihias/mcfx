@@ -48,8 +48,9 @@
         screen is the only reason to pay for this;
       - buffers are allocated on first activation, so a session that never opens
         the waterfall never pays the memory either.
-    A full 128-channel pass costs well under a millisecond now that the
-    transform goes straight to the platform's vector library.
+    The transform goes straight to the platform's vector library: at 128
+    channels and 48 kHz, every frame that arrives (about two per 40 ms tick)
+    costs 1.6 ms a tick on an M-series Mac, 4% of a core.
 
     Band levels are linear magnitudes calibrated so a full-scale sine reads 1.0
     in the band containing it. */
@@ -77,20 +78,32 @@ public:
     /** Audio thread: append a block. Copy only — no transform here. */
     void push (const AudioSampleBuffer& buffer, int numSamples);
 
-    /** GUI thread: transform every channel from one latched read position.
+    /** GUI thread: analyse every frame that has arrived since the last call,
+        every channel from the same frames.
 
-        The window is 85 ms and always ends at "now", so successive calls
-        overlap rather than tile: a late call means more overlap, never a gap.
-        Only an interval longer than the window itself could miss audio, which
-        is why this is safe to drive from a GUI timer at 40 ms — there is better
-        than 2:1 headroom — even though the timer's spacing is not exact. */
+        Frames are 4096 points on a fixed grid of absolute sample positions, a
+        quarter of a frame apart, with a Hann window: at that overlap its
+        squared windows sum to a constant, so a click or a note counts the
+        same wherever it falls, and however the timer driving this is spaced.
+        The earlier version took one frame of the newest audio per call; at
+        a 40 ms timer that is 53% overlap and 8.5 dB of ripple, 25 dB when a
+        call came 20 ms late. Hann rather than the spectrum's Blackman-Harris
+        because it needs half the frames for a flat sum (N/4 against N/8),
+        and band sums do not need Blackman-Harris's far sidelobes: Hann's are
+        75 dB down a band away from 1 kHz, and its narrower main lobe keeps
+        the low bands, only a bin or two wide, apart better.
+
+        At most kMaxFramesPerCall are analysed in one call; behind by more
+        (a stall), it skips ahead to the newest frames rather than freeze the
+        GUI catching up. */
     void compute();
 
-    /** Per-call pole for the exponential average of each band, 0 = no
-        smoothing. One 85 ms frame of anything noise-like is a chi-squared
-        estimate with several dB of spread, so without this the display shimmers
-        even on a steady signal. */
-    void setSmoothing (float alpha);
+    /** Time constant of each band's exponential average, in seconds, 0 = no
+        smoothing. Applied per frame, so it means the same whatever calls
+        compute(). One 85 ms frame of anything noise-like is a chi-squared
+        estimate with several dB of spread, so without this the display
+        shimmers even on a steady signal. */
+    void setSmoothingTime (float seconds);
 
     /** Linear band magnitudes for a channel — kNumBands entries, or nullptr. */
     const float* getChannelBands (int channel) const;
@@ -114,8 +127,11 @@ private:
 
     double sampleRate_  = 0.0;
     int    numChannels_ = 0;
+    static constexpr int kMaxFramesPerCall = 8;
+
     int    fftOrder_    = 12;                 // 4096: 85 ms window, ~101 Hz floor
     int    fftSize_     = 1 << 12;
+    int    hop_         = 1 << 10;            // fftSize_ / 4
     bool   ready_       = false;
 
     std::atomic<bool> active_ { false };
@@ -124,7 +140,7 @@ private:
     // go through juce::dsp::FFT.
     mcfx::RealFFT fft_;
     std::vector<float> window_;
-    float windowGain_ = 1.f;
+    float bandNorm_ = 1.f;            // sqrt (band power) -> full-scale sine is 1.0
 
     // Per-band FFT bin range. The first and last bin are weighted by how much
     // of them the band actually covers — taking whole bins would over-count the
@@ -134,14 +150,19 @@ private:
     std::vector<BandBins> bands_;
 
     // All channels share one write position so they stay time-aligned — the
-    // whole point of the view is comparing them against each other.
-    AudioSampleBuffer ring_;
-    std::atomic<int>  writePos_ { 0 };
-    juce::SpinLock    ringLock_;
+    // whole point of the view is comparing them against each other. The ring
+    // is a power of two and sample i (counted since prepare) sits at
+    // i & (size - 1), so frames are addressed by absolute position. It holds
+    // a frame plus the catch-up allowance plus headroom for blocks written
+    // while a pass is reading.
+    AudioSampleBuffer  ring_;
+    std::atomic<int64> written_ { 0 };
+    juce::SpinLock     ringLock_;
+    int64 nextFrame_ = -1;            // grid index of the next frame, -1 = from now
 
     std::vector<float> magSq_;        // fftSize_/2 + 1 bin powers
     std::vector<float> levels_;       // numChannels_ * kNumBands — smoothed
-    float smoothAlpha_ = 0.f;
+    float smoothTau_ = 0.f;
     bool  primed_ = false;            // first pass loads rather than averages
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MultiBandAnalyser)

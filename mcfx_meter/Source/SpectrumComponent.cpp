@@ -34,6 +34,14 @@ namespace
     constexpr int   kPlotTop  = 28;
     constexpr float kMarginL  = 46.f, kMarginR = 6.f, kMarginB = 16.f;
 
+    // Frames advance by 1/8 of the window: Blackman-Harris then overlaps
+    // enough that its squared windows sum to a constant (50%: 10 dB of
+    // ripple, 75%: 0.5 dB, 87.5%: none to speak of).
+    constexpr int   kHopDivisor = 8;
+    // Most audio caught up on in one tick; behind by more (a stall), the
+    // analysis skips ahead to the newest frames.
+    constexpr float kMaxCatchUpSec = 0.25f;
+
     constexpr float kPeakHoldSec = 2.f;     // falling peaks wait this long...
     constexpr float kPeakFallDbS = 20.f;    // ...then fall at this rate
     constexpr int   kNumWindows = 4, kNumPeakModes = 3;
@@ -282,7 +290,7 @@ void SpectrumComponent::resetCurves()
         c.cumPeak.assign ((size_t) bins + 1, 0.0);
     }
     fresh_ = true;
-    lastWritten_ = -1;
+    nextFrame_ = -1;
     repaint();
 }
 
@@ -309,64 +317,98 @@ void SpectrumComponent::tick()
     if (paused_)
         return;
 
-    // Nothing new (transport stopped): keep what is shown.
     const int64 written = capture_->getNumWritten();
-    if (written == lastWritten_ || written <= 0)
-        return;
-
-    const int N = fft_.getSize();
+    const int N    = fft_.getSize();
+    const int hop  = N / kHopDivisor;
     const int bins = fft_.getNumBins();
     const int shown = numShown();
-    const int64 newSamples = lastWritten_ < 0 ? (int64) N : written - lastWritten_;
-    lastWritten_ = written;
 
-    capture_->readEndingAt (frame_, settings_->firstCh, shown, N, written - 1);
+    // Frames sit on a fixed grid of absolute positions, frame k covering
+    // [k * hop, k * hop + N), and every one that has fully arrived is
+    // analysed. At 1/8 of the window the squared Blackman-Harris windows sum
+    // to a constant, so a click counts the same wherever it falls. Taking one
+    // frame of the newest audio per tick instead left the overlap to the
+    // timer: 53% at 4096 points and a 40 ms tick, 8.5 dB of ripple.
+    if (written < N)
+        return;                                         // nothing whole yet
+    const int64 newest = (written - N) / hop;           // last complete frame
 
-    const float dt    = (float) ((double) newSamples / sr);
+    // Starting, or behind by more than the cap allows (a stall, or the
+    // frames we owe have left the ring): carry on from the newest frames
+    // rather than freeze the GUI catching up.
+    const int64 maxFrames = jlimit ((int64) 1, (int64) (capture_->getCapacity() - N) / hop + 1,
+                                    (int64) std::ceil (kMaxCatchUpSec * sr / hop));
+    if (nextFrame_ < 0 || newest - nextFrame_ + 1 > maxFrames)
+        nextFrame_ = jmax ((int64) 0, newest - (nextFrame_ < 0 ? 0 : maxFrames - 1));
+    if (nextFrame_ > newest)
+        return;                                         // nothing new (transport stopped)
+
+    const float dt    = (float) hop / (float) sr;
     const float tau   = kAvgSec[settings_->avgIdx];
-    const float alpha = fresh_ || tau <= 0.f ? 0.f : std::exp (-dt / tau);
-    const float fall  = std::pow (10.f, -kPeakFallDbS * dt / 10.f);     // per tick, in power
+    const float alphaPerFrame = tau <= 0.f ? 0.f : std::exp (-dt / tau);
+    const float fall  = std::pow (10.f, -kPeakFallDbS * dt / 10.f);     // per frame, in power
     const int   peakMode = settings_->peakMode;
+    bool firstOfTick = true;
 
-    for (int ci = 0; ci < (int) curves_.size(); ++ci)
+    for (; nextFrame_ <= newest; ++nextFrame_)
     {
-        auto& c = curves_[(size_t) ci];
-        const int c0 = settings_->average ? 0 : ci;
-        const int c1 = settings_->average ? shown : ci + 1;
-        const float scale = ampNorm_ / (float) jmax (1, c1 - c0);
+        capture_->readEndingAt (frame_, settings_->firstCh, shown, N, nextFrame_ * hop + N - 1);
 
-        // Instantaneous power, averaged over the channels of this curve.
-        accum_.assign ((size_t) bins, 0.f);
-        for (int ch = c0; ch < c1 && ch < frame_.getNumChannels(); ++ch)
+        // No averaging: show the loudest of this tick's frames, so a click
+        // reads its level whichever of them it landed in, instead of only
+        // when it happens to be in the newest one.
+        const bool loadFrame = fresh_ || (tau <= 0.f && firstOfTick);
+        const float alpha = loadFrame ? 0.f : alphaPerFrame;
+
+        for (int ci = 0; ci < (int) curves_.size(); ++ci)
         {
-            FloatVectorOperations::multiply (fft_.getTimeBuffer(), frame_.getReadPointer (ch), window_.data(), N);
-            fft_.magnitudesSquared (magSq_.data());
-            FloatVectorOperations::add (accum_.data(), magSq_.data(), bins);
-        }
+            auto& c = curves_[(size_t) ci];
+            const int c0 = settings_->average ? 0 : ci;
+            const int c1 = settings_->average ? shown : ci + 1;
+            const float scale = ampNorm_ / (float) jmax (1, c1 - c0);
 
-        for (int k = 0; k < bins; ++k)
-        {
-            float& a = c.avg[(size_t) k];
-            a = alpha * a + (1.f - alpha) * accum_[(size_t) k] * scale;
-
-            float& pk  = c.peak[(size_t) k];
-            float& age = c.peakAge[(size_t) k];
-            if (fresh_ || peakMode == 0 || a >= pk)
+            // Instantaneous power, averaged over the channels of this curve.
+            accum_.assign ((size_t) bins, 0.f);
+            for (int ch = c0; ch < c1 && ch < frame_.getNumChannels(); ++ch)
             {
-                pk = a;
-                age = 0.f;
-            }
-            else if (peakMode == 1 && (age += dt) > kPeakHoldSec)
-            {
-                pk = jmax (a, pk * fall);
+                FloatVectorOperations::multiply (fft_.getTimeBuffer(), frame_.getReadPointer (ch), window_.data(), N);
+                fft_.magnitudesSquared (magSq_.data());
+                FloatVectorOperations::add (accum_.data(), magSq_.data(), bins);
             }
 
-            c.cum[(size_t) k + 1]     = c.cum[(size_t) k] + (double) a;
-            c.cumPeak[(size_t) k + 1] = c.cumPeak[(size_t) k] + (double) pk;
+            for (int k = 0; k < bins; ++k)
+            {
+                float& a = c.avg[(size_t) k];
+                const float p = accum_[(size_t) k] * scale;
+                a = (tau <= 0.f && ! loadFrame) ? jmax (a, p)
+                                                : alpha * a + (1.f - alpha) * p;
+
+                float& pk  = c.peak[(size_t) k];
+                float& age = c.peakAge[(size_t) k];
+                if (fresh_ || peakMode == 0 || a >= pk)
+                {
+                    pk = a;
+                    age = 0.f;
+                }
+                else if (peakMode == 1 && (age += dt) > kPeakHoldSec)
+                {
+                    pk = jmax (a, pk * fall);
+                }
+            }
         }
+
+        fresh_ = false;
+        firstOfTick = false;
     }
 
-    fresh_ = false;
+    // The band sums only matter for what is drawn: once a tick.
+    for (auto& c : curves_)
+        for (int k = 0; k < bins; ++k)
+        {
+            c.cum[(size_t) k + 1]     = c.cum[(size_t) k] + (double) c.avg[(size_t) k];
+            c.cumPeak[(size_t) k + 1] = c.cumPeak[(size_t) k] + (double) c.peak[(size_t) k];
+        }
+
     repaint();
 }
 
@@ -462,7 +504,7 @@ void SpectrumComponent::setPaused (bool shouldBePaused)
 
     paused_ = shouldBePaused;
     if (! paused_)
-        lastWritten_ = -1;      // carry on from now, not across the pause
+        nextFrame_ = -1;      // carry on from now, not across the pause
 
     btnPause_.setToggleState (paused_, dontSendNotification);
     btnPause_.setButtonText (paused_ ? "run" : "pause");
@@ -474,7 +516,7 @@ void SpectrumComponent::visibilityChanged()
     if (! isVisible())
         setPaused (false);
     fresh_ = true;              // whatever was averaged is stale by now
-    lastWritten_ = -1;
+    nextFrame_ = -1;
 }
 
 void SpectrumComponent::comboBoxChanged (ComboBox* cb)

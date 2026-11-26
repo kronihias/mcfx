@@ -61,7 +61,9 @@ struct SpectroSettings
     Reads the scope's sample history rather than keeping its own, so the audio
     thread does nothing new for it. Columns are produced on a fixed hop in
     absolute sample time, not once per timer tick, so the time axis is exact
-    whatever the timer's jitter.
+    whatever the timer's jitter. A column longer than an eighth of the FFT
+    window is built from several frames spread across it, so no audio falls
+    between columns.
 
     The history's resolution follows the size it is shown at — a projector
     gets a picture as fine as its pixels, a corner window a cheap one — within
@@ -144,7 +146,9 @@ private:
     void resetHistory();
     void updateWantedResolution();
     void resampleHistory (int newCols, int newRows);
-    void produceColumn (int64 centreAbs);
+    /** One history column centred on `centreAbs`, from frames spread evenly
+        over the `colHop` samples up to it. */
+    void produceColumn (double centreAbs, double colHop);
 
     // Fine bass: decimator + constant-Q, see the class comment.
     void prepareBass (double sr);
@@ -198,6 +202,7 @@ private:
     std::vector<float> window_;
     float ampNorm_ = 1.f;               // power -> full-scale-sine-is-1 amplitude^2
     std::vector<float> magSq_, accum_;
+    std::vector<float> colPow_;         // lanes x rows_, the column being built
     AudioSampleBuffer frame_;
 
     // Per analysis row: the FFT bins it covers, or a fractional bin to
@@ -207,7 +212,7 @@ private:
     float fMin_ = 20.f, fMax_ = 20000.f;
 
     // Fine bass.
-    static constexpr int kDecRing = 4096;            // decimated samples kept per channel
+    static constexpr int kDecRing = 8192;            // decimated samples kept per channel: a frame plus a long column
     mcfx::ConstantQ cq_;
     int   decim_ = 16;                                // decimation factor
     int   firDelay_ = 0;                              // decimator delay, raw samples
