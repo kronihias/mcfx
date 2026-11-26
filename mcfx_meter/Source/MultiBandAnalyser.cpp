@@ -60,19 +60,22 @@ void MultiBandAnalyser::prepare (double sampleRate, int numChannels)
     fftSize_     = 1 << fftOrder_;
     fft_.prepare (fftOrder_);
 
-    // Blackman-Harris, matching SpectrumAnalyzer, with the same coherent-gain
-    // normalisation so a full-scale sine reads 1.0 in its band.
+    hop_ = fftSize_ / 4;
+
+    // Periodic Hann: at a quarter-frame hop its squares sum exactly to a
+    // constant (see compute()).
     window_.resize ((size_t) fftSize_);
-    double sum = 0.0;
+    double sumSq = 0.0;
     for (int i = 0; i < fftSize_; ++i)
     {
-        const double t = MathConstants<double>::twoPi * i / (double) (fftSize_ - 1);
-        const double w = 0.35875 - 0.48829 * std::cos (t)
-                       + 0.14128 * std::cos (2.0 * t) - 0.01168 * std::cos (3.0 * t);
+        const double w = 0.5 - 0.5 * std::cos (MathConstants<double>::twoPi * i / (double) fftSize_);
         window_[(size_t) i] = (float) w;
-        sum += w;
+        sumSq += w * w;
     }
-    windowGain_ = (float) (sum / (double) fftSize_);
+    // A sine of amplitude A puts (A/2)^2 * N * sum(w^2) into the positive-
+    // frequency bins around it, whatever the window, so this reads A as 1.0
+    // for a full-scale sine and band power for noise.
+    bandNorm_ = (float) std::sqrt (4.0 / ((double) fftSize_ * sumSq));
 
     buildBandTable();
 
@@ -82,10 +85,13 @@ void MultiBandAnalyser::prepare (double sampleRate, int numChannels)
 
     {
         const juce::SpinLock::ScopedLockType sl (ringLock_);
-        ring_.setSize (numChannels_, fftSize_, false, true, false);
+        const int headroom = (int) std::ceil (0.1 * sampleRate_);
+        ring_.setSize (numChannels_, nextPowerOfTwo (fftSize_ + kMaxFramesPerCall * hop_ + headroom),
+                       false, true, false);
         ring_.clear();
-        writePos_.store (0, std::memory_order_relaxed);
+        written_.store (0, std::memory_order_relaxed);
     }
+    nextFrame_ = -1;
 
     ready_ = true;
 }
@@ -143,7 +149,7 @@ void MultiBandAnalyser::push (const AudioSampleBuffer& buffer, int numSamples)
     const int nCh  = jmin (buffer.getNumChannels(), ring_.getNumChannels());
     const int n    = jmin (numSamples, size);
     const int skip = numSamples - n;          // oversized block: keep the newest
-    const int wp   = writePos_.load (std::memory_order_relaxed);
+    const int wp   = (int) (written_.load (std::memory_order_relaxed) & (int64) (size - 1));
 
     // Two segments per channel rather than a per-sample modulo: at 128 channels
     // the difference is a memcpy against a quarter of a million branches.
@@ -158,12 +164,12 @@ void MultiBandAnalyser::push (const AudioSampleBuffer& buffer, int numSamples)
             ring_.copyFrom (ch, 0, src + first, rest);
     }
 
-    writePos_.store ((wp + n) % size, std::memory_order_release);
+    written_.fetch_add (n, std::memory_order_release);
 }
 
-void MultiBandAnalyser::setSmoothing (float alpha)
+void MultiBandAnalyser::setSmoothingTime (float seconds)
 {
-    smoothAlpha_ = jlimit (0.f, 0.99f, alpha);
+    smoothTau_ = jmax (0.f, seconds);
 }
 
 void MultiBandAnalyser::compute()
@@ -171,76 +177,90 @@ void MultiBandAnalyser::compute()
     if (! ready_ || ! fft_.isReady() || numChannels_ <= 0)
         return;
 
-    // Latched once for the whole pass. Every channel is then read from the same
-    // instant, which is the property the view depends on — and it is free,
-    // because a pass takes under a millisecond while the ring holds 85 ms, so
-    // nothing under this position can be overwritten before the pass ends.
-    const int wp = writePos_.load (std::memory_order_acquire);
+    const int64 written = written_.load (std::memory_order_acquire);
+    if (written < fftSize_)
+        return;
 
-    for (int ch = 0; ch < numChannels_; ++ch)
+    // Frame k covers [k * hop, k * hop + N). Start at the newest complete
+    // one, and start over there after falling too far behind.
+    const int64 newest = (written - fftSize_) / hop_;
+    if (nextFrame_ < 0 || newest - nextFrame_ + 1 > kMaxFramesPerCall)
+        nextFrame_ = jmax ((int64) 0, newest - (nextFrame_ < 0 ? 0 : kMaxFramesPerCall - 1));
+
+    const float alpha = smoothTau_ > 0.f
+                          ? (float) std::exp (-(double) hop_ / (smoothTau_ * sampleRate_)) : 0.f;
+
+    // Every channel of a frame is read from the same absolute position, which
+    // is what the view depends on. Oldest frame first; the ring's headroom
+    // covers whatever the audio thread writes while the pass runs.
+    for (; nextFrame_ <= newest; ++nextFrame_)
     {
-        // Hold the lock only for the copy — holding it across the transform
-        // would make the audio thread's try-lock fail and drop blocks.
+        const int64 start = nextFrame_ * hop_;
+
+        for (int ch = 0; ch < numChannels_; ++ch)
         {
-            const juce::SpinLock::ScopedLockType sl (ringLock_);
-            if (ch >= ring_.getNumChannels())
-                continue;
-
-            const int size = ring_.getNumSamples();
-            const float* src = ring_.getReadPointer (ch);
-            const int first = size - wp;
-            // Oldest-to-newest, so the frame ends at the write head. Copied
-            // straight into the transform's own buffer — no staging array.
-            float* t = fft_.getTimeBuffer();
-            FloatVectorOperations::copy (t, src + wp, first);
-            if (wp > 0)
-                FloatVectorOperations::copy (t + first, src, wp);
-        }
-
-        FloatVectorOperations::multiply (fft_.getTimeBuffer(), window_.data(), fftSize_);
-        fft_.magnitudesSquared (magSq_.data());
-
-        // Sum power across each band, then take the root: that makes a band's
-        // reading independent of how many bins happen to fall inside it, which
-        // is what lets broadband content read at the right level.
-        const float norm = 1.f / (windowGain_ * (float) fftSize_);
-        float* out = levels_.data() + (size_t) ch * kNumBands;
-
-        const float* mag = magSq_.data();
-
-        for (int b = 0; b < kNumBands; ++b)
-        {
-            const auto& e = bands_[(size_t) b];
-            float power;
-
-            if (e.hi == e.lo)
+            // Hold the lock only for the copy — holding it across the
+            // transform would make the audio thread's try-lock fail and drop
+            // blocks.
             {
-                // Band inside a single bin. The weight applies once — the old
-                // form multiplied the low and high weights together and so
-                // squared a fraction, under-reading every sub-bin-wide band.
-                power = e.wLo * mag[e.lo];
-            }
-            else
-            {
-                power = e.wLo * mag[e.lo] + e.wHi * mag[e.hi];
-                for (int bin = e.lo + 1; bin < e.hi; ++bin)
-                    power += mag[bin];
+                const juce::SpinLock::ScopedLockType sl (ringLock_);
+                if (ch >= ring_.getNumChannels())
+                    continue;
+
+                const int size = ring_.getNumSamples();
+                const int pos  = (int) (start & (int64) (size - 1));
+                const float* src = ring_.getReadPointer (ch);
+                const int first = jmin (fftSize_, size - pos);
+                // Copied straight into the transform's own buffer.
+                float* t = fft_.getTimeBuffer();
+                FloatVectorOperations::copy (t, src + pos, first);
+                if (first < fftSize_)
+                    FloatVectorOperations::copy (t + first, src, fftSize_ - first);
             }
 
-            // 2x for the negative-frequency half a real transform folds away.
-            const float mag = std::sqrt (2.f * power) * norm;
+            FloatVectorOperations::multiply (fft_.getTimeBuffer(), window_.data(), fftSize_);
+            fft_.magnitudesSquared (magSq_.data());
 
-            // Averaged in power, not amplitude: it is power that is additive for
-            // uncorrelated content, so this converges on the right level for
-            // noise instead of biasing low.
-            out[b] = (primed_ && smoothAlpha_ > 0.f)
-                         ? std::sqrt (smoothAlpha_ * out[b] * out[b]
-                                      + (1.f - smoothAlpha_) * mag * mag)
-                         : mag;
+            // Sum power across each band, then take the root: that makes a
+            // band's reading independent of how many bins happen to fall
+            // inside it, which is what lets broadband content read at the
+            // right level.
+            float* out = levels_.data() + (size_t) ch * kNumBands;
+            const float* mag = magSq_.data();
+
+            for (int b = 0; b < kNumBands; ++b)
+            {
+                const auto& e = bands_[(size_t) b];
+                float power;
+
+                if (e.hi == e.lo)
+                {
+                    // Band inside a single bin. The weight applies once — the
+                    // old form multiplied the low and high weights together
+                    // and so squared a fraction, under-reading every
+                    // sub-bin-wide band.
+                    power = e.wLo * mag[e.lo];
+                }
+                else
+                {
+                    power = e.wLo * mag[e.lo] + e.wHi * mag[e.hi];
+                    for (int bin = e.lo + 1; bin < e.hi; ++bin)
+                        power += mag[bin];
+                }
+
+                const float level = std::sqrt (power) * bandNorm_;
+
+                // Averaged in power, not amplitude: it is power that is
+                // additive for uncorrelated content, so this converges on the
+                // right level for noise instead of biasing low.
+                out[b] = (primed_ && alpha > 0.f)
+                             ? std::sqrt (alpha * out[b] * out[b] + (1.f - alpha) * level * level)
+                             : level;
+            }
         }
+
+        primed_ = true;
     }
-
-    primed_ = true;
 }
 
 const float* MultiBandAnalyser::getChannelBands (int channel) const
@@ -255,8 +275,9 @@ void MultiBandAnalyser::reset()
     {
         const juce::SpinLock::ScopedLockType sl (ringLock_);
         ring_.clear();
-        writePos_.store (0, std::memory_order_relaxed);
+        written_.store (0, std::memory_order_relaxed);
     }
+    nextFrame_ = -1;
     std::fill (levels_.begin(), levels_.end(), 0.f);
     primed_ = false;
 }

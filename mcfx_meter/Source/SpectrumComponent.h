@@ -58,9 +58,11 @@ struct SpectrumSettings
     band power, as a hardware RTA does.
 
     Reads the scope's sample history like the spectrogram, so the audio thread
-    does nothing new for it. Every timer tick transforms the newest window of
-    each shown channel; time averaging is exponential in power over the audio
-    that actually arrived, so it means the same whatever the timer does.
+    does nothing new for it. Frames are on a fixed grid of absolute sample
+    positions, 1/8 of the window apart, and each tick analyses every one that
+    arrived since the last: every moment of the audio is weighted the same
+    whatever the timer does. Time averaging is exponential in power, per
+    frame; without it a tick shows the loudest of its frames.
 
     Mouse: hover reads frequency, note and every curve's level; a click
     clears the held peaks.
@@ -168,7 +170,7 @@ private:
     float enbw_ = 2.f;                  // the window's noise bandwidth, in bins
     std::vector<float> magSq_, accum_;
     AudioSampleBuffer frame_;
-    int64 lastWritten_ = -1;
+    int64 nextFrame_ = -1;             // grid index of the next frame to analyse, -1 = from now
 
     struct Curve
     {

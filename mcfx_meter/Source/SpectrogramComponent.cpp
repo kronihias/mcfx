@@ -34,6 +34,10 @@ namespace
     constexpr float kLaneGap  = 6.f;
 
     constexpr float kAvgTauSec   = 1.f;     // the strip's average
+    // Analysis frames are at most 1/8 of the window apart: then the squared
+    // Blackman-Harris windows sum to a constant and every moment of the audio
+    // counts the same (50% overlap: 10 dB of ripple, 75%: 0.5 dB).
+    constexpr int   kFramesPerWindow = 8;
     constexpr float kPeakHoldSec = 2.f;     // then it falls...
     constexpr float kPeakFallDbS = 20.f;    // ...at this rate
     constexpr float kFloorDb     = -200.f;
@@ -548,7 +552,9 @@ void SpectrogramComponent::updateWantedResolution()
     // so a short span over many channels gets fewer columns than its width.
     const int N = fft_.isReady() ? fft_.getSize() : 8192;
     const double budget = 3000.0 * 8192.0 / (double) N;
-    // The bass transform adds roughly a third of an FFT per channel.
+    // The bass transform adds roughly a third of an FFT per channel. Columns
+    // longer than N/8 take several frames each (see produceColumn), so long
+    // spans cost a floor of 8 frames per window length whatever the width.
     const double perChannel = settings_->fineBass ? 1.3 : 1.0;
     const int byBudget = (int) (budget * kSpanSec[settings_->spanIdx] / ((double) jmax (1, numShown()) * perChannel));
     const int cols = jlimit (120, 2048, jmin (roundToInt (h.getWidth()), byBudget));
@@ -664,14 +670,16 @@ void SpectrogramComponent::tick()
     // Columns are placed by their centre instant, which lags the newest
     // sample by the lead. Start there, and start over there if we fell so far
     // behind that the frames we owe have already left the ring.
+    // A column's frames reach back a column hop before its centre, so that
+    // much more has to be left in the ring.
     const int lead = leadSamples();
-    if (nextColAbs_ < 0.0 || (double) written - nextColAbs_ > (double) (capture_->getCapacity() - N))
+    if (nextColAbs_ < 0.0 || (double) written - nextColAbs_ > (double) (capture_->getCapacity() - N) - hop)
         nextColAbs_ = (double) (written - lead);
 
     int produced = 0;
     while (nextColAbs_ + lead <= (double) written && produced < 64)
     {
-        produceColumn ((int64) nextColAbs_);
+        produceColumn (nextColAbs_, hop);
         nextColAbs_ += hop;
         ++produced;
     }
@@ -683,118 +691,152 @@ void SpectrogramComponent::tick()
     }
 }
 
-void SpectrogramComponent::produceColumn (int64 centreAbs)
+void SpectrogramComponent::produceColumn (double centreAbs, double colHop)
 {
     const int N = fft_.getSize();
     const int shown = numShown();
-
-    // FFT frame centred on the column's instant.
-    capture_->readEndingAt (frame_, settings_->firstCh, shown, N, centreAbs + N / 2 - 1);
-
-    // Bass frame centred on the same instant: the decimated sample whose
-    // (delayed) raw time is closest to it sits in the middle of the frame,
-    // where every constant-Q window is centred.
     const int Nd = cq_.getFrameSize();
-    int64 bassStart = 0;
-    bool haveBass = false;
-    if (bassActive())
+
+    // A column stands for the colHop samples up to its centre. When that is
+    // more than an eighth of the window, one frame per column would leave
+    // the squared windows summing unevenly (60 s over 1000 px: 3.3 dB of
+    // ripple in the average) or skip audio outright (60 s over 300 px: the
+    // hop is longer than the frame). So the column takes K frames evenly
+    // across its stretch, the frames of successive columns then forming one
+    // even grid at most N/8 apart; the picture keeps the loudest of them (a
+    // click shows at its level, not diluted by the column's length) and the
+    // strip's average takes every one.
+    const int   K       = jmax (1, (int) std::ceil (colHop / (double) (N / kFramesPerWindow)));
+    const double subHop = colHop / (double) K;
+    const float subSec  = (float) (subHop / sr_);
+    const float avgAlpha = std::exp (-subSec / kAvgTauSec);
+    const int   col     = (int) (colCount_ % cols_);
+    const int   numL    = (int) lanes_.size();
+
+    colPow_.resize ((size_t) numL * (size_t) rows_);
+
+    for (int j = 0; j < K; ++j)
     {
-        const int64 jc = (int64) std::llround ((double) (centreAbs + firDelay_) / (double) decim_);
-        bassStart = jc - Nd / 2;
-        haveBass = bassStart + Nd - 1 < nextDec_ && bassStart >= nextDec_ - kDecRing;
+        const int64 centre = (int64) std::llround (centreAbs - subHop * (double) (K - 1 - j));
+        const bool firstFrame = colCount_ == 0 && j == 0;
+
+        // FFT frame centred on the frame's instant.
+        capture_->readEndingAt (frame_, settings_->firstCh, shown, N, centre + N / 2 - 1);
+
+        // Bass frame centred on the same instant: the decimated sample whose
+        // (delayed) raw time is closest to it sits in the middle of the
+        // frame, where every constant-Q window is centred.
+        int64 bassStart = 0;
+        bool haveBass = false;
+        if (bassActive())
+        {
+            const int64 jc = (int64) std::llround ((double) (centre + firDelay_) / (double) decim_);
+            bassStart = jc - Nd / 2;
+            haveBass = bassStart + Nd - 1 < nextDec_ && bassStart >= nextDec_ - kDecRing;
+        }
+
+        for (int li = 0; li < numL; ++li)
+        {
+            auto& lane = lanes_[(size_t) li];
+            float* cp = colPow_.data() + (size_t) li * (size_t) rows_;
+            const int c0 = settings_->stacked ? li : 0;
+            const int c1 = settings_->stacked ? li + 1 : shown;
+
+            // Power average across channels: what "the level of these
+            // channels at this frequency" means for content that is not
+            // coherent between them.
+            std::fill (accum_.begin(), accum_.end(), 0.f);
+            for (int c = c0; c < c1 && c < frame_.getNumChannels(); ++c)
+            {
+                FloatVectorOperations::multiply (fft_.getTimeBuffer(), frame_.getReadPointer (c), window_.data(), N);
+                fft_.magnitudesSquared (magSq_.data());
+                FloatVectorOperations::add (accum_.data(), magSq_.data(), (int) accum_.size());
+            }
+            const float scale = ampNorm_ / (float) jmax (1, c1 - c0);
+
+            // Bass for this lane: constant-Q per channel, averaged in power.
+            if (haveBass)
+            {
+                std::fill (bassPow_.begin(), bassPow_.end(), 0.f);
+                for (int c = c0; c < c1 && c < (int) decRing_.size(); ++c)
+                {
+                    const auto& ring = decRing_[(size_t) c];
+                    float* t = cq_.getTimeBuffer();
+                    for (int i = 0; i < Nd; ++i)
+                        t[i] = ring[(size_t) ((bassStart + i) & (kDecRing - 1))];
+                    cq_.transform (cqMag_.data());
+                    for (size_t k = 0; k < cqMag_.size(); ++k)
+                        bassPow_[k] += cqMag_[k] * cqMag_[k];
+                }
+                const float inv = 1.f / (float) jmax (1, c1 - c0);
+                for (size_t k = 0; k < bassPow_.size(); ++k)
+                    bassPow_[k] *= inv;
+            }
+            const int lastCq = (int) bassPow_.size() - 1;
+
+            for (int r = 0; r < rows_; ++r)
+            {
+                const auto& rb = rowBins_[(size_t) r];
+                float p;
+                if (rb.interp)
+                {
+                    const int i = (int) rb.centre;
+                    const float f = rb.centre - (float) i;
+                    p = accum_[(size_t) i] + f * (accum_[(size_t) i + 1] - accum_[(size_t) i]);
+                }
+                else
+                {
+                    // Max, not mean: a tone keeps its level however many bins
+                    // the row spans, so the picture and the strip agree with
+                    // a meter.
+                    p = 0.f;
+                    for (int b = rb.lo; b <= rb.hi; ++b)
+                        p = jmax (p, accum_[(size_t) b]);
+                }
+                p *= scale;
+
+                if (haveBass && rowBassW_[(size_t) r] > 0.f)
+                {
+                    // Interpolated in power between constant-Q bins.
+                    const float pos = jlimit (0.f, (float) lastCq, rowCqPos_[(size_t) r]);
+                    const int   k   = jmin ((int) pos, jmax (0, lastCq - 1));
+                    const float fr  = pos - (float) k;
+                    const float pb  = bassPow_[(size_t) k] + fr * (bassPow_[(size_t) jmin (k + 1, lastCq)] - bassPow_[(size_t) k]);
+                    const float w   = rowBassW_[(size_t) r];
+                    p = w * pb + (1.f - w) * p;
+                }
+
+                cp[r] = j == 0 ? p : jmax (cp[r], p);
+
+                // The strip's average and held peak see every frame.
+                lane.avgPow[(size_t) r] = firstFrame ? p : avgAlpha * lane.avgPow[(size_t) r] + (1.f - avgAlpha) * p;
+
+                const float db = 10.f * std::log10 (jmax (p, 1.0e-20f));
+                float& pk = lane.peak[(size_t) r];
+                float& age = lane.peakAge[(size_t) r];
+                if (db >= pk) { pk = db; age = 0.f; }
+                else
+                {
+                    age += subSec;
+                    if (age > kPeakHoldSec)
+                        pk = jmax (db, pk - kPeakFallDbS * subSec);
+                }
+            }
+        }
     }
 
-    const float hopSec    = kSpanSec[settings_->spanIdx] / (float) cols_;
-    const float avgAlpha  = std::exp (-hopSec / kAvgTauSec);
-    const int   col       = (int) (colCount_ % cols_);
-
-    for (int li = 0; li < (int) lanes_.size(); ++li)
+    for (int li = 0; li < numL; ++li)
     {
         auto& lane = lanes_[(size_t) li];
-        const int c0 = settings_->stacked ? li : 0;
-        const int c1 = settings_->stacked ? li + 1 : shown;
-
-        // Power average across channels: what "the level of these channels at
-        // this frequency" means for content that is not coherent between them.
-        std::fill (accum_.begin(), accum_.end(), 0.f);
-        for (int c = c0; c < c1 && c < frame_.getNumChannels(); ++c)
-        {
-            FloatVectorOperations::multiply (fft_.getTimeBuffer(), frame_.getReadPointer (c), window_.data(), N);
-            fft_.magnitudesSquared (magSq_.data());
-            FloatVectorOperations::add (accum_.data(), magSq_.data(), (int) accum_.size());
-        }
-        const float scale = ampNorm_ / (float) jmax (1, c1 - c0);
-
-        // Bass for this lane: constant-Q per channel, averaged in power.
-        if (haveBass)
-        {
-            std::fill (bassPow_.begin(), bassPow_.end(), 0.f);
-            for (int c = c0; c < c1 && c < (int) decRing_.size(); ++c)
-            {
-                const auto& ring = decRing_[(size_t) c];
-                float* t = cq_.getTimeBuffer();
-                for (int i = 0; i < Nd; ++i)
-                    t[i] = ring[(size_t) ((bassStart + i) & (kDecRing - 1))];
-                cq_.transform (cqMag_.data());
-                for (size_t k = 0; k < cqMag_.size(); ++k)
-                    bassPow_[k] += cqMag_[k] * cqMag_[k];
-            }
-            const float inv = 1.f / (float) jmax (1, c1 - c0);
-            for (size_t k = 0; k < bassPow_.size(); ++k)
-                bassPow_[k] *= inv;
-        }
-        const int lastCq = (int) bassPow_.size() - 1;
-
+        const float* cp = colPow_.data() + (size_t) li * (size_t) rows_;
         float colMax = kFloorDb;
 
         for (int r = 0; r < rows_; ++r)
         {
-            const auto& rb = rowBins_[(size_t) r];
-            float p;
-            if (rb.interp)
-            {
-                const int i = (int) rb.centre;
-                const float f = rb.centre - (float) i;
-                p = accum_[(size_t) i] + f * (accum_[(size_t) i + 1] - accum_[(size_t) i]);
-            }
-            else
-            {
-                // Max, not mean: a tone keeps its level however many bins the
-                // row spans, so the picture and the strip agree with a meter.
-                p = 0.f;
-                for (int b = rb.lo; b <= rb.hi; ++b)
-                    p = jmax (p, accum_[(size_t) b]);
-            }
-            p *= scale;
-
-            if (haveBass && rowBassW_[(size_t) r] > 0.f)
-            {
-                // Interpolated in power between constant-Q bins.
-                const float pos = jlimit (0.f, (float) lastCq, rowCqPos_[(size_t) r]);
-                const int   k   = jmin ((int) pos, jmax (0, lastCq - 1));
-                const float fr  = pos - (float) k;
-                const float pb  = bassPow_[(size_t) k] + fr * (bassPow_[(size_t) jmin (k + 1, lastCq)] - bassPow_[(size_t) k]);
-                const float w   = rowBassW_[(size_t) r];
-                p = w * pb + (1.f - w) * p;
-            }
-
-            const float db = 10.f * std::log10 (jmax (p, 1.0e-20f));
+            const float db = 10.f * std::log10 (jmax (cp[r], 1.0e-20f));
             lane.db[(size_t) col * rows_ + (size_t) r] = db;
+            lane.inst[(size_t) r] = db;     // the strip's live line is the newest column
             colMax = jmax (colMax, db);
-
-            // The strip alongside: instantaneous, average (in power), held peak.
-            lane.inst[(size_t) r] = db;
-            lane.avgPow[(size_t) r] = colCount_ == 0 ? p : avgAlpha * lane.avgPow[(size_t) r] + (1.f - avgAlpha) * p;
-
-            float& pk = lane.peak[(size_t) r];
-            float& age = lane.peakAge[(size_t) r];
-            if (db >= pk) { pk = db; age = 0.f; }
-            else
-            {
-                age += hopSec;
-                if (age > kPeakHoldSec)
-                    pk = jmax (db, pk - kPeakFallDbS * hopSec);
-            }
         }
 
         // Coloured once the column's maximum is known, for normalising.
